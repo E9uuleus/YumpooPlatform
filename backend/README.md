@@ -5,7 +5,7 @@
 默认关闭的 `yumpoo.maintenance.initial-identity.enabled` Runner 仅允许在 `prod + spring.main.web-application-type=none` 下运行。它从部署 secrets 根目录内的受限 JSON 文件读取预期 CorpID 和两个不同企微成员标识，调用现有完整目录同步；只有同步 `SUCCEEDED` 且成员非空、两名目标均属于同一企业并处于 `ACTIVE + ENABLED` 时，才在同一事务内授予首个 `APP_MANAGER` 与首个 `COMPANY_ADMIN`、递增授权版本、写角色事件和 Security Audit，并把 APP_MANAGER 治理状态置为 `AVAILABLE`。
 
 ```powershell
-pnpm verify:m1-15
+pnpm run ci
 ```
 
 该入口不新增 Flyway 或 HTTP/OpenAPI。APP_MANAGER 与 COMPANY_ADMIN 必须由不同用户承担；同步失败、部分成功、空快照、配置冲突或角色事务失败均不会留下单边角色。命令、DTO、异常、日志和报告不记录企微 UserID 或凭据。
@@ -15,7 +15,7 @@ pnpm verify:m1-15
 Web `/api/v1/auth/wecom/authorize` 使用企微官方 `qrConnect`。Electron 新增 attempt、HTTPS callback、PKCE handoff exchange 三个接口，并在同一事务内消费 handoff、变更 attempt 状态和签发 `ELECTRON` Session；V15 迁移在既有 `desktop_auth_attempt` 上增加用户、客户端版本和协议版本绑定。
 
 ```powershell
-pnpm verify:m1-14
+pnpm run ci
 ```
 
 真实 Secret、Cookie、企微 code、state、handoff 和 verifier 不得进入日志、审计正文或验证报告。
@@ -29,7 +29,7 @@ pnpm verify:m1-14
 从仓库根目录运行：
 
 ```powershell
-pnpm verify:m1-13
+pnpm run ci
 ```
 
 该入口要求 Docker Linux engine 可运行 `postgres:17.10-alpine`，并要求本机 8100、18174 端口空闲。它验证 PostgreSQL 权限矩阵后，以外部 JAR 和 Vite production preview 完成受控登录、Cookie/CSRF、角色边界、退出与自禁用链路，最终在忽略目录 `out/m1-13/verification-report.json` 生成绑定当前 HEAD 的脱敏报告。Docker 或端口条件不满足时必须失败，不能用单元测试结果替代完整门禁。
@@ -43,7 +43,7 @@ Flyway `V11` 创建 `platform_role_assignment`，只允许 `COMPANY_ADMIN + COMP
 从仓库根目录运行完整门禁：
 
 ```powershell
-pnpm verify:m1-08
+pnpm run ci
 ```
 
 仅运行不依赖 Docker 的后端测试：
@@ -70,7 +70,7 @@ Flyway `V10` 扩展 M1-04 的同步结果约束：成员 outcome 支持 `RETURNE
 
 全量成功收尾会在单一事务中锁定缺失的 ACTIVE WECOM 身份并按 external ID 排序，将 User 和 ExternalIdentity 同时置为 `LEFT`，递增 User 的授权版本，写入离职 item、就业事件、计数和 completed v2 Outbox。相同 external ID 返聘复用原 UUID、恢复双侧 ACTIVE 并优先记录 `RETURNED`；既有 `DISABLED`、离职时间和原因不被覆盖。存在 ACTIVE 基线时空快照会以 `DIRECTORY_EMPTY_SNAPSHOT_REJECTED` 失败关闭，不执行全员离职。
 
-从仓库根运行 `pnpm verify:m1-05`。该入口复核 M1-04 live evidence，并执行后端 `clean verify` 与完整 Node 门禁。本切片不新增 REST/OpenAPI、页面、调度、企微离职回调或失败项定向重试，也不批量撤销 `login_session`；会话撤销留给 M1-07。
+从仓库根运行 `pnpm run ci`。该入口执行后端 `clean verify` 与完整 Node 门禁。本切片不新增 REST/OpenAPI、页面、调度、企微离职回调或失败项定向重试，也不批量撤销 `login_session`；会话撤销留给 M1-07。
 
 ## M1-04 通讯录同步批次与全量导入
 
@@ -80,7 +80,7 @@ Flyway `V9` 创建 `directory_sync_run`、`directory_sync_item` 与 `directory_s
 
 运行配置位于 `yumpoo.wecom.directory.*`：`enabled`、`corp-id`、`directory-secret`、`profile-secret`、`page-size`、`lease-duration`、`connect-timeout`、`read-timeout`。默认 page size 1000、租约 5 分钟、连接超时 5 秒、读取超时 20 秒；两个 Secret 必须不同，并只应放在外部 Secret 配置层。除 access token 失效后刷新一次外不自动重试。
 
-从仓库根运行 `pnpm verify:m1-04`。可选真实验证需设置 `SPRING_PROFILES_ACTIVE=m1-04-live`、`YUMPOO_M104_WECOM_ENABLED=true`、`YUMPOO_M104_WECOM_CORP_ID`、两项 `YUMPOO_M104_WECOM_*_SECRET` 和独立的 `YUMPOO_M104_EVIDENCE_HMAC_KEY`，再运行 `pnpm verify:m1-04:live`。该 live harness 不连接业务数据库，只验证生产适配器可读取真实 ID、成员资料和部门字典，并以短期 HMAC 收据把脱敏证据从 `ENV_PENDING` 更新为 `PASS`。
+从仓库根运行 `pnpm run ci`。旧 Node live 编排已退役，Java 的 `m1-04-live` profile 与诊断配置暂时保留；真实企微适配器验证需要独立受控环境，不以普通 CI 作为替代。
 
 ## M1-03 会话与安全底座
 
@@ -88,7 +88,7 @@ Flyway `V8` 为 `identity_user` 增加非负 `authorization_version`，并创建
 
 Spring Security 链只匹配 `/api/v1/**`，禁用 HttpSession、表单登录、HTTP Basic 和持久化 SecurityContext。Session Cookie 为 `__Host-yumpoo-session`；CSRF Cookie 为可读的 `__Host-yumpoo-csrf`，写请求通过 `X-XSRF-TOKEN` 回传并与当前 Session 的数据库指纹核对。生产环境必须配置 current HMAC 版本与至少 32 字节 Base64 密钥；previous 版本、密钥和截止时刻只能成组配置。
 
-从仓库根运行 `pnpm verify:m1-03`。本切片仅提供会话/鉴权内核与 HTTP 安全基础，不提供正式 callback、logout、`/me` 或登录页面。
+从仓库根运行 `pnpm run ci`。本切片仅提供会话/鉴权内核与 HTTP 安全基础，不提供正式 callback、logout、`/me` 或登录页面。
 
 ## M1-02 User 与 ExternalIdentity 底座
 
@@ -96,7 +96,7 @@ Flyway `V7` 创建 `identity_user` 与 `external_identity`。User 固定归属 M
 
 `DirectoryMemberProvisioningService.provisionOrRefresh` 是供后续正式通讯录同步复用的模块内部事务入口。首次观察创建 `ACTIVE + ENABLED` User；后续同外部 ID 只刷新当前资料、hash 和观察时间，保持 User ID、就业状态、账号状态及既有历史事实。实现以派生 advisory lock 处理并发首次建立，含敏感数据的值对象和聚合输出均使用脱敏 `toString()`。
 
-从仓库根运行 `pnpm verify:m1-02`，会执行后端 `clean verify` 和完整 Node 工作区门禁。本切片不提供 REST/OpenAPI、同步批次、就业/账号状态命令、会话、角色或事件发布。
+从仓库根运行 `pnpm run ci`，会执行后端 `clean verify` 和完整 Node 工作区门禁。本切片不提供 REST/OpenAPI、同步批次、就业/账号状态命令、会话、角色或事件发布。
 
 ## M1-01 Company 与工作日历底座
 
@@ -104,7 +104,7 @@ Flyway `V7` 创建 `identity_user` 与 `external_identity`。User 固定归属 M
 
 `organization.api.CompanyConfigurationQuery` 和 `CompanyCalendarQuery` 是跨模块只读入口，不暴露 JDBC 仓储。日历缺省为周一至周五工作、周末休息，日期级覆盖优先；工作日空分钟继承 Company 默认值，非工作日固定为 0。日期与时刻运算使用 `Instant`、`LocalDate`、`ZoneId`，DST 缺口向后移动到首个有效时刻，重叠固定选择较早 offset。
 
-从仓库根运行 `pnpm verify:m1-01`，会执行后端 `clean verify` 和完整 Node 工作区门禁。本切片没有 REST/OpenAPI、前端或日历写命令。
+从仓库根运行 `pnpm run ci`，会执行后端 `clean verify` 和完整 Node 工作区门禁。本切片没有 REST/OpenAPI、前端或日历写命令。
 
 ## M0-17 备份与隔离恢复测试原型
 
@@ -114,7 +114,7 @@ Flyway `V7` 创建 `identity_user` 与 `external_identity`。User 固定归属 M
 
 M2-19 起恢复断言同时核对 `attachment_blob` 注册表、附件引用、配额与扫描代次；恢复完成后必须先运行完整附件对账，物理清理保持 dry-run，直到显式提供删除开关和非空批准引用。
 
-从仓库根运行 `pnpm verify:m0-17`。该命令先校验证据契约，再串联 `verify:m0-16`，最终只接受本次运行在 `out/m0-17` 产生且绑定当前 Git HEAD 的报告。Docker 不可用会直接失败，不使用 H2。以上类型均位于测试源码，不进入生产 JAR；正式任务调度、外部介质、告警、签名/加密和 RPO/RTO 演练留给 M5/M6。
+从仓库根运行 `pnpm ci:backend` 执行备份恢复集成测试，默认写入 `out/backup-restore`；`pnpm ci:portable` 校验本次运行报告的提交与时间。Docker 不可用会直接失败，不使用 H2。正式任务调度、外部介质、告警、签名/加密和 RPO/RTO 演练仍需独立验收。
 
 ## M0-16 生产 profile 与部署健康检查
 
@@ -156,31 +156,31 @@ authorize 只接受随机 `state`、PKCE `codeChallenge` 与 `S256`，通过 Sec
 
 exchange 成功只返回一次短期 HMAC 收据；其中 requestId、企业/成员指纹和签名仅用于 live runner 即时验签，随后删除，不写入最终 M0-15 证据。正式 `/api/v1/electron/auth/attempts`、`/exchange`、logout、User/ExternalIdentity/LoginSession、账号状态编排和 Windows 凭据仍属于 M1/M4。
 
-从仓库根目录运行 `pnpm verify:m0-15`，完成证据校验、Windows x64 壳打包/内容扫描并串联 `verify:m0-14`。真实企微、HTTPS、packaged app 与协议唤起均就绪后，按根 README 注入短期收据和 manifest 路径，再运行 `pnpm verify:m0-15:live`。当前 live runner 只提供安全 preflight 和收据验证入口，不模拟企微或代签桌面结果；缺少自动串联、任何门禁或安全输入都会失败，`evidence/m0-15/live-verification.json` 保持 `NOT_RUN`。
+桌面交付使用 `pnpm ci:windows`；打包与完整性校验分别为 `pnpm package:desktop:win` 和 `node tools/verification/verify-desktop-package.mjs`。旧 live runner 和静态证据文件已退役，真实企微、HTTPS 与协议唤起仍需独立环境验证。
 
 ## M0-14 file-security PoC
 
 `filestorage` 现包含固定 64 KiB 缓冲的隔离接收、100 MiB 精确上限、SHA-256 内容寻址、Tika 类型识别、ZIP/OOXML 判别和同卷原子发布。它们是后续正式附件功能可复用的技术核心；当前没有生产 Attachment 表、Controller 或正式 OpenAPI operation。
 
-从仓库根目录运行 `pnpm verify:m0-14`。该命令额外在 `-Xmx96m` 下点名运行 `M014BoundedHeapVerification`，并通过 test-only HTTP/PostgreSQL 探针覆盖断流、并发完成、处理事务边界、授权撤销、413/415、隐藏 404 和最终事务回滚。Windows NTFS 与同卷原子移动验证可通过 `pnpm verify:m0-14:live` 运行；旧恶意软件扫描证据仅保留历史含义，不再更新。
+从仓库根运行 `pnpm ci:backend`，其中单独以 `-Xmx96m` 运行 `M014BoundedHeapVerification`，并保留 HTTP/PostgreSQL 的附件行为测试。旧 Windows live 脚本已退役，NTFS 与同卷原子移动仍需独立环境验证。
 
 YumpooPlatform Spring 后端是单 Maven 模块、单可执行 JAR 的模块化单体，包含 PostgreSQL、Flyway、真实库测试、统一错误、请求关联、乐观锁、持久化幂等、事务 Outbox、消费去重、身份治理、固定 Project 模板目录，以及 Workspace、Product 与 Project 真源。
 
 ## M2-04 Project 原子创建与初始 Content
 
-Flyway V21 创建 Project 与 ProjectMembership 真源及延迟 owner-membership 约束，V22 创建带模板 provenance 的 Content 真源，V23 为持久化幂等补充原始响应文本以保证字节级重放。`administration.application` 通过 Catalog、TemplateWorkflow、Workitem 公共端口持有原子创建事务；HTTP、PostgreSQL 故障注入、并发锁和备份恢复验收由 `pnpm verify:m2-04` 统一执行。
+Flyway V21 创建 Project 与 ProjectMembership 真源及延迟 owner-membership 约束，V22 创建带模板 provenance 的 Content 真源，V23 为持久化幂等补充原始响应文本以保证字节级重放。`administration.application` 通过 Catalog、TemplateWorkflow、Workitem 公共端口持有原子创建事务；HTTP、PostgreSQL 故障注入、并发锁和备份恢复验收由 `pnpm run ci` 统一执行。
 
 ## M2-03 Product 生命周期与负责人治理
 
-Flyway V18 创建 Company 范围 Product 主数据，V19 扩展 `governance_issue` 支持每个 Product 独立的 `OWNER_MISSING`，V20 将负责人重指派 Security Audit 的理由上限同步到 500 字符。Catalog 负责 SQL 可见范围、资料条件更新和最小跨模块端口；Administration 负责归档、恢复、负责人重指派及其 Audit/Outbox/幂等原子事务。完整验收从仓库根目录运行 `pnpm verify:m2-03`。
+Flyway V18 创建 Company 范围 Product 主数据，V19 扩展 `governance_issue` 支持每个 Product 独立的 `OWNER_MISSING`，V20 将负责人重指派 Security Audit 的理由上限同步到 500 字符。Catalog 负责 SQL 可见范围、资料条件更新和最小跨模块端口；Administration 负责归档、恢复、负责人重指派及其 Audit/Outbox/幂等原子事务。完整验收从仓库根目录运行 `pnpm run ci`。
 
 ## M2-02 Workspace 生命周期
 
-Flyway V17 在 `catalog` owner 目录创建 `workspace` 表。`WorkspaceService` 负责 Company 隔离、COMPANY_ADMIN 治理、条件更新、幂等创建/归档/恢复与事务 Outbox；`WorkspaceSnapshotQuery` 只向其他模块暴露同 Company 的 ACTIVE 最小快照。HTTP 契约包含列表、详情、创建、完整可变快照 PATCH、归档与恢复，响应中的 `visibleProjectCount` 在 Project 真源交付前固定为 `0`。完整验收从仓库根目录运行 `pnpm verify:m2-02`。
+Flyway V17 在 `catalog` owner 目录创建 `workspace` 表。`WorkspaceService` 负责 Company 隔离、COMPANY_ADMIN 治理、条件更新、幂等创建/归档/恢复与事务 Outbox；`WorkspaceSnapshotQuery` 只向其他模块暴露同 Company 的 ACTIVE 最小快照。HTTP 契约包含列表、详情、创建、完整可变快照 PATCH、归档与恢复，响应中的 `visibleProjectCount` 在 Project 真源交付前固定为 `0`。完整验收从仓库根目录运行 `pnpm run ci`。
 
 ## M2-01 模板目录
 
-Flyway V16 在 `templateworkflow` owner 目录创建模板版本、Content blueprint、状态和迁移四张表，并预置四个 PUBLISHED V1。跨模块只能使用 `templateworkflow.api` 的已发布查询、任意版本查询和发布/停用命令端口；HTTP Controller 与审计/Outbox/幂等事务编排归 `administration`。完整验收从仓库根目录运行 `pnpm verify:m2-01`，Project 实例初始化仍属于 M2-04。
+Flyway V16 在 `templateworkflow` owner 目录创建模板版本、Content blueprint、状态和迁移四张表，并预置四个 PUBLISHED V1。跨模块只能使用 `templateworkflow.api` 的已发布查询、任意版本查询和发布/停用命令端口；HTTP Controller 与审计/Outbox/幂等事务编排归 `administration`。完整验收从仓库根目录运行 `pnpm run ci`，Project 实例初始化仍属于 M2-04。
 
 ## 环境
 
@@ -232,7 +232,7 @@ M0-11 新增 `outbox_event` 与 `outbox_consumer_receipt`。`TransactionalEventP
 
 ## M0-12 企微 OAuth 诊断流程
 
-M0 开发门禁为 `pnpm verify:m0-12`，通过受控测试边界验证授权参数、corp/member 映射、state/nonce、原子消费、并发/重放拒绝、供应商失败映射和脱敏；不要求真实成员授权或扫码、公开域名和真实 HTTPS 回调。下面的 live 流程保留为后续受控联调环境门禁，未执行时 `NOT_RUN` 是预期状态但不代表通过。
+M0 开发门禁为 `pnpm run ci`，通过受控测试边界验证授权参数、corp/member 映射、state/nonce、原子消费、并发/重放拒绝、供应商失败映射和脱敏；不要求真实成员授权或扫码、公开域名和真实 HTTPS 回调。下面的 Java 诊断配置暂时保留；旧 Node live 编排已退役，真实联调仍需独立验收。
 
 真实企微路由采用双重门禁，默认不会注册。启动前必须同时设置 `SPRING_PROFILES_ACTIVE=m0-12-live`、`YUMPOO_M012_WECOM_ENABLED=true`，并从外部注入：
 
@@ -245,7 +245,7 @@ M0 开发门禁为 `pnpm verify:m0-12`，通过受控测试边界验证授权参
 
 callback URI 必须是固定、不带 query 的 HTTPS 地址；证据 HMAC 密钥至少包含 32 个 UTF-8 字节和 8 种字符，且不得使用占位值或复用企微应用 Secret。缺项、弱密钥或不安全 callback 会拒绝启用。启用后只增加 `/_m0/m0-12/wecom/authorize` 与 `/_m0/m0-12/wecom/callback` 两个诊断路径；它们不属于 `/api/v1` 正式契约，不创建用户、外部身份或登录会话。
 
-在 HTTPS 反向代理和后端均运行后，从仓库根目录执行 `pnpm verify:m0-12:live`。脚本先执行配置预检和四类统一 401 负向检查，再在不回显输入的情况下验证同一成员的两份 HMAC 签名成功收据。完整步骤、可选 `YUMPOO_M012_LIVE_BASE_URL` 和证据约束见仓库根 README。真实企业验证没有执行时，`evidence/m0-12/live-verification.json` 必须保持 `NOT_RUN`，不得手工改成 `PASS`。
+旧企微 Node live runner 和静态证据文件已退役，历史执行记录由 Git 保留。当前自动回归使用 `pnpm ci:backend`；真实企业授权与 HTTPS 回调需要独立验证，不能用普通 CI 通过替代。
 
 ## M0-13 企微通讯录诊断流程
 
@@ -259,7 +259,7 @@ M0-13 live runner 不是常驻 Controller，也不增加 HTTP 路径。运行前
 
 通讯录 Secret 只用于从 Java 直连企微时的可信出口 IP 访问；`HTTP_PROXY/HTTPS_PROXY` 环境变量不会自动改变本 live harness 的 Java 出口。证据 HMAC 密钥至少包含 32 个 UTF-8 字节和 8 种 Unicode code point，不得包含常见占位标记，也不得与该 Secret 相同。五项都只能从受控外部环境注入，测试、日志和 Maven 输出不得回显其值。
 
-从仓库根目录执行 `pnpm verify:m0-13:live`。Node runner 清理旧收据后，只运行 Maven 类 `M013WeComDirectoryLiveVerification`。Java 在任何 probe 对账前完成两次 `limit=1` 窄页扫描和一次 `limit=10000` 宽页扫描；两次窄页必须观察真实非空游标，三次必须以供应商省略终止游标结束，并得到完全一致的企业、快照和成员 HMAC。只有 test-only `M013OmittedCursorConfirmation` 能在这些条件同时成立时确认候选快照，主 collector 仍保持严格失败。全部安全场景通过后 Java 写入 `target/m0-13-live-receipt.json`；收据签名必须把 UTF-8 `receipt\0` 置于 canonical 正文之前，与 corp/member/snapshot 指纹执行域分离。Node 验签后才原子更新 `evidence/m0-13/live-verification.json`，并在 `finally` 删除收据。验证失败不会改写已有证据。当前 M0-12 证据状态只作为 `m012DependencyStatus` 记录，不作为 M0-13 live runner 的通过前提。
+旧 Node live 编排已退役；Java 诊断类 `M013WeComDirectoryLiveVerification` 保留，当前常规回归入口为 `pnpm ci:backend`。Java 在任何 probe 对账前完成两次 `limit=1` 窄页扫描和一次 `limit=10000` 宽页扫描；两次窄页必须观察真实非空游标，三次必须以供应商省略终止游标结束，并得到完全一致的企业、快照和成员 HMAC。只有 test-only `M013OmittedCursorConfirmation` 能在这些条件同时成立时确认候选快照，主 collector 仍保持严格失败。全部安全场景通过后 Java 写入 `target/m0-13-live-receipt.json`；收据签名必须把 UTF-8 `receipt\0` 置于 canonical 正文之前，与 corp/member/snapshot 指纹执行域分离。旧 Node 验签、静态证据写入和清理编排不再提供；历史记录可从 Git 查询。
 
 收据和最终证据都禁止出现人数、页数、游标、原始企微成员 ID、个人资料、Secret、token 或完整企微响应。`providerPaginationObserved` 与 `providerTerminalCursorOmissionConfirmed` 分别记录真实分页和终止字段省略已完成交叉确认；人工诊断输出的通讯录或 userid 不进入仓库。正式 Company、User、ExternalIdentity、DirectorySyncRun、管理 API、调度和会话撤销仍属于 M1，不在本诊断流程中创建。
 
@@ -283,7 +283,7 @@ java -jar .\target\yumpoo-server.jar
 - `GET /actuator/health/liveness`
 - `GET /actuator/health/readiness`
 
-M0-12 与 M0-13 不增加生产探针、正式业务 Controller 或 OpenAPI path；双门禁诊断能力只用于真实企微验证。`/api/v1` 的统一错误、分页、条件头和客户端头以仓库根目录 `contracts/openapi/yumpoo-v1.yaml` 为唯一 HTTP 契约；内部事件信封、目录、payload Schema 和样例位于 `contracts/events`。
+M0-12 与 M0-13 不增加生产探针、正式业务 Controller 或 OpenAPI path；双门禁诊断能力只用于真实企微验证。`/api/v1` 的统一错误、分页、条件头和客户端头编辑于仓库根目录 `contracts/openapi/yumpoo-v1/`，运行 `pnpm generate:openapi` 生成 `contracts/openapi/yumpoo-v1.yaml`，禁止手改生成文件；消费方继续读取生成的单文件。内部事件信封、目录、payload Schema 和样例位于 `contracts/events`。
 
 ## 模块
 
@@ -325,7 +325,7 @@ ArchUnit 在 `verify` 阶段检查模块允许依赖图、循环依赖、层级�
 - 同步认领明确区分 `NEW`、`REPLAY` 和 `ACTIVE_CONFLICT`。失败项只返回稳定错误码和脱敏成员引用；供应商原文、完整 Corp ID、Secret、token 与回调地址不得进入响应或日志。
 - 企微状态从外部配置属性和同步运行事实派生，不新建 Secret 表。生产 Secret 仍只能通过受控外部配置注入，管理 API 与页面没有写入口。
 
-从仓库根运行 `pnpm verify:m1-11`，串联事件契约、后端 `clean verify` 与完整 Node 门禁。
+从仓库根运行 `pnpm run ci`，串联事件契约、后端 `clean verify` 与完整 Node 门禁。
 
 ## M1-10 Security Audit 与治理 API 边界
 
@@ -334,7 +334,7 @@ ArchUnit 在 `verify` 阶段检查模块允许依赖图、循环依赖、层级�
 - 正式 `/api/v1/admin` 治理端点提供成员治理快照、角色读写与账号启停；角色写仅 APP_MANAGER，账号启停仅 COMPANY_ADMIN，读取允许两者。写模型不接受 actor、role、scope 或任何版本字段。
 - 审计 HTTP 查询、`SECURITY_AUDIT_READ`、查询自身审计、CapabilityAssignment、哈希链/WORM 及管理页面不在 M1-10 范围。
 
-从仓库根运行 `pnpm verify:m1-10`，串联事件契约、后端 `clean verify`、OpenAPI/生成客户端和完整 Node 门禁。PostgreSQL 集成测试要求 Docker Desktop Linux engine 可用。
+从仓库根运行 `pnpm run ci`，串联事件契约、后端 `clean verify`、OpenAPI/生成客户端和完整 Node 门禁。PostgreSQL 集成测试要求 Docker Desktop Linux engine 可用。
 
 ## M1-09 角色治理边界
 

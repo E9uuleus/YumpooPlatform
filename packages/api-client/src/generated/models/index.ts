@@ -246,6 +246,7 @@ export * from './TimeTrackingSummary';
 export * from './TimeTrackingSummaryPage';
 export * from './TimerCandidate';
 export * from './TimerCandidatePage';
+export * from './TimerCandidateProjectCount';
 export * from './UpdateConnectColumn409Response';
 export * from './WeComDirectoryStatus';
 export * from './WeComIntegrationStatus';

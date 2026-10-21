@@ -1,0 +1,229 @@
+components:
+  parameters:
+    ActivityCursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 2048
+    ActivitySize:
+      name: size
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 25
+    ActivityEventType:
+      name: eventType
+      in: query
+      required: false
+      style: form
+      explode: true
+      schema:
+        type: array
+        uniqueItems: true
+        items:
+          type: string
+          minLength: 3
+          maxLength: 128
+    ActivityEntityType:
+      name: entityType
+      in: query
+      required: false
+      style: form
+      explode: true
+      schema:
+        type: array
+        uniqueItems: true
+        items:
+          type: string
+          minLength: 2
+          maxLength: 32
+    ActivityOccurredFrom:
+      name: occurredFrom
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date-time
+    ActivityOccurredTo:
+      name: occurredTo
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date-time
+    AttachmentId:
+      name: attachmentId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/Uuid"
+    WorkItemId:
+      name: workItemId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/Uuid"
+    WorkItemUpdateId:
+      name: updateId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/Uuid"
+    AttachmentCursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+        minLength: 1
+    AttachmentPageSize:
+      name: size
+      in: query
+      required: false
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+        maximum: 100
+        default: 20
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/Uuid"
+    AssignmentId:
+      name: assignmentId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/Uuid"
+    WorkspaceId:
+      name: workspaceId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/Uuid"
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/Uuid"
+    WorkItemLabelCode:
+      name: code
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: ^[A-Z][A-Z0-9_]{1,31}$
+    RunId:
+      name: runId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/Uuid"
+    XsrfToken:
+      name: X-XSRF-TOKEN
+      in: header
+      required: true
+      description: 与当前 Session 绑定并由非 HttpOnly Cookie 回传的 CSRF 凭据。
+      schema:
+        type: string
+        minLength: 1
+    Page:
+      name: page
+      in: query
+      required: false
+      description: 页号，从 0 开始。
+      schema:
+        type: integer
+        format: int32
+        minimum: 0
+        default: 0
+    Size:
+      name: size
+      in: query
+      required: false
+      description: 页容量，默认 20，最大 100。
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+        maximum: 100
+        default: 20
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: 追加流使用的不透明续读游标，不得按 offset 解释。
+      schema:
+        type: string
+        minLength: 1
+    FromDate:
+      name: from
+      in: query
+      required: true
+      description: 统计范围起始自然日，首尾包含。
+      schema:
+        $ref: "#/components/schemas/LocalDate"
+    ToDate:
+      name: to
+      in: query
+      required: true
+      description: 统计范围结束自然日，首尾包含且范围最多 366 天。
+      schema:
+        $ref: "#/components/schemas/LocalDate"
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: |
+        单个强 ETag，格式为双引号包围的十进制 rowVersion。弱验证器、`*` 和多个
+        ETag 均不属于一期契约。
+      schema:
+        type: string
+        pattern: ^"[0-9]+"$
+      example: '"5"'
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: 客户端为单一业务意图生成并在重试时复用的 UUID。
+      schema:
+        type: string
+        format: uuid
+        maxLength: 64
+    ElectronClientType:
+      name: X-Client-Type
+      in: header
+      required: true
+      description: Electron 请求固定为 ELECTRON；该头不是认证凭据。
+      schema:
+        type: string
+        enum:
+          - ELECTRON
+    ElectronClientVersion:
+      name: X-Client-Version
+      in: header
+      required: true
+      description: Electron 应用版本；该头不是认证凭据。
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+    ElectronProtocolVersion:
+      name: X-Client-Protocol-Version
+      in: header
+      required: true
+      description: Electron 与服务端约定的协议版本；该头不是认证凭据。
+      schema:
+        type: string
+        enum:
+          - "1"

@@ -7,6 +7,7 @@ import { ArrowRight, CircleCheck, Clock } from '@element-plus/icons-vue'
 import { useSession } from '../../composables/useSession'
 import { useTimeTracker } from '../../composables/useTimeTracker'
 import { useTimerCandidates } from '../../composables/useTimerCandidates'
+import { useInfiniteSentinel } from '../../composables/useInfiniteSentinel'
 import { useHideCompleted } from '../../composables/useHideCompleted'
 import { useDesktopSurfaceOpacity } from '../../composables/useDesktopSurfaceOpacity'
 import { useDayTimeline } from '../../components/my-time/day/useDayTimeline'
@@ -19,16 +20,24 @@ import { groupCandidates, placementHint, projectTones, quickPlan, shortDuration,
 import brandLogo from '../../assets/brand/logo.svg'
 
 const bridge = window.yumpooDesktop?.quick
+const pinnable = !!bridge?.setPinned
+const pinned = ref(false)
 const session = useSession()
 const tracker = useTimeTracker()
 useDesktopSurfaceOpacity()
 const timezone = computed(() => session.authentication.value?.company.timezone ?? 'Asia/Shanghai')
 const today = computed(() => todayIn(timezone.value, new Date(tracker.now.value)))
-const candidates = useTimerCandidates(computed(() => session.phase.value === 'authenticated'))
-const { hideCompleted, visibleCandidates } = useHideCompleted()
+const project = ref<string | null>(null)
+const candidates = useTimerCandidates(computed(() => session.phase.value === 'authenticated'), {
+  projects: computed(() => project.value ? [project.value] : []),
+})
+const { hideCompleted } = useHideCompleted()
+const list = ref<HTMLElement>()
+const sentinel = ref<HTMLElement>()
+useInfiniteSentinel(list, sentinel, () => candidates.items.value.length,
+  () => candidates.nextOffset.value !== null && !candidates.loading.value && !candidates.problem.value, () => candidates.load(true))
 
 const context = ref<QuickPanelContext>({ projectId: null, projects: [], origin: 'bottom' })
-const project = ref<string | null>(null)
 const openId = ref<string | null>(null)
 const dateChoice = ref<DateChoice>('today')
 const pickedDate = ref(today.value)
@@ -52,13 +61,14 @@ const todayDay = useDayTimeline(today, timezone)
 const targetDay = useDayTimeline(targetDate, timezone)
 
 const query = candidates.query
-const inScope = computed(() => project.value ? candidates.items.value.filter(item => item.projectId === project.value) : candidates.items.value)
-const shown = computed(() => visibleCandidates(inScope.value, query.value))
-const hiddenCount = computed(() => inScope.value.length - shown.value.length)
+const shown = candidates.items
+const hiddenCount = candidates.hiddenCount
 const groups = computed(() => groupCandidates(shown.value, context.value.projects))
 const chips = computed(() => {
-  const list = groupCandidates(visibleCandidates(candidates.items.value, query.value), context.value.projects)
-    .map(group => ({ id: group.projectId, name: group.projectName }))
+  const counts = candidates.projectCounts.value
+  const list = context.value.projects.filter(item => counts.some(count => count.projectId === item.id))
+    .map(item => ({ id: item.id, name: item.name }))
+  for (const item of counts) if (!list.some(project => project.id === item.projectId)) list.push({ id: item.projectId, name: item.projectName })
   const locked = context.value.projects.find(item => item.id === project.value)
   return locked && !list.some(item => item.id === locked.id) ? [{ id: locked.id, name: locked.name }, ...list] : list
 })
@@ -97,6 +107,7 @@ watch(() => todayDay.recordedMs.value, (to, from) => {
 }, { immediate: true })
 
 const offOpen = bridge?.onOpen(value => {
+  pinned.value = value.pinned === true
   context.value = value
   project.value = value.projectId
   openId.value = null
@@ -112,7 +123,22 @@ const offOpen = bridge?.onOpen(value => {
   void nextTick(() => search.value?.focus())
 })
 const offClosing = bridge?.onClosing(() => { closing.value = true })
-onBeforeUnmount(() => { offOpen?.(); offClosing?.(); clearTimeout(toastTimer); cancelAnimationFrame(countFrame) })
+const offPinned = bridge?.onPinned?.(value => { pinned.value = value })
+onBeforeUnmount(() => { offOpen?.(); offClosing?.(); offPinned?.(); clearTimeout(toastTimer); cancelAnimationFrame(countFrame) })
+
+function startResize(event: PointerEvent) {
+  const grip = event.currentTarget as HTMLElement
+  grip.setPointerCapture(event.pointerId)
+  void bridge!.resize!(true)
+  let ended = false
+  const end = () => {
+    if (ended) return
+    ended = true
+    void bridge!.resize!(false)
+  }
+  grip.addEventListener('pointerup', end, { once: true })
+  grip.addEventListener('lostpointercapture', end, { once: true })
+}
 
 function toggle(item: TimerCandidate) {
   if (recording.value !== 'idle') return
@@ -171,7 +197,10 @@ function keydown(event: KeyboardEvent) {
       :style="{ transformOrigin }"
       aria-label="快捷工时"
     >
-      <header class="quick-head">
+      <header
+        class="quick-head"
+        :class="{ 'is-draggable': pinnable }"
+      >
         <img
           class="quick-logo"
           :src="brandLogo"
@@ -180,13 +209,16 @@ function keydown(event: KeyboardEvent) {
         <strong>快捷工时</strong>
         <span class="quick-total"><Clock />今日 <b>{{ shortDuration(total) }}</b></span>
         <button
+          v-if="pinnable"
           type="button"
           class="quick-icon"
-          aria-label="打开主界面"
-          title="打开主界面"
-          @click="bridge?.openMain()"
+          :class="{ 'is-pinned': pinned }"
+          :aria-pressed="pinned"
+          :aria-label="pinned ? '取消固定' : '固定小窗'"
+          :title="pinned ? '取消固定' : '固定小窗'"
+          @click="bridge!.setPinned!(!pinned)"
         >
-          <TimerIcon name="external" />
+          <TimerIcon name="pin" />
         </button>
         <button
           type="button"
@@ -196,6 +228,15 @@ function keydown(event: KeyboardEvent) {
           @click="bridge?.openMain('/settings')"
         >
           <TimerIcon name="settings" />
+        </button>
+        <button
+          v-if="pinned"
+          type="button"
+          class="quick-icon"
+          aria-label="关闭"
+          @click="bridge?.close()"
+        >
+          <TimerIcon name="close" />
         </button>
       </header>
       <label class="quick-search">
@@ -238,7 +279,10 @@ function keydown(event: KeyboardEvent) {
           />{{ chip.name }}
         </button>
       </div>
-      <div class="quick-list">
+      <div
+        ref="list"
+        class="quick-list"
+      >
         <div
           v-for="group in groups"
           :key="group.projectId"
@@ -281,15 +325,30 @@ function keydown(event: KeyboardEvent) {
           {{ candidates.loading.value ? '正在加载工作项…' : candidates.problem.value
             || (project ? '这个项目里暂无分配给你或最近记录的工作项，可以在上方搜索。' : '暂无工作项，可以在上方搜索。') }}
         </p>
-        <button
-          v-else-if="candidates.nextOffset.value !== null"
-          type="button"
-          class="quick-more"
-          :disabled="candidates.loading.value"
-          @click="candidates.load(true)"
+        <p
+          v-if="candidates.loading.value && shown.length"
+          class="quick-status"
         >
-          加载更多
-        </button>
+          正在加载更多工作项…
+        </p>
+        <p
+          v-else-if="candidates.problem.value && shown.length"
+          class="quick-status"
+          role="alert"
+        >
+          加载更多失败 <button
+            type="button"
+            @click="candidates.load(true)"
+          >
+            重试
+          </button>
+        </p>
+        <div
+          v-if="candidates.nextOffset.value !== null"
+          ref="sentinel"
+          class="quick-sentinel"
+          aria-hidden="true"
+        />
       </div>
       <footer class="quick-foot">
         <HideCompletedSwitch :hidden-count="hiddenCount" />
@@ -301,6 +360,12 @@ function keydown(event: KeyboardEvent) {
           我的一天<ArrowRight />
         </button>
       </footer>
+      <span
+        v-if="bridge?.resize"
+        class="quick-grip"
+        aria-hidden="true"
+        @pointerdown.prevent="startResize"
+      ><TimerIcon name="resize" /></span>
       <div
         class="quick-toast"
         :class="{ 'is-visible': toastVisible }"
@@ -330,6 +395,12 @@ button:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:-2p
 .quick-icon{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;color:var(--yp-text-secondary)}
 .quick-icon:hover{background:var(--yp-timer-hover);color:var(--yp-text-primary)}
 .quick-icon svg{width:16px;height:16px}
+.quick-icon.is-pinned{color:var(--yp-timer-accent);background:color-mix(in srgb,var(--yp-timer-accent) 12%,transparent)}
+.quick-head.is-draggable{app-region:drag}
+.quick-head.is-draggable button{app-region:no-drag}
+.quick-grip{position:absolute;right:4px;bottom:4px;width:16px;height:16px;cursor:nwse-resize;opacity:.35;color:var(--yp-text-secondary)}
+.quick-grip svg{transform:rotate(90deg)}
+.quick-card:hover .quick-grip{opacity:.6}
 .quick-search{display:flex;align-items:center;gap:6px;height:32px;margin:8px 10px 6px;padding:0 10px;border-radius:8px;background:var(--yp-timer-sunken);color:var(--yp-text-muted);flex-shrink:0}
 .quick-search svg{width:15px;height:15px}
 .quick-search :deep(.el-input){flex:1;min-width:0;--el-input-height:30px}
@@ -343,7 +414,9 @@ button:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:-2p
 .quick-list{flex:1;min-height:0;overflow:auto;padding:2px 8px 8px}
 .quick-group{padding:8px 6px 3px;color:var(--yp-text-muted);font-size:11px}
 .quick-empty{margin:24px 12px;color:var(--yp-text-muted);font-size:12.5px;line-height:1.6;text-align:center}
-.quick-more{display:block;margin:6px auto 0;padding:4px 10px;border-radius:8px;color:var(--yp-timer-accent);font-size:12.5px}
+.quick-status{margin:6px 0;color:var(--yp-text-muted);font-size:12px;text-align:center}
+.quick-status button{color:var(--yp-timer-accent)}
+.quick-sentinel{height:1px}
 .quick-foot{display:flex;align-items:center;gap:8px;height:44px;padding:0 12px;border-top:1px solid var(--yp-timer-hairline);flex-shrink:0}
 .quick-link{display:inline-flex;align-items:center;gap:2px;margin-left:auto;color:var(--yp-timer-accent);font-size:12.5px}
 .quick-link svg{width:13px;height:13px}

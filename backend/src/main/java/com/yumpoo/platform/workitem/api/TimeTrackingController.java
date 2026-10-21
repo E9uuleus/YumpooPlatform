@@ -32,9 +32,12 @@ public class TimeTrackingController {
     @GetMapping("/me/time-tracker/candidates")
     ResponseEntity<TimerCandidatePage> candidates(@RequestParam(required=false) String q,
             @RequestParam(defaultValue="PERSONAL") String scope, @RequestParam(defaultValue="0") int offset,
-            @RequestParam(defaultValue="25") int limit) {
+            @RequestParam(defaultValue="25") int limit,
+            @RequestParam(name="projectId", required=false) List<UUID> projectIds,
+            @RequestParam(defaultValue="false") boolean assignedToMe,
+            @RequestParam(defaultValue="false") boolean excludeCompleted) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(service.candidates(actors.requiredActive(), q, scope, offset, limit));
+                .body(service.candidates(actors.requiredActive(), q, scope, offset, limit, projectIds, assignedToMe, excludeCompleted));
     }
     @GetMapping("/projects/{projectId}/time-tracking-summaries")
     ResponseEntity<SummaryPage> summaries(@PathVariable UUID projectId,@RequestParam List<UUID> workItemId) {

@@ -6,6 +6,18 @@ import { formatClock, gaps, HOUR, MINUTE, placeSequential, type DayBlock, type R
 export const QUICK_DURATIONS = [15 * MINUTE, 30 * MINUTE, HOUR, 2 * HOUR] as const
 export type DateChoice = 'today' | 'yesterday' | 'pick'
 
+/** The stepper moves the target day one day at a time and never past today; today and yesterday light their own chips. */
+export function stepDate(target: string, delta: -1 | 1, today: string): { choice: DateChoice; picked: string } {
+  const next = addDays(target, delta)
+  const date = next > today ? today : next
+  return { choice: date === today ? 'today' : date === addDays(today, -1) ? 'yesterday' : 'pick', picked: date }
+}
+/** `10月19日 周一` */
+export function stepperLabel(date: string): string {
+  const [month, day] = date.slice(5).split('-').map(Number)
+  return `${month}月${day}日 周${'日一二三四五六'[new Date(`${date}T00:00:00Z`).getUTCDay()]}`
+}
+
 /** The candidate carries only the status category, so the pill names the category. */
 export const STATUS_PILLS: Record<string, { label: string; tone: 'accent' | 'warning' | 'success' | 'neutral' }> = {
   TODO: { label: '待开始', tone: 'warning' },

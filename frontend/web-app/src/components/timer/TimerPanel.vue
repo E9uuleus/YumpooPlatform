@@ -5,6 +5,7 @@ import type { TimerOrbChange, TimerOrbLayout, TimerPreferences, TimerPreferences
 import { ListTimerCandidatesScopeEnum, type TimerCandidate } from '@yumpoo/api-client'
 import { formatTrackingDuration, useTimeTracker } from '../../composables/useTimeTracker'
 import { useTimerCandidates } from '../../composables/useTimerCandidates'
+import { useInfiniteSentinel } from '../../composables/useInfiniteSentinel'
 import { useHideCompleted } from '../../composables/useHideCompleted'
 import HideCompletedSwitch from './HideCompletedSwitch.vue'
 import TimerIcon from './TimerIcon.vue'
@@ -45,13 +46,15 @@ const running = computed(() => runningSessions.value[0]?.session)
 const resumeItems = computed(() => tracker.current.value?.resumeItems ?? [])
 const resume = computed(() => resumeItems.value.length > 1 ? resumeItems.value[0] : tracker.current.value?.recentItems[0])
 const needsCandidates = computed(() => expanded.value || !!running.value || !!resume.value)
-const { query, scope, items, loading, problem, nextOffset, searching, load } = useTimerCandidates(needsCandidates)
+const { query, scope, items, hiddenCount, loading, problem, nextOffset, searching, load } = useTimerCandidates(needsCandidates)
+const sentinel = ref<HTMLElement>()
+useInfiniteSentinel(results, sentinel, () => items.value.length,
+  () => nextOffset.value !== null && !loading.value && !problem.value, () => load(true))
 const title = computed(() => running.value
   ? `${runningSessions.value[0]!.workItemTitle ?? '不可见工作项'}${runningSessions.value.length > 1 ? ` 等 ${runningSessions.value.length} 项` : ''}`
   : resume.value ? `${resume.value.title}${resumeItems.value.length > 1 ? ` 等 ${resumeItems.value.length} 项` : ''}` : undefined)
-const { hideCompleted, visibleCandidates } = useHideCompleted()
-const visible = computed(() => visibleCandidates(items.value, query.value))
-const hiddenCount = computed(() => items.value.length - visible.value.length)
+const { hideCompleted } = useHideCompleted()
+const visible = items
 const candidates = computed(() => visible.value.filter(item => !tracker.isRunning(item.workItemId) && (running.value || !saved.value || item.workItemId !== resume.value?.workItemId)))
 const focusedItem = ref<TimerCandidate>()
 const focusedId = computed(() => running.value ? running.value.workItemId : resume.value?.workItemId)
@@ -615,7 +618,7 @@ function keydown(event: KeyboardEvent) {
             </button>
           </div>
           <div
-            v-if="loading"
+            v-if="loading && !items.length"
             class="empty-state"
             role="status"
           >
@@ -636,13 +639,30 @@ function keydown(event: KeyboardEvent) {
               查看全部
             </button>
           </div>
-          <button
-            v-if="nextOffset !== null && !loading"
-            class="load-more"
-            @click="load(true)"
+          <p
+            v-if="loading && items.length"
+            class="picker-status"
           >
-            加载更多
-          </button>
+            正在加载更多工作项…
+          </p>
+          <p
+            v-else-if="problem && items.length"
+            class="picker-status"
+            role="alert"
+          >
+            加载更多失败 <button
+              class="text-button"
+              @click="load(true)"
+            >
+              重试
+            </button>
+          </p>
+          <div
+            v-if="nextOffset !== null"
+            ref="sentinel"
+            class="picker-sentinel"
+            aria-hidden="true"
+          />
         </div>
       </template>
     </template>
@@ -715,7 +735,8 @@ button:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:2px
 .empty-state{min-height:135px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:14px;color:var(--yp-text-muted);font-size:12px;text-align:center}
 .empty-state>svg{width:24px;height:24px;opacity:.6}
 .text-button{color:var(--yp-timer-accent);border:0;background:transparent;padding:3px;font-size:12px}
-.load-more{display:block;width:100%;padding:10px;background:transparent;border:0;color:var(--yp-timer-accent);font-size:12px}
+.picker-status{margin:6px 0;color:var(--yp-text-muted);font-size:12px;text-align:center}
+.picker-sentinel{height:1px}
 .panel-problem{margin:0 12px 10px;padding:7px 10px;font-size:11px;color:var(--yp-status-red);background:color-mix(in srgb,var(--yp-status-red) 8%,var(--yp-bg-raised));border-radius:8px}
 .panel-problem.is-waiting{color:var(--yp-text-secondary);background:var(--yp-timer-sunken)}
 .saved-feedback{display:flex;align-items:center;gap:7px;color:var(--yp-timer-saved);font-size:13px;font-weight:600}

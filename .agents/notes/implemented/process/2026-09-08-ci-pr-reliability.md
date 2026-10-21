@@ -10,25 +10,29 @@ Status: implemented
 
 ## Decision
 
-`tools/ci/plan.mjs` 与 `run.mjs` 提供平铺的 `ci:contracts/static/backend/portable/windows` 和统一 `pnpm run ci` 入口，显式 `run` 避免与 pnpm 内置命令冲突。昂贵能力各执行一次，后端 `clean verify` 保留全部业务、安全、架构、数据库迁移和备份恢复集成测试，96 MiB 堆的附件探针另行执行。当前资产、历史证据结构、事件兼容与校验器测试分工明确；M2-23/M2-24 的 assets 不再隐式运行整套工具链。旧切片入口仍作历史复现，普通 PR 不依赖嵌套命令。
+`tools/ci/plan.mjs` 与 `run.mjs` 提供平铺的 `ci:contracts/static/backend/portable/windows` 和统一 `pnpm run ci` 入口。里程碑检查与 `evidence/` 已退役，只保留当前打包、冒烟、交接包、部署配置不变量和契约检查；现有前端、桌面与后端行为回归继续运行。后端 `clean verify` 保留业务、安全、架构、数据库迁移和备份恢复集成测试，96 MiB 堆的附件探针另行执行。
 
 历史 SQL、M2-23 冻结清单及既有 OpenAPI 精确例外对照 PR 基线不可改写，归档 Note 继续由原 manifest 门禁保护。当前 OpenAPI 和完整事件目录是现行规范，兼容基线从目标提交临时提取。已有例外仅匹配原始精确哈希对，不授权后续规范；类别专项不再要求每次正常迭代追加“旧历史 → 当前”的哈希链。恢复请求枚举缩减和响应枚举扩展检测，没有增加或批准例外。本决策部分替代[类别重构闸门](2026-09-02-content-category-openapi-breaking-change.md)的当前哈希维护要求，保留其精确授权与审计理由。
 
 事件比较覆盖全部当前登记版本及共享载荷。既有版本只允许增加可选字段、嵌套可选对象字段或变更 Schema 注释；聚合语义、必需字段、原有约束、引用和历史合法样例继续保护。JSON Schema 的业务属性即使名为 `description` 也不是可忽略的注释。M2-23 的 14 项清单仍是冻结历史，新增版本在当前目录登记；本决策补充[事件冻结决定](../data/2026-08-31-work-item-event-contract-freeze.md)。
 
-迁移测试从真实资源和 Flyway pending 清单推导期望版本、执行数量和执行集合，保留具体数据、索引、约束、V46 checksum 及重复 migrate 的断言；增加未来迁移夹具，修改已应用 SQL 仍由 checksum 和 Git 历史检查拒绝。类别专项读取结构化 OpenAPI 与事件契约，移除旧 CSS 尺寸、源码符号和文档措辞匹配，原有前端/后端行为回归继续运行。
+迁移测试从真实资源和 Flyway pending 清单推导期望版本、执行数量和执行集合，保留具体数据、索引、约束、V46 checksum 及重复 migrate 的断言；增加未来迁移夹具，修改已应用 SQL 仍由 checksum 和 Git 历史检查拒绝。类别源码与历史资产专项已退役，当前类别契约由通用 OpenAPI/事件检查和业务回归保护。
 
-根 README 提供当前项目介绍、技术栈、运行、构建、验证与部署入口，历史切片由 Git、`evidence/` 与相关决策记录保留。M2-17 至 M2-23（含 M2-21A）的资产脚本移除对 README 里程碑标题和旧延期措辞的匹配，保留各自契约、实现、测试和验收资产检查；README 链接继续由 `doc-sync` 校验。
+根 README 提供当前运行、构建、验证与部署入口；历史切片、验收矩阵及延期记录由 Git 保留，不再作为当前 CI 输入。运行报告 schema 移至 `tools/verification/schemas/`，只校验本次输出及其提交、时间、完整性与脱敏。
 
 验证子进程清除继承的应用配置、认证 fixture 和 JVM/Maven/Node 注入选项，再显式注入当前验证参数。阶段报告记录源码指纹、基线提交及逐步完成状态；后续交付拒绝旧源码、旧基线和缺失步骤。Windows 在校验 handoff 后对同一 JAR/Web 字节执行 smoke 和组包，服务器包再次逐文件对照 handoff。
 
 保留远端 required check 名称 `M0 Portable Gate` 与 `M0 Windows x64 Gate`。实际 Windows 工作任务为 `Windows Delivery`；最终门禁使用 `always()`，要求每个工作任务为 success 且有完成凭据。失败、取消、意外 skipped、未知或缺失结果都不能成功；没有路径过滤。PR/ref 新轮次取消旧轮次，保留合入 `dev` 或晋升到 `main` 后对实际提交的验证；指向 `dev`、`main` 的 PR 与两者的推送运行同一套门禁（发布线见 [main 发布线决策](2026-10-15-main-release-line.md)）。无论成功与否都尝试上传阶段记录和 Maven 诊断；必要交付物缺失仍失败。
 
+生产部署校验完整保留回环监听、Secret 与普通配置分离、会话时限、日志路径与轮转、Nginx/IIS 响应头与代理规则、内部端点隔离、SPA 路由不被遮蔽、WinSW 锁定摘要与服务策略；不再断言 RUNBOOK 或清单的文字。Windows 安装与更新验证继续保留 `CI=true` 门槛和本机配置备份恢复。
+
+冻结标识包括 `.github/workflows/m0-18-ci.yml`、`Platform CI`、三个 Job ID 与名称、`m1-15-server-*`/`desktop-*` artifact、`out/m1-15/` 与服务器 ZIP 名、服务器 manifest/report 字段、`collect-desktop-release.mjs` 路径，以及后端 Java 类、profile 和配置标识（只迁移备份输出环境变量）。这些标识分别绑定发布工具、Sigstore、主机引擎或后端测试，后续先兼容新旧标识再协调切换，回退窗口结束后退役旧标识。
+
 ## Alternatives considered
 
 - 持续更新历史版本数字、UI 片段和整份规范哈希：把本来可兼容的产品变化变成审批噪声，且容易掩盖真实破坏，拒绝。
 - 关闭兼容检查、宽泛忽略枚举变化或按路径跳过大部分测试：会削弱已有消费者、安全或 Windows 保障，拒绝；未新增按需跳过规则。
-- 删除全部里程碑校验：其中仍有备份、产物白名单、敏感信息排除及环境延期清单的独特保障；仅移除已证实的重复编排和脆弱断言。
+- 连同里程碑脚本删除有效生产保障：拒绝。将备份恢复、产物白名单、敏感信息排除、交接包与生产配置不变量迁入独立能力脚本后，再删除旧入口和历史记录检查。
 - 提交永久 OpenAPI/事件快照并维护多套基线：PR 目标提交已是可信比较对象，复制只增加漂移，拒绝。
 - 将 Windows 构建结果当成与 Linux 已测包等价：重新构建的字节没有同一测试证明，改为验证并复用 handoff。
 - 改名所有 required checks 并同步改远端设置：会制造配置切换窗口；保留两个既有名字，用最终状态承载完整依赖判断。
@@ -37,6 +41,6 @@ Status: implemented
 
 正常 PR 的最少步骤是基于最新 dev 开分支、安装锁定依赖、运行统一入口并向 dev 开 PR。契约破坏、已交付迁移改写、新版本遗漏旧版本、生成客户端漂移与安全回归仍必须修复；不能用刷新历史证据消除失败。源代码改变后不能复用旧阶段报告，失败定位使用明确的阶段/步骤和 Actions 诊断 artifact。
 
-CI 不代表部署：公司 HTTPS、真实企微、Defender、干净 Windows Server、生产数据迁移和灾备环境验收仍保留原 evidence 中的 NOT_RUN/延期状态，CI 报告保持 WINDOWS_X64_CI_STAGE。本机 Windows 的大小写碰撞与符号链接夹具由必需 Linux job 执行。实际远端执行和本地验证结果随 PR 提供，不伪造历史 PASS。
+CI 不代表部署：公司 HTTPS、真实企微、干净 Windows Server、生产数据迁移和灾备环境仍需独立验收。删除历史 evidence 不将 NOT_RUN 或延期状态改成 PASS；Git 保留原记录。本机 Windows 的大小写碰撞与符号链接夹具由必需 Linux job 执行。
 
 远端规则集 Protect dev（20779725）已读取，未修改；现有两个必需状态继续有效。其 required_approving_review_count 仍为 0，至少一位其他评审者批准并未由远端强制；准确配置建议与现有 bypass 记录在 CI 文档中。

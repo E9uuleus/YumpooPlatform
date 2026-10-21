@@ -2,6 +2,7 @@ import path from 'node:path'
 import { readFileSync } from 'node:fs'
 import { mkdir, rename, writeFile } from 'node:fs/promises'
 import type { TimerDisplayStyle, TimerDockSide, TimerOrbSize, TimerPreferences } from '@yumpoo/preload-contract'
+import { QUICK_PANEL, QUICK_PANEL_MAX, type Rect } from './timer-geometry'
 
 const STORE_FILE = 'timer-preferences.json'
 const MAX_STORE_BYTES = 4 * 1024
@@ -9,10 +10,12 @@ const MAX_STORE_BYTES = 4 * 1024
 export interface StoredTimerPreferences extends TimerPreferences {
   dockY: number
   pinned: boolean
+  quickPinned: boolean
+  quickBounds: Rect | null
 }
 
 export const DEFAULT_TIMER_PREFERENCES: Readonly<StoredTimerPreferences> = Object.freeze({
-  display: 'orb', orbSize: 'medium', dockSide: 'right', dockY: .5, pinned: true,
+  display: 'orb', orbSize: 'medium', dockSide: 'right', dockY: .5, pinned: true, quickPinned: false, quickBounds: null,
 })
 
 export const validDisplay = (value: unknown): value is TimerDisplayStyle => value === 'orb' || value === 'dock'
@@ -38,7 +41,7 @@ export class TimerPreferenceStore {
 
   update(change: Partial<StoredTimerPreferences>): StoredTimerPreferences {
     const next = { ...this.value, ...sanitize(change as Record<string, unknown>) }
-    if ((Object.keys(next) as Array<keyof StoredTimerPreferences>).some(key => next[key] !== this.value[key])) {
+    if (JSON.stringify(next) !== JSON.stringify(this.value)) {
       this.value = next
       this.persist()
     }
@@ -78,5 +81,15 @@ function sanitize(value: Record<string, unknown>): Partial<StoredTimerPreference
   if (validDockSide(value.dockSide)) result.dockSide = value.dockSide
   if (typeof value.dockY === 'number' && Number.isFinite(value.dockY)) result.dockY = Math.min(1, Math.max(0, value.dockY))
   if (typeof value.pinned === 'boolean') result.pinned = value.pinned
+  if (typeof value.quickPinned === 'boolean') result.quickPinned = value.quickPinned
+  if (value.quickBounds === null) result.quickBounds = null
+  else if (value.quickBounds && typeof value.quickBounds === 'object') {
+    const bounds = value.quickBounds as Rect
+    if ([bounds.x, bounds.y, bounds.width, bounds.height].every(number => typeof number === 'number' && Number.isFinite(number))
+      && bounds.width >= QUICK_PANEL.width && bounds.width <= QUICK_PANEL_MAX.width
+      && bounds.height >= QUICK_PANEL.height && bounds.height <= QUICK_PANEL_MAX.height) {
+      result.quickBounds = { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }
+    }
+  }
   return result
 }

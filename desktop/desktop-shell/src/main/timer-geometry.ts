@@ -10,9 +10,10 @@ export const CAPSULE_WIDTH = 216
 export const DOCK_TAB = { width: 32, height: 112 } as const
 export const DOCK_CARD = { width: 288, height: 152 } as const
 export const PANEL = { width: 360 + PANEL_MARGIN * 2, height: 480 + PANEL_MARGIN * 2 } as const
-export const MENU = { width: 288 + PANEL_MARGIN * 2, height: 408 + PANEL_MARGIN * 2 } as const
+export const MENU = { width: 288 + PANEL_MARGIN * 2, height: 448 + PANEL_MARGIN * 2 } as const
 
 export const QUICK_PANEL = { width: 340 + PANEL_MARGIN * 2, height: 476 + PANEL_MARGIN * 2 } as const
+export const QUICK_PANEL_MAX = { width: 560 + PANEL_MARGIN * 2, height: 860 + PANEL_MARGIN * 2 } as const
 export const RAIL_ICONS: Readonly<Record<RailSize, number>> = { small: 30, medium: 34, large: 40 }
 /** Space between the rail and the screen edge; tucked, the rail keeps RAIL_PEEK - RAIL_EDGE_GAP pixels in view. */
 export const RAIL_EDGE_GAP = 6
@@ -22,6 +23,13 @@ export const MAX_RAIL_PROJECTS = 6
 const RAIL_PADDING = 10, RAIL_GAP = 8, RAIL_LABEL = 14
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(value, max))
+
+/** Grows or shrinks from the top-left corner within the panel limits and the work area. */
+export function resizeFrom(start: Rect, dx: number, dy: number, area: Rect): Rect {
+  const width = clamp(Math.round(start.width + dx), QUICK_PANEL.width, Math.min(QUICK_PANEL_MAX.width, area.x + area.width - start.x))
+  const height = clamp(Math.round(start.height + dy), QUICK_PANEL.height, Math.min(QUICK_PANEL_MAX.height, area.y + area.height - start.y))
+  return { x: start.x, y: start.y, width, height }
+}
 
 export function clampRect(rect: Rect, area: Rect): Rect {
   const width = Math.min(rect.width, area.width), height = Math.min(rect.height, area.height)

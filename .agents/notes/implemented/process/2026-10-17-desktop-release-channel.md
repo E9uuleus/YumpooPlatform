@@ -122,6 +122,7 @@ Status: implemented
 
 - `DesktopBridge.update` 提供 `getState / check / restart / onState`，只接受主窗口主框架的调用。Web 只在桥接存在且状态为 `ready` 时显示「重启以更新」横幅；
 - 托盘提示和托盘原生菜单在更新就绪时显示版本与「重启以更新到 X」；诊断窗显示更新状态；
+- 托盘右键菜单显示版本与更新状态，可以检查、下载和重启更新；检查与下载时保持菜单打开，旧壳缺少更新状态时隐藏该入口。
 - 发往本 origin 的请求由 `onBeforeSendHeaders` 加上 `X-Client-Type: ELECTRON`、`X-Client-Version`、`X-Client-Protocol-Version: 1`，为服务端最低版本闸门做准备。其他来源的请求不会带这些头。
 
 **卸载边界**：
@@ -133,7 +134,7 @@ Status: implemented
 **安装自检与门禁**：
 
 - 打包版支持 `--self-check=<绝对路径>`：不联网，检查是否打包、分发配置、协议注册，并在隐藏窗口中离线渲染诊断页（等到页面状态变为 `ready`）；报告 safeStorage 可用性，把 JSON 报告写到指定文件后退出。报告写文件而不走 stdout，因为 GUI 子系统 exe 的标准输出不可靠；
-- [打包校验](../../../../tools/verification/package-m0-15-win.mjs)在 `win-unpacked` 上检查图标、版本资源、fuse 状态、`resources` 白名单和 asar 白名单，生成原有 schema 的 M0-15 manifest，另写一份 `desktop-installer.json`，记录安装包名称、大小和 SHA-256；
+- [打包校验](../../../../tools/verification/package-desktop-win.mjs)在 `win-unpacked` 上检查图标、版本资源、fuse 状态、`resources` 白名单和 asar 白名单，生成 `desktop-artifact-manifest.json`（DESKTOP manifest），另写一份 `desktop-installer.json`，记录安装包名称、大小和 SHA-256；
 - [安装冒烟](../../../../tools/verification/verify-desktop-installer.mjs)在 Windows 门禁中依次执行：静默安装、核对快捷方式（含安全模式快捷方式的目标和参数）和协议键、自检（含诊断页离线渲染）、预置会话与偏好数据、同版本覆盖安装、静默卸载，并断言上面的卸载边界；再以 `/D=` 指定的自定义目录重复安装，核对 exe 位置、`InstallLocation` 与协议键命令路径，要求不带 `/D=` 的同版本覆盖安装沿用该目录、卸载后目录被删除。每次安装都要求 `QuietUninstallString` 带 `/S`。它会改动当前用户的配置，所以只在 `CI=true` 或 `YUMPOO_DESKTOP_INSTALLER_SMOKE=1` 时运行，并先把已有的 userData、更新缓存目录和协议键移到临时备份目录（更新端到端验证同样如此），结束后恢复。备份与运行处于同一个 try 内，中途失败也会恢复已移开的部分；任何一项恢复失败时保留备份目录并让冒烟失败，报错中给出目录位置。NSIS 卸载程序会从 %TEMP% 重新启动自身，所以由 Windows PowerShell 临时编译[进程树助手](../../../../tools/verification/windows-process-tree.cs)：挂起创建根进程、加入 Job Object 后才恢复执行，直到内核报告该 Job 没有活动进程，再返回根进程退出码。Job 禁止子进程脱离，且关闭最后一个句柄会终止全部成员，因此外层超时结束助手时也会结束分离的子孙进程。收尾卸载失败或超时时仍不恢复配置，保留备份并报出路径，由人确认卸载结束后手动恢复。Windows 门禁覆盖快速原生启动器、真实分离子孙进程、参数传递、退出码及超时终止行为。
 
 **更新端到端验证**（DESK-3）：

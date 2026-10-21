@@ -1,0 +1,214 @@
+components:
+  schemas:
+    DashboardConfiguration:
+      type: object
+      required:
+        - projectIds
+        - widgets
+        - filters
+      properties:
+        projectIds:
+          type: array
+          items: &a1
+            type: string
+            format: uuid
+          maxItems: 100
+        widgets:
+          type: array
+          items:
+            $ref: "#/components/schemas/DashboardWidget"
+          maxItems: 40
+        filters:
+          $ref: "#/components/schemas/DashboardFilters"
+    DashboardWrite:
+      type: object
+      required:
+        - name
+        - configuration
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        configuration:
+          $ref: "#/components/schemas/DashboardConfiguration"
+    DashboardConnection:
+      type: object
+      required:
+        - id
+        - name
+        - code
+        - lifecycle
+        - available
+      properties:
+        id: *a1
+        name:
+          type: string
+          nullable: true
+        code:
+          type: string
+          nullable: true
+        lifecycle:
+          type: string
+          nullable: true
+        available: &a5
+          type: boolean
+    DashboardProject:
+      type: object
+      required:
+        - id
+        - name
+        - code
+        - lifecycle
+      properties:
+        id: *a1
+        name: &a2
+          type: string
+        code: *a2
+        lifecycle: *a2
+    DashboardProjectPage:
+      type: object
+      required:
+        - items
+        - totalElements
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DashboardProject"
+        totalElements: &a3
+          type: integer
+          format: int64
+          minimum: 0
+    DashboardView:
+      type: object
+      required:
+        - id
+        - name
+        - configuration
+        - projects
+        - version
+        - etag
+        - updatedAt
+      properties:
+        id: *a1
+        name: *a2
+        configuration:
+          $ref: "#/components/schemas/DashboardConfiguration"
+        projects:
+          type: array
+          items:
+            $ref: "#/components/schemas/DashboardConnection"
+        version: *a3
+        etag: *a2
+        updatedAt: &a4
+          type: string
+          format: date-time
+    DashboardSummary:
+      type: object
+      required:
+        - id
+        - name
+        - projectCount
+        - widgetCount
+        - updatedAt
+      properties:
+        id: *a1
+        name: *a2
+        projectCount: *a3
+        widgetCount: *a3
+        updatedAt: *a4
+    DashboardList:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DashboardSummary"
+    DashboardQuery:
+      type: object
+      required:
+        - filters
+      properties:
+        filters:
+          $ref: "#/components/schemas/DashboardFilters"
+        widgets:
+          type: array
+          items:
+            $ref: "#/components/schemas/DashboardWidget"
+          maxItems: 40
+    DashboardBucket:
+      type: object
+      required:
+        - kind
+        - key
+        - projectId
+        - userId
+        - label
+        - code
+        - category
+        - colorToken
+        - count
+        - inProgress
+        - done
+        - durationMs
+      properties:
+        kind: *a2
+        key: *a2
+        projectId:
+          type: string
+          format: uuid
+          nullable: true
+        userId:
+          type: string
+          format: uuid
+          nullable: true
+        label:
+          type: string
+          nullable: true
+        code:
+          type: string
+          nullable: true
+        category:
+          type: string
+          nullable: true
+        colorToken:
+          type: string
+          nullable: true
+        count: *a3
+        inProgress: *a3
+        done: *a3
+        durationMs: *a3
+    DashboardSnapshot:
+      type: object
+      required:
+        - buckets
+        - options
+        - asOf
+        - projects
+      properties:
+        buckets:
+          type: array
+          items:
+            $ref: "#/components/schemas/DashboardBucket"
+        options:
+          type: array
+          items:
+            $ref: "#/components/schemas/DashboardBucket"
+        asOf: *a4
+        projects:
+          type: array
+          items:
+            $ref: "#/components/schemas/DashboardConnection"
+        charts:
+          type: array
+          items:
+            $ref: "#/components/schemas/DashboardChartResult"
+    DashboardDeleted:
+      type: object
+      required:
+        - deleted
+      properties:
+        deleted: *a5

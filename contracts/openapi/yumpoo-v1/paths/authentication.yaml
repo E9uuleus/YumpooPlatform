@@ -1,0 +1,197 @@
+paths:
+  /auth/wecom/authorize:
+    get:
+      tags:
+        - Authentication
+      operationId: authorizeWeComLogin
+      summary: 发起企微 Web 登录
+      description: 创建一次性 OAuth state/nonce，并跳转到当前启用的身份提供者。
+      security: []
+      parameters:
+        - name: remember
+          in: query
+          required: false
+          description: 「7 天内免登录」。缺省按 true；false 时会话闲置 8 小时失效，Session/CSRF Cookie 不带 Max-Age。
+          schema:
+            type: boolean
+            default: true
+      responses:
+        "302":
+          description: 跳转到身份提供者，并设置 HttpOnly nonce 与免登录选择 Cookie。
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+            Set-Cookie:
+              $ref: "#/components/headers/SetCookie"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+  /auth/wecom/callback:
+    get:
+      tags:
+        - Authentication
+      operationId: completeWeComLogin
+      summary: 完成企微 Web 登录
+      description: |
+        原子消费 OAuth attempt，解析已同步的企微身份并按发起时的免登录选择签发 Web Session。
+        成功固定跳转到 `/`；无论成功失败均清除 nonce 与免登录选择 Cookie。
+      security: []
+      parameters:
+        - name: code
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 512
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 43
+            maxLength: 43
+            pattern: ^[A-Za-z0-9_-]{43}$
+      responses:
+        "302":
+          description: 登录成功，签发 Session/CSRF Cookie 并固定跳转到 `/`。
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+            Set-Cookie:
+              $ref: "#/components/headers/SetCookie"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+  /electron/auth/attempts:
+    post:
+      tags:
+        - Authentication
+      operationId: createElectronAuthAttempt
+      summary: 创建 Electron 系统浏览器登录请求
+      description: 绑定 Electron state、PKCE S256 challenge 与客户端版本并返回企微官方扫码地址。
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/ElectronClientType"
+        - $ref: "#/components/parameters/ElectronClientVersion"
+        - $ref: "#/components/parameters/ElectronProtocolVersion"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ElectronAuthAttemptRequest"
+      responses:
+        "201":
+          description: 已创建五分钟有效的登录请求。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ElectronAuthAttemptResponse"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+  /electron/auth/wecom/callback:
+    get:
+      tags:
+        - Authentication
+      operationId: completeElectronWeComLogin
+      summary: 完成 Electron 企微扫码授权
+      security: []
+      parameters:
+        - name: code
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 512
+        - name: state
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/OpaqueDesktopToken"
+      responses:
+        "302":
+          description: 成功时跳转受限 yumpoo 协议；失败时跳转脱敏登录页。
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+  /electron/auth/exchange:
+    post:
+      tags:
+        - Authentication
+      operationId: exchangeElectronAuthHandoff
+      summary: 兑换一次性 Electron 登录交接码
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/ElectronClientType"
+        - $ref: "#/components/parameters/ElectronClientVersion"
+        - $ref: "#/components/parameters/ElectronProtocolVersion"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ElectronAuthExchangeRequest"
+      responses:
+        "200":
+          description: 正式 ELECTRON 会话材料；响应禁止缓存。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ElectronAuthExchangeResponse"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+  /auth/logout:
+    post:
+      tags:
+        - Authentication
+      operationId: logoutCurrentSession
+      summary: 退出当前会话
+      description: |
+        撤销当前 Session。已由 USER_LOGOUT 撤销的同一 Session 可携原 CSRF 幂等重试。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/XsrfToken"
+      responses:
+        "204":
+          description: 当前 Session 已处于主动退出状态，并清除 Session/CSRF Cookie。
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/SetCookie"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /auth/me:
+    get:
+      tags:
+        - Authentication
+      operationId: getCurrentAuthentication
+      summary: 查询当前登录主体
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: 当前 Web 登录主体、公司、角色及客户端兼容状态。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentAuthentication"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"

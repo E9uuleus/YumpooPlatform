@@ -1,0 +1,293 @@
+paths:
+  /company:
+    get:
+      tags:
+        - IdentityAdministration
+      operationId: getCompany
+      summary: 查询当前公司配置
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: 当前公司的只读配置。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Company"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    patch:
+      tags:
+        - IdentityAdministration
+      operationId: updateCompany
+      summary: 修改公司名称
+      description: 仅 COMPANY_ADMIN（含 APP_MANAGER）；要求会话、XSRF 和最近读取的 If-Match；名称去除首尾空白后保存；写入安全审计。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompanyUpdateRequest"
+      responses:
+        "200":
+          description: 保存后的公司配置。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Company"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /admin/integrations/wecom/status:
+    get:
+      tags:
+        - IdentityAdministration
+      operationId: getWeComIntegrationStatus
+      summary: 查询企微集成配置与运行状态
+      description: 只返回配置布尔状态和脱敏 Corp ID，绝不返回 Secret、token 或回调地址。
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: 企微集成只读状态。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeComIntegrationStatus"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /admin/members:
+    get:
+      tags:
+        - IdentityAdministration
+      operationId: listMembers
+      summary: 分页查询成员目录
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: platformRole
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/PlatformRoleTier"
+        - name: name
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+        - name: externalUserId
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 256
+        - name: employmentStatus
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/EmploymentStatus"
+        - name: accountStatus
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/AccountStatus"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Size"
+      responses:
+        "200":
+          description: 成员分页。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberPage"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /admin/members/{userId}:
+    get:
+      tags:
+        - IdentityAdministration
+      operationId: getMember
+      summary: 查询成员目录详情
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: 成员详情。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Member"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+  /admin/directory-sync-runs:
+    get:
+      tags:
+        - IdentityAdministration
+      operationId: listDirectorySyncRuns
+      summary: 分页查询通讯录同步运行
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/DirectorySyncRunStatus"
+        - name: triggerType
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/DirectorySyncTriggerType"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Size"
+      responses:
+        "200":
+          description: 同步运行分页。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DirectorySyncRunPage"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags:
+        - IdentityAdministration
+      operationId: triggerDirectorySync
+      summary: 同步执行一次完整通讯录对账
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: 同一幂等键的运行结果重放。
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DirectorySyncRun"
+        "201":
+          description: 新同步运行已执行并返回终态。
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DirectorySyncRun"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: 另一业务意图的运行仍处于活动状态，Location 指向该运行。
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+  /admin/directory-sync-runs/{runId}:
+    get:
+      tags:
+        - IdentityAdministration
+      operationId: getDirectorySyncRun
+      summary: 查询同步运行详情
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/RunId"
+      responses:
+        "200":
+          description: 同步运行详情。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DirectorySyncRun"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+  /admin/directory-sync-runs/{runId}/failures:
+    get:
+      tags:
+        - IdentityAdministration
+      operationId: listDirectorySyncFailures
+      summary: 分页查询同步失败项
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/RunId"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Size"
+      responses:
+        "200":
+          description: 仅包含稳定错误码和脱敏成员引用的失败项分页。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DirectorySyncFailurePage"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"

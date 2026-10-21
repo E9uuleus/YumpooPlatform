@@ -1,0 +1,2835 @@
+paths:
+  /projects/{projectId}/connect-columns:
+    get:
+      tags:
+        - WorkItems
+      operationId: listConnectColumns
+      summary: 读取连接列目录与入站列概览
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+      responses:
+        "200":
+          description: 操作成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectColumnCatalog"
+              examples:
+                example:
+                  $ref: "#/components/examples/ConnectColumnCatalog"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    post:
+      tags:
+        - WorkItems
+      operationId: createConnectColumn
+      summary: 创建项目连接列
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConnectColumnCreateRequest"
+      responses:
+        "201":
+          description: 操作成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectColumn"
+              examples:
+                example:
+                  $ref: "#/components/examples/ConnectColumn"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /projects/{projectId}/connect-columns/{columnId}:
+    patch:
+      tags:
+        - WorkItems
+      operationId: updateConnectColumn
+      summary: 按完整快照修改连接列
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: columnId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConnectColumnUpdateRequest"
+      responses:
+        "200":
+          description: 操作成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectColumn"
+              examples:
+                example:
+                  $ref: "#/components/examples/ConnectColumn"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          description: 项目归档或待移除目标仍有有效连接。
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ErrorResponse"
+                  - $ref: "#/components/schemas/ConnectTargetInUseError"
+              examples:
+                targetInUse:
+                  $ref: "#/components/examples/ConnectTargetInUseError"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+      description: 无变化时不升版本、不发事件；移除仍有有效连接的目标返回 CONNECT_TARGET_IN_USE 及目标 ID、有效连接数。
+    delete:
+      tags:
+        - WorkItems
+      operationId: deleteConnectColumn
+      summary: 负责人删除连接列并解除列内连接
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: columnId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200":
+          description: 操作成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectColumnDeleteResult"
+              examples:
+                example:
+                  $ref: "#/components/examples/ConnectColumnDeleteResult"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /projects/connect-targets:
+    get:
+      tags:
+        - WorkItems
+      operationId: searchConnectTargetProjects
+      summary: 搜索本公司启用项目的最小信息
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: query
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 0
+            maxLength: 80
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        "200":
+          description: 操作成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectTargetProjectPage"
+              examples:
+                example:
+                  $ref: "#/components/examples/ConnectTargetProjectPage"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /projects/{projectId}/work-item-connections:
+    get:
+      tags:
+        - WorkItems
+      operationId: listWorkItemConnectionCells
+      summary: 批量读取工作项出站与入站连接
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: workItemIds
+          in: query
+          required: true
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/Uuid"
+            minItems: 1
+            maxItems: 100
+          style: form
+          explode: true
+      responses:
+        "200":
+          description: 操作成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemConnectionCellList"
+              examples:
+                example:
+                  $ref: "#/components/examples/WorkItemConnectionCellList"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+      description: 只返回本项目未删除工作项，外项目 ID 静默忽略；incomingByColumn 按来源连接列分组，每列最多 50 条并给出该列完整计数，供目标项目渲染双向连接的反向列。incoming 与 incomingTotal 是跨列汇总的兼容视图（最多 50 条与完整计数）。请求 1–100 行采用固定次数批量 SQL。
+  /work-items/{workItemId}/incoming-connections:
+    get:
+      tags:
+        - WorkItems
+      operationId: listIncomingWorkItemConnections
+      summary: 分页读取可见的入站连接
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: columnId
+          in: query
+          required: false
+          description: 只返回该来源连接列的入站连接，用于反向列展开分页。
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        "200":
+          description: 操作成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemConnectionPage"
+              examples:
+                example:
+                  $ref: "#/components/examples/WorkItemConnectionPage"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+      description: 每条连接须有任一端项目可见；在 SQL 中裁剪可见连接后计数与分页。
+  /work-item-connections/{connectionId}:
+    get:
+      tags:
+        - WorkItems
+      operationId: getWorkItemConnection
+      summary: 读取连接与两端最小卡片
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: connectionId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+      responses:
+        "200":
+          description: 操作成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemConnection"
+              examples:
+                example:
+                  $ref: "#/components/examples/WorkItemConnection"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+      description: 能看见任一端项目即可读取两端 ConnectionCard；任一工作项已删除时省略该连接。
+    delete:
+      tags:
+        - WorkItems
+      operationId: unlinkWorkItemConnection
+      summary: 任一端项目成员解除连接
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: connectionId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200":
+          description: 操作成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemConnection"
+              examples:
+                example:
+                  $ref: "#/components/examples/WorkItemConnection"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /projects/{projectId}/connect-columns/{columnId}/create-options:
+    get:
+      tags:
+        - WorkItems
+      operationId: getConnectCreateOptions
+      summary: 读取新建并关联的目标类别选项
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: columnId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: targetProjectId
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+      responses:
+        "200":
+          description: 操作成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectCreateOptions"
+              examples:
+                example:
+                  $ref: "#/components/examples/ConnectCreateOptions"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /projects/{projectId}/connect-columns/{columnId}/candidates:
+    get:
+      tags:
+        - WorkItems
+      operationId: searchConnectCandidates
+      summary: 双侧成员搜索可关联的目标工作项
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: columnId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: targetProjectId
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: sourceWorkItemId
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: q
+          in: query
+          required: false
+          description: 为空时按排序浏览全部工作项。
+          schema:
+            type: string
+            minLength: 0
+            maxLength: 80
+        - name: fields
+          in: query
+          required: false
+          description: 搜索词匹配的字段，默认只匹配名称（标题与编号前缀）；处理人按姓名匹配最多 100 位有效成员。
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/ConnectCandidateField"
+            minItems: 1
+            maxItems: 5
+          style: form
+          explode: true
+        - name: sort
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/ConnectCandidateSort"
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 20
+      responses:
+        "200":
+          description: 操作成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectCandidatePage"
+              examples:
+                example:
+                  $ref: "#/components/examples/ConnectCandidatePage"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+      description: 根项与子项均可返回，排除已删除；搜索词按所选字段匹配，任一字段命中即返回。完全编号匹配优先，其次按 sort（RECENT 为 updated_at DESC，TITLE 为标题升序）与 id 排序。
+  /work-items/{workItemId}/connections:
+    post:
+      tags:
+        - WorkItems
+      operationId: linkWorkItemConnection
+      summary: 双侧项目成员关联已有工作项
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkItemConnectionLinkRequest"
+      responses:
+        "200":
+          description: 同列同端点已有有效连接，返回同一连接 ID。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemConnection"
+              examples:
+                example:
+                  $ref: "#/components/examples/WorkItemConnection"
+        "201":
+          description: 操作成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemConnection"
+              examples:
+                example:
+                  $ref: "#/components/examples/WorkItemConnection"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /work-items/{workItemId}/connected-work-items:
+    post:
+      tags:
+        - WorkItems
+      operationId: createConnectedWorkItem
+      summary: 在目标项目新建根工作项并关联
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConnectedWorkItemCreateRequest"
+      responses:
+        "201":
+          description: 操作成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemConnection"
+              examples:
+                example:
+                  $ref: "#/components/examples/WorkItemConnection"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+      description: 仅要求来源项目 OWNER/MEMBER，两端项目 ACTIVE。目标根项与连接在同一事务创建，默认状态 NOT_STARTED，其余可选字段为空。
+  /work-items/{workItemId}/reverse-connect-candidates:
+    get:
+      tags:
+        - WorkItems
+      operationId: searchReverseConnectCandidates
+      summary: 从反向列搜索连接列所在项目的工作项
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          description: 目标项目中打开反向列的工作项。
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: columnId
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: q
+          in: query
+          required: false
+          description: 为空时按排序浏览全部工作项。
+          schema:
+            type: string
+            minLength: 0
+            maxLength: 80
+        - name: fields
+          in: query
+          required: false
+          description: 搜索词匹配的字段，默认只匹配名称（标题与编号前缀）；处理人按姓名匹配最多 100 位有效成员。
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/ConnectCandidateField"
+            minItems: 1
+            maxItems: 5
+          style: form
+          explode: true
+        - name: sort
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/ConnectCandidateSort"
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 20
+      responses:
+        "200":
+          description: 操作成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectCandidatePage"
+              examples:
+                example:
+                  $ref: "#/components/examples/ConnectCandidatePage"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+      description: 要求当前用户同时是两端项目的 OWNER/MEMBER 且两端 ACTIVE；连接列须以该工作项所在项目为目标，否则返回 404。alreadyConnected 表示候选项已作为来源连接到该工作项。
+  /work-items/{workItemId}/reverse-connect-create-options:
+    get:
+      tags:
+        - WorkItems
+      operationId: getReverseConnectCreateOptions
+      summary: 读取反向新建并关联的来源项目类别选项
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: columnId
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+      responses:
+        "200":
+          description: 操作成功；targetProjectId 是新工作项将要创建到的连接列所在项目。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectCreateOptions"
+              examples:
+                example:
+                  $ref: "#/components/examples/ConnectCreateOptions"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /work-items/{workItemId}/reverse-connected-work-items:
+    post:
+      tags:
+        - WorkItems
+      operationId: createReverseConnectedWorkItem
+      summary: 从反向列在连接列所在项目新建根工作项并关联
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReverseConnectedWorkItemCreateRequest"
+            examples:
+              example:
+                $ref: "#/components/examples/ReverseConnectedWorkItemCreateRequest"
+      responses:
+        "201":
+          description: 操作成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemConnection"
+              examples:
+                example:
+                  $ref: "#/components/examples/WorkItemConnection"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+      description: 要求两端项目 OWNER/MEMBER 且 ACTIVE，不构成跨项目投递；新根项建在连接列所在项目，与连接在同一事务创建，连接 origin 为 LINKED，不产生投递通知。
+  /me/projects/{projectId}/work-item-table-settings:
+    get:
+      tags:
+        - WorkItems
+      operationId: getMyWorkItemTableSettings
+      summary: 查询本人在项目中的工作项表格设置
+      description: 项目对当前账号可见即可读取；从未保存时返回默认值、updatedAt 为 null、etag 为 "0"。只影响本人的表格展示与新建默认值。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: 本人工作项表格设置。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemTableSettings"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+    put:
+      tags:
+        - WorkItems
+      operationId: updateMyWorkItemTableSettings
+      summary: 整体替换本人在项目中的工作项表格设置
+      description: 要求会话、XSRF 和最近读取的 If-Match。ETag 由 updatedAt 的微秒时间戳生成，保存以原子比较更新防止覆盖其他窗口或设备的修改；版本过期返回 412。不校验规则与默认值引用的成员、标签或类别是否仍有效，客户端使用时忽略失效值。grouping 与 completedStatusCodes 省略或为 null 时保留原值，其余字段整体替换。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkItemTableSettingsUpdateRequest"
+      responses:
+        "200":
+          description: 保存后的本人工作项表格设置。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemTableSettings"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /projects/{projectId}/work-items:
+    get:
+      tags:
+        - WorkItems
+      operationId: listProjectWorkItems
+      summary: 分页查询 Project 下全部工作项
+      description: 聚合 Project 内全部类别的非删除工作项。TABLE 复用白名单筛选与排序； KANBAN 必须指定单一 status，并使用项目级状态泳道 rank。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: assigneeSetUserId
+          in: query
+          description: 精确匹配处理人集合，与其他筛选取交集并绑定游标；空集合使用 emptyField=ASSIGNEE。
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            maxItems: 20
+            items:
+              type: string
+              format: uuid
+        - name: connectedColumnIds
+          in: query
+          description: 所选每个本项目有效连接列均至少有一条可读连接。 参与计数与游标，不提供连接排序或分组。
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            maxItems: 20
+            items:
+              $ref: "#/components/schemas/Uuid"
+        - name: unconnectedColumnIds
+          in: query
+          description: 所选每个本项目有效连接列均没有可读连接；不存在或其他项目的列不匹配。 参与计数与游标，不提供连接排序或分组。
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            maxItems: 20
+            items:
+              $ref: "#/components/schemas/Uuid"
+        - name: incomingProjectIds
+          in: query
+          description: 至少有一条来自所选任一项目的有效入站连接。 参与计数与游标，不提供连接排序或分组。
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            maxItems: 20
+            items:
+              $ref: "#/components/schemas/Uuid"
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: timeTrackingState
+          in: query
+          schema:
+            $ref: "#/components/schemas/TimeTrackingState"
+        - name: timeTrackingMinMs
+          in: query
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: timeTrackingMaxMs
+          in: query
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: cursor
+          in: query
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 2048
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 100
+            default: 25
+        - name: view
+          in: query
+          description: TABLE 使用白名单排序；KANBAN 要求单一 status 且固定按项目级状态泳道 rank 排序。
+          schema:
+            $ref: "#/components/schemas/WorkItemViewType"
+        - name: emptyField
+          in: query
+          description: 仅返回指定字段为空的工作项，与其他筛选条件取交集；游标绑定该条件。
+          schema:
+            type: string
+            enum:
+              - ASSIGNEE
+              - PRIORITY
+              - DUE_DATE
+        - name: status
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            items:
+              type: string
+              pattern: ^[A-Z][A-Z0-9_]{1,31}$
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: priority
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            items:
+              $ref: "#/components/schemas/WorkItemPriority"
+        - name: assigneeUserId
+          description: 任一所选成员是处理人即匹配。
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            items:
+              $ref: "#/components/schemas/Uuid"
+        - name: contentId
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            items:
+              $ref: "#/components/schemas/Uuid"
+        - name: dueFrom
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: dueTo
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: updatedAfter
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: sort
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 3
+            items:
+              type: string
+              pattern: ^(TIME_TRACKING|CONTENT|ITEM_NO|TITLE|STATUS|PRIORITY|ASSIGNEE|REPORTER|TIMELINE_START_DATE|TIMELINE_END_DATE|DUE_DATE|UPDATED_AT),(ASC|DESC)$
+      responses:
+        "200":
+          description: 已先按 Project 可见性与筛选条件裁剪，再稳定分页。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectWorkItemCursorPage"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    post:
+      tags:
+        - WorkItems
+      operationId: createWorkItem
+      summary: 在 Project 中创建带必填类别的工作项
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkItemCreateRequest"
+      responses:
+        "201":
+          description: 工作项已创建或幂等重放。
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemDetail"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /projects/{projectId}/work-item-labels:
+    get:
+      tags:
+        - WorkItems
+      operationId: getProjectWorkItemLabels
+      summary: 查询 Project 级工作项状态与优先级标签目录
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: 返回活动及停用但仍可展示的标签；目录使用独立强 ETag。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemLabelCatalog"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+  /projects/{projectId}/work-item-labels/statuses:
+    post:
+      tags:
+        - WorkItems
+      operationId: createProjectWorkItemStatusLabel
+      summary: 新增 Project 状态标签
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkItemLabelCreateRequest"
+      responses:
+        "200":
+          description: 标签已新增并返回最新目录。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemLabelCatalog"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /projects/{projectId}/work-item-labels/statuses/{code}:
+    patch:
+      tags:
+        - WorkItems
+      operationId: updateProjectWorkItemStatusLabel
+      summary: 立即保存状态标签名称、颜色或启停状态
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/WorkItemLabelCode"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkItemLabelUpdateRequest"
+      responses:
+        "200":
+          description: 标签已更新并返回最新目录。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemLabelCatalog"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+    delete:
+      tags:
+        - WorkItems
+      operationId: deleteProjectWorkItemStatusLabel
+      summary: 删除未受保护且从未被工作项引用的状态标签
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/WorkItemLabelCode"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200":
+          description: 标签已软删除并返回最新目录。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemLabelCatalog"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /projects/{projectId}/work-item-labels/priorities:
+    post:
+      tags:
+        - WorkItems
+      operationId: createProjectWorkItemPriorityLabel
+      summary: 新增 Project 优先级标签
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkItemLabelCreateRequest"
+      responses:
+        "200":
+          description: 标签已新增并返回最新目录。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemLabelCatalog"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /projects/{projectId}/work-item-labels/priorities/{code}:
+    patch:
+      tags:
+        - WorkItems
+      operationId: updateProjectWorkItemPriorityLabel
+      summary: 立即保存优先级标签名称、颜色或启停状态
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/WorkItemLabelCode"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkItemLabelUpdateRequest"
+      responses:
+        "200":
+          description: 标签已更新并返回最新目录。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemLabelCatalog"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+    delete:
+      tags:
+        - WorkItems
+      operationId: deleteProjectWorkItemPriorityLabel
+      summary: 删除从未被工作项引用的优先级标签
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/WorkItemLabelCode"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200":
+          description: 标签已软删除并返回最新目录。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemLabelCatalog"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /projects/{projectId}/work-items/filter-options:
+    get:
+      tags:
+        - WorkItems
+      operationId: listProjectWorkItemFilterOptions
+      summary: 按当前项目查询上下文分页取得筛选选项及动态计数
+      description: ASSIGNEE 按成员分别计数，同一工作项可计入多个成员；ASSIGNEE_SET 按处理人组合计数。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: assigneeSetUserId
+          in: query
+          description: 精确匹配处理人集合，与其他筛选取交集并绑定游标；空集合使用 emptyField=ASSIGNEE。
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            maxItems: 20
+            items:
+              type: string
+              format: uuid
+        - name: connectedColumnIds
+          in: query
+          description: 所选每个本项目有效连接列均至少有一条可读连接。 参与计数与游标，不提供连接排序或分组。
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            maxItems: 20
+            items:
+              $ref: "#/components/schemas/Uuid"
+        - name: unconnectedColumnIds
+          in: query
+          description: 所选每个本项目有效连接列均没有可读连接；不存在或其他项目的列不匹配。 参与计数与游标，不提供连接排序或分组。
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            maxItems: 20
+            items:
+              $ref: "#/components/schemas/Uuid"
+        - name: incomingProjectIds
+          in: query
+          description: 至少有一条来自所选任一项目的有效入站连接。 参与计数与游标，不提供连接排序或分组。
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            maxItems: 20
+            items:
+              $ref: "#/components/schemas/Uuid"
+        - name: timeTrackingState
+          in: query
+          schema:
+            $ref: "#/components/schemas/TimeTrackingState"
+        - name: timeTrackingMinMs
+          in: query
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: timeTrackingMaxMs
+          in: query
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - $ref: "#/components/parameters/ProjectId"
+        - name: field
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - TITLE
+              - ASSIGNEE
+              - ASSIGNEE_SET
+              - STATUS
+              - PRIORITY
+              - CONTENT
+              - DUE_DATE
+              - UPDATED_AT
+              - INCOMING_PROJECT
+        - name: cursor
+          in: query
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 2048
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            items:
+              type: string
+        - name: priority
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            items:
+              $ref: "#/components/schemas/WorkItemPriority"
+        - name: assigneeUserId
+          description: 任一所选成员是处理人即匹配。
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            items:
+              $ref: "#/components/schemas/Uuid"
+        - name: contentId
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            items:
+              $ref: "#/components/schemas/Uuid"
+        - name: dueFrom
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: dueTo
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: updatedAfter
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: sort
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 3
+            items:
+              type: string
+      responses:
+        "200":
+          description: 选项以值稳定排序，计数应用当前查询上下文。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectWorkItemFilterOptionCursorPage"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /projects/{projectId}/work-items/{workItemId}/order-moves:
+    post:
+      tags:
+        - WorkItems
+      operationId: moveProjectWorkItemOrder
+      summary: 调整项目共享表格顺序
+      description: 仅提交筛选结果中的可见上下邻项；服务端在真实项目顺序中分配稀疏键。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectWorkItemOrderMoveRequest"
+      responses:
+        "200":
+          description: 顺序已更新或返回幂等重放结果。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemDetail"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /work-items/{parentWorkItemId}/subitems:
+    get:
+      tags:
+        - WorkItems
+      operationId: listWorkItemSubitems
+      summary: 查询 Work Item 的直接子项
+      description: 仅返回未删除的直接子项；未指定 sort 时按项目共享手工顺序返回。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: timeTrackingState
+          in: query
+          schema:
+            $ref: "#/components/schemas/TimeTrackingState"
+        - name: timeTrackingMinMs
+          in: query
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: timeTrackingMaxMs
+          in: query
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: parentWorkItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: sort
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 3
+            items:
+              type: string
+              pattern: ^(TIME_TRACKING|CONTENT|ITEM_NO|TITLE|STATUS|PRIORITY|ASSIGNEE|REPORTER|TIMELINE_START_DATE|TIMELINE_END_DATE|DUE_DATE|UPDATED_AT),(ASC|DESC)$
+      responses:
+        "200":
+          description: 当前调用人可见的直接子项。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemSubitemList"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    post:
+      tags:
+        - WorkItems
+      operationId: createWorkItemSubitem
+      summary: 为根 Work Item 创建全新子项
+      description: 子项必须属于父项所在 Project；Content 可在同 Project 的 ACTIVE Content 中选择。本阶段不支持在子项下继续创建子项。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: parentWorkItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkItemSubitemCreateRequest"
+      responses:
+        "201":
+          description: 子项及 PARENT_CHILD 关系已原子创建或幂等重放。
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemDetail"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /work-items/{parentWorkItemId}/subitems/{subitemId}/order-moves:
+    post:
+      tags:
+        - WorkItems
+      operationId: moveWorkItemSubitemOrder
+      summary: 调整同一父项下的子项顺序
+      description: 可见前后锚点必须都是该父项的未删除直接子项。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: parentWorkItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: subitemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectWorkItemOrderMoveRequest"
+      responses:
+        "200":
+          description: 子项顺序已更新或返回幂等重放结果。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemDetail"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /work-items/{workItemId}/relations:
+    get:
+      tags:
+        - WorkItems
+      operationId: listWorkItemRelations
+      summary: 分页查询 Work Item 的有效关系
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: relationType
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/WorkItemRelationType"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Size"
+      responses:
+        "200":
+          description: 按创建时间倒序返回当前侧语义、对端摘要和操作能力。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemRelationPage"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    post:
+      tags:
+        - WorkItems
+      operationId: createWorkItemRelation
+      summary: 创建 Work Item 关系
+      description: 普通关系可跨项目，父子关系必须同项目；相同逻辑关系已存在时返回既有关系且不重复写事件。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkItemRelationCreateRequest"
+      responses:
+        "200":
+          description: 逻辑关系已存在。
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemRelation"
+        "201":
+          description: 关系已创建或幂等重放。
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemRelation"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /work-items/{workItemId}/relation-candidates:
+    get:
+      tags:
+        - WorkItems
+      operationId: listWorkItemRelationCandidates
+      summary: 搜索关系候选 Work Item
+      description: 返回合法、需显式换父和不合法候选以及稳定原因码；不包含已删除事项。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: relationType
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/WorkItemRelationType"
+        - name: currentRole
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/WorkItemRelationRole"
+        - name: targetProjectId
+          in: query
+          required: false
+          description: 目标项目；省略时使用当前事项所在项目。
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 80
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Size"
+      responses:
+        "200":
+          description: 候选判定页。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemRelationCandidatePage"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /work-item-relations/{relationId}/parent-changes:
+    post:
+      tags:
+        - WorkItems
+      operationId: changeWorkItemParent
+      summary: 原子更换 Work Item 父项
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: relationId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkItemParentChangeRequest"
+      responses:
+        "200":
+          description: 旧关系已软删除且新父子关系已在同一事务创建。
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemRelation"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /work-item-relations/{relationId}:
+    delete:
+      tags:
+        - WorkItems
+      operationId: deleteWorkItemRelation
+      summary: 解除 Work Item 关系
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: relationId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkItemRelationDeleteRequest"
+      responses:
+        "200":
+          description: 返回解除后的关系事实投影。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemRelation"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /work-items/{workItemId}:
+    get:
+      tags:
+        - WorkItems
+      operationId: getWorkItem
+      summary: 查询 Work Item 详情
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+      responses:
+        "200":
+          description: 当前项目成员或 CompanyAdmin 可见的工作项详情。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemDetail"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+    patch:
+      tags:
+        - WorkItems
+      operationId: updateWorkItem
+      summary: 更新 Work Item 协作字段
+      description: 提交全部八个可编辑字段的完整快照；null 显式清空可空字段，无变化时不递增版本。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkItemUpdateRequest"
+      responses:
+        "200":
+          description: 字段已更新，或快照无变化。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemDetail"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+    delete:
+      tags:
+        - WorkItems
+      operationId: deleteWorkItem
+      summary: 软删除 Work Item
+      description: 删除后普通详情、Table 与 Kanban 均不再返回该项；同一幂等命令重放原墓碑结果。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkItemDeleteRequest"
+      responses:
+        "200":
+          description: Work Item 已软删除，或返回同一幂等命令保存的墓碑结果。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemDetail"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /work-items/{workItemId}/assignee:
+    patch:
+      tags:
+        - WorkItems
+      operationId: patchWorkItemAssignee
+      summary: 单独更新处理人
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkItemAssigneePatchRequest"
+      responses:
+        "200":
+          description: 处理人已更新或返回幂等重放结果。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemDetail"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /work-items/{workItemId}/assignees:
+    patch:
+      tags:
+        - WorkItems
+      operationId: patchWorkItemAssignees
+      summary: 单独更新完整处理人列表
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkItemAssigneesPatchRequest"
+      responses:
+        "200":
+          description: 处理人已更新或返回幂等重放结果。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemDetail"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /work-items/{workItemId}/priority:
+    patch:
+      tags:
+        - WorkItems
+      operationId: patchWorkItemPriority
+      summary: 单独更新优先级
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkItemPriorityPatchRequest"
+      responses:
+        "200":
+          description: 优先级已更新或返回幂等重放结果。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemDetail"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /work-items/{workItemId}/description:
+    patch:
+      tags:
+        - WorkItems
+      operationId: patchWorkItemDescription
+      summary: 单独更新富文本描述
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkItemDescriptionPatchRequest"
+            examples:
+              withImage:
+                $ref: "#/components/examples/WorkItemDescriptionWithImage"
+      responses:
+        "200":
+          description: 描述已更新、内容未变化，或返回幂等重放结果。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemDetail"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /work-items/{workItemId}/due-date:
+    patch:
+      tags:
+        - WorkItems
+      operationId: patchWorkItemDueDate
+      summary: 单独更新截止日期
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkItemDueDatePatchRequest"
+            examples:
+              withTime:
+                $ref: "#/components/examples/WorkItemDeadlineWithTime"
+              dateOnly:
+                $ref: "#/components/examples/WorkItemDeadlineRemoveTime"
+              clear:
+                $ref: "#/components/examples/WorkItemDeadlineClear"
+      responses:
+        "200":
+          description: 截止日期已更新或返回幂等重放结果。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemDetail"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /work-items/{workItemId}/content:
+    patch:
+      tags:
+        - WorkItems
+      operationId: patchWorkItemContent
+      summary: 切换工作项类别
+      description: 类别切换不改变编号、父子关系、讨论、附件、项目顺序或 Kanban rank。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkItemContentPatchRequest"
+      responses:
+        "200":
+          description: 类别已切换；相同类别作为无事件幂等成功返回。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemDetail"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /work-items/{workItemId}/restore:
+    post:
+      tags:
+        - WorkItems
+      operationId: restoreWorkItem
+      summary: 恢复已删除 Work Item
+      description: 保留原状态；历史 rank 未占用时复用，否则恢复到原状态泳道顶部。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Work Item 已恢复，或返回同一幂等命令保存的结果。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemDetail"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /work-items/{workItemId}/archive:
+    post:
+      tags:
+        - WorkItems
+      operationId: archiveWorkItem
+      summary: 归档工作项
+      description: 仅改变归档标记，保留业务状态、排序、讨论和父子关系。归档项不出现在活动列表中，仍可通过详情链接查看和取消归档。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: 归档状态已更新，或返回同一幂等命令保存的结果。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemDetail"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /work-items/{workItemId}/unarchive:
+    post:
+      tags:
+        - WorkItems
+      operationId: unarchiveWorkItem
+      summary: 取消归档工作项
+      description: 仅改变归档标记，保留业务状态、排序、讨论和父子关系。归档项不出现在活动列表中，仍可通过详情链接查看和取消归档。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: 归档状态已更新，或返回同一幂等命令保存的结果。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemDetail"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /work-items/{workItemId}/transitions:
+    post:
+      tags:
+        - WorkItems
+      operationId: transitionWorkItem
+      summary: 按 Project 固化模板迁移 Work Item 状态
+      description: 服务端验证当前状态到目标状态的精确模板边；状态类别只能由目标状态派生。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkItemTransitionRequest"
+      responses:
+        "200":
+          description: 状态已迁移，或返回同一幂等命令保存的结果。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemDetail"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /work-items/{workItemId}/rank-moves:
+    post:
+      tags:
+        - WorkItems
+      operationId: rankMoveWorkItem
+      summary: 在 Kanban 状态泳道内或合法状态之间移动 Work Item
+      description: 服务端只接受相对锚点或泳道首尾意图；rank 为内部实现，不由客户端读取或写入。 跨状态移动复用 Project 固化模板迁移边，同状态移动只改变排序。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkItemRankMoveRequest"
+      responses:
+        "200":
+          description: 排序或状态已移动、位置无变化，或返回同一幂等命令保存的结果。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemDetail"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"

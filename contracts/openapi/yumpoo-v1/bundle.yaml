@@ -1,0 +1,46 @@
+root: openapi.yaml
+paths:
+  - paths/operations.yaml
+  - paths/notifications.yaml
+  - paths/dashboards.yaml
+  - paths/team-dashboard.yaml
+  - paths/project-statistics.yaml
+  - paths/time-tracking.yaml
+  - paths/my-work.yaml
+  - paths/onboarding.yaml
+  - paths/authentication.yaml
+  - paths/identity-governance.yaml
+  - paths/identity-administration.yaml
+  - paths/workspaces.yaml
+  - paths/projects.yaml
+  - paths/contents.yaml
+  - paths/work-items.yaml
+  - paths/work-item-updates.yaml
+  - paths/attachments.yaml
+  - paths/activity.yaml
+  - paths/administration.yaml
+components:
+  - components/schemas/common.yaml
+  - components/schemas/operations.yaml
+  - components/schemas/notifications.yaml
+  - components/schemas/dashboards.yaml
+  - components/schemas/team-dashboard.yaml
+  - components/schemas/project-statistics.yaml
+  - components/schemas/time-tracking.yaml
+  - components/schemas/onboarding.yaml
+  - components/schemas/authentication.yaml
+  - components/schemas/identity-governance.yaml
+  - components/schemas/identity-administration.yaml
+  - components/schemas/workspaces.yaml
+  - components/schemas/projects.yaml
+  - components/schemas/contents.yaml
+  - components/schemas/work-items.yaml
+  - components/schemas/work-item-updates.yaml
+  - components/schemas/attachments.yaml
+  - components/schemas/activity.yaml
+  - components/schemas/administration.yaml
+  - components/request-bodies.yaml
+  - components/parameters.yaml
+  - components/headers.yaml
+  - components/examples.yaml
+  - components/responses.yaml

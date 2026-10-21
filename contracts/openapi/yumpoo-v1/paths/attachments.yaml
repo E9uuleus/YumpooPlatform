@@ -1,0 +1,290 @@
+paths:
+  /attachments:
+    post:
+      tags:
+        - Attachments
+      operationId: createAttachmentIntent
+      summary: 创建附件上传意图
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttachmentIntentCreateRequest"
+      responses:
+        "201":
+          description: 已创建上传意图。
+          headers:
+            Location:
+              schema:
+                type: string
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttachmentIntentResult"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /attachments/{attachmentId}:
+    get:
+      tags:
+        - Attachments
+      operationId: getAttachment
+      summary: 查询附件实时元数据
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/AttachmentId"
+      responses:
+        "200":
+          description: 当前父对象权限下可见的附件元数据。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttachmentMetadata"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+    delete:
+      tags:
+        - Attachments
+      operationId: deleteAttachment
+      summary: 逻辑删除一个可用附件
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/AttachmentId"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttachmentDeleteRequest"
+      responses:
+        "200":
+          description: 附件墓碑；同一幂等键可重放相同响应。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttachmentDeleteResult"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /attachments/{attachmentId}/content:
+    get:
+      tags:
+        - Attachments
+      operationId: downloadAttachmentContent
+      summary: 校验并流式下载一个可用附件
+      description: 不支持 Range，也不返回永久 URL、存储路径或内容摘要响应头。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/AttachmentId"
+      responses:
+        "200":
+          description: 64 KiB 有界缓冲的同源附件流。
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+            Content-Length:
+              schema:
+                type: integer
+                format: int64
+                minimum: 1
+            X-Content-Type-Options:
+              schema:
+                type: string
+                enum:
+                  - nosniff
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - private, no-store
+            Content-Security-Policy:
+              schema:
+                type: string
+                enum:
+                  - sandbox
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+    put:
+      tags:
+        - Attachments
+      operationId: uploadAttachmentContent
+      summary: 流式写入一个附件内容
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/AttachmentId"
+        - $ref: "#/components/parameters/XsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "202":
+          description: 内容已封存并排入类型识别、完整性校验与发布处理。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttachmentMetadata"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/FileTooLarge"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /work-items/{workItemId}/attachments:
+    get:
+      tags:
+        - Attachments
+      operationId: listWorkItemAttachments
+      summary: 分页查询 Work Item 附件
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/WorkItemId"
+        - $ref: "#/components/parameters/AttachmentCursor"
+        - $ref: "#/components/parameters/AttachmentPageSize"
+      responses:
+        "200":
+          description: 附件页。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttachmentPage"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+  /work-item-updates/{updateId}/attachments:
+    get:
+      tags:
+        - Attachments
+      operationId: listWorkItemUpdateAttachments
+      summary: 分页查询已发布 Update 附件
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/WorkItemUpdateId"
+        - $ref: "#/components/parameters/AttachmentCursor"
+        - $ref: "#/components/parameters/AttachmentPageSize"
+      responses:
+        "200":
+          description: 附件页。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttachmentPage"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+  /admin/attachments/{attachmentId}/rescan:
+    post:
+      tags:
+        - Attachments
+      operationId: rescanAttachment
+      summary: APP_MANAGER 受控重扫仍保留封存内容的附件
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/AttachmentId"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttachmentRescanRequest"
+      responses:
+        "202":
+          description: 已重新预约配额并排入完整处理；宽限期内的历史 SCAN_UNAVAILABLE 附件重新检测类型后可发布。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttachmentRescanResult"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"

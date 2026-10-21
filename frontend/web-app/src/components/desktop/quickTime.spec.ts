@@ -1,13 +1,24 @@
 import { describe, expect, it } from 'vitest'
 import type { TimerCandidate } from '@yumpoo/api-client'
 import { atMinute, dayWindow, HOUR, MINUTE } from '../my-time/day/dayModel'
-import { groupCandidates, placementHint, quickPlan } from './quickTime'
+import { groupCandidates, placementHint, quickPlan, stepDate, stepperLabel } from './quickTime'
 
 const timezone = 'Asia/Shanghai'
 const date = '2026-10-19'
 const candidate = (workItemId: string, projectId: string, projectName: string) => ({ workItemId, projectId, projectName, title: workItemId }) as TimerCandidate
 
 describe('快捷工时', () => {
+  it.each([
+    ['2026-10-19', -1, 'yesterday', '2026-10-18'],
+    ['2026-10-18', -1, 'pick', '2026-10-17'],
+    ['2026-10-17', 1, 'yesterday', '2026-10-18'],
+    ['2026-10-19', 1, 'today', '2026-10-19'],
+  ] as const)('日期 %s 步进 %s', (target, delta, choice, picked) => {
+    expect(stepDate(target, delta, date)).toEqual({ choice, picked })
+  })
+  it('显示日期自身的星期', () => {
+    expect(stepperLabel('2026-10-19')).toBe('10月19日 周一')
+  })
   it('按侧边栏顺序分组，并把时长排入上班后的空档', () => {
     const groups = groupCandidates([candidate('a', 'p2', '运维中心'), candidate('b', 'p1', 'Yumpoo 平台'), candidate('c', 'p2', '运维中心')],
       [{ id: 'p1', name: 'Yumpoo 平台' }, { id: 'p3', name: '设计系统' }])

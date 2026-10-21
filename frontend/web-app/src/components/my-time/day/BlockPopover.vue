@@ -15,18 +15,23 @@ const emit = defineEmits<{ save: [range: Range]; remove: []; reassign: [workItem
 const view = ref<'main' | 'reassign' | 'delete'>('main')
 const start = ref(props.block.start)
 const end = ref(blockEnd(props.block, props.limit))
+const startValid = ref(true)
+const endValid = ref(true)
 watch(() => [props.block.id, props.block.etag], () => {
   start.value = props.block.start
   end.value = blockEnd(props.block, props.limit)
+  startValid.value = true
+  endValid.value = true
   view.value = 'main'
 })
 const running = computed(() => props.block.end === null)
 const editable = computed(() => props.block.canEdit && !running.value)
 const startInDay = computed(() => props.block.start >= props.bounds.start)
 const endInDay = computed(() => blockEnd(props.block, props.limit) <= props.bounds.end)
-const changed = computed(() => editable.value && (start.value !== props.block.start || end.value !== props.block.end))
+const changed = computed(() => editable.value && (!startValid.value || !endValid.value || start.value !== props.block.start || end.value !== props.block.end))
 const problem = computed(() => {
   if (!changed.value) return ''
+  if (!startValid.value || !endValid.value) return '请输入有效的时间'
   if (end.value <= start.value) return '结束时间要晚于开始时间'
   if (end.value > props.limit) return '不能记录未来的时间'
   return ''
@@ -74,6 +79,8 @@ function save() { if (!problem.value) emit('save', { start: start.value, end: en
         :day-start="bounds.start"
         :day-end="bounds.end"
         label="开始时间"
+        immediate
+        @validity="startValid = $event"
       />
       <span
         v-else
@@ -92,6 +99,8 @@ function save() { if (!problem.value) emit('save', { start: start.value, end: en
         :day-start="bounds.start"
         :day-end="bounds.end"
         label="结束时间"
+        immediate
+        @validity="endValid = $event"
       />
       <span
         v-else

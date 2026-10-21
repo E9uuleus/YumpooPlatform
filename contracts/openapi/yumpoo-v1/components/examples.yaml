@@ -1,0 +1,173 @@
+components:
+  examples:
+    ConnectColumnIncoming:
+      summary: ConnectColumnIncoming 连接契约黄金样例
+      externalValue: ../examples/connections/connect-column-incoming.json
+    ConnectColumnTarget:
+      summary: ConnectColumnTarget 连接契约黄金样例
+      externalValue: ../examples/connections/connect-column-target.json
+    ConnectColumn:
+      summary: ConnectColumn 连接契约黄金样例
+      externalValue: ../examples/connections/connect-column.json
+    ConnectColumnCatalog:
+      summary: ConnectColumnCatalog 连接契约黄金样例
+      externalValue: ../examples/connections/connect-column-catalog.json
+    ConnectColumnCreateRequest:
+      summary: ConnectColumnCreateRequest 连接契约黄金样例
+      externalValue: ../examples/connections/connect-column-create-request.json
+    ConnectColumnUpdateRequest:
+      summary: ConnectColumnUpdateRequest 连接契约黄金样例
+      externalValue: ../examples/connections/connect-column-update-request.json
+    ConnectColumnDeleteResult:
+      summary: ConnectColumnDeleteResult 连接契约黄金样例
+      externalValue: ../examples/connections/connect-column-delete-result.json
+    ConnectTargetProject:
+      summary: ConnectTargetProject 连接契约黄金样例
+      externalValue: ../examples/connections/connect-target-project.json
+    ConnectTargetProjectPage:
+      summary: ConnectTargetProjectPage 连接契约黄金样例
+      externalValue: ../examples/connections/connect-target-project-page.json
+    ConnectionCardLabel:
+      summary: ConnectionCardLabel 连接契约黄金样例
+      externalValue: ../examples/connections/connection-card-label.json
+    ConnectionCardStatus:
+      summary: ConnectionCardStatus 连接契约黄金样例
+      externalValue: ../examples/connections/connection-card-status.json
+    ConnectionCardCategory:
+      summary: ConnectionCardCategory 连接契约黄金样例
+      externalValue: ../examples/connections/connection-card-category.json
+    ConnectionCardAssignee:
+      summary: ConnectionCardAssignee 连接契约黄金样例
+      externalValue: ../examples/connections/connection-card-assignee.json
+    ConnectionCard:
+      summary: ConnectionCard 连接契约黄金样例
+      externalValue: ../examples/connections/connection-card.json
+    WorkItemConnectionCapabilities:
+      summary: WorkItemConnectionCapabilities 连接契约黄金样例
+      externalValue: ../examples/connections/work-item-connection-capabilities.json
+    WorkItemConnection:
+      summary: WorkItemConnection 连接契约黄金样例
+      externalValue: ../examples/connections/work-item-connection.json
+    WorkItemConnectionOutgoing:
+      summary: WorkItemConnectionOutgoing 连接契约黄金样例
+      externalValue: ../examples/connections/work-item-connection-outgoing.json
+    WorkItemConnectionCell:
+      summary: WorkItemConnectionCell 连接契约黄金样例
+      externalValue: ../examples/connections/work-item-connection-cell.json
+    WorkItemConnectionCellList:
+      summary: WorkItemConnectionCellList 连接契约黄金样例
+      externalValue: ../examples/connections/work-item-connection-cell-list.json
+    WorkItemConnectionPage:
+      summary: WorkItemConnectionPage 连接契约黄金样例
+      externalValue: ../examples/connections/work-item-connection-page.json
+    ConnectCreateOptions:
+      summary: ConnectCreateOptions 连接契约黄金样例
+      externalValue: ../examples/connections/connect-create-options.json
+    ConnectCandidateParent:
+      summary: ConnectCandidateParent 连接契约黄金样例
+      externalValue: ../examples/connections/connect-candidate-parent.json
+    ConnectCandidate:
+      summary: ConnectCandidate 连接契约黄金样例
+      externalValue: ../examples/connections/connect-candidate.json
+    ConnectCandidatePage:
+      summary: ConnectCandidatePage 连接契约黄金样例
+      externalValue: ../examples/connections/connect-candidate-page.json
+    WorkItemConnectionLinkRequest:
+      summary: WorkItemConnectionLinkRequest 连接契约黄金样例
+      externalValue: ../examples/connections/work-item-connection-link-request.json
+    ConnectedWorkItemCreateRequest:
+      summary: ConnectedWorkItemCreateRequest 连接契约黄金样例
+      externalValue: ../examples/connections/connected-work-item-create-request.json
+    ReverseConnectedWorkItemCreateRequest:
+      summary: ReverseConnectedWorkItemCreateRequest 连接契约黄金样例
+      externalValue: ../examples/connections/reverse-connected-work-item-create-request.json
+    WorkItemConnectionIncomingColumn:
+      summary: WorkItemConnectionIncomingColumn 连接契约黄金样例
+      externalValue: ../examples/connections/work-item-connection-incoming-column.json
+    ConnectTargetInUseDetails:
+      summary: ConnectTargetInUseDetails 连接契约黄金样例
+      externalValue: ../examples/connections/connect-target-in-use-details.json
+    ConnectTargetInUseError:
+      summary: ConnectTargetInUseError 连接契约黄金样例
+      externalValue: ../examples/connections/connect-target-in-use-error.json
+    OperationsLogTailSample:
+      summary: 跨越 JavaScript 整数精度边界的日志水位与空异常
+      externalValue: ../examples/operations/log-tail.json
+    OperationsMetricsWithGap:
+      summary: 缺失采样保留空值并标记重启
+      externalValue: ../examples/operations/metrics-with-gap.json
+    OperationsPartialLogPage:
+      summary: 文件轮转或删除导致不完整查询
+      externalValue: ../examples/operations/partial-log-page.json
+    WorkItemUpdateRichText:
+      summary: 受限富文本、表格、清单及个人提及的发布输入
+      externalValue: ../examples/work-items/update-rich-text.json
+    WorkItemDescriptionWithImage:
+      summary: 含格式、清单与同源附件图片的描述输入
+      externalValue: ../examples/work-items/description-with-image.json
+    WorkItemDeadlineWithTime:
+      summary: 设置企业时区的日期及分钟精度时分
+      externalValue: ../examples/work-items/deadline-with-time.json
+    WorkItemDeadlineRemoveTime:
+      summary: 移除时分并保留自然日
+      externalValue: ../examples/work-items/deadline-remove-time.json
+    WorkItemDeadlineClear:
+      summary: 同时清空截止日期和时分
+      externalValue: ../examples/work-items/deadline-clear.json
+    MalformedRequest:
+      summary: JSON、类型、参数或 If-Match 格式无法解析
+      externalValue: ../examples/errors/400-malformed-request.json
+    AuthenticationRequired:
+      summary: 会话缺失、未知、过期、主动退出或登录回调统一失败
+      externalValue: ../examples/errors/401-authentication-required.json
+    AccountDisabled:
+      summary: 可识别会话因离职或账号禁用被撤销
+      externalValue: ../examples/errors/403-account-disabled.json
+    AccessDenied:
+      summary: 有效主体可见资源但没有动作权限
+      externalValue: ../examples/errors/403-access-denied.json
+    ResourceNotFound:
+      summary: 资源不存在或存在性对当前主体不可见
+      externalValue: ../examples/errors/404-resource-not-found.json
+    IdempotencyKeyReused:
+      summary: 相同幂等键被用于不同请求内容
+      externalValue: ../examples/errors/409-idempotency-key-reused.json
+    RequestInProgress:
+      summary: 相同幂等请求仍在处理中
+      externalValue: ../examples/errors/409-request-in-progress.json
+    InvalidStateTransition:
+      summary: 当前业务状态不允许目标命令
+      externalValue: ../examples/errors/409-invalid-state-transition.json
+    WorklogLocked:
+      summary: 已提交或批准工时不能普通修改
+      externalValue: ../examples/errors/409-worklog-locked.json
+    VersionConflict:
+      summary: If-Match 与当前可见资源版本不一致
+      externalValue: ../examples/errors/412-version-conflict.json
+    FileTooLarge:
+      summary: 上传内容超过冻结的服务端字节上限
+      externalValue: ../examples/errors/413-file-too-large.json
+    FileTypeNotAllowed:
+      summary: 文件名、声明类型或服务端识别类型不在允许策略内
+      externalValue: ../examples/errors/415-file-type-not-allowed.json
+    ValidationFailed:
+      summary: 请求格式正确但字段或业务规则不满足
+      externalValue: ../examples/errors/422-validation-failed.json
+    ClientUpgradeRequired:
+      summary: Electron 低于最低支持版本
+      externalValue: ../examples/errors/426-client-upgrade-required.json
+    PreconditionRequired:
+      summary: 条件写入缺少 If-Match
+      externalValue: ../examples/errors/428-precondition-required.json
+    DependencyUnavailable:
+      summary: 外部依赖暂时不可用，可在稍后重试
+      externalValue: ../examples/errors/503-dependency-unavailable.json
+    InternalError:
+      summary: 高风险操作因审计不可写而失败关闭
+      externalValue: ../examples/errors/500-internal-error.json
+    EmptyPage:
+      summary: 空的普通分页响应
+      externalValue: ../examples/pagination/empty-page.json
+    EmptyCursorPage:
+      summary: 没有后续游标的空追加流响应
+      externalValue: ../examples/pagination/empty-cursor-page.json
