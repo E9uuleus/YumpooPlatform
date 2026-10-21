@@ -126,6 +126,8 @@ export interface DesktopPreferencesBridge {
 export type QuickPanelOrigin = 'top' | 'bottom' | 'left' | 'right'
 
 export interface QuickPanelContext {
+  /** Pinned panels stay open on blur and follow the window level; absent from shells before 1.1.2. */
+  pinned?: boolean
   /** The rail project the panel opened for; null from the tray or the shortcut. */
   projectId: string | null
   /** The rail's projects in rail order, so groups and colours match the rail. */
@@ -134,6 +136,11 @@ export interface QuickPanelContext {
 }
 
 export interface DesktopQuickBridge {
+  setPinned?(pinned: boolean): Promise<void>
+  /** Starts (true) or ends (false) resizing from the corner grip. */
+  resize?(active: boolean): Promise<void>
+  /** Pushed when dragging or resizing pinned the panel, or it was unpinned. */
+  onPinned?(listener: (pinned: boolean) => void): () => void
   onOpen(listener: (context: QuickPanelContext) => void): () => void
   /** Sent 180ms before the window hides, so the panel can play its closing transition. */
   onClosing(listener: () => void): () => void

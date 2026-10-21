@@ -1,9 +1,17 @@
 import { describe, expect, it } from 'vitest'
+import { QUICK_PANEL_MAX, resizeFrom } from '../src/main/timer-geometry'
 import { placeBeside, placeRail, QUICK_PANEL, railShape, CAPSULE_WIDTH, compactVisual, dockShape, hitTest, MENU, orbDetails, orbShape, placeDock, placeMenu, placeOrb, placePanel, snapDock, stadiumRows } from '../src/main/timer-geometry'
 
 const area = { x: 0, y: 0, width: 1280, height: 800 }
 
 describe('timer surface geometry', () => {
+  it('resizes within minimum, maximum and work area bounds', () => {
+    const start = { x: 100, y: 100, ...QUICK_PANEL }
+    const large = { x: 0, y: 0, width: 1920, height: 1080 }
+    expect(resizeFrom(start, -999, -999, large)).toEqual(start)
+    expect(resizeFrom(start, 999, 999, large)).toEqual({ x: 100, y: 100, ...QUICK_PANEL_MAX })
+    expect(resizeFrom(start, 999, 999, { x: 0, y: 0, width: 600, height: 700 })).toEqual({ x: 100, y: 100, width: 500, height: 600 })
+  })
   it('draws a symmetric circle and extends it into a pill with rounded ends', () => {
     const circle = stadiumRows(10, 0, 84, 84)
     expect(circle).toHaveLength(84)

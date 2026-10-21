@@ -89,7 +89,8 @@ export class TimerWindowController {
     this.pinned = prefs.get().pinned
     this.orb = { size: ORB_SIZES[prefs.get().orbSize], side: null, detailWidth: 0 }
     this.menu = new TimerQuickMenu(origin, preload, action => this.menuAction(action))
-    this.quick = new QuickPanelController(origin, preload, { openMain: path => void this.openMain(path), changed: () => this.rail.sync() })
+    this.quick = new QuickPanelController(origin, preload, prefs, { openMain: path => void this.openMain(path), changed: () => this.rail.sync(),
+      level: () => ({ pinned: this.pinned, aboveTaskbar: this.desktopPrefs.get().aboveTaskbar }) })
     this.rail = new RailController(origin, preload, prefs, desktopPrefs, {
       signedIn: () => !!this.state?.accountId,
       timer: () => this.railTimer(),
@@ -119,7 +120,7 @@ export class TimerWindowController {
     this.menu.install()
     this.quick.install()
     this.rail.install()
-    this.desktopPrefs.onChange(() => { this.applyLevel(); this.rail.sync(); this.updateTray() })
+    this.desktopPrefs.onChange(() => { this.applyLevel(); this.quick.applyLevel(); this.rail.sync(); this.updateTray() })
     this.updateTray()
     ipcMain.handle('yumpoo:timer:show', async (event, mode: unknown = 'picker', activate: unknown = true) => {
       this.trusted(event)
@@ -412,6 +413,7 @@ export class TimerWindowController {
     this.pinned = pinned
     this.prefs.update({ pinned })
     this.applyLevel()
+    this.quick.applyLevel()
     this.rail.sync()
     this.window?.webContents.send('yumpoo:timer:mode-changed', this.mode)
     this.updateTray()

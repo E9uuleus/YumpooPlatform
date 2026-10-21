@@ -181,6 +181,25 @@ test('preload 入口仅允许固定认证 IPC 包装', async () => {
   )
 })
 
+test('快捷工时固定与缩放只开放精确通道、方法和参数数量', async () => {
+  const file = 'desktop/desktop-shell/src/preload/index.ts'
+  const prefix = "import { ipcRenderer } from 'electron'\n"
+  for (const call of [
+    "invoke('yumpoo:quick:pin', true)",
+    "invoke('yumpoo:quick:resize', false)",
+    "on('yumpoo:quick:pinned', () => undefined)",
+    "removeListener('yumpoo:quick:pinned', () => undefined)",
+  ]) assert.equal((await boundaryMessages(file, `${prefix}void ipcRenderer.${call}`)).length, 0)
+  for (const call of [
+    "invoke('yumpoo:quick:pin')",
+    "invoke('yumpoo:quick:resize', true, false)",
+    "send('yumpoo:quick:pin', true)",
+    "invoke('yumpoo:quick:pinned', true)",
+    "on('yumpoo:quick:pinned')",
+    "invoke('yumpoo:quick:unknown', true)",
+  ]) assert.equal((await boundaryMessages(file, `${prefix}void ipcRenderer.${call}`)).length, 1)
+})
+
 test('Electron main 不得直接依赖 API client', async () => {
   const messages = await boundaryMessages(
     'desktop/desktop-shell/src/main/illegal.ts',

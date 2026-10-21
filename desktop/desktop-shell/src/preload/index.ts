@@ -256,6 +256,20 @@ const desktopPreferences: DesktopPreferencesBridge = Object.freeze({
 const QUICK_ORIGINS = new Set(['top', 'bottom', 'left', 'right'])
 
 const desktopQuick: DesktopQuickBridge = Object.freeze({
+  setPinned: async (pinned: boolean) => {
+    if (typeof pinned !== 'boolean') throw new TypeError('Quick panel pinned must be a boolean')
+    await ipcRenderer.invoke('yumpoo:quick:pin', pinned)
+  },
+  resize: async (active: boolean) => {
+    if (typeof active !== 'boolean') throw new TypeError('Quick panel resize must be a boolean')
+    await ipcRenderer.invoke('yumpoo:quick:resize', active)
+  },
+  onPinned: (listener: (pinned: boolean) => void) => {
+    if (typeof listener !== 'function') throw new TypeError('Quick panel listener must be a function')
+    const wrapped = (_event: unknown, value: unknown) => { if (typeof value === 'boolean') listener(value) }
+    ipcRenderer.on('yumpoo:quick:pinned', wrapped)
+    return () => ipcRenderer.removeListener('yumpoo:quick:pinned', wrapped)
+  },
   onOpen: (listener: (context: QuickPanelContext) => void) => {
     if (typeof listener !== 'function') throw new TypeError('Quick panel listener must be a function')
     const wrapped = (_event: unknown, value: QuickPanelContext) => {

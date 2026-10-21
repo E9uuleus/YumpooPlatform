@@ -67,6 +67,7 @@ vi.mock('../src/main/timer-menu', () => ({
 }))
 vi.mock('../src/main/quick-panel', () => ({
   QuickPanelController: class {
+    applyLevel = vi.fn()
     install = vi.fn()
     prewarm = vi.fn()
     destroy = vi.fn()
