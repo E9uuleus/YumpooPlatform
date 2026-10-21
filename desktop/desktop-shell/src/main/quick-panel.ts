@@ -78,6 +78,7 @@ export class QuickPanelController {
   applyLevel(): void {
     const window = this.window
     if (!window || window.isDestroyed()) return
+    window.setSkipTaskbar(!this.pinned())
     if (!this.pinned()) window.setAlwaysOnTop(true, 'pop-up-menu')
     else {
       const { pinned, aboveTaskbar } = this.host.level()
@@ -129,7 +130,7 @@ export class QuickPanelController {
       maxWidth: QUICK_PANEL_MAX.width, maxHeight: QUICK_PANEL_MAX.height,
       frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false, thickFrame: false,
       resizable: false, movable: true, minimizable: false, maximizable: false, fullscreenable: false,
-      skipTaskbar: true, type: 'toolbar', alwaysOnTop: true, title: 'YumpooPlatform · 快捷工时',
+      skipTaskbar: !this.pinned(), alwaysOnTop: true, title: 'YumpooPlatform · 快捷工时',
     })
     this.window = window
     this.ready = false

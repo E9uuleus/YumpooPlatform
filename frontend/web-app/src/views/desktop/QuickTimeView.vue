@@ -373,6 +373,7 @@ button:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:-2p
 .quick-head.is-draggable{app-region:drag}
 .quick-head.is-draggable button{app-region:no-drag}
 .quick-grip{position:absolute;right:4px;bottom:4px;width:16px;height:16px;cursor:nwse-resize;opacity:.35;color:var(--yp-text-secondary)}
+.quick-grip svg{transform:rotate(90deg)}
 .quick-card:hover .quick-grip{opacity:.6}
 .quick-search{display:flex;align-items:center;gap:6px;height:32px;margin:8px 10px 6px;padding:0 10px;border-radius:8px;background:var(--yp-timer-sunken);color:var(--yp-text-muted);flex-shrink:0}
 .quick-search svg{width:15px;height:15px}

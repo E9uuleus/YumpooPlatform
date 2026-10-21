@@ -38,6 +38,8 @@ IPC 按窗口主框架与来源校验：`yumpoo:preferences:*` 只接受主窗�
 
 本记录更新[桌面计时界面](2026-09-24-desktop-timer-surfaces.md)和[计时窗与托盘](2026-09-08-timer-work-picker.md)中的侧边栏与托盘语义，取代发布渠道记录中对应用内开机自启的否决。
 
+固定的小窗口作为普通独立窗口显示在任务栏的 YumpooPlatform 分组中，便于从任务栏找回；取消固定时移出任务栏，继续作为失焦收起的托盘弹窗。窗口不再使用 `toolbar` 类型，任务栏可见性随 `quickPinned` 切换并在重启后恢复。
+
 ## Alternatives considered
 
 - 保留计时侧边栏再增加项目侧边栏：屏幕边缘会出现两条栏，用户选择合并。

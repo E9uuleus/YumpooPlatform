@@ -24,6 +24,7 @@ vi.mock('electron', () => ({
     getBounds = vi.fn(() => ({ ...this.bounds }))
     setBounds = vi.fn((bounds: typeof this.bounds) => { this.bounds = { ...bounds } })
     setAlwaysOnTop = vi.fn()
+    setSkipTaskbar = vi.fn()
     show = vi.fn()
     focus = vi.fn()
     hide = vi.fn()
@@ -37,8 +38,9 @@ import { QuickPanelController } from '../src/main/quick-panel'
 import { TimerPreferenceStore } from '../src/main/timer-preferences'
 
 type Panel = BrowserWindow & { events: Map<string, () => void>; contentEvents: Map<string, () => void> }
-function setup() {
+function setup(pinned = false) {
   const prefs = new TimerPreferenceStore()
+  prefs.update({ quickPinned: pinned })
   const level = { pinned: true, aboveTaskbar: false }
   const controller = new QuickPanelController('https://yumpoo.example', '/preload.js', prefs, { openMain: vi.fn(), changed: vi.fn(), level: () => level })
   controller.install(); controller.prewarm()
@@ -51,6 +53,18 @@ beforeEach(() => { vi.useFakeTimers(); mocks.windows.length = 0; mocks.handlers.
 afterEach(() => { mocks.appEvents.get('will-quit')?.(); vi.useRealTimers() })
 
 describe('快捷工时固定小窗', () => {
+  it('固定时进入任务栏，取消固定时退出任务栏', () => {
+    const { controller, window } = setup()
+    expect(window.setSkipTaskbar).toHaveBeenLastCalledWith(true)
+    controller.setPinned(true)
+    expect(window.setSkipTaskbar).toHaveBeenLastCalledWith(false)
+    controller.setPinned(false)
+    expect(window.setSkipTaskbar).toHaveBeenLastCalledWith(true)
+  })
+  it('从固定偏好恢复时保留任务栏入口', () => {
+    const { window } = setup(true)
+    expect(window.setSkipTaskbar).toHaveBeenLastCalledWith(false)
+  })
   it('固定后失焦不隐藏', async () => {
     const { controller, window } = setup()
     controller.setPinned(true)
