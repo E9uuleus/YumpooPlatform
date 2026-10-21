@@ -15,6 +15,20 @@ afterEach(() => vi.useRealTimers())
 const totals = [{ workItemId: 'a', title: '写周报', itemNo: 'A', projectName: '项目', colorToken: null, ms: 1.5 * HOUR }]
 
 describe('工作项侧栏', () => {
+  it('自动加载下一段，追加失败时保留原列表并从相同位置重试', async () => {
+    api.listTimerCandidates.mockResolvedValueOnce({ items: [candidate('a', '写周报')], nextOffset: 25 }).mockRejectedValueOnce(new Error('offline'))
+    const wrapper = mount(ItemShelf, { props: { totals: [], busy: false } })
+    await settle()
+    expect(wrapper.findAll('button').some(button => button.text() === '加载更多')).toBe(false)
+    expect(wrapper.text()).toContain('加载更多失败')
+    expect(wrapper.findAll('.item-shelf__row')).toHaveLength(1)
+    api.listTimerCandidates.mockResolvedValueOnce({ items: [candidate('b', '评审')], nextOffset: null })
+    await wrapper.get('.item-shelf__status button').trigger('click')
+    await flushPromises()
+    expect(api.listTimerCandidates).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 25 }), expect.anything())
+    expect(wrapper.findAll('.item-shelf__row')).toHaveLength(2)
+    wrapper.unmount()
+  })
   it('今天已记录的项不在最近列表中重复出现', async () => {
     const wrapper = mount(ItemShelf, { props: { totals, busy: false }, attachTo: document.body })
     await settle()

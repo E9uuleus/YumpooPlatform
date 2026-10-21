@@ -4,6 +4,7 @@ import { ElButton, ElInput } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import type { TimerCandidate } from '@yumpoo/api-client'
 import { useTimerCandidates } from '../../../composables/useTimerCandidates'
+import { useInfiniteSentinel } from '../../../composables/useInfiniteSentinel'
 import { useHideCompleted } from '../../../composables/useHideCompleted'
 import HideCompletedSwitch from '../../timer/HideCompletedSwitch.vue'
 import WorkItemGlyph from '../../timer/WorkItemGlyph.vue'
@@ -18,6 +19,9 @@ const listbox = ref<HTMLElement>()
 const id = useId()
 const { query, items, hiddenCount, loading, problem, nextOffset, searching, load } = useTimerCandidates(ref(true))
 const { hideCompleted } = useHideCompleted()
+const sentinel = ref<HTMLElement>()
+useInfiniteSentinel(listbox, sentinel, () => items.value.length,
+  () => nextOffset.value !== null && !loading.value && !problem.value, () => load(true))
 const visible = items
 const options = computed(() => visible.value.filter(item => !props.exclude.includes(item.workItemId)))
 const active = ref(0)
@@ -125,15 +129,22 @@ defineExpose({ focus: () => input.value?.focus() })
           class="item-picker__done"
         >已完成</span>
       </li>
+      <div
+        v-if="nextOffset !== null"
+        ref="sentinel"
+        class="item-picker-sentinel"
+        role="presentation"
+        aria-hidden="true"
+      />
     </ul>
     <p
-      v-if="loading"
+      v-if="loading && !items.length"
       class="item-picker__status"
     >
       正在加载…
     </p>
     <p
-      v-else-if="problem"
+      v-else-if="problem && !items.length"
       class="item-picker__status"
       role="alert"
     >
@@ -151,15 +162,25 @@ defineExpose({ focus: () => input.value?.focus() })
     >
       {{ searching ? '没有匹配的工作项' : '还没有分配给你或最近记录过的工作项，输入关键字搜索全部。' }}
     </p>
-    <el-button
-      v-else-if="nextOffset !== null"
-      text
-      size="small"
-      class="item-picker__more"
-      @click="load(true)"
+    <p
+      v-if="loading && items.length"
+      class="item-picker__status is-more"
     >
-      加载更多
-    </el-button>
+      正在加载更多工作项…
+    </p>
+    <p
+      v-else-if="problem && items.length"
+      class="item-picker__status is-more"
+      role="alert"
+    >
+      加载更多失败<el-button
+        text
+        size="small"
+        @click="load(true)"
+      >
+        重试
+      </el-button>
+    </p>
   </div>
 </template>
 
@@ -179,5 +200,6 @@ defineExpose({ focus: () => input.value?.focus() })
 .item-picker__option.is-completed .item-picker__text strong{text-decoration:line-through}
 .item-picker__done{flex:none;padding:1px 6px;border-radius:var(--yp-radius-pill);background:var(--yp-bg-hover);color:var(--yp-text-muted);font-size:11px;line-height:16px}
 .item-picker__status{margin:6px 4px;color:var(--yp-text-muted);font-size:12px;line-height:18px}
-.item-picker__more{align-self:center}
+.item-picker__status.is-more{text-align:center}
+.item-picker-sentinel{height:1px}
 </style>

@@ -7,6 +7,7 @@ import { ArrowRight, CircleCheck, Clock } from '@element-plus/icons-vue'
 import { useSession } from '../../composables/useSession'
 import { useTimeTracker } from '../../composables/useTimeTracker'
 import { useTimerCandidates } from '../../composables/useTimerCandidates'
+import { useInfiniteSentinel } from '../../composables/useInfiniteSentinel'
 import { useHideCompleted } from '../../composables/useHideCompleted'
 import { useDesktopSurfaceOpacity } from '../../composables/useDesktopSurfaceOpacity'
 import { useDayTimeline } from '../../components/my-time/day/useDayTimeline'
@@ -31,6 +32,10 @@ const candidates = useTimerCandidates(computed(() => session.phase.value === 'au
   projects: computed(() => project.value ? [project.value] : []),
 })
 const { hideCompleted } = useHideCompleted()
+const list = ref<HTMLElement>()
+const sentinel = ref<HTMLElement>()
+useInfiniteSentinel(list, sentinel, () => candidates.items.value.length,
+  () => candidates.nextOffset.value !== null && !candidates.loading.value && !candidates.problem.value, () => candidates.load(true))
 
 const context = ref<QuickPanelContext>({ projectId: null, projects: [], origin: 'bottom' })
 const openId = ref<string | null>(null)
@@ -274,7 +279,10 @@ function keydown(event: KeyboardEvent) {
           />{{ chip.name }}
         </button>
       </div>
-      <div class="quick-list">
+      <div
+        ref="list"
+        class="quick-list"
+      >
         <div
           v-for="group in groups"
           :key="group.projectId"
@@ -317,15 +325,30 @@ function keydown(event: KeyboardEvent) {
           {{ candidates.loading.value ? '正在加载工作项…' : candidates.problem.value
             || (project ? '这个项目里暂无分配给你或最近记录的工作项，可以在上方搜索。' : '暂无工作项，可以在上方搜索。') }}
         </p>
-        <button
-          v-else-if="candidates.nextOffset.value !== null"
-          type="button"
-          class="quick-more"
-          :disabled="candidates.loading.value"
-          @click="candidates.load(true)"
+        <p
+          v-if="candidates.loading.value && shown.length"
+          class="quick-status"
         >
-          加载更多
-        </button>
+          正在加载更多工作项…
+        </p>
+        <p
+          v-else-if="candidates.problem.value && shown.length"
+          class="quick-status"
+          role="alert"
+        >
+          加载更多失败 <button
+            type="button"
+            @click="candidates.load(true)"
+          >
+            重试
+          </button>
+        </p>
+        <div
+          v-if="candidates.nextOffset.value !== null"
+          ref="sentinel"
+          class="quick-sentinel"
+          aria-hidden="true"
+        />
       </div>
       <footer class="quick-foot">
         <HideCompletedSwitch :hidden-count="hiddenCount" />
@@ -391,7 +414,9 @@ button:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:-2p
 .quick-list{flex:1;min-height:0;overflow:auto;padding:2px 8px 8px}
 .quick-group{padding:8px 6px 3px;color:var(--yp-text-muted);font-size:11px}
 .quick-empty{margin:24px 12px;color:var(--yp-text-muted);font-size:12.5px;line-height:1.6;text-align:center}
-.quick-more{display:block;margin:6px auto 0;padding:4px 10px;border-radius:8px;color:var(--yp-timer-accent);font-size:12.5px}
+.quick-status{margin:6px 0;color:var(--yp-text-muted);font-size:12px;text-align:center}
+.quick-status button{color:var(--yp-timer-accent)}
+.quick-sentinel{height:1px}
 .quick-foot{display:flex;align-items:center;gap:8px;height:44px;padding:0 12px;border-top:1px solid var(--yp-timer-hairline);flex-shrink:0}
 .quick-link{display:inline-flex;align-items:center;gap:2px;margin-left:auto;color:var(--yp-timer-accent);font-size:12.5px}
 .quick-link svg{width:13px;height:13px}

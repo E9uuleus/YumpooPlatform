@@ -300,10 +300,19 @@ describe('personal cross-project timer picker', () => {
   it('deduplicates repeated pages and never repeats the running work item', async () => {
     tracker.current.value = runningState('session', '正在做')
     api.listTimerCandidates.mockResolvedValueOnce({ items: [item('a'), item('b')], nextOffset: 2 })
-    const wrapper = await panel()
-    expect(wrapper.findAll('[role="option"]')).toHaveLength(1)
     api.listTimerCandidates.mockResolvedValueOnce({ items: [item('b'), item('c')], nextOffset: null })
-    await wrapper.get('.load-more').trigger('click'); await flushPromises()
+    const wrapper = await panel()
+    expect(wrapper.findAll('button').some(button => button.text() === '加载更多')).toBe(false)
+    expect(wrapper.findAll('[role="option"]')).toHaveLength(2)
+  })
+  it('shows append failure and retries at the same offset without clearing existing items', async () => {
+    api.listTimerCandidates.mockResolvedValueOnce({ items: [item('a')], nextOffset: 25 }).mockRejectedValueOnce(new Error('offline'))
+    const wrapper = await panel()
+    expect(wrapper.text()).toContain('加载更多失败')
+    expect(wrapper.findAll('[role="option"]')).toHaveLength(1)
+    api.listTimerCandidates.mockResolvedValueOnce({ items: [item('b')], nextOffset: null })
+    await wrapper.get('.picker-status button').trigger('click'); await flushPromises()
+    expect(api.listTimerCandidates).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 25 }), expect.anything())
     expect(wrapper.findAll('[role="option"]')).toHaveLength(2)
   })
   it('keeps failed starts reviewable and does not close or clear the query', async () => {

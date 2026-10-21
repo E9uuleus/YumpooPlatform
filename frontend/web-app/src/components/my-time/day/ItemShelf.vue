@@ -4,6 +4,7 @@ import { ElButton, ElCheckbox, ElIcon, ElInput, ElPopover } from 'element-plus'
 import { FolderOpened, Plus, Search, User } from '@element-plus/icons-vue'
 import { ListTimerCandidatesScopeEnum } from '@yumpoo/api-client'
 import { useTimerCandidates } from '../../../composables/useTimerCandidates'
+import { useInfiniteSentinel } from '../../../composables/useInfiniteSentinel'
 import { useHideCompleted } from '../../../composables/useHideCompleted'
 import HideCompletedSwitch from '../../timer/HideCompletedSwitch.vue'
 import '../../projects/workItemAccentBar.css'
@@ -22,6 +23,10 @@ const { query, scope, items, projectCounts, hiddenCount, loading, problem, nextO
   projects: computed(() => [...projects.value.keys()]), assignedToMe: mine,
 })
 const { hideCompleted } = useHideCompleted()
+const list = ref<HTMLElement>()
+const sentinel = ref<HTMLElement>()
+useInfiniteSentinel(list, sentinel, () => items.value.length,
+  () => nextOffset.value !== null && !loading.value && !problem.value, () => load(true))
 const scopes = computed(() => [
   { value: ListTimerCandidatesScopeEnum.Personal, label: '最近与我的', disabled: searching.value },
   { value: ListTimerCandidatesScopeEnum.All, label: '全部', disabled: searching.value },
@@ -187,7 +192,10 @@ const color = (item: ShelfItem) => ({ '--work-item-accent': workItemLabelColorVa
         </button>
       </div>
     </header>
-    <div class="item-shelf__body">
+    <div
+      ref="list"
+      class="item-shelf__body"
+    >
       <section
         v-for="section in sections"
         :key="section.key"
@@ -286,13 +294,13 @@ const color = (item: ShelfItem) => ({ '--work-item-accent': workItemLabelColorVa
         </ul>
         <template v-if="section.key !== 'today'">
           <p
-            v-if="loading"
+            v-if="loading && !items.length"
             class="item-shelf__empty"
           >
             正在加载…
           </p>
           <p
-            v-else-if="problem"
+            v-else-if="problem && !items.length"
             class="item-shelf__empty"
             role="alert"
           >
@@ -310,14 +318,31 @@ const color = (item: ShelfItem) => ({ '--work-item-accent': workItemLabelColorVa
           >
             {{ filtering ? '没有匹配的工作项' : '输入关键字搜索全部工作项' }}
           </p>
-          <el-button
-            v-if="!loading && !problem && nextOffset !== null"
-            text
-            size="small"
-            @click="load(true)"
+          <p
+            v-if="loading && items.length"
+            class="item-shelf__status"
           >
-            加载更多
-          </el-button>
+            正在加载更多工作项…
+          </p>
+          <p
+            v-else-if="problem && items.length"
+            class="item-shelf__status"
+            role="alert"
+          >
+            加载更多失败<el-button
+              text
+              size="small"
+              @click="load(true)"
+            >
+              重试
+            </el-button>
+          </p>
+          <div
+            v-if="nextOffset !== null"
+            :ref="el => sentinel = (el as HTMLElement | null) ?? undefined"
+            class="item-shelf-sentinel"
+            aria-hidden="true"
+          />
         </template>
       </section>
     </div>
@@ -342,6 +367,8 @@ const color = (item: ShelfItem) => ({ '--work-item-accent': workItemLabelColorVa
 .item-shelf__section h3 small{color:var(--yp-text-muted);font:500 12px var(--yp-font-mono)}
 .item-shelf__section ul{display:grid;gap:6px;margin:0;padding:0;list-style:none}
 .item-shelf__empty{margin:0;color:var(--yp-text-muted);font-size:13px;line-height:20px}
+.item-shelf__status{margin:6px 0;color:var(--yp-text-muted);font-size:12px;text-align:center}
+.item-shelf-sentinel{height:1px}
 .item-shelf__row{display:flex;align-items:center;gap:8px;min-height:52px;padding:6px 6px 6px 16px;border:1px solid var(--yp-monday-grid-border);border-radius:var(--yp-radius-sm);background:var(--yp-bg-surface);box-shadow:var(--yp-shadow-card);transition:box-shadow var(--yp-motion-fast) ease-out,border-color var(--yp-motion-fast) ease-out,opacity var(--yp-motion-fast) ease-out}
 .item-shelf__row.work-item-accent-bar::before{top:-1px;bottom:-1px;left:-1px}
 .item-shelf__row:hover,.item-shelf__row.is-open{border-color:color-mix(in srgb,var(--work-item-accent) 45%,var(--yp-monday-grid-border));box-shadow:var(--yp-shadow-hover)}
