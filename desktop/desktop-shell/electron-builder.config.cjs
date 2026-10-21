@@ -31,7 +31,7 @@ module.exports = {
   directories: {
     output: process.env.YUMPOO_DESKTOP_OUTPUT_ROOT
       ? path.resolve(process.env.YUMPOO_DESKTOP_OUTPUT_ROOT)
-      : path.join(__dirname, 'out', 'builder'),
+      : path.join(__dirname, 'out', 'release'),
     buildResources: 'build',
   },
   files: [

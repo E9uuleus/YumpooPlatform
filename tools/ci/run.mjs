@@ -21,7 +21,6 @@ const environment = {
   YUMPOO_BUILD_COMMIT: git(['rev-parse', 'HEAD']).trim(),
   YUMPOO_HANDOFF_ROOT: path.join(root, 'out/handoff'),
   YUMPOO_BACKUP_RESTORE_OUTPUT_ROOT: path.join(root, 'out/backup-restore'),
-  YUMPOO_M018_VALIDATION_MODE: 'WINDOWS_X64_CI_STAGE',
   YUMPOO_HANDOFF_ARTIFACT_NAME: process.env.YUMPOO_HANDOFF_ARTIFACT_NAME || '',
   YUMPOO_HANDOFF_ARTIFACT_DIGEST: process.env.YUMPOO_HANDOFF_ARTIFACT_DIGEST || '',
 }

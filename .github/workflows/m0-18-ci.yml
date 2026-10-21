@@ -178,13 +178,6 @@ jobs:
           path: out/desktop/*
           if-no-files-found: error
           retention-days: 30
-      - name: Upload final evidence pack
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: m0-18-evidence-${{ github.sha }}-${{ github.run_attempt }}
-          path: out/m0-18/evidence-pack
-          if-no-files-found: error
-          retention-days: 30
       - name: Record complete Windows execution
         id: completed
         run: '"completed=true" >> $env:GITHUB_OUTPUT'
