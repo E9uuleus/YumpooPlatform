@@ -14,4 +14,3 @@ const powershell = spawnSync(
   { cwd: repositoryRoot, stdio: 'ignore' },
 )
 assertPackage(powershell.status === 0, 'PowerShell 不可用')
-

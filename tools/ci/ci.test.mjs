@@ -201,4 +201,3 @@ test('history guard permits forward additions and rejects rewritten or deleted d
   assert.throws(() => checkHistory(directory, baseline), /既有 OpenAPI 精确例外/u)
   assert.throws(() => checkHistory(directory, 'missing-ref'), /历史基线不可读取/u)
 })
-
