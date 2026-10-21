@@ -11,6 +11,7 @@ import { projectColors } from '../../components/team/teamDashboardModel'
 import { orbDuration } from '../../components/timer/timeFormat'
 import TimerIcon from '../../components/timer/TimerIcon.vue'
 import { projectInitial } from '../../components/desktop/quickTime'
+import { plainRailProjects } from '../../components/desktop/railProjects'
 
 // Mirrors RAIL_ICONS and the 10px padding, 8px gaps and 14px time label that timer-geometry.ts sizes the window by.
 const ICONS = { small: 30, medium: 34, large: 40 } as const
@@ -60,7 +61,7 @@ function drop(target: number) {
   const items = [...projects.value]
   const [moved] = items.splice(from, 1)
   items.splice(target, 0, moved!)
-  void bridge?.setProjects({ owner: scope.value, items })
+  void bridge?.setProjects({ owner: scope.value, items: plainRailProjects(items) })
 }
 </script>
 
