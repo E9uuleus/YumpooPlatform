@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
-import { resolveGitCommit } from '../verification/m0-18-utils.mjs'
+import { resolveGitCommit } from '../verification/delivery-utils.mjs'
 import { retirementManifestPath, validateRetirementManifest } from '../events/event-contract-compat.mjs'
 
 function git(root, args) {

@@ -7,7 +7,7 @@ import { verificationEnvironment } from './environment.mjs'
 import { checkHistory } from './history-policy.mjs'
 import { plan } from './plan.mjs'
 import { assertStageReport } from './reports.mjs'
-import { resolveGitCommit } from '../verification/m0-18-utils.mjs'
+import { resolveGitCommit } from '../verification/delivery-utils.mjs'
 import { runPnpmSync, runSync } from '../verification/process-utils.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -16,14 +16,13 @@ const baseRef = resolveGitCommit(root, process.env.YUMPOO_CI_BASE_REF || 'origin
 const environment = {
   ...verificationEnvironment(process.env),
   AGENT_NOTE_ARCHIVE_BASE_REF: baseRef,
-  YUMPOO_M018_HEAD_COMMIT: process.env.YUMPOO_M018_HEAD_COMMIT || git(['rev-parse', 'HEAD']).trim(),
-  YUMPOO_M018_TESTED_COMMIT: git(['rev-parse', 'HEAD']).trim(),
+  YUMPOO_CI_HEAD_COMMIT: process.env.YUMPOO_CI_HEAD_COMMIT || git(['rev-parse', 'HEAD']).trim(),
+  YUMPOO_CI_TESTED_COMMIT: git(['rev-parse', 'HEAD']).trim(),
   YUMPOO_BUILD_COMMIT: git(['rev-parse', 'HEAD']).trim(),
-  YUMPOO_M018_HANDOFF_ROOT: path.join(root, 'out/m0-18/portable-handoff'),
-  YUMPOO_M017_OUTPUT_ROOT: path.join(root, 'out/m0-17'),
-  YUMPOO_M018_VALIDATION_MODE: 'WINDOWS_X64_CI_STAGE',
-  YUMPOO_M018_HANDOFF_ARTIFACT_NAME: process.env.YUMPOO_M018_HANDOFF_ARTIFACT_NAME || '',
-  YUMPOO_M018_HANDOFF_ARTIFACT_DIGEST: process.env.YUMPOO_M018_HANDOFF_ARTIFACT_DIGEST || '',
+  YUMPOO_HANDOFF_ROOT: path.join(root, 'out/handoff'),
+  YUMPOO_BACKUP_RESTORE_OUTPUT_ROOT: path.join(root, 'out/backup-restore'),
+  YUMPOO_HANDOFF_ARTIFACT_NAME: process.env.YUMPOO_HANDOFF_ARTIFACT_NAME || '',
+  YUMPOO_HANDOFF_ARTIFACT_DIGEST: process.env.YUMPOO_HANDOFF_ARTIFACT_DIGEST || '',
 }
 
 function git(args) {
@@ -44,7 +43,7 @@ function fingerprint() {
 function prerequisite(stage, sourceHash) {
   const file = path.join(output, `${stage}.json`)
   const report = fs.existsSync(file) && JSON.parse(fs.readFileSync(file, 'utf8'))
-  assertStageReport(report, { stage, sourceHash, sourceCommit: environment.YUMPOO_M018_TESTED_COMMIT,
+  assertStageReport(report, { stage, sourceHash, sourceCommit: environment.YUMPOO_CI_TESTED_COMMIT,
     baseRef, steps: plan(stage, baseRef) })
   return report
 }
@@ -55,7 +54,7 @@ function runStage(stage) {
   }
   const steps = plan(stage, baseRef)
   const sourceHash = fingerprint()
-  const report = { stage, baseRef, sourceCommit: environment.YUMPOO_M018_TESTED_COMMIT,
+  const report = { stage, baseRef, sourceCommit: environment.YUMPOO_CI_TESTED_COMMIT,
     sourceHash, startedAt: new Date().toISOString(), status: 'RUNNING', steps: [] }
   fs.mkdirSync(output, { recursive: true })
   const save = () => fs.writeFileSync(path.join(output, `${stage}.json`), `${JSON.stringify(report, null, 2)}\n`)
@@ -65,7 +64,7 @@ function runStage(stage) {
     if (stage === 'portable') {
       prerequisite('static', sourceHash)
       const backend = prerequisite('backend', sourceHash)
-      environment.YUMPOO_M018_STARTED_AT = backend.startedAt
+      environment.YUMPOO_CI_STARTED_AT = backend.startedAt
       environment.YUMPOO_M113_STARTED_AT = report.startedAt
       for (const step of steps) step.args = step.args.map(arg => arg === '$BACKEND_STARTED' ? String(Date.parse(backend.startedAt)) : arg)
     }

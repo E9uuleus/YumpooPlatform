@@ -25,7 +25,7 @@ const bundled = [
 function build(t, { latest } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yumpoo-desktop-collect-'))
   t.after(() => fs.rmSync(root, { recursive: true, force: true }))
-  const sourceRoot = path.join(root, 'm0-15')
+  const sourceRoot = path.join(root, 'release')
   fs.mkdirSync(sourceRoot)
   const bytes = Buffer.from('installer bytes')
   const sha512 = createHash('sha512').update(bytes).digest('base64')

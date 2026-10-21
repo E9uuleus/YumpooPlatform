@@ -1,7 +1,7 @@
 import net from 'node:net'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { verifyM018Handoff } from './verify-m0-18-handoff.mjs'
+import { verifyPortableHandoff } from './verify-portable-handoff.mjs'
 import { setTimeout as delay } from 'node:timers/promises'
 import {
   runPnpmSync,
@@ -76,7 +76,7 @@ const handoffArgument = process.argv.indexOf('--handoff')
 const handoff = handoffArgument >= 0 ? process.argv[handoffArgument + 1] : undefined
 if (handoffArgument >= 0 && !handoff) throw new Error('--handoff 必须提供已验证载荷目录')
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
-if (handoff) verifyM018Handoff(root, path.resolve(handoff))
+if (handoff) verifyPortableHandoff(root, path.resolve(handoff))
 
 runPnpmSync(['--filter', '@yumpoo/preload-contract', 'build'])
 if (!handoff) {

@@ -51,7 +51,7 @@ export function assertWorkflowSafety(workflow) {
   assert(upload.with.name.includes('github.run_id') && upload.with.name.includes('github.run_attempt'))
   assert.equal(upload.with['if-no-files-found'], 'error')
   assert.equal(workflow.jobs.windows_delivery.steps.find(step => step.run === 'pnpm ci:windows')
-    .env.YUMPOO_M018_HANDOFF_ARTIFACT_DIGEST, '${{ needs.linux.outputs.handoff-digest }}')
+    .env.YUMPOO_HANDOFF_ARTIFACT_DIGEST, '${{ needs.linux.outputs.handoff-digest }}')
   assertBuildAttestation(workflow)
 }
 

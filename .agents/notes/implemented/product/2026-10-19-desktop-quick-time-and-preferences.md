@@ -67,5 +67,5 @@ IPC 按窗口主框架与来源校验：`yumpoo:preferences:*` 只接受主窗�
 - `pnpm --filter @yumpoo/web-app exec vitest run src/components/desktop/quickTime.spec.ts src/components/timer src/components/inbox/InboxHost.spec.ts src/views/download/DesktopDownloadView.spec.ts`：11 个 spec 共 77 项通过。
 - preload-contract 构建、Web 与桌面 `typecheck`、`pnpm lint`（0 errors）、`pnpm run test:architecture`（15 项）、`pnpm run doc-sync`（88 份活动 Note 与 4 份冻结记录）、`pnpm run test:agent-notes -- --maxWorkers=1 --testTimeout=30000`（20 项）通过。
 - 本地独立数据库与浏览器走查：快捷页按提示排入一小时，今日合计从 30 分钟变为一小时 30 分钟；无搜索时隐藏已完成项并显示数量，搜索时保留、淡化并划线。
-- 迁移到 `/timer/quick`、`/timer/rail`：`test/surface-load.spec.ts` 覆盖 200、404 与网络失败；`node tools/verification/verify-m1-15-deployment-assets.mjs` 在路由仍为 `/desktop/quick` 时失败、迁移后通过。
+- 迁移到 `/timer/quick`、`/timer/rail`：`test/surface-load.spec.ts` 覆盖 200、404 与网络失败；`node tools/verification/verify-deployment-config.mjs` 在路由仍为 `/desktop/quick` 时失败、迁移后通过。
 - 真实桌面托盘、系统快捷键、自动隐藏、安装版登录项及旧壳人工走查尚未完成，限制与其余验收证据记录在本 PR。
