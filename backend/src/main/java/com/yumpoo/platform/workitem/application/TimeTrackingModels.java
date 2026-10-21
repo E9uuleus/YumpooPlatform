@@ -1,6 +1,7 @@
 package com.yumpoo.platform.workitem.application;
 
 import com.yumpoo.platform.foundation.application.concurrency.StrongEtag;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -59,7 +60,11 @@ public final class TimeTrackingModels {
         }
     }
 
-    public record TimerCandidatePage(List<TimerCandidate> items, Integer nextOffset) {}
+    public record TimerCandidateProjectCount(UUID projectId, String projectName, long count) {}
+
+    public record TimerCandidatePage(List<TimerCandidate> items, Integer nextOffset,
+            @JsonInclude(JsonInclude.Include.NON_NULL) List<TimerCandidateProjectCount> projects,
+            @JsonInclude(JsonInclude.Include.NON_NULL) Integer hiddenCompletedCount) {}
 
     public record CurrentRunningTimer(TimeTrackingSession session, String workItemTitle) {}
 

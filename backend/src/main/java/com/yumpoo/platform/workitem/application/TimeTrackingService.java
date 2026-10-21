@@ -49,22 +49,38 @@ public class TimeTrackingService {
     }
 
     @Transactional(readOnly=true, isolation=Isolation.REPEATABLE_READ)
-    public TimerCandidatePage candidates(CurrentActor actor, String query, String scope, int offset, int limit) {
+    public TimerCandidatePage candidates(CurrentActor actor, String query, String scope, int offset, int limit,
+            List<UUID> projectIds, boolean assignedToMe, boolean excludeCompleted) {
         String normalized=query == null ? "" : query.strip().toLowerCase(Locale.ROOT);
         if(normalized.length()>200) throw validation("q", "INVALID_LENGTH", "搜索词最多 200 字");
         if(!Set.of("PERSONAL", "ALL").contains(scope)) throw validation("scope", "INVALID_VALUE", "无效的工作项范围");
         if(offset<0 || offset>100000 || limit<1 || limit>50) throw validation("offset", "INVALID_PAGE", "无效的分页参数");
+        if(projectIds!=null && projectIds.size()>20) throw validation("projectId", "INVALID_SIZE", "最多选择 20 个项目");
         var projects=access.findWritableProjects(actor);
-        if(projects.isEmpty()) return new TimerCandidatePage(List.of(), null);
+        if(projects.isEmpty()) return new TimerCandidatePage(List.of(), null, offset==0 ? List.of() : null, offset==0 ? 0 : null);
         var names=projects.stream().collect(java.util.stream.Collectors.toMap(
                 ProjectAccessSnapshotQuery.WritableProject::projectId, ProjectAccessSnapshotQuery.WritableProject::name));
         var matching=projects.stream().filter(p -> !normalized.isEmpty()
                 && (p.name().toLowerCase(Locale.ROOT).contains(normalized) || p.code().toLowerCase(Locale.ROOT).contains(normalized)))
                 .map(ProjectAccessSnapshotQuery.WritableProject::projectId).toList();
-        var rows=timers.candidates(actor.companyId(), actor.userId(), names.keySet(), matching, normalized,
-                scope.equals("PERSONAL"), offset, limit+1, now());
+        var filtered=new HashSet<>(names.keySet());
+        if(projectIds!=null && !projectIds.isEmpty()) filtered.retainAll(projectIds);
+        Instant now=now();
+        var rows=timers.candidates(actor.companyId(), actor.userId(), names.keySet(), filtered, matching, normalized,
+                scope.equals("PERSONAL"), assignedToMe, excludeCompleted, offset, limit+1, now);
+        List<TimerCandidateProjectCount> counts=null;
+        Integer hidden=null;
+        if(offset==0) {
+            var totals=timers.candidateProjectCounts(actor.companyId(), actor.userId(), names.keySet(), matching, normalized,
+                    scope.equals("PERSONAL"), assignedToMe, excludeCompleted, now);
+            counts=totals.stream().filter(row -> row.visible()>0)
+                    .map(row -> new TimerCandidateProjectCount(row.projectId(), names.get(row.projectId()), row.visible()))
+                    .sorted(Comparator.comparingLong(TimerCandidateProjectCount::count).reversed()
+                            .thenComparing(TimerCandidateProjectCount::projectName).thenComparing(TimerCandidateProjectCount::projectId)).toList();
+            hidden=Math.toIntExact(totals.stream().filter(row -> filtered.contains(row.projectId())).mapToLong(TimeTrackingRepository.CandidateProjectCount::hidden).sum());
+        }
         return new TimerCandidatePage(rows.stream().limit(limit).map(row -> row.withProjectName(names.get(row.projectId()))).toList(),
-                rows.size()>limit ? offset+limit : null);
+                rows.size()>limit ? offset+limit : null, counts, hidden);
     }
 
     private CurrentTimeTracker currentView(CurrentActor actor) {

@@ -19,6 +19,13 @@ import {
     TimerCandidateToJSON,
     TimerCandidateToJSONTyped,
 } from './TimerCandidate';
+import type { TimerCandidateProjectCount } from './TimerCandidateProjectCount';
+import {
+    TimerCandidateProjectCountFromJSON,
+    TimerCandidateProjectCountFromJSONTyped,
+    TimerCandidateProjectCountToJSON,
+    TimerCandidateProjectCountToJSONTyped,
+} from './TimerCandidateProjectCount';
 
 /**
  *
@@ -38,6 +45,18 @@ export interface TimerCandidatePage {
      * @memberof TimerCandidatePage
      */
     nextOffset: number | null;
+    /**
+     * 仅首段（offset=0）返回。按当前范围、搜索词、assignedToMe 和 excludeCompleted 统计，不受 projectId 限制；只含计数大于 0 的项目，按计数降序、项目名升序。
+     * @type {Array<TimerCandidateProjectCount>}
+     * @memberof TimerCandidatePage
+     */
+    projects?: Array<TimerCandidateProjectCount>;
+    /**
+     * 仅首段返回。excludeCompleted 为 true 时被排除的已完成候选数（受 projectId 限制）；为 false 时为 0。
+     * @type {number}
+     * @memberof TimerCandidatePage
+     */
+    hiddenCompletedCount?: number;
 }
 
 /**
@@ -61,6 +80,8 @@ export function TimerCandidatePageFromJSONTyped(json: any, ignoreDiscriminator: 
 
         'items': ((json['items'] as Array<any>).map(TimerCandidateFromJSON)),
         'nextOffset': json['nextOffset'],
+        ...(json['projects'] == null ? {} : { 'projects': ((json['projects'] as Array<any>).map(TimerCandidateProjectCountFromJSON)) }),
+        ...(json['hiddenCompletedCount'] == null ? {} : { 'hiddenCompletedCount': json['hiddenCompletedCount'] }),
     };
 }
 
@@ -77,5 +98,7 @@ export function TimerCandidatePageToJSONTyped(value?: TimerCandidatePage | null,
 
         'items': ((value['items'] as Array<any>).map(TimerCandidateToJSON)),
         'nextOffset': value['nextOffset'],
+        'projects': value['projects'] == null ? undefined : ((value['projects'] as Array<any>).map(TimerCandidateProjectCountToJSON)),
+        'hiddenCompletedCount': value['hiddenCompletedCount'],
     };
 }

@@ -413,6 +413,84 @@ class TimeTrackingHttpIT {
         assertThat(ok(get(candidates,owner)).path("items").get(0).path("completed").asBoolean()).isFalse();
     }
 
+    @Test
+    void candidateProjectCountsIncludeUntrackedAssignmentsBeyondTheFirstPage() throws Exception {
+        for(int i=0;i<26;i++) {
+            UUID item=UUID.fromString(createItem(source.id(),"已计时 "+i).path("id").asText());
+            ok(mutate("POST","/api/v1/me/time-sessions/fill",member,fillBody("PARALLEL",item,"09:00","10:00"),null));
+        }
+        UUID assigned=UUID.fromString(createItem(target.id(),"从未计时的分配项",List.of(member.userId())).path("id").asText());
+        jdbc.sql("UPDATE yumpoo.work_item SET status_category='IN_PROGRESS',status_code='IN_PROGRESS' WHERE id=:id")
+                .param("id",assigned).update();
+        String path="/api/v1/me/time-tracker/candidates";
+        JsonNode first=ok(get(path,member));
+        assertThat(first.path("items").size()).isEqualTo(25);
+        assertThat(first.path("items").toString()).doesNotContain(assigned.toString());
+        assertThat(first.path("projects").size()).isEqualTo(2);
+        assertThat(first.path("projects").get(1).path("projectId").asText()).isEqualTo(target.id().toString());
+        assertThat(first.path("projects").get(1).path("count").asInt()).isOne();
+        JsonNode filtered=ok(get(path+"?projectId="+target.id(),member));
+        assertThat(filtered.path("items").size()).isOne();
+        assertThat(filtered.path("items").get(0).path("workItemId").asText()).isEqualTo(assigned.toString());
+        assertThat(filtered.path("projects")).isEqualTo(first.path("projects"));
+        assertThat(filtered.path("hiddenCompletedCount").asInt()).isZero();
+    }
+
+    @Test
+    void candidateCompletionFilteringUsesPersonalDefinitionAndOnlyFirstPageHasCounts() throws Exception {
+        createItem(source.id(),"按本人定义完成");
+        String settings="""
+            {"pinnedColumnCount":0,"headerHeight":"SINGLE","rowHeight":"SINGLE","coloringRules":[],
+             "defaultValues":{"assigneeUserIds":[],"statusCode":null,"priority":null,"contentId":null,"dueDateOffsetDays":null},
+             "completedStatusCodes":["NOT_STARTED"]}
+            """;
+        ok(mutate("PUT","/api/v1/me/projects/"+source.id()+"/work-item-table-settings",member,settings,"\"0\""));
+        String path="/api/v1/me/time-tracker/candidates?scope=ALL&excludeCompleted=true";
+        JsonNode filtered=ok(get(path,member));
+        assertThat(filtered.path("items").size()).isOne();
+        assertThat(filtered.path("items").get(0).path("projectId").asText()).isEqualTo(target.id().toString());
+        assertThat(filtered.path("hiddenCompletedCount").asInt()).isEqualTo(2);
+        assertThat(filtered.path("projects").size()).isOne();
+        JsonNode project=ok(get(path+"&projectId="+target.id(),member));
+        assertThat(project.path("hiddenCompletedCount").asInt()).isZero();
+        JsonNode ownerPage=ok(get(path,owner));
+        assertThat(ownerPage.path("items").size()).isEqualTo(3);
+        assertThat(ownerPage.path("hiddenCompletedCount").asInt()).isZero();
+        JsonNode later=ok(get(path+"&offset=25",member));
+        assertThat(later.has("projects")).isFalse();
+        assertThat(later.has("hiddenCompletedCount")).isFalse();
+    }
+
+    @Test
+    void candidateAssignmentFilterRunsBeforePagination() throws Exception {
+        UUID assigned=UUID.fromString(createItem(target.id(),"分配给本人",List.of(member.userId())).path("id").asText());
+        JsonNode page=ok(get("/api/v1/me/time-tracker/candidates?scope=ALL&assignedToMe=true",member));
+        assertThat(page.path("items").size()).isOne();
+        assertThat(page.path("items").get(0).path("workItemId").asText()).isEqualTo(assigned.toString());
+        assertThat(page.path("projects").size()).isOne();
+        assertThat(page.path("projects").get(0).path("count").asInt()).isOne();
+    }
+
+    @Test
+    void inaccessibleCandidateProjectReturnsEmptyItemsButKeepsAccessibleCounts() throws Exception {
+        jdbc.sql("DELETE FROM yumpoo.project_membership WHERE project_id=:project AND user_id=:user")
+                .param("project",source.id()).param("user",member.userId()).update();
+        JsonNode page=ok(get("/api/v1/me/time-tracker/candidates?scope=ALL&projectId="+source.id(),member));
+        assertThat(page.path("items").isEmpty()).isTrue();
+        assertThat(page.path("nextOffset").isNull()).isTrue();
+        assertThat(page.path("projects").size()).isOne();
+        assertThat(page.path("projects").get(0).path("projectId").asText()).isEqualTo(target.id().toString());
+    }
+
+    @Test
+    void candidatesRejectMoreThanTwentyProjectFilters() throws Exception {
+        String query=java.util.stream.IntStream.range(0,21).mapToObj(i -> "projectId="+UUID.randomUUID())
+                .collect(java.util.stream.Collectors.joining("&"));
+        var response=get("/api/v1/me/time-tracker/candidates?"+query,member);
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(422);
+        assertThat(response.body()).contains("INVALID_SIZE","projectId");
+    }
+
     private String fillBody(String mode,UUID item,String start,String stop) {
         return json.writeValueAsString(Map.of("mode",mode,"entries",List.of(Map.of("workItemId",item,
                 "startedAt","2026-09-01T"+start+":00Z","stoppedAt","2026-09-01T"+stop+":00Z"))));
@@ -437,10 +515,16 @@ class TimeTrackingHttpIT {
     }
 
     private JsonNode createItem(UUID projectId,String title) throws Exception {
+        return createItem(projectId,title,List.of());
+    }
+
+    private JsonNode createItem(UUID projectId,String title,List<UUID> assignees) throws Exception {
         UUID content = jdbc.sql("SELECT id FROM yumpoo.content WHERE project_id=:project AND code='TASKS'")
                 .param("project", projectId).query(UUID.class).single();
         var itemBody = json.createObjectNode().put("contentId", content.toString()).put("title", title);
         itemBody.putNull("priority").putNull("description").putNull("notes");
+        var assigned=itemBody.putArray("assigneeUserIds");
+        assignees.forEach(id -> assigned.add(id.toString()));
         var item = mutate("POST", "/api/v1/projects/" + projectId + "/work-items", member,
                 json.writeValueAsString(itemBody), null);
         assertThat(item.statusCode()).as(item.body()).isEqualTo(201);

@@ -16,10 +16,48 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
     public JdbcTimeTrackingRepository(JdbcClient jdbc) { this.jdbc = jdbc; }
 
     public List<TimerCandidate> candidates(UUID companyId, UUID userId, Collection<UUID> projectIds,
-            Collection<UUID> matchingProjectIds, String query, boolean personal, int offset, int limit, Instant now) {
+            Collection<UUID> filterProjectIds, Collection<UUID> matchingProjectIds, String query, boolean personal,
+            boolean assignedToMe, boolean excludeCompleted, int offset, int limit, Instant now) {
+        if(projectIds.isEmpty() || filterProjectIds.isEmpty()) return List.of();
+        var statement=jdbc.sql(candidateBase(!matchingProjectIds.isEmpty()) + """
+            SELECT * FROM base
+            WHERE project_id IN (:filterProjects) AND (:assigned=false OR assigned) AND (:exclude=false OR NOT completed)
+            ORDER BY last_tracked_at DESC NULLS LAST, assigned DESC, updated_at DESC, id
+            LIMIT :limit OFFSET :offset
+            """).param("company",companyId).param("user",userId).param("projects",projectIds)
+                .param("filterProjects",filterProjectIds).param("assigned",assignedToMe).param("exclude",excludeCompleted)
+                .param("personal",personal).param("empty",query.isEmpty())
+                .param("query","%"+query.replace("\\","\\\\").replace("%","\\%").replace("_","\\_")+"%")
+                .param("now",Timestamp.from(now)).param("limit",limit).param("offset",offset);
+        if(!matchingProjectIds.isEmpty()) statement.param("matchingProjects",matchingProjectIds);
+        return statement.query((rs,n) -> new TimerCandidate(rs.getObject("id",UUID.class),
+                rs.getObject("project_id",UUID.class), "", rs.getString("item_no"), rs.getString("title"),
+                rs.getString("content_name"), rs.getString("content_code"), rs.getString("content_color_token"),
+                rs.getString("status_category"), rs.getBoolean("completed"), rs.getBoolean("assigned"),
+                instant(rs,"last_tracked_at"), rs.getLong("duration"))).list();
+    }
+
+    public List<CandidateProjectCount> candidateProjectCounts(UUID companyId, UUID userId, Collection<UUID> projectIds,
+            Collection<UUID> matchingProjectIds, String query, boolean personal, boolean assignedToMe, boolean excludeCompleted, Instant now) {
         if(projectIds.isEmpty()) return List.of();
-        String projectMatch=matchingProjectIds.isEmpty() ? "" : " OR w.project_id IN (:matchingProjects)";
-        var statement=jdbc.sql("""
+        var statement=jdbc.sql(candidateBase(!matchingProjectIds.isEmpty()) + """
+            SELECT project_id,
+              COUNT(*) FILTER (WHERE NOT (:exclude AND completed)) AS visible,
+              COUNT(*) FILTER (WHERE :exclude AND completed) AS hidden
+            FROM base WHERE (:assigned=false OR assigned) GROUP BY project_id
+            """).param("company",companyId).param("user",userId).param("projects",projectIds)
+                .param("assigned",assignedToMe).param("exclude",excludeCompleted)
+                .param("personal",personal).param("empty",query.isEmpty())
+                .param("query","%"+query.replace("\\","\\\\").replace("%","\\%").replace("_","\\_")+"%")
+                .param("now",Timestamp.from(now));
+        if(!matchingProjectIds.isEmpty()) statement.param("matchingProjects",matchingProjectIds);
+        return statement.query((rs,n) -> new CandidateProjectCount(rs.getObject("project_id",UUID.class),
+                rs.getLong("visible"),rs.getLong("hidden"))).list();
+    }
+
+    private String candidateBase(boolean matchingProjects) {
+        String projectMatch=matchingProjects ? " OR w.project_id IN (:matchingProjects)" : "";
+        return """
             WITH last_tracked AS (
               SELECT work_item_id, MAX(started_at) AS last_tracked_at
               FROM yumpoo.work_item_time_session
@@ -30,8 +68,8 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
               WHERE sh.company_id=:company AND sh.user_id=:user AND sh.project_id IN (:projects)
               GROUP BY sh.work_item_id), own AS (
               SELECT t.work_item_id,t.last_tracked_at,COALESCE(a.duration,0) AS duration
-              FROM last_tracked t LEFT JOIN allocated a ON a.work_item_id=t.work_item_id)
-            SELECT w.id, w.project_id, w.item_no, w.title, c.name AS content_name, c.code AS content_code,
+              FROM last_tracked t LEFT JOIN allocated a ON a.work_item_id=t.work_item_id), base AS (
+            SELECT w.id, w.project_id, w.item_no, w.title, w.updated_at, c.name AS content_name, c.code AS content_code,
               c.color_token AS content_color_token, w.status_category,
               COALESCE(s.completed_status_codes @> jsonb_build_array(w.status_code), w.status_category IN ('DONE','CANCELED')) AS completed,
               EXISTS (SELECT 1 FROM yumpoo.work_item_assignee a WHERE a.work_item_id=w.id AND a.user_id=:user) AS assigned, own.last_tracked_at, COALESCE(own.duration,0) AS duration
@@ -42,19 +80,8 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
               AND (:personal=false OR EXISTS (SELECT 1 FROM yumpoo.work_item_assignee a WHERE a.work_item_id=w.id AND a.user_id=:user) OR own.last_tracked_at IS NOT NULL)
               AND (:empty OR lower(w.title) LIKE :query ESCAPE '\\' OR lower(w.item_no) LIKE :query ESCAPE '\\'
             """.formatted(TimeShareSql.allocated("sh",":now")) + projectMatch + """
-              )
-            ORDER BY own.last_tracked_at DESC NULLS LAST, assigned DESC, w.updated_at DESC, w.id
-            LIMIT :limit OFFSET :offset
-            """).param("company",companyId).param("user",userId).param("projects",projectIds)
-                .param("personal",personal).param("empty",query.isEmpty())
-                .param("query","%"+query.replace("\\","\\\\").replace("%","\\%").replace("_","\\_")+"%")
-                .param("now",Timestamp.from(now)).param("limit",limit).param("offset",offset);
-        if(!matchingProjectIds.isEmpty()) statement.param("matchingProjects",matchingProjectIds);
-        return statement.query((rs,n) -> new TimerCandidate(rs.getObject("id",UUID.class),
-                rs.getObject("project_id",UUID.class), "", rs.getString("item_no"), rs.getString("title"),
-                rs.getString("content_name"), rs.getString("content_code"), rs.getString("content_color_token"),
-                rs.getString("status_category"), rs.getBoolean("completed"), rs.getBoolean("assigned"),
-                instant(rs,"last_tracked_at"), rs.getLong("duration"))).list();
+              ))
+            """;
     }
 
     public List<RecentTimeTrackingItem> recentItems(UUID companyId, UUID userId) {
