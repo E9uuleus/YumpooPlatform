@@ -123,6 +123,23 @@ pnpm dev:desktop
 
 Vite 将 `/api` 代理至后端。修改 `YUMPOO_SERVER_PORT` 后，需同步修改 [vite.config.ts](frontend/web-app/vite.config.ts) 中的代理目标。
 
+### 端到端冒烟（本地）
+
+前置条件：Docker 可运行 Linux 容器、Java 21、已安装的系统 Edge（Windows 默认）或 Chrome，以及已构建的后端 JAR。在仓库根目录执行：
+
+```powershell
+.\backend\mvnw.cmd -f backend/pom.xml -DskipTests package
+pnpm test:e2e
+pnpm test:e2e -- --skip-web-build
+```
+
+默认命令构建 Web，启动独立的 PostgreSQL 容器、后端和 Web preview，依次检查首页登录、创建项目、工作项详情、我的一天、收件箱和管理后台。运行前需释放 8100、18174 端口；结束后自动停止本次启动的进程并删除容器。`--skip-web-build` 复用已有 Web 构建，其他参数转交 Playwright，例如 `pnpm test:e2e -- --headed`。
+
+- `YUMPOO_E2E_BASE_URL`：指向已运行的测试环境；设置后不构建或启动服务，也不清理该环境。用例会创建一个带时间戳的项目和工作项，环境需提供“本地测试管理员”身份。
+- `YUMPOO_E2E_BROWSER`：系统浏览器 channel，例如 `msedge` 或 `chrome`；不下载浏览器二进制。
+
+服务日志在 `out/e2e/logs/`，HTML 报告在 `out/e2e/report/`，失败时的截图与 trace 在 `out/e2e/results/`。该命令仅供本地使用，不加入 CI 或合并门禁。
+
 ## 常用配置
 
 后端配置基线见 [application.yml](backend/src/main/resources/application.yml)，生产值通过外部配置与环境变量注入。
