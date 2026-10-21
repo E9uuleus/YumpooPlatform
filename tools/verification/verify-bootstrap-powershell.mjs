@@ -15,7 +15,7 @@ const windowsPowerShell = path.join(
 const powerShell = fs.existsSync(windowsPowerShell) ? windowsPowerShell : 'powershell.exe'
 
 if (process.platform !== 'win32') {
-  console.log('M1-15 PowerShell 行为门禁仅在 Windows 执行')
+  console.log('Bootstrap PowerShell 行为门禁仅在 Windows 执行')
   process.exit(0)
 }
 
@@ -51,7 +51,7 @@ try {
   assert(!fs.existsSync(successInput), '成功时必须自动删除输入文件')
   assertNoIdentity(success)
 
-  console.log('M1-15 PowerShell 失败保留、成功删除与输出脱敏行为有效')
+  console.log('Bootstrap PowerShell 失败保留、成功删除与输出脱敏行为有效')
 } finally {
   fs.rmSync(temporary, { recursive: true, force: true })
 }
@@ -84,7 +84,7 @@ function invoke(javaPath, jarPath, inputFile) {
     '-JavaPath', javaPath,
     '-JarPath', jarPath,
     '-InputFile', inputFile,
-    '-ReasonReference', 'M1-15 verification',
+    '-ReasonReference', 'Bootstrap verification',
     '-ConfigurationLocation', 'file:C:/ProgramData/Yumpoo/config/',
   ], { encoding: 'utf8' })
 }
@@ -108,5 +108,5 @@ function failureOutput(result) {
 }
 
 function assert(condition, message) {
-  if (!condition) throw new Error(`M1-15 PowerShell 验证失败：${message}`)
+  if (!condition) throw new Error(`Bootstrap PowerShell 验证失败：${message}`)
 }

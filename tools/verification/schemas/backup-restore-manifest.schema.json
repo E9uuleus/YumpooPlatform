@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://contracts.yumpoo.local/evidence/m0-17/backup-manifest.schema.json",
-  "title": "M0-17 complete backup set manifest",
+  "$id": "https://contracts.yumpoo.local/verification/backup-restore-manifest.schema.json",
+  "title": "Backup restore complete backup set manifest",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "milestone", "backupSetId", "createdAt", "companyTimeZone", "applicationVersion", "sourceCommit", "postgresVersion", "flywaySchemaVersion", "databaseDumpPath", "restoreDescriptorPath", "retention", "files"],

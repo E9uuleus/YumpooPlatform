@@ -4,21 +4,21 @@ import { assertDelivery, assertSchema, readJson, gitHead } from './delivery-util
 
 function validateFreshReport(repositoryRoot, report) {
   const currentSha = gitHead(repositoryRoot)
-  assertDelivery(report.gitSha === currentSha, 'M1-13 report is not bound to the current Git SHA')
+  assertDelivery(report.gitSha === currentSha, 'PACKAGED_HTTP report is not bound to the current Git SHA')
   const startedAt = Date.parse(report.startedAt)
   const completedAt = Date.parse(report.completedAt)
   const now = Date.now()
-  assertDelivery(Number.isFinite(startedAt) && Number.isFinite(completedAt), 'M1-13 report timestamps are invalid')
-  assertDelivery(startedAt <= completedAt, 'M1-13 report completion precedes start')
-  assertDelivery(completedAt <= now + 5 * 60_000 && completedAt >= now - 30 * 60_000, 'M1-13 report is stale or from the future')
+  assertDelivery(Number.isFinite(startedAt) && Number.isFinite(completedAt), 'PACKAGED_HTTP report timestamps are invalid')
+  assertDelivery(startedAt <= completedAt, 'PACKAGED_HTTP report completion precedes start')
+  assertDelivery(completedAt <= now + 5 * 60_000 && completedAt >= now - 30 * 60_000, 'PACKAGED_HTTP report is stale or from the future')
   const gateStartedAt = process.env.YUMPOO_M113_STARTED_AT
   if (gateStartedAt) {
-    assertDelivery(startedAt >= Date.parse(gateStartedAt), 'M1-13 report predates the current gate run')
+    assertDelivery(startedAt >= Date.parse(gateStartedAt), 'PACKAGED_HTTP report predates the current gate run')
   }
   const serialized = JSON.stringify(report)
-  assertDelivery(!serialized.includes(path.resolve(repositoryRoot)), 'M1-13 report exposes an absolute repository path')
+  assertDelivery(!serialized.includes(path.resolve(repositoryRoot)), 'PACKAGED_HTTP report exposes an absolute repository path')
   const stringValues = collectStringValues(report)
-  assertDelivery(!stringValues.some((value) => value.match(/(__Host-|member-id|session-key|password|secret)/iu)), 'M1-13 report exposes sensitive runtime data')
+  assertDelivery(!stringValues.some((value) => value.match(/(__Host-|member-id|session-key|password|secret)/iu)), 'PACKAGED_HTTP report exposes sensitive runtime data')
 }
 
 function collectStringValues(value) {

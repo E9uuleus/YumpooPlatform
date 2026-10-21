@@ -18,11 +18,11 @@ assert(manifest.schemaVersion === 2 && manifest.milestone === 'M1-15', 'artifact
 assert(manifest.server?.platform === 'windows' && manifest.server.architecture === 'x64'
   && manifest.server.runtimeMode === 'WINDOWS_SERVICE_WINSW', '服务器包必须使用 Windows x64 WinSW 服务模式')
 assert(report.milestone === 'M1-15' && report.liveEnvironment === 'ENV_PENDING', '验证报告必须保留 ENV_PENDING')
-assert(report.databaseMigrationAdded === false && report.publicApiChanged === false, 'M1-15 边界报告错误')
+assert(report.databaseMigrationAdded === false && report.publicApiChanged === false, '服务器边界报告错误')
 assert(manifest.desktopReuse?.milestone === 'M1-14' && manifest.desktopReuse.repackaged === false, '桌面复用声明错误')
 assert(manifest.sourceCommit === report.sourceCommit && /^[0-9a-f]{40}$/u.test(manifest.sourceCommit), '产物未绑定有效源码 commit')
 assert(manifest.sourceCommit === gitHead(root), '服务器包不是当前 checkout 的产物')
-assert(manifest.artifacts.length === 1, 'M1-15 只能包含一个服务器产物')
+assert(manifest.artifacts.length === 1, '服务器交付只能包含一个服务器产物')
 
 const artifact = manifest.artifacts[0]
 const file = path.join(out, artifact.name)
@@ -106,7 +106,7 @@ for (const packagedFile of await collectRegularFiles(serverRoot)) {
 
 const reportText = JSON.stringify(report)
 assert(!/(__Host-|handoffCode|codeVerifier|sessionCredential|csrfCredential|wecomUserId)/iu.test(reportText), '验证报告包含敏感材料')
-console.log(`M1-15 Windows 服务器包已复核；source commit ${manifest.sourceCommit}`)
+console.log(`Windows 服务器包已复核；source commit ${manifest.sourceCommit}`)
 
 function expand(name, directoryName) {
   const destination = path.join(out, directoryName)
@@ -149,5 +149,5 @@ function isTextAsset(relative) {
 }
 
 function assert(condition, message) {
-  if (!condition) throw new Error(`M1-15 包验证失败：${message}`)
+  if (!condition) throw new Error(`服务器包验证失败：${message}`)
 }

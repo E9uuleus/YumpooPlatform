@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://contracts.yumpoo.local/evidence/m1-13/verification-report.schema.json",
-  "title": "M1-13 external HTTP verification report",
+  "$id": "https://contracts.yumpoo.local/verification/packaged-http-report.schema.json",
+  "title": "PACKAGED_HTTP external HTTP verification report",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -22,7 +22,7 @@
       "const": 1
     },
     "milestone": {
-      "const": "M1-13"
+      "const": "PACKAGED_HTTP"
     },
     "status": {
       "const": "PASS"

@@ -63,7 +63,7 @@ try {
     publicApiChanged: false,
     sensitiveValuesRecorded: false,
   }, null, 2)}\n`, 'utf8')
-  console.log(`M1-15 Windows x64 服务器产物已生成：${path.relative(root, out)}`)
+  console.log(`Windows x64 服务器产物已生成：${path.relative(root, out)}`)
 } finally {
   fs.rmSync(stage, { recursive: true, force: true })
 }
@@ -155,5 +155,5 @@ function requireDirectory(directory, label) {
 }
 
 function assert(condition, message) {
-  if (!condition) throw new Error(`M1-15 打包失败：${message}`)
+  if (!condition) throw new Error(`服务器打包失败：${message}`)
 }

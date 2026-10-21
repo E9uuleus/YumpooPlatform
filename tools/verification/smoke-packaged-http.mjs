@@ -138,7 +138,7 @@ try {
     headers: writeHeaders(roleBoundarySession, roleSelfEtag),
     body: JSON.stringify({
       userId: roleMe.user.id,
-      reason: 'M1-13 role boundary verification',
+      reason: 'PACKAGED_HTTP role boundary verification',
     }),
   })
   assert(deniedRole.response.status === 403 && deniedRole.text.includes('ACCESS_DENIED'), 'COMPANY_ADMIN crossed the APP_MANAGER role boundary')
@@ -154,7 +154,7 @@ try {
     method: 'POST',
     jar: secondSession,
     headers: writeHeaders(secondSession, secondEtag),
-    body: JSON.stringify({ reason: 'M1-13 session invalidation verification' }),
+    body: JSON.stringify({ reason: 'PACKAGED_HTTP session invalidation verification' }),
   })
   assert(disabled.response.status === 200, `self-disable failed with ${disabled.response.status}: ${disabled.text}`)
   const invalidated = await request('/api/v1/auth/me', { cookieHeader: disabledCookies })
@@ -167,7 +167,7 @@ try {
   assertNoSecretLeak()
   const report = {
     schemaVersion: 1,
-    milestone: 'M1-13',
+    milestone: 'PACKAGED_HTTP',
     status: 'PASS',
     gitSha: gitSha(),
     startedAt,
@@ -193,7 +193,7 @@ try {
     },
   }
   fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8')
-  console.log('M1-13 fresh database, packaged JAR, controlled identity and production SPA HTTP gate passed')
+  console.log('PACKAGED_HTTP fresh database, packaged JAR, controlled identity and production SPA HTTP gate passed')
 } catch (error) {
   printDiagnostics('backend', application?.output)
   printDiagnostics('preview', preview?.output)
@@ -319,7 +319,7 @@ function assertSecurityCookies(setCookies, requiredNames) {
 function verifyDatabaseState() {
   const flywayVersion = psql("SELECT max(version::integer) FROM yumpoo.flyway_schema_history WHERE success = true")
   const missingM113Migrations = Number(psql("SELECT count(*) FROM generate_series(1, 14) AS required(version) WHERE NOT EXISTS (SELECT 1 FROM yumpoo.flyway_schema_history AS history WHERE history.success = true AND history.version::integer = required.version)"))
-  assert(missingM113Migrations === 0, `required M1-13 migrations are missing: ${missingM113Migrations}`)
+  assert(missingM113Migrations === 0, `required PACKAGED_HTTP migrations are missing: ${missingM113Migrations}`)
   assert(/^\d+$/u.test(flywayVersion) && Number(flywayVersion) >= 14, `unexpected Flyway version: ${flywayVersion}`)
   const outOfScopeTables = psql("SELECT table_name FROM information_schema.tables WHERE table_schema = 'yumpoo' AND lower(table_name) ~ '(project|product|membership|owner)' AND table_name NOT IN ('project_template_definition', 'project_template_content_blueprint', 'activity_projection_state', 'notification_projection_state') ORDER BY table_name")
     .split(/\r?\n/u)
@@ -333,9 +333,9 @@ function verifyDatabaseState() {
   assert(outOfScopeFacts.length === 0,
     `clean M1 fixture created project/product/membership/owner instance facts: ${outOfScopeFacts.join(', ')}`)
   const counts = psql("SELECT (SELECT count(*) FROM yumpoo.identity_user) || '|' || (SELECT count(*) FROM yumpoo.external_identity) || '|' || (SELECT count(*) FROM yumpoo.platform_role_assignment)")
-  assert(counts === '2|2|2', `M1-13 service fixture counts are incorrect: ${counts}`)
+  assert(counts === '2|2|2', `PACKAGED_HTTP service fixture counts are incorrect: ${counts}`)
   const roles = psql("SELECT string_agg(role_code || ':' || status, ',' ORDER BY role_code) FROM yumpoo.platform_role_assignment")
-  assert(roles === 'APP_MANAGER:ACTIVE,COMPANY_ADMIN:ACTIVE', `M1-13 fixture roles are incorrect: ${roles}`)
+  assert(roles === 'APP_MANAGER:ACTIVE,COMPANY_ADMIN:ACTIVE', `PACKAGED_HTTP fixture roles are incorrect: ${roles}`)
   return { flywayVersion }
 }
 
@@ -354,7 +354,7 @@ function runDocker(args) {
   const result = spawnSync('docker', args, { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 })
   if (result.status !== 0) {
     printDiagnostics('docker', `${result.stdout ?? ''}\n${result.stderr ?? ''}`)
-    throw new Error('M1-13 verification failed: Docker command failed')
+    throw new Error('PACKAGED_HTTP verification failed: Docker command failed')
   }
   return result.stdout.trim()
 }
@@ -388,14 +388,14 @@ async function waitUntil(probe, timeoutMilliseconds, failureMessage) {
     if (await probe()) return
     await new Promise((resolve) => setTimeout(resolve, 300))
   }
-  throw new Error(`M1-13 verification failed: ${failureMessage}`)
+  throw new Error(`PACKAGED_HTTP verification failed: ${failureMessage}`)
 }
 
 function assertPortAvailable(port) {
   return new Promise((resolve, reject) => {
     const server = net.createServer()
     server.unref()
-    server.once('error', () => reject(new Error(`M1-13 verification failed: port ${port} is already in use`)))
+    server.once('error', () => reject(new Error(`PACKAGED_HTTP verification failed: port ${port} is already in use`)))
     server.listen(port, '127.0.0.1', () => server.close((error) => (error ? reject(error) : resolve())))
   })
 }
@@ -416,7 +416,7 @@ function stopOwnedProcess(child) {
 function assertNoSecretLeak() {
   const output = `${application?.output ?? ''}\n${preview?.output ?? ''}`
   for (const secret of [databasePassword, controlledCorpId, controlledMemberId, backupMemberId, sessionKey]) {
-    assert(!output.includes(secret), 'runtime output exposed M1-13 fixture credentials or identifiers')
+    assert(!output.includes(secret), 'runtime output exposed PACKAGED_HTTP fixture credentials or identifiers')
   }
 }
 
@@ -429,7 +429,7 @@ function printDiagnostics(label, output) {
     .replaceAll(backupMemberId, '[REDACTED]')
     .replaceAll(sessionKey, '[REDACTED]')
     .replaceAll(repositoryRoot, '[REPOSITORY]')
-  process.stderr.write(`--- M1-13 ${label} diagnostics ---\n${scrubbed.slice(-32 * 1024)}\n`)
+  process.stderr.write(`--- PACKAGED_HTTP ${label} diagnostics ---\n${scrubbed.slice(-32 * 1024)}\n`)
 }
 
 function gitSha() {
@@ -445,10 +445,10 @@ function parseJson(value, label) {
   try {
     return JSON.parse(value)
   } catch {
-    throw new Error(`M1-13 verification failed: ${label} did not return JSON`)
+    throw new Error(`PACKAGED_HTTP verification failed: ${label} did not return JSON`)
   }
 }
 
 function assert(condition, message) {
-  if (!condition) throw new Error(`M1-13 verification failed: ${message}`)
+  if (!condition) throw new Error(`PACKAGED_HTTP verification failed: ${message}`)
 }

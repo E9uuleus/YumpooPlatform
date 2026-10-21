@@ -8,7 +8,7 @@ const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 const schemaRoot = path.join(repositoryRoot, 'tools', 'verification', 'schemas')
 const outputRoot = path.join(repositoryRoot, 'out', 'backup-restore')
 function fail(message) {
-  throw new Error(`M0-17 验证失败：${message}`)
+  throw new Error(`备份恢复 验证失败：${message}`)
 }
 
 function assert(condition, message) {
@@ -68,7 +68,7 @@ function validateGenerated(startedAt) {
     retention.decisions.some((decision) => decision.legalHold && !decision.deletionEligible),
     'retention plan 未证明 legal hold',
   )
-  console.log(`M0-17 本地备份/隔离恢复已通过：${path.relative(repositoryRoot, reportPath)}`)
+  console.log(`备份恢复 本地备份/隔离恢复已通过：${path.relative(repositoryRoot, reportPath)}`)
 }
 
 function validateFile(schemaName, file, label) {

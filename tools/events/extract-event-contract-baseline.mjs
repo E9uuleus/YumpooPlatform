@@ -14,7 +14,7 @@ import {
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const reference = process.argv[2] ?? process.env.YUMPOO_M223_BASE_REF ?? 'origin/dev'
-const outputPath = path.resolve(process.argv[3] ?? path.join(repositoryRoot, 'out', 'm2-23', 'event-contract-baseline.json'))
+const outputPath = path.resolve(process.argv[3] ?? path.join(repositoryRoot, 'out', 'ci', 'event-baseline.json'))
 const baseCommit = resolveGitCommit(repositoryRoot, reference)
 const catalog = parseYaml(gitObject(repositoryRoot, baseCommit, 'contracts/events/catalog.yaml'))
 const envelopeSchema = parseJson(

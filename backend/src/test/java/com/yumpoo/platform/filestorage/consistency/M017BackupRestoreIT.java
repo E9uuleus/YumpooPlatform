@@ -52,7 +52,8 @@ class M017BackupRestoreIT {
     @Test
     void backsUpDatabaseAndAttachmentsAndRestoresIntoIsolatedTargets() throws Exception {
         Path repositoryRoot = Path.of("..").toAbsolutePath().normalize();
-        Path outputRoot = repositoryRoot.resolve("out/backup-restore");
+        Path outputRoot = repositoryRoot.resolve(System.getenv().getOrDefault(
+                "YUMPOO_BACKUP_RESTORE_OUTPUT_ROOT", "out/backup-restore")).normalize();
         M017BackupSet.deleteTreeIfExists(outputRoot);
         Files.createDirectories(outputRoot);
         Path workRoot = Files.createDirectories(outputRoot.resolve("m017-work"));

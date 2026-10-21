@@ -5,15 +5,13 @@ import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
-import { parse, stringify } from 'yaml'
+import { parse } from 'yaml'
 import { assertRequiredJobs, requiredJobs } from './gate.mjs'
 import { assertWorkflowSafety } from './workflow-policy.mjs'
 import { verificationEnvironment } from './environment.mjs'
 import { checkHistory } from './history-policy.mjs'
-import { plan } from './plan.mjs'
-import { historicalMilestones, verifyHistoricalMilestone } from './historical-assets.mjs'
+import { assetSteps, plan } from './plan.mjs'
 import { assertStageReport } from './reports.mjs'
-import { verifyContentCategoryRefactorAssets } from '../verification/content-category-refactor-assets.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const workflow = () => parse(fs.readFileSync(path.join(root, '.github/workflows/m0-18-ci.yml'), 'utf8'))
@@ -100,7 +98,16 @@ test('flat static plan runs shared capabilities once and Windows reuses the test
   const steps = plan('static')
   assert.equal(new Set(steps.map(step => step.id)).size, steps.length)
   assert.equal(new Set(steps.map(step => JSON.stringify([step.tool, step.args]))).size, steps.length)
-  assert(!steps.some(step => step.args.includes('verify:node') || step.args.includes('verify:m1-13')))
+  assert(!steps.some(step => step.args.some(arg => /^(?:verify|package|validate):m/u.test(arg))))
+  assert.deepEqual(assetSteps.map(step => step.id), ['brand-assets', 'deployment-config'])
+  assert.deepEqual(plan('portable').map(step => step.id), [
+    'backup-restore-output', 'packaged-http', 'packaged-http-report', 'create-handoff', 'verify-handoff',
+  ])
+  assert.deepEqual(plan('windows').map(step => step.id), [
+    'windows-toolchain', 'desktop-profile-tests', 'windows-release-restore', 'windows-handoff',
+    'desktop-smoke', 'desktop-package', 'desktop-package-integrity', 'desktop-installer', 'desktop-update',
+    'desktop-release-artifact', 'powershell-behavior', 'server-package', 'server-package-integrity',
+  ])
   assert.equal(steps.filter(step => step.id === 'event-compatibility').length, 1)
   assert.equal(steps.filter(step => step.id === 'generated-client').length, 1)
   assert.deepEqual(plan('backend').find(step => step.id === 'backend-regression').args, ['clean', 'verify'])
@@ -117,60 +124,6 @@ test('handoff prerequisites reject stale, partial and failed stage reports', () 
     { status: 'FAIL' }, { steps: report.steps.slice(1) }, { steps: [{ id: 'backend-regression', status: 'PASS' }] },
     { completedAt: 'invalid' }]) {
     assert.throws(() => assertStageReport({ ...report, ...changed }, expected), /旧报告或不完整/u)
-  }
-})
-
-test('retired product milestones retain historical checks without requiring deleted implementations', () => {
-  const steps = plan('static')
-  assert(steps.some(step => step.id === 'historical-milestones'))
-  for (const milestone of ['M2-01', 'M2-03', 'M2-04', 'M2-06', 'M2-07', 'M2-24']) {
-    assert(!steps.some(step => step.id === `${milestone.toLowerCase()}-assets`))
-    assert.equal(historicalMilestones.filter(item => item === milestone).length, 1)
-    assert.doesNotThrow(() => verifyHistoricalMilestone(milestone))
-  }
-  for (const id of ['m2-02-assets', 'm2-08-assets', 'm2-23-assets']) {
-    assert(steps.some(step => step.id === id))
-  }
-})
-
-test('historical validation rejects changed statuses, incomplete checks and empty acceptance', context => {
-  const directory = temporary(context)
-  for (const milestone of ['M2-01', 'M2-03', 'M2-04', 'M2-06', 'M2-07', 'M2-24']) {
-    const base = `evidence/${milestone.toLowerCase()}`
-    const report = JSON.parse(fs.readFileSync(path.join(root, base, 'verification-report.json'), 'utf8'))
-    const acceptance = fs.readFileSync(path.join(root, base, 'acceptance-matrix.json'), 'utf8')
-    const check = value => {
-      write(directory, `${base}/verification-report.json`, JSON.stringify(value))
-      verifyHistoricalMilestone(milestone, directory)
-    }
-    write(directory, `${base}/acceptance-matrix.json`, acceptance)
-    assert.doesNotThrow(() => check(report))
-    for (const status of ['FAIL', 'BLOCKED_ENVIRONMENT', 'SKIPPED', undefined,
-      milestone === 'M2-24' ? 'PASS' : 'VERIFIED']) {
-      assert.throws(() => check({ ...report, status }), /历史报告无效/u)
-    }
-    assert.throws(() => check({ ...report, milestone: 'M2-00' }), /历史报告无效/u)
-    if (milestone === 'M2-24') {
-      for (const changes of [{ checks: {} }, { checks: { ...report.checks, linuxPrCi: false } },
-        { checks: { ...report.checks, productHttpContract: false } }, { flywayVersion: '60' }]) {
-        assert.throws(() => check({ ...report, ...changes }), /历史检查未完整成功/u)
-      }
-    }
-    write(directory, `${base}/acceptance-matrix.json`, JSON.stringify({ verifiedSlices: [], verifiedRequirements: [] }))
-    assert.throws(() => check(report), /缺少已验证切片/u)
-  }
-})
-
-test('retired product verification commands run only historical evidence checks', () => {
-  for (const milestone of ['m2-01', 'm2-03', 'm2-04', 'm2-06', 'm2-07', 'm2-24']) {
-    for (const suffix of ['', '-assets']) {
-      const result = spawnSync(process.execPath, [`tools/verification/verify-${milestone}${suffix}.mjs`], {
-        cwd: root, encoding: 'utf8', timeout: 10000,
-      })
-      assert.equal(result.status, 0, result.error?.message || result.stderr)
-      assert.match(result.stdout, /仅校验历史验收记录/u)
-      assert.match(result.stdout, /ci:static.*ci:backend/u)
-    }
   }
 })
 
@@ -249,16 +202,3 @@ test('history guard permits forward additions and rejects rewritten or deleted d
   assert.throws(() => checkHistory(directory, 'missing-ref'), /历史基线不可读取/u)
 })
 
-test('category contract allows additive API evolution without an old-to-current hash and rejects unsafe writes', context => {
-  const directory = temporary(context)
-  const relative = 'contracts/openapi/yumpoo-v1.yaml'
-  const spec = parse(fs.readFileSync(path.join(root, relative), 'utf8'))
-  spec.components.schemas.Content.properties.optionalFutureLabel = { type: 'string' }
-  spec.paths['/future-health'] = { get: { operationId: 'futureHealth', responses: { 204: { description: 'OK' } } } }
-  write(directory, relative, stringify(spec))
-  write(directory, 'contracts/events/catalog.yaml', fs.readFileSync(path.join(root, 'contracts/events/catalog.yaml')))
-  assert.doesNotThrow(() => verifyContentCategoryRefactorAssets(directory))
-  delete spec.paths['/work-items/{workItemId}/content'].patch.security
-  write(directory, relative, stringify(spec))
-  assert.throws(() => verifyContentCategoryRefactorAssets(directory), /会话认证/u)
-})

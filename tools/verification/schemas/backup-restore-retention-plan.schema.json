@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://contracts.yumpoo.local/evidence/m0-17/retention-plan.schema.json",
-  "title": "M0-17 retention dry-run plan",
+  "$id": "https://contracts.yumpoo.local/verification/backup-restore-retention-plan.schema.json",
+  "title": "Backup restore retention dry-run plan",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "milestone", "companyTimeZone", "decisions"],

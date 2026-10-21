@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://contracts.yumpoo.local/evidence/m0-18/portable-handoff.schema.json",
+  "$id": "https://contracts.yumpoo.local/verification/portable-handoff.schema.json",
   "title": "DELIVERY portable to Windows handoff",
   "type": "object",
   "additionalProperties": false,

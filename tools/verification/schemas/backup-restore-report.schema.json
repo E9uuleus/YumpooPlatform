@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://contracts.yumpoo.local/evidence/m0-17/verification-report.schema.json",
-  "title": "M0-17 local backup and isolated restore verification report",
+  "$id": "https://contracts.yumpoo.local/verification/backup-restore-report.schema.json",
+  "title": "Backup restore local backup and isolated restore verification report",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "milestone", "status", "startedAt", "completedAt", "sourceCommit", "backupSetId", "restoredReferenceCount", "orphanCount", "checks"],
