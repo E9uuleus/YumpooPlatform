@@ -48,6 +48,17 @@ test('bundle rejects duplicate path and component keys', context => {
   assert.throws(() => bundleOpenApi(source), /重复键：Z/u)
 })
 
+test('bundle preserves prototype-named components and rejects their duplicates', context => {
+  const { source, write } = fixture(context)
+  const schemas = Object.fromEntries([['__proto__', { type: 'string' }]])
+  write('components/a.yaml', { components: { schemas } })
+  const document = parse(bundleOpenApi(source))
+  assert(Object.hasOwn(document.components.schemas, '__proto__'))
+  assert.deepEqual(document.components.schemas.__proto__, { type: 'string' })
+  write('components/z.yaml', { components: { schemas } })
+  assert.throws(() => bundleOpenApi(source), /重复键：__proto__/u)
+})
+
 test('bundle rejects unknown top-level keys and unlisted files', context => {
   const { source, write } = fixture(context)
   write('paths/a.yaml', { paths: {}, schemas: {} })

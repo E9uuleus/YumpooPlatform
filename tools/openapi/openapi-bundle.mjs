@@ -16,7 +16,7 @@ function assertKeys(value, allowed, file) {
 function mergeMap(target, source, label) {
   for (const [key, value] of Object.entries(source)) {
     if (Object.hasOwn(target, key)) throw new Error(`${label} 包含重复键：${key}`)
-    target[key] = value
+    Object.defineProperty(target, key, { value, enumerable: true, writable: true, configurable: true })
   }
 }
 
