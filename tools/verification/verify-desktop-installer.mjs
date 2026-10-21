@@ -14,7 +14,7 @@ import {
 // one, and checks the install and uninstall boundaries.
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const desktopRoot = path.join(repositoryRoot, 'desktop', 'desktop-shell')
-const outputRoot = path.resolve(process.env.YUMPOO_M015_OUTPUT_ROOT ?? '')
+const outputRoot = path.resolve(process.env.YUMPOO_DESKTOP_OUTPUT_ROOT ?? path.join(repositoryRoot, 'desktop', 'desktop-shell', 'out', 'release'))
 const PREFERENCE_FILES = ['timer-preferences.json', 'inbox-preferences.json', 'desktop-preferences.json']
 const SESSION_FIXTURES = [['auth', 'session.bin'], ['Network', 'Cookies'], ['Local State']]
 
@@ -23,7 +23,6 @@ if (!profileChangesAllowed()) {
   process.exit(0)
 }
 assert(process.platform === 'win32' && process.arch === 'x64', '桌面安装冒烟需要 Windows x64')
-assert(process.env.YUMPOO_M015_OUTPUT_ROOT, '缺少 YUMPOO_M015_OUTPUT_ROOT')
 
 const descriptor = JSON.parse(fs.readFileSync(path.join(outputRoot, 'desktop-installer.json'), 'utf8'))
 const installer = path.join(outputRoot, descriptor.installer.name)

@@ -3,8 +3,8 @@ import { fileURLToPath } from 'node:url'
 import { runPnpmSync, runSync } from './process-utils.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
-const outputRoot = process.env.YUMPOO_M015_OUTPUT_ROOT
-  ? path.resolve(process.env.YUMPOO_M015_OUTPUT_ROOT)
+const outputRoot = process.env.YUMPOO_DESKTOP_OUTPUT_ROOT
+  ? path.resolve(process.env.YUMPOO_DESKTOP_OUTPUT_ROOT)
   : path.join(
       repositoryRoot,
       'desktop',
@@ -15,26 +15,26 @@ const outputRoot = process.env.YUMPOO_M015_OUTPUT_ROOT
 
 runSync(
   process.execPath,
-  [path.join(repositoryRoot, 'tools', 'verification', 'verify-m0-15-live.mjs'), '--validate-evidence'],
+  [path.join(repositoryRoot, 'tools', 'verification', 'verify-desktop-package.mjs'), '--validate-evidence'],
   { cwd: repositoryRoot },
 )
-runPnpmSync(['run', 'package:m0-15:win'], {
+runPnpmSync(['run', 'package:desktop:win'], {
   cwd: repositoryRoot,
-  env: { ...process.env, YUMPOO_M015_OUTPUT_ROOT: outputRoot },
+  env: { ...process.env, YUMPOO_DESKTOP_OUTPUT_ROOT: outputRoot },
 })
 runSync(
   process.execPath,
   [
-    path.join(repositoryRoot, 'tools', 'verification', 'verify-m0-15-live.mjs'),
+    path.join(repositoryRoot, 'tools', 'verification', 'verify-desktop-package.mjs'),
     '--validate-manifest',
-    path.join(outputRoot, 'm0-15-artifact-manifest.json'),
+    path.join(outputRoot, 'desktop-artifact-manifest.json'),
   ],
   { cwd: repositoryRoot },
 )
 runSync(
   process.execPath,
   [path.join(repositoryRoot, 'tools', 'verification', 'verify-desktop-installer.mjs')],
-  { cwd: repositoryRoot, env: { ...process.env, YUMPOO_M015_OUTPUT_ROOT: outputRoot } },
+  { cwd: repositoryRoot, env: { ...process.env, YUMPOO_DESKTOP_OUTPUT_ROOT: outputRoot } },
 )
 runSync(
   process.execPath,

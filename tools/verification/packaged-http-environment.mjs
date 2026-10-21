@@ -6,7 +6,7 @@ const PORTABLE_OVERRIDES = Object.freeze({
   YUMPOO_M113_BACKUP_MEMBER_ID: '',
 })
 
-export function m113PortableEnvironment(environment) {
+export function packagedHttpEnvironment(environment) {
   return {
     ...environment,
     ...PORTABLE_OVERRIDES,

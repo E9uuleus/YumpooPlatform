@@ -3,7 +3,7 @@ import net from 'node:net'
 import path from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { assertM016 } from './m0-16-utils.mjs'
+import { assertPackage } from './package-utils.mjs'
 import { writeServerSmokeReceipt } from './m0-18-server-smoke-receipt.mjs'
 import { stopProcessTree } from './process-utils.mjs'
 
@@ -16,8 +16,8 @@ const migrationPassword = 'M016-Migration-Only-2026!'
 let application
 let containerStarted = false
 
-assertM016(process.platform === 'win32' && process.arch === 'x64', 'packaged JAR 冒烟仅支持 Windows x64')
-assertM016(fs.existsSync(jarPath), 'packaged JAR 不存在')
+assertPackage(process.platform === 'win32' && process.arch === 'x64', 'packaged JAR 冒烟仅支持 Windows x64')
+assertPackage(fs.existsSync(jarPath), 'packaged JAR 不存在')
 
 try {
   prepareDirectories()
@@ -56,7 +56,7 @@ try {
   const baseUrl = `http://127.0.0.1:${serverPort}`
   await waitUntil(async () => healthMatches(`${baseUrl}/actuator/health/liveness`, 200, 'UP'), 90_000, 'packaged JAR liveness 未就绪')
   await waitUntil(async () => healthMatches(`${baseUrl}/actuator/health/readiness`, 200, 'UP'), 30_000, 'packaged JAR readiness 未就绪')
-  assertM016(await statusOf(`${baseUrl}/actuator/env`) === 404, '/actuator/env 不得暴露')
+  assertPackage(await statusOf(`${baseUrl}/actuator/env`) === 404, '/actuator/env 不得暴露')
   verifyLoopbackListener(application.pid, serverPort)
 
   const attachmentRoot = path.join(smokeRoot, 'attachment')
@@ -64,7 +64,7 @@ try {
   fs.renameSync(attachmentRoot, unavailableRoot)
   try {
     await waitUntil(async () => healthMatches(`${baseUrl}/actuator/health/readiness`, 503, 'DOWN'), 20_000, '附件目录故障未使 readiness DOWN')
-    assertM016(await healthMatches(`${baseUrl}/actuator/health/liveness`, 200, 'UP'), '目录故障时 liveness 必须保持 UP')
+    assertPackage(await healthMatches(`${baseUrl}/actuator/health/liveness`, 200, 'UP'), '目录故障时 liveness 必须保持 UP')
   } finally {
     fs.renameSync(unavailableRoot, attachmentRoot)
   }
@@ -73,7 +73,7 @@ try {
   runDocker(['stop', '--time', '1', containerName])
   containerStarted = false
   await waitUntil(async () => healthMatches(`${baseUrl}/actuator/health/readiness`, 503, 'DOWN'), 30_000, '数据库故障未使 readiness DOWN')
-  assertM016(await healthMatches(`${baseUrl}/actuator/health/liveness`, 200, 'UP'), '数据库故障时 liveness 必须保持 UP')
+  assertPackage(await healthMatches(`${baseUrl}/actuator/health/liveness`, 200, 'UP'), '数据库故障时 liveness 必须保持 UP')
   if (process.env.YUMPOO_M018_SERVER_SMOKE_RECEIPT) {
     writeServerSmokeReceipt(repositoryRoot, jarPath, process.env.YUMPOO_M018_SERVER_SMOKE_RECEIPT)
   }
@@ -110,12 +110,12 @@ async function assertInvalidConfigurationRejected(serverPort) {
     fileLocation(path.join(smokeRoot, 'bad-config')),
   ])
   const exitCode = await waitForExit(child, 60_000)
-  assertM016(exitCode !== 0, '非 HTTPS 公开地址必须拒绝启动')
-  assertM016(child.output.includes('PUBLIC_ORIGIN_INVALID:yumpoo.deployment.public-base-url'), '拒启日志缺少稳定错误码与配置项')
-  assertM016(!child.output.includes(applicationPassword), '拒启日志泄露哨兵 Secret')
-  assertM016(!child.output.includes(migrationPassword), '拒启日志泄露迁移 Secret')
-  assertM016(!child.output.includes(smokeRoot), '拒启日志泄露目录路径')
-  assertM016(badPort !== serverPort, '负向启动必须使用独立端口')
+  assertPackage(exitCode !== 0, '非 HTTPS 公开地址必须拒绝启动')
+  assertPackage(child.output.includes('PUBLIC_ORIGIN_INVALID:yumpoo.deployment.public-base-url'), '拒启日志缺少稳定错误码与配置项')
+  assertPackage(!child.output.includes(applicationPassword), '拒启日志泄露哨兵 Secret')
+  assertPackage(!child.output.includes(migrationPassword), '拒启日志泄露迁移 Secret')
+  assertPackage(!child.output.includes(smokeRoot), '拒启日志泄露目录路径')
+  assertPackage(badPort !== serverPort, '负向启动必须使用独立端口')
 }
 
 function startJava(port, locations) {
@@ -159,10 +159,10 @@ function waitForExit(child, timeoutMilliseconds) {
 function verifyLoopbackListener(pid, port) {
   const command = `$m016Connections = @(Get-NetTCPConnection -State Listen -LocalPort ${port} | Select-Object LocalAddress,LocalPort,OwningProcess); ConvertTo-Json -InputObject $m016Connections -Compress`
   const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], { encoding: 'utf8' })
-  assertM016(result.status === 0, '无法读取 packaged JAR 监听地址')
+  assertPackage(result.status === 0, '无法读取 packaged JAR 监听地址')
   const connections = JSON.parse(result.stdout || '[]')
-  assertM016(connections.length > 0, 'packaged JAR 未建立监听')
-  assertM016(connections.every((item) => item.LocalAddress === '127.0.0.1' && item.LocalPort === port && item.OwningProcess === pid), 'packaged JAR 必须仅由目标 Java 进程监听 127.0.0.1')
+  assertPackage(connections.length > 0, 'packaged JAR 未建立监听')
+  assertPackage(connections.every((item) => item.LocalAddress === '127.0.0.1' && item.LocalPort === port && item.OwningProcess === pid), 'packaged JAR 必须仅由目标 Java 进程监听 127.0.0.1')
 }
 
 async function healthMatches(url, expectedStatus, expectedHealth) {
@@ -215,7 +215,7 @@ function runDockerQuiet(args) {
 function postgresPort() {
   const output = runDocker(['port', containerName, '5432/tcp'])
   const match = output.match(/127\.0\.0\.1:(\d+)/u)
-  assertM016(match, '无法读取 PostgreSQL 随机端口')
+  assertPackage(match, '无法读取 PostgreSQL 随机端口')
   return Number(match[1])
 }
 

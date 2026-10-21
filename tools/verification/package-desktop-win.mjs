@@ -3,7 +3,7 @@ import { createReadStream } from 'node:fs'
 import { lstat, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { gitHead } from './m0-18-utils.mjs'
+import { gitHead } from './delivery-utils.mjs'
 import { runPnpmSync } from './process-utils.mjs'
 import { readFuseWire, readVersionStrings, verifyExecutableIcons } from './desktop-executable.mjs'
 
@@ -14,12 +14,9 @@ const repositoryRoot = path.resolve(
 )
 const desktopRoot = path.join(repositoryRoot, 'desktop', 'desktop-shell')
 const desktopOutputRoot = path.join(desktopRoot, 'out')
-const outputRoot = process.env.YUMPOO_M015_OUTPUT_ROOT
-  ? path.resolve(process.env.YUMPOO_M015_OUTPUT_ROOT)
-  : path.join(
-      desktopOutputRoot,
-      `.m0-15-package-${process.pid}-${Date.now()}`,
-    )
+const outputRoot = process.env.YUMPOO_DESKTOP_OUTPUT_ROOT
+  ? path.resolve(process.env.YUMPOO_DESKTOP_OUTPUT_ROOT)
+  : path.join(desktopOutputRoot, 'release')
 const packageJsonPath = path.join(desktopRoot, 'package.json')
 const asarModuleUrl = pathToFileURL(
   path.join(desktopRoot, 'node_modules', '@electron', 'asar', 'lib', 'asar.js'),
@@ -60,13 +57,13 @@ const EXPECTED_FUSES = {
 }
 
 if (process.platform !== 'win32') {
-  throw new Error('M0-15 Windows 产物只能在 Windows 上打包和扫描')
+  throw new Error('DESKTOP Windows 产物只能在 Windows 上打包和扫描')
 }
 if (
   outputRoot !== desktopOutputRoot &&
   !outputRoot.startsWith(`${desktopOutputRoot}${path.sep}`)
 ) {
-  throw new Error('M0-15 打包输出路径必须位于 desktop out 目录内')
+  throw new Error('DESKTOP 打包输出路径必须位于 desktop out 目录内')
 }
 
 const { electronVersion, desktopVersion } = await readDesktopVersions()
@@ -75,7 +72,7 @@ const { listPackage, extractFile } = await import(asarModuleUrl)
 // A reused output root (the Windows gate uses a fixed one) must not leave an older installer to be picked up.
 for (const entry of await readdir(outputRoot).catch(() => [])) {
   if (entry === PACKAGE_DIRECTORY || /^YumpooDesktop-Setup-.+\.exe(?:\.blockmap)?$/u.test(entry)
-    || ['m0-15-artifact-manifest.json', INSTALLER_DESCRIPTOR].includes(entry) || /^builder-.+\.ya?ml$/u.test(entry)) {
+    || ['desktop-artifact-manifest.json', INSTALLER_DESCRIPTOR].includes(entry) || /^builder-.+\.ya?ml$/u.test(entry)) {
     await rm(path.join(outputRoot, entry), { recursive: true, force: true })
   }
 }
@@ -84,7 +81,7 @@ runPnpmSync(['--filter', '@yumpoo/desktop-shell', 'run', 'package:win'], {
   cwd: repositoryRoot,
   env: {
     ...process.env,
-    YUMPOO_M015_OUTPUT_ROOT: outputRoot,
+    YUMPOO_DESKTOP_OUTPUT_ROOT: outputRoot,
   },
 })
 
@@ -153,7 +150,7 @@ const artifactFiles = await Promise.all(
 )
 const manifest = {
   schemaVersion: 1,
-  milestone: 'M0-15',
+  milestone: 'DESKTOP',
   generatedAt: new Date().toISOString(),
   sourceCommit,
   platform: 'win32',
@@ -162,7 +159,7 @@ const manifest = {
   packageDirectory: PACKAGE_DIRECTORY,
   files: artifactFiles,
 }
-const manifestPath = path.join(outputRoot, 'm0-15-artifact-manifest.json')
+const manifestPath = path.join(outputRoot, 'desktop-artifact-manifest.json')
 await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
 const descriptor = {
   schemaVersion: 1,
@@ -174,7 +171,7 @@ const descriptor = {
 await writeFile(path.join(outputRoot, INSTALLER_DESCRIPTOR), `${JSON.stringify(descriptor, null, 2)}\n`, 'utf8')
 
 console.log(
-  `M0-15 Windows x64 产物已通过白名单扫描：${path.relative(repositoryRoot, manifestPath)}；安装包 ${installerName} sha256=${descriptor.installer.sha256}`,
+  `DESKTOP Windows x64 产物已通过白名单扫描：${path.relative(repositoryRoot, manifestPath)}；安装包 ${installerName} sha256=${descriptor.installer.sha256}`,
 )
 
 async function verifyVersionStrings(file) {

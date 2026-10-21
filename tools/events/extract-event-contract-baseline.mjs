@@ -10,7 +10,7 @@ import {
   gitObject,
   resolveGitCommit,
   runGit,
-} from '../verification/m0-18-utils.mjs'
+} from '../verification/delivery-utils.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const reference = process.argv[2] ?? process.env.YUMPOO_M223_BASE_REF ?? 'origin/dev'

@@ -26,7 +26,7 @@ jobs:
     timeout-minutes: 60
     env:
       YUMPOO_CI_BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || inputs.base_ref }}
-      YUMPOO_M018_HEAD_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      YUMPOO_CI_HEAD_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
     outputs:
       handoff-digest: ${{ steps.handoff_upload.outputs.artifact-digest }}
       completed: ${{ steps.completed.outputs.completed }}
@@ -68,20 +68,20 @@ jobs:
       - name: Upload portable HTTP report
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: m1-13-verification-${{ github.sha }}-${{ github.run_attempt }}
-          path: out/m1-13/verification-report.json
+          name: packaged-http-report-${{ github.sha }}-${{ github.run_attempt }}
+          path: out/packaged-http/verification-report.json
           if-no-files-found: error
           retention-days: 30
       - name: Upload tested portable handoff
         id: handoff_upload
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: m0-18-portable-${{ github.run_id }}-${{ github.run_attempt }}
+          name: portable-handoff-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            out/m0-18/portable-handoff
-            out/m0-17/backup-set/manifest.json
-            out/m0-17/retention-plan.json
-            out/m0-17/verification-report.json
+            out/handoff
+            out/backup-restore/backup-set/manifest.json
+            out/backup-restore/retention-plan.json
+            out/backup-restore/verification-report.json
           if-no-files-found: error
           retention-days: 1
       - name: Record complete portable execution
@@ -137,12 +137,12 @@ jobs:
       - name: Download exact portable handoff
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: m0-18-portable-${{ github.run_id }}-${{ github.run_attempt }}
+          name: portable-handoff-${{ github.run_id }}-${{ github.run_attempt }}
           path: out
       - name: Windows packaging, PowerShell and payload integrity
         env:
-          YUMPOO_M018_HANDOFF_ARTIFACT_NAME: m0-18-portable-${{ github.run_id }}-${{ github.run_attempt }}
-          YUMPOO_M018_HANDOFF_ARTIFACT_DIGEST: ${{ needs.linux.outputs.handoff-digest }}
+          YUMPOO_HANDOFF_ARTIFACT_NAME: portable-handoff-${{ github.run_id }}-${{ github.run_attempt }}
+          YUMPOO_HANDOFF_ARTIFACT_DIGEST: ${{ needs.linux.outputs.handoff-digest }}
         run: pnpm ci:windows
       # 只有推送 CI 的产物可能被发布；PR 运行（含 fork 与 Dependabot）没有 OIDC 令牌。
       - name: Attest server package and SBOM build provenance

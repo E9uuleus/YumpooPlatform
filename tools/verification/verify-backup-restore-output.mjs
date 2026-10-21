@@ -3,17 +3,10 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import Ajv from 'ajv'
 import addFormats from 'ajv-formats'
-import { runPnpmSync } from './process-utils.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
-const evidenceRoot = path.join(repositoryRoot, 'evidence', 'm0-17')
-const outputRoot = path.join(repositoryRoot, 'out', 'm0-17')
-const contracts = [
-  ['backup-manifest.schema.json', 'backup-manifest.example.json'],
-  ['retention-plan.schema.json', 'retention-plan.example.json'],
-  ['verification-report.schema.json', 'verification-report.example.json'],
-]
-
+const schemaRoot = path.join(repositoryRoot, 'tools', 'verification', 'schemas')
+const outputRoot = path.join(repositoryRoot, 'out', 'backup-restore')
 function fail(message) {
   throw new Error(`M0-17 验证失败：${message}`)
 }
@@ -33,25 +26,16 @@ function readJson(file, label) {
 function validator(schemaName) {
   const ajv = new Ajv({ allErrors: true, strict: false })
   addFormats(ajv)
-  return ajv.compile(readJson(path.join(evidenceRoot, schemaName), schemaName))
-}
-
-function validateContracts() {
-  for (const [schemaName, exampleName] of contracts) {
-    const validate = validator(schemaName)
-    const example = readJson(path.join(evidenceRoot, exampleName), exampleName)
-    assert(validate(example), `${exampleName} 不符合 ${schemaName}：${ajvErrors(validate)}`)
-  }
-  console.log('M0-17 manifest、retention plan 与 verification report 契约示例有效。')
+  return ajv.compile(readJson(path.join(schemaRoot, schemaName), schemaName))
 }
 
 function validateGenerated(startedAt) {
   const manifestPath = path.join(outputRoot, 'backup-set', 'manifest.json')
   const retentionPath = path.join(outputRoot, 'retention-plan.json')
   const reportPath = path.join(outputRoot, 'verification-report.json')
-  const manifest = validateFile('backup-manifest.schema.json', manifestPath, '运行 manifest')
-  const retention = validateFile('retention-plan.schema.json', retentionPath, '运行 retention plan')
-  const report = validateFile('verification-report.schema.json', reportPath, '运行 verification report')
+  const manifest = validateFile('backup-restore-manifest.schema.json', manifestPath, '运行 manifest')
+  const retention = validateFile('backup-restore-retention-plan.schema.json', retentionPath, '运行 retention plan')
+  const report = validateFile('backup-restore-report.schema.json', reportPath, '运行 verification report')
 
   const paths = manifest.files.map((file) => file.path)
   assert(paths.join('\n') === [...paths].sort().join('\n'), 'manifest files 未严格排序')
@@ -127,17 +111,6 @@ function ajvErrors(validate) {
     .join('; ')
 }
 
-validateContracts()
-const validateAfterIndex = process.argv.indexOf('--validate-generated-after')
-if (validateAfterIndex >= 0) {
-  const startedAt = Number(process.argv[validateAfterIndex + 1])
-  assert(Number.isFinite(startedAt) && startedAt > 0, '--validate-generated-after 需要毫秒时间戳')
-  validateGenerated(startedAt)
-} else if (process.argv.includes('--validate-generated')) {
-  const report = readJson(path.join(outputRoot, 'verification-report.json'), '运行 verification report')
-  validateGenerated(Date.parse(report.startedAt) - 1_000)
-} else if (!process.argv.includes('--validate-contracts')) {
-  const startedAt = Date.now()
-  runPnpmSync(['run', 'verify:m0-16'], { cwd: repositoryRoot })
-  validateGenerated(startedAt)
-}
+const startedAt = Number(process.argv[2])
+assert(Number.isFinite(startedAt) && startedAt > 0, '需要本次后端门禁的毫秒时间戳')
+validateGenerated(startedAt)

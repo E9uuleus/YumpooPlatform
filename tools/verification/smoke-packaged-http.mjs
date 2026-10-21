@@ -5,12 +5,11 @@ import { randomUUID } from 'node:crypto'
 import { spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { pnpmInvocation, stopProcessTree } from './process-utils.mjs'
-import { validateM113Evidence } from './m1-13-evidence.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const jarPath = path.join(repositoryRoot, 'backend', 'target', 'yumpoo-server.jar')
 const webDist = path.join(repositoryRoot, 'frontend', 'web-app', 'dist', 'index.html')
-const outputRoot = path.join(repositoryRoot, 'out', 'm1-13')
+const outputRoot = path.join(repositoryRoot, 'out', 'packaged-http')
 const reportPath = path.join(outputRoot, 'verification-report.json')
 const backendPort = 8100
 const previewPort = 18174
@@ -166,7 +165,6 @@ try {
   assert(!rejectedSession.has('__Host-yumpoo-session'), 'disabled login created a new session cookie')
 
   assertNoSecretLeak()
-  const { liveEvidence } = validateM113Evidence(repositoryRoot)
   const report = {
     schemaVersion: 1,
     milestone: 'M1-13',
@@ -178,7 +176,6 @@ try {
     provider: 'CONTROLLED',
     springProfiles: ['local', 'm1-13-e2e'],
     flywayVersion: databaseState.flywayVersion,
-    liveEvidence,
     checks: {
       portsAvailable: true,
       freshPostgres: true,

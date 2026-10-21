@@ -13,14 +13,14 @@ export async function collectRegularFiles(root) {
       const candidate = path.join(directory, entry.name)
       const metadata = await lstat(candidate)
       if (metadata.isSymbolicLink()) {
-        throw new Error(`M0-16 产物不得包含符号链接：${path.relative(root, candidate)}`)
+        throw new Error(`Package 产物不得包含符号链接：${path.relative(root, candidate)}`)
       }
       if (metadata.isDirectory()) {
         await visit(candidate)
       } else if (metadata.isFile()) {
         files.push(candidate)
       } else {
-        throw new Error(`M0-16 产物包含不支持的文件类型：${path.relative(root, candidate)}`)
+        throw new Error(`Package 产物包含不支持的文件类型：${path.relative(root, candidate)}`)
       }
     }
   }
@@ -51,8 +51,8 @@ export function quotePowerShellLiteral(value) {
   return `'${String(value).replaceAll("'", "''")}'`
 }
 
-export function assertM016(condition, message) {
+export function assertPackage(condition, message) {
   if (!condition) {
-    throw new Error(`M0-16 验证失败：${message}`)
+    throw new Error(`Package 验证失败：${message}`)
   }
 }

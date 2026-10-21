@@ -8,7 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { generateSigningKey, signInstaller } from '../release/desktop-update-signature.mjs'
 import { installation, installedFrom, profileChangesAllowed, runInstaller, spawnAndWait, uninstall, userDataPath, withIsolatedProfile } from './desktop-profile.mjs'
-import { gitHead } from './m0-18-utils.mjs'
+import { gitHead } from './delivery-utils.mjs'
 import { runPnpmSync } from './process-utils.mjs'
 
 // In-app update end to end: two throwaway builds (N, N+1) trusting a key generated for this run, a local feed,
@@ -49,7 +49,7 @@ try {
   for (const version of [CURRENT, NEXT]) {
     runPnpmSync(['--filter', '@yumpoo/desktop-shell', 'exec', 'electron-builder', '--config', 'electron-builder.config.cjs', '--win', 'nsis', '--x64', '--publish', 'never'], {
       cwd: repositoryRoot,
-      env: { ...testEnvironment, YUMPOO_DESKTOP_TEST_VERSION: version, YUMPOO_M015_OUTPUT_ROOT: path.join(outputRoot, version) },
+      env: { ...testEnvironment, YUMPOO_DESKTOP_TEST_VERSION: version, YUMPOO_DESKTOP_OUTPUT_ROOT: path.join(outputRoot, version) },
     })
   }
   for (const file of [installerName(NEXT), `${installerName(NEXT)}.blockmap`, 'latest.yml']) {

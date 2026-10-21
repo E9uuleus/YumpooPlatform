@@ -4,10 +4,10 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { migrationInventory } from '../ci/migration-policy.mjs'
 import { sboms } from '../release/policy.mjs'
-import { quotePowerShellLiteral, sha256 } from './m0-16-utils.mjs'
-import { gitHead } from './m0-18-utils.mjs'
+import { quotePowerShellLiteral, sha256 } from './package-utils.mjs'
+import { gitHead } from './delivery-utils.mjs'
 import { runPnpmSync } from './process-utils.mjs'
-import { verifyM018Handoff } from './verify-m0-18-handoff.mjs'
+import { verifyPortableHandoff } from './verify-portable-handoff.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const out = path.join(root, 'out', 'm1-15')
@@ -15,8 +15,8 @@ const stage = path.join(out, 'server-staging')
 const serverZip = path.join(out, 'yumpoo-windows-server-m1-15.zip')
 const [serverSbom, webSbom] = sboms.map(sbom => path.join(out, sbom.name))
 const deployment = path.join(root, 'deployment', 'windows')
-const handoff = process.env.YUMPOO_M018_HANDOFF_ROOT
-if (handoff) verifyM018Handoff(root, path.resolve(handoff))
+const handoff = process.env.YUMPOO_HANDOFF_ROOT
+if (handoff) verifyPortableHandoff(root, path.resolve(handoff))
 const jar = handoff ? path.join(handoff, 'server/yumpoo-server.jar') : path.join(root, 'backend/target/yumpoo-server.jar')
 const web = handoff ? path.join(handoff, 'web') : path.join(root, 'frontend/web-app/dist')
 

@@ -177,7 +177,7 @@ test('retired product verification commands run only historical evidence checks'
 test('verification subprocesses cannot inherit application credentials or JVM test bypasses', () => {
   const source = { PATH: 'toolchain', JAVA_HOME: 'jdk', DOCKER_HOST: 'docker', npm_execpath: 'pnpm.cjs',
     SPRING_DATASOURCE_URL: 'external-db', spring_flyway_password: 'external-secret',
-    YUMPOO_LOCAL_AUTH_ENABLED: 'true', YUMPOO_M113_FIXTURE_ENABLED: 'true', YUMPOO_M017_OUTPUT_ROOT: 'elsewhere',
+    YUMPOO_LOCAL_AUTH_ENABLED: 'true', YUMPOO_M113_FIXTURE_ENABLED: 'true', YUMPOO_BACKUP_RESTORE_OUTPUT_ROOT: 'elsewhere',
     JAVA_TOOL_OPTIONS: '-DskipTests', MAVEN_ARGS: '-DskipTests', MAVEN_OPTS: '-Dspring.profiles.active=prod', NODE_OPTIONS: '--require external' }
   assert.deepEqual(verificationEnvironment(source), { PATH: 'toolchain', JAVA_HOME: 'jdk', DOCKER_HOST: 'docker', npm_execpath: 'pnpm.cjs' })
   assert.equal(source.YUMPOO_LOCAL_AUTH_ENABLED, 'true')

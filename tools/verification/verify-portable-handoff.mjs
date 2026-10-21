@@ -3,25 +3,25 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   assertExactPayload,
-  assertM018,
+  assertDelivery,
   assertSchema,
   gitHead,
   readJson,
   sha256GitTextFile,
-} from './m0-18-utils.mjs'
+} from './delivery-utils.mjs'
 
-export function verifyM018Handoff(repositoryRoot, handoffRoot, options = {}) {
+export function verifyPortableHandoff(repositoryRoot, handoffRoot, options = {}) {
   const manifestPath = path.join(handoffRoot, 'portable-handoff.json')
-  assertM018(fs.statSync(manifestPath, { throwIfNoEntry: false })?.isFile(), 'portable handoff manifest 不存在')
+  assertDelivery(fs.statSync(manifestPath, { throwIfNoEntry: false })?.isFile(), 'portable handoff manifest 不存在')
   const manifest = readJson(manifestPath)
   assertSchema(
-    path.join(repositoryRoot, 'evidence', 'm0-18', 'portable-handoff.schema.json'),
+    path.join(repositoryRoot, 'tools', 'verification', 'schemas', 'portable-handoff.schema.json'),
     manifest,
     'portable-handoff.json',
   )
   const expectedCommit = options.expectedCommit ?? gitHead(repositoryRoot)
-  assertM018(manifest.testedCommit === expectedCommit, 'portable handoff testedCommit 与当前 checkout 不一致')
-  assertM018(
+  assertDelivery(manifest.testedCommit === expectedCommit, 'portable handoff testedCommit 与当前 checkout 不一致')
+  assertDelivery(
     manifest.currentOpenApiSha256 ===
       sha256GitTextFile(
         repositoryRoot,
@@ -41,9 +41,9 @@ if (invokedDirectly) {
   const handoffArgument = process.argv.slice(2).find((argument) => argument !== '--')
   const handoffRoot = path.resolve(
     handoffArgument ??
-      process.env.YUMPOO_M018_HANDOFF_ROOT ??
-      path.join(repositoryRoot, 'out', 'm0-18', 'portable-handoff'),
+      process.env.YUMPOO_HANDOFF_ROOT ??
+      path.join(repositoryRoot, 'out', 'handoff'),
   )
-  const manifest = verifyM018Handoff(repositoryRoot, handoffRoot)
-  console.log(`M0-18 portable handoff 已复核：${manifest.sourceCommit}`)
+  const manifest = verifyPortableHandoff(repositoryRoot, handoffRoot)
+  console.log(`DELIVERY portable handoff 已复核：${manifest.sourceCommit}`)
 }

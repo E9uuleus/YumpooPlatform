@@ -3,7 +3,7 @@ import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import {
-  assertM018,
+  assertDelivery,
   assertDirectoryTargetWithin,
   assertSchema,
   atomicWriteJson,
@@ -14,8 +14,8 @@ import {
   readJson,
   sha256File,
   sha256Pattern,
-} from './m0-18-utils.mjs'
-import { verifyM018Handoff } from './verify-m0-18-handoff.mjs'
+} from './delivery-utils.mjs'
+import { verifyPortableHandoff } from './verify-portable-handoff.mjs'
 import { verifyServerSmokeReceipt } from './m0-18-server-smoke-receipt.mjs'
 
 const fileRoles = new Map([
@@ -60,17 +60,17 @@ const forbiddenJsonKeys = new Set([
 export function assertNoSensitiveMaterial(root, files = collectRegularFiles(root), forbiddenAbsoluteRoot) {
   for (const file of files) {
     const relativePath = path.relative(root, file).replaceAll('\\', '/')
-    assertM018(isSafeRelativePath(relativePath), `证据包路径不安全：${relativePath}`)
+    assertDelivery(isSafeRelativePath(relativePath), `证据包路径不安全：${relativePath}`)
     const bytes = fs.readFileSync(file)
-    assertM018(!bytes.includes(0), `证据包只允许文本安全元数据：${relativePath}`)
+    assertDelivery(!bytes.includes(0), `证据包只允许文本安全元数据：${relativePath}`)
     const text = bytes.toString('utf8')
-    assertM018(!/-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----/u.test(text), `证据包疑似包含私钥：${relativePath}`)
-    assertM018(!/[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/u.test(text), `证据包疑似包含 JWT：${relativePath}`)
-    assertM018(!/https?:\/\/[^/\s:@]+:[^@\s]+@/iu.test(text), `证据包 URI 包含 userinfo：${relativePath}`)
-    assertM018(!/(?:^|["'\s])(?:[A-Za-z]:[\\/]|\\\\[^\\\s]+\\)/mu.test(text), `证据包包含 Windows 绝对路径：${relativePath}`)
-    assertM018(!/(?:^|["'\s])\/(?:home|Users|workspace|workspaces|tmp|__w|var\/lib\/jenkins)\//mu.test(text), `证据包包含主机绝对路径：${relativePath}`)
+    assertDelivery(!/-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----/u.test(text), `证据包疑似包含私钥：${relativePath}`)
+    assertDelivery(!/[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/u.test(text), `证据包疑似包含 JWT：${relativePath}`)
+    assertDelivery(!/https?:\/\/[^/\s:@]+:[^@\s]+@/iu.test(text), `证据包 URI 包含 userinfo：${relativePath}`)
+    assertDelivery(!/(?:^|["'\s])(?:[A-Za-z]:[\\/]|\\\\[^\\\s]+\\)/mu.test(text), `证据包包含 Windows 绝对路径：${relativePath}`)
+    assertDelivery(!/(?:^|["'\s])\/(?:home|Users|workspace|workspaces|tmp|__w|var\/lib\/jenkins)\//mu.test(text), `证据包包含主机绝对路径：${relativePath}`)
     if (forbiddenAbsoluteRoot) {
-      assertM018(!text.includes(path.resolve(forbiddenAbsoluteRoot)), `证据包泄露仓库绝对路径：${relativePath}`)
+      assertDelivery(!text.includes(path.resolve(forbiddenAbsoluteRoot)), `证据包泄露仓库绝对路径：${relativePath}`)
     }
     if (relativePath.endsWith('.json')) {
       walkJson(readJson(file, relativePath), relativePath)
@@ -86,7 +86,7 @@ function walkJson(value, relativePath) {
   if (!value || typeof value !== 'object') return
   for (const [key, child] of Object.entries(value)) {
     const normalized = key.replaceAll(/[-_]/gu, '').toLocaleLowerCase('en-US')
-    assertM018(
+    assertDelivery(
       !forbiddenJsonKeys.has(normalized) && !normalized.endsWith('fingerprint'),
       `证据包包含敏感字段 ${key}：${relativePath}`,
     )
@@ -101,14 +101,14 @@ export function verifyEvidencePack(repositoryRoot, outputRoot, expectedCommit = 
   const report = readJson(reportPath, 'M0-18 verification report')
   assertSchema(path.join(repositoryRoot, 'evidence', 'm0-18', 'evidence-manifest.schema.json'), manifest, 'manifest.json')
   assertSchema(path.join(repositoryRoot, 'evidence', 'm0-18', 'verification-report.schema.json'), report, 'verification-report.json')
-  assertM018(manifest.sourceCommit === expectedCommit, 'evidence manifest 未绑定当前 checkout')
-  assertM018(report.sourceCommit === expectedCommit && report.testedCommit === expectedCommit, 'verification report 未绑定当前 checkout')
-  assertM018(Date.parse(report.completedAt) >= Date.parse(report.startedAt), 'verification report 时间顺序无效')
-  assertM018(Date.parse(report.completedAt) <= Date.now() + 120_000, 'verification report 完成时间位于未来')
+  assertDelivery(manifest.sourceCommit === expectedCommit, 'evidence manifest 未绑定当前 checkout')
+  assertDelivery(report.sourceCommit === expectedCommit && report.testedCommit === expectedCommit, 'verification report 未绑定当前 checkout')
+  assertDelivery(Date.parse(report.completedAt) >= Date.parse(report.startedAt), 'verification report 时间顺序无效')
+  assertDelivery(Date.parse(report.completedAt) <= Date.now() + 120_000, 'verification report 完成时间位于未来')
 
   const handoff = readJson(path.join(outputRoot, 'portable', 'portable-handoff.json'), 'portable handoff')
   assertSchema(path.join(repositoryRoot, 'evidence', 'm0-18', 'portable-handoff.schema.json'), handoff, 'portable handoff')
-  assertM018(
+  assertDelivery(
     handoff.sourceCommit === expectedCommit &&
       handoff.testedCommit === expectedCommit &&
       report.baseCommit === handoff.baseCommit &&
@@ -119,7 +119,7 @@ export function verifyEvidencePack(repositoryRoot, outputRoot, expectedCommit = 
 
   const m015 = readJson(path.join(outputRoot, 'm0-15', 'artifact-manifest.json'))
   const m016 = readJson(path.join(outputRoot, 'm0-16', 'artifact-manifest.json'))
-  assertM018(m015.sourceCommit === expectedCommit && m016.sourceCommit === expectedCommit, 'Windows manifest 未绑定当前 checkout')
+  assertDelivery(m015.sourceCommit === expectedCommit && m016.sourceCommit === expectedCommit, 'Windows manifest 未绑定当前 checkout')
   for (const [file, schema] of [
     ['backup-manifest.json', 'backup-manifest.schema.json'],
     ['retention-plan.json', 'retention-plan.schema.json'],
@@ -134,8 +134,8 @@ export function verifyEvidencePack(repositoryRoot, outputRoot, expectedCommit = 
 
   const actualFiles = collectRegularFiles(outputRoot).filter((file) => path.resolve(file) !== path.resolve(manifestPath))
   const records = fileRecords(outputRoot, actualFiles, (relativePath) => fileRoles.get(relativePath) ?? '')
-  assertM018(JSON.stringify(records) === JSON.stringify(manifest.files), 'evidence manifest 与实际文件、角色、大小或 SHA-256 不一致')
-  assertM018(records.length === fileRoles.size, '证据包文件数量不符合白名单')
+  assertDelivery(JSON.stringify(records) === JSON.stringify(manifest.files), 'evidence manifest 与实际文件、角色、大小或 SHA-256 不一致')
+  assertDelivery(records.length === fileRoles.size, '证据包文件数量不符合白名单')
   assertNoSensitiveMaterial(outputRoot, collectRegularFiles(outputRoot), repositoryRoot)
   return { manifest, report }
 }
@@ -151,30 +151,30 @@ export function assertEvidenceReportDigests(outputRoot, report, handoff) {
     ['deferredAcceptance', 'deferred-acceptance.json'],
   ])
   for (const [key, relativePath] of digestFiles) {
-    assertM018(
+    assertDelivery(
       report.digests[key] === sha256File(path.join(outputRoot, ...relativePath.split('/'))),
       `verification report 摘要与 ${relativePath} 不一致`,
     )
   }
-  assertM018(report.digests.baselineOpenApi === handoff.baselineOpenApiSha256, 'OpenAPI 基线摘要与 handoff 不一致')
-  assertM018(report.digests.currentOpenApi === handoff.currentOpenApiSha256, '当前 OpenAPI 摘要与 handoff 不一致')
+  assertDelivery(report.digests.baselineOpenApi === handoff.baselineOpenApiSha256, 'OpenAPI 基线摘要与 handoff 不一致')
+  assertDelivery(report.digests.currentOpenApi === handoff.currentOpenApiSha256, '当前 OpenAPI 摘要与 handoff 不一致')
   const zipDigest = fs
     .readFileSync(path.join(outputRoot, 'm0-16', 'yumpoo-windows-m0-16.zip.sha256'), 'utf8')
     .trim()
     .match(/^([0-9a-f]{64})  yumpoo-windows-m0-16\.zip$/u)?.[1]
-  assertM018(report.digests.m016Zip === zipDigest, 'verification report 摘要与 M0-16 ZIP 摘要不一致')
+  assertDelivery(report.digests.m016Zip === zipDigest, 'verification report 摘要与 M0-16 ZIP 摘要不一致')
 }
 
 export function createEvidencePack(repositoryRoot, options = {}) {
   const handoffRoot = path.resolve(
     options.handoffRoot ??
-      process.env.YUMPOO_M018_HANDOFF_ROOT ??
-      path.join(repositoryRoot, 'out', 'm0-18', 'portable-handoff'),
+      process.env.YUMPOO_HANDOFF_ROOT ??
+      path.join(repositoryRoot, 'out', 'handoff'),
   )
   const m015OutputRoot = path.resolve(
     options.m015OutputRoot ??
-      process.env.YUMPOO_M015_OUTPUT_ROOT ??
-      path.join(repositoryRoot, 'desktop', 'desktop-shell', 'out', 'm0-18-windows', 'm0-15'),
+      process.env.YUMPOO_DESKTOP_OUTPUT_ROOT ??
+      path.join(repositoryRoot, 'desktop', 'desktop-shell', 'out', 'release'),
   )
   const outputRoot = path.resolve(
     options.outputRoot ??
@@ -183,19 +183,19 @@ export function createEvidencePack(repositoryRoot, options = {}) {
   )
   const m017OutputRoot = path.resolve(
     options.m017OutputRoot ??
-      process.env.YUMPOO_M017_OUTPUT_ROOT ??
-      path.join(repositoryRoot, 'out', 'm0-17'),
+      process.env.YUMPOO_BACKUP_RESTORE_OUTPUT_ROOT ??
+      path.join(repositoryRoot, 'out', 'backup-restore'),
   )
   const partialRoot = `${outputRoot}.partial-${process.pid}-${Date.now()}`
   assertDirectoryTargetWithin(path.join(repositoryRoot, 'out', 'm0-18'), outputRoot, 'M0-18 证据包输出目录')
   assertDirectoryTargetWithin(path.join(repositoryRoot, 'out', 'm0-18'), partialRoot, 'M0-18 证据包临时目录')
   const sourceCommit = gitHead(repositoryRoot)
-  const handoff = verifyM018Handoff(repositoryRoot, handoffRoot, { expectedCommit: sourceCommit })
+  const handoff = verifyPortableHandoff(repositoryRoot, handoffRoot, { expectedCommit: sourceCommit })
   const evidenceRoot = path.join(repositoryRoot, 'evidence')
   const outputM016Root = path.join(repositoryRoot, 'out', 'm0-16')
   const sources = [
     ['deferred-acceptance.json', path.join(evidenceRoot, 'm0-18', 'deferred-acceptance.json')],
-    ['m0-15/artifact-manifest.json', path.join(m015OutputRoot, 'm0-15-artifact-manifest.json')],
+    ['m0-15/artifact-manifest.json', path.join(m015OutputRoot, 'desktop-artifact-manifest.json')],
     ['m0-16/artifact-manifest.json', path.join(outputM016Root, 'verified', 'artifact-manifest.json')],
     ['m0-16/yumpoo-windows-m0-16.zip.sha256', path.join(outputM016Root, 'yumpoo-windows-m0-16.zip.sha256')],
     ['m0-17/backup-manifest.json', path.join(m017OutputRoot, 'backup-set', 'manifest.json')],
@@ -218,7 +218,7 @@ export function createEvidencePack(repositoryRoot, options = {}) {
 
     const packFiles = collectRegularFiles(partialRoot)
     const records = fileRecords(partialRoot, packFiles, (relativePath) => fileRoles.get(relativePath) ?? '')
-    assertM018(records.length === fileRoles.size, '证据包白名单文件不完整')
+    assertDelivery(records.length === fileRoles.size, '证据包白名单文件不完整')
     assertNoSensitiveMaterial(partialRoot, packFiles, repositoryRoot)
     const manifest = {
       schemaVersion: 1,
@@ -244,7 +244,7 @@ export function createEvidencePack(repositoryRoot, options = {}) {
 
 function copySafeMetadata(source, destination) {
   const metadata = fs.lstatSync(source, { throwIfNoEntry: false })
-  assertM018(metadata?.isFile() && !metadata.isSymbolicLink(), `证据元数据缺失或不是普通文件：${path.basename(source)}`)
+  assertDelivery(metadata?.isFile() && !metadata.isSymbolicLink(), `证据元数据缺失或不是普通文件：${path.basename(source)}`)
   fs.mkdirSync(path.dirname(destination), { recursive: true })
   fs.copyFileSync(source, destination)
 }
@@ -255,34 +255,34 @@ function validateSourceMetadata(repositoryRoot, partialRoot, handoff, sourceComm
 
   const m016 = readJson(path.join(partialRoot, 'm0-16', 'artifact-manifest.json'))
   const m015 = readJson(path.join(partialRoot, 'm0-15', 'artifact-manifest.json'))
-  assertM018(m015.sourceCommit === sourceCommit, 'M0-15 manifest 未绑定当前 checkout')
-  assertM018(m016.sourceCommit === sourceCommit, 'M0-16 manifest 未绑定当前 checkout')
+  assertDelivery(m015.sourceCommit === sourceCommit, 'M0-15 manifest 未绑定当前 checkout')
+  assertDelivery(m016.sourceCommit === sourceCommit, 'M0-16 manifest 未绑定当前 checkout')
   const m017Backup = readJson(path.join(partialRoot, 'm0-17', 'backup-manifest.json'))
   const m017Retention = readJson(path.join(partialRoot, 'm0-17', 'retention-plan.json'))
   const m017Report = readJson(path.join(partialRoot, 'm0-17', 'verification-report.json'))
   assertSchema(path.join(repositoryRoot, 'evidence', 'm0-17', 'backup-manifest.schema.json'), m017Backup, 'M0-17 backup manifest')
   assertSchema(path.join(repositoryRoot, 'evidence', 'm0-17', 'retention-plan.schema.json'), m017Retention, 'M0-17 retention plan')
   assertSchema(path.join(repositoryRoot, 'evidence', 'm0-17', 'verification-report.schema.json'), m017Report, 'M0-17 verification report')
-  assertM018(m017Backup.sourceCommit === sourceCommit && m017Report.sourceCommit === sourceCommit, 'M0-17 元数据未绑定当前 checkout')
-  assertM018(handoff.sourceCommit === sourceCommit && handoff.testedCommit === sourceCommit, 'portable handoff 未绑定当前 checkout')
+  assertDelivery(m017Backup.sourceCommit === sourceCommit && m017Report.sourceCommit === sourceCommit, 'M0-17 元数据未绑定当前 checkout')
+  assertDelivery(handoff.sourceCommit === sourceCommit && handoff.testedCommit === sourceCommit, 'portable handoff 未绑定当前 checkout')
 
   const zipDigestText = fs.readFileSync(path.join(partialRoot, 'm0-16', 'yumpoo-windows-m0-16.zip.sha256'), 'utf8').trim()
   const match = zipDigestText.match(/^([0-9a-f]{64})  yumpoo-windows-m0-16\.zip$/u)
-  assertM018(match, 'M0-16 ZIP 摘要格式无效')
-  assertM018(match[1] === sha256File(path.join(outputM016Root, 'yumpoo-windows-m0-16.zip')), 'M0-16 ZIP 摘要与 ZIP 不一致')
+  assertDelivery(match, 'M0-16 ZIP 摘要格式无效')
+  assertDelivery(match[1] === sha256File(path.join(outputM016Root, 'yumpoo-windows-m0-16.zip')), 'M0-16 ZIP 摘要与 ZIP 不一致')
 }
 
 function createVerificationReport(repositoryRoot, partialRoot, handoff, sourceCommit) {
-  assertM018(process.platform === 'win32' && process.arch === 'x64', 'verification report 必须在 Windows x64 生成')
+  assertDelivery(process.platform === 'win32' && process.arch === 'x64', 'verification report 必须在 Windows x64 生成')
   const validationMode = process.env.YUMPOO_M018_VALIDATION_MODE ?? 'WINDOWS_X64_CI_STAGE'
-  assertM018(
+  assertDelivery(
     ['WINDOWS_X64_FULL', 'WINDOWS_X64_CI_STAGE'].includes(validationMode),
     'verification report 的 Windows 验证模式无效',
   )
   const fullWindowsChain = validationMode === 'WINDOWS_X64_FULL'
   if (fullWindowsChain) {
     const serverJar = handoff.files.find((file) => file.role === 'SERVER_JAR')
-    assertM018(serverJar, 'portable handoff 缺少 server JAR')
+    assertDelivery(serverJar, 'portable handoff 缺少 server JAR')
     verifyServerSmokeReceipt(
       repositoryRoot,
       process.env.YUMPOO_M018_SERVER_SMOKE_RECEIPT,
@@ -299,7 +299,7 @@ function createVerificationReport(repositoryRoot, partialRoot, handoff, sourceCo
     .readFileSync(path.join(partialRoot, 'm0-16', 'yumpoo-windows-m0-16.zip.sha256'), 'utf8')
     .trim()
     .slice(0, 64)
-  assertM018(sha256Pattern.test(zipDigest), 'M0-16 ZIP 摘要无效')
+  assertDelivery(sha256Pattern.test(zipDigest), 'M0-16 ZIP 摘要无效')
   return {
     schemaVersion: 1,
     milestone: 'M0-18',
@@ -369,45 +369,45 @@ function createVerificationReport(repositoryRoot, partialRoot, handoff, sourceCo
     ci: {
       runId: digitsOrNull(process.env.GITHUB_RUN_ID),
       runAttempt: digitsOrNull(process.env.GITHUB_RUN_ATTEMPT),
-      handoffArtifactName: process.env.YUMPOO_M018_HANDOFF_ARTIFACT_NAME || null,
-      handoffArtifactDigest: artifactDigestOrNull(process.env.YUMPOO_M018_HANDOFF_ARTIFACT_DIGEST),
+      handoffArtifactName: process.env.YUMPOO_HANDOFF_ARTIFACT_NAME || null,
+      handoffArtifactDigest: artifactDigestOrNull(process.env.YUMPOO_HANDOFF_ARTIFACT_DIGEST),
     },
   }
 }
 
 function toolVersions(repositoryRoot) {
   const nodeVersion = process.version.replace(/^v/u, '')
-  assertM018(typeof process.env.npm_execpath === 'string' && process.env.npm_execpath.length > 0, 'pnpm 执行入口不可用')
+  assertDelivery(typeof process.env.npm_execpath === 'string' && process.env.npm_execpath.length > 0, 'pnpm 执行入口不可用')
   const pnpmVersion = run(process.execPath, [process.env.npm_execpath, '--version'], repositoryRoot).trim()
   const javaOutput = run('java', ['-version'], repositoryRoot)
   const mavenWrapper = path.join(repositoryRoot, 'backend', 'mvnw.cmd').replaceAll("'", "''")
   const mavenOutput = run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `& '${mavenWrapper}' -v`], repositoryRoot)
   const javaMatch = javaOutput.match(/version\s+"(\d+)(?:\.|")/u)
   const mavenMatch = mavenOutput.match(/Apache Maven\s+(\d+\.\d+\.\d+)/u)
-  assertM018(nodeVersion === '24.14.0', `Node 版本必须为 24.14.0，实际为 ${nodeVersion}`)
-  assertM018(pnpmVersion === '11.16.0', `pnpm 版本必须为 11.16.0，实际为 ${pnpmVersion}`)
-  assertM018(javaMatch?.[1] === '21', 'Java 版本必须为 21')
-  assertM018(mavenMatch?.[1] === '3.10.0', 'Maven Wrapper 版本必须为 3.10.0')
+  assertDelivery(nodeVersion === '24.14.0', `Node 版本必须为 24.14.0，实际为 ${nodeVersion}`)
+  assertDelivery(pnpmVersion === '11.16.0', `pnpm 版本必须为 11.16.0，实际为 ${pnpmVersion}`)
+  assertDelivery(javaMatch?.[1] === '21', 'Java 版本必须为 21')
+  assertDelivery(mavenMatch?.[1] === '3.10.0', 'Maven Wrapper 版本必须为 3.10.0')
   return { nodeVersion, pnpmVersion, javaMajor: 21, mavenVersion: '3.10.0' }
 }
 
 function run(command, args, cwd) {
-  assertM018(typeof command === 'string' && command.length > 0, '工具命令不可用')
+  assertDelivery(typeof command === 'string' && command.length > 0, '工具命令不可用')
   const result = spawnSync(command, args, { cwd, encoding: 'utf8', windowsHide: true })
-  assertM018(result.status === 0, `${path.basename(command)} 版本检查失败`)
+  assertDelivery(result.status === 0, `${path.basename(command)} 版本检查失败`)
   return `${result.stdout ?? ''}\n${result.stderr ?? ''}`
 }
 
 function digitsOrNull(value) {
   if (!value) return null
-  assertM018(/^[0-9]+$/u.test(value), 'CI 数字标识格式无效')
+  assertDelivery(/^[0-9]+$/u.test(value), 'CI 数字标识格式无效')
   return value
 }
 
 function artifactDigestOrNull(value) {
   if (!value) return null
   const normalized = value.startsWith('sha256:') ? value : `sha256:${value}`
-  assertM018(/^sha256:[0-9a-f]{64}$/u.test(normalized), 'handoff artifact digest 格式无效')
+  assertDelivery(/^sha256:[0-9a-f]{64}$/u.test(normalized), 'handoff artifact digest 格式无效')
   return normalized
 }
 

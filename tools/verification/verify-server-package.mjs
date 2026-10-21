@@ -5,9 +5,9 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { migrationDigest } from '../ci/migration-policy.mjs'
 import { sboms, validateSbom } from '../release/policy.mjs'
-import { collectRegularFiles, quotePowerShellLiteral, sha256 } from './m0-16-utils.mjs'
-import { verifyM018Handoff } from './verify-m0-18-handoff.mjs'
-import { gitHead } from './m0-18-utils.mjs'
+import { collectRegularFiles, quotePowerShellLiteral, sha256 } from './package-utils.mjs'
+import { verifyPortableHandoff } from './verify-portable-handoff.mjs'
+import { gitHead } from './delivery-utils.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const out = path.join(root, 'out', 'm1-15')
@@ -45,9 +45,9 @@ for (const entry of manifest.sboms) {
 }
 
 const serverRoot = expand(artifact.name, 'verified-server')
-if (process.env.YUMPOO_M018_HANDOFF_ROOT) {
-  const handoffRoot = path.resolve(process.env.YUMPOO_M018_HANDOFF_ROOT)
-  const tested = verifyM018Handoff(root, handoffRoot)
+if (process.env.YUMPOO_HANDOFF_ROOT) {
+  const handoffRoot = path.resolve(process.env.YUMPOO_HANDOFF_ROOT)
+  const tested = verifyPortableHandoff(root, handoffRoot)
   const packaged = (await collectRegularFiles(serverRoot))
     .map(file => path.relative(serverRoot, file).replaceAll('\\', '/'))
     .filter(file => file.startsWith('server/') || file.startsWith('web/')).sort()

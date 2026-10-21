@@ -2,8 +2,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { collectRegularFiles, fileRecord, quotePowerShellLiteral, sha256 } from './m0-16-utils.mjs'
-import { gitHead } from './m0-18-utils.mjs'
+import { collectRegularFiles, fileRecord, quotePowerShellLiteral, sha256 } from './package-utils.mjs'
+import { gitHead } from './delivery-utils.mjs'
 import { runSync } from './process-utils.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -27,9 +27,9 @@ try {
   assembleServer()
   compressContents(serverStage, serverZip)
 
-  runSync(process.execPath, [path.join(root, 'tools', 'verification', 'package-m0-15-win.mjs')], {
+  runSync(process.execPath, [path.join(root, 'tools', 'verification', 'package-desktop-win.mjs')], {
     cwd: root,
-    env: { ...process.env, YUMPOO_M015_OUTPUT_ROOT: desktopTemp },
+    env: { ...process.env, YUMPOO_DESKTOP_OUTPUT_ROOT: desktopTemp },
   })
   const desktopDirectories = fs.readdirSync(desktopTemp, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && entry.name === 'win-unpacked')

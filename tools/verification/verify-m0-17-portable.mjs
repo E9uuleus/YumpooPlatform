@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { runPnpmSync, runSync } from './process-utils.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
-const verifier = path.join(repositoryRoot, 'tools', 'verification', 'verify-m0-17.mjs')
+const verifier = path.join(repositoryRoot, 'tools', 'verification', 'verify-backup-restore-output.mjs')
 
 runSync(process.execPath, [verifier, '--validate-contracts'], { cwd: repositoryRoot })
 const startedAt = Date.now()

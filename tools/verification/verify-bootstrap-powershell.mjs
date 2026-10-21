@@ -4,7 +4,7 @@ import path from 'node:path'
 import net from 'node:net'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { quotePowerShellLiteral } from './m0-16-utils.mjs'
+import { quotePowerShellLiteral } from './package-utils.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const script = path.join(root, 'deployment', 'windows', 'Invoke-InitialIdentityBootstrap.ps1')

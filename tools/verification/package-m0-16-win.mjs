@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { collectRegularFiles, fileRecord, quotePowerShellLiteral, sha256, assertM016 } from './m0-16-utils.mjs'
+import { collectRegularFiles, fileRecord, quotePowerShellLiteral, sha256, assertPackage } from './package-utils.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const outputRoot = path.join(repositoryRoot, 'out', 'm0-16')
@@ -20,7 +20,7 @@ const webRoot = portablePayloadRoot
   : path.join(repositoryRoot, 'frontend', 'web-app', 'dist')
 const deploymentRoot = path.join(repositoryRoot, 'deployment', 'windows')
 
-assertM016(process.platform === 'win32' && process.arch === 'x64', 'Windows 发布包只能在 Windows x64 上组装')
+assertPackage(process.platform === 'win32' && process.arch === 'x64', 'Windows 发布包只能在 Windows x64 上组装')
 requireFile(jarPath, 'packaged JAR')
 requireDirectory(webRoot, 'Vite dist')
 requireDirectory(deploymentRoot, 'Windows 部署资产')
@@ -50,7 +50,7 @@ const command = [
   `Compress-Archive -LiteralPath $m016Items.FullName -DestinationPath ${quotePowerShellLiteral(zipPath)} -CompressionLevel Optimal -Force`,
 ].join('; ')
 const compressed = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], { stdio: 'inherit' })
-assertM016(compressed.status === 0, 'PowerShell Compress-Archive 执行失败')
+assertPackage(compressed.status === 0, 'PowerShell Compress-Archive 执行失败')
 const zipHash = await sha256(zipPath)
 fs.writeFileSync(zipHashPath, `${zipHash}  ${path.basename(zipPath)}\n`, 'utf8')
 console.log(`M0-16 Windows 开发部署包已生成：${path.relative(repositoryRoot, zipPath)}`)
@@ -62,22 +62,22 @@ function copyTree(source, destination, options = {}) {
     const from = path.join(source, entry.name)
     const to = path.join(destination, entry.name)
     const metadata = fs.lstatSync(from)
-    assertM016(!metadata.isSymbolicLink(), `复制源不得包含符号链接：${path.relative(repositoryRoot, from)}`)
+    assertPackage(!metadata.isSymbolicLink(), `复制源不得包含符号链接：${path.relative(repositoryRoot, from)}`)
     if (entry.isDirectory()) {
       copyTree(from, to, options)
     } else if (entry.isFile()) {
-      assertM016(!(options.rejectSourceMaps && entry.name.endsWith('.map')), 'Vite dist 不得包含 source map')
+      assertPackage(!(options.rejectSourceMaps && entry.name.endsWith('.map')), 'Vite dist 不得包含 source map')
       fs.copyFileSync(from, to)
     }
   }
 }
 
 function requireFile(file, label) {
-  assertM016(fs.existsSync(file) && fs.statSync(file).isFile(), `缺少 ${label}`)
+  assertPackage(fs.existsSync(file) && fs.statSync(file).isFile(), `缺少 ${label}`)
 }
 
 function requireDirectory(directory, label) {
-  assertM016(fs.existsSync(directory) && fs.statSync(directory).isDirectory(), `缺少 ${label}`)
+  assertPackage(fs.existsSync(directory) && fs.statSync(directory).isDirectory(), `缺少 ${label}`)
 }
 
 function gitHead() {
@@ -88,15 +88,15 @@ function gitHead() {
   const head = fs.readFileSync(path.join(gitDirectory, 'HEAD'), 'utf8').trim()
   if (/^[0-9a-f]{40}$/u.test(head)) return head
   const match = head.match(/^ref:\s+(.+)$/u)
-  assertM016(match, '无法解析 Git HEAD')
+  assertPackage(match, '无法解析 Git HEAD')
   const looseRef = path.join(gitDirectory, ...match[1].split('/'))
   if (fs.existsSync(looseRef)) {
     const value = fs.readFileSync(looseRef, 'utf8').trim()
-    assertM016(/^[0-9a-f]{40}$/u.test(value), 'Git HEAD ref 无效')
+    assertPackage(/^[0-9a-f]{40}$/u.test(value), 'Git HEAD ref 无效')
     return value
   }
   const packedRefs = fs.readFileSync(path.join(gitDirectory, 'packed-refs'), 'utf8')
   const packed = packedRefs.split(/\r?\n/u).find((line) => line.endsWith(` ${match[1]}`))?.split(' ')[0]
-  assertM016(/^[0-9a-f]{40}$/u.test(packed ?? ''), '无法读取源码 commit')
+  assertPackage(/^[0-9a-f]{40}$/u.test(packed ?? ''), '无法读取源码 commit')
   return packed
 }

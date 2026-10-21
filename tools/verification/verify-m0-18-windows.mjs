@@ -1,17 +1,17 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { assertM018 } from './m0-18-utils.mjs'
+import { assertDelivery } from './delivery-utils.mjs'
 import { resolveServerSmokeReceiptPath } from './m0-18-server-smoke-receipt.mjs'
 import { runPnpmSync, runSync } from './process-utils.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const handoffRoot = path.resolve(
-  process.env.YUMPOO_M018_HANDOFF_ROOT ?? path.join(repositoryRoot, 'out', 'm0-18', 'portable-handoff'),
+  process.env.YUMPOO_HANDOFF_ROOT ?? path.join(repositoryRoot, 'out', 'handoff'),
 )
 const m015OutputRoot = path.resolve(
-  process.env.YUMPOO_M015_OUTPUT_ROOT ??
-    path.join(repositoryRoot, 'desktop', 'desktop-shell', 'out', 'm0-18-windows', 'm0-15'),
+  process.env.YUMPOO_DESKTOP_OUTPUT_ROOT ??
+    path.join(repositoryRoot, 'desktop', 'desktop-shell', 'out', 'release'),
 )
 const serverSmokeReceiptPath = resolveServerSmokeReceiptPath(
   repositoryRoot,
@@ -20,15 +20,15 @@ const serverSmokeReceiptPath = resolveServerSmokeReceiptPath(
 )
 const environment = {
   ...process.env,
-  YUMPOO_M018_HANDOFF_ROOT: handoffRoot,
-  YUMPOO_M015_OUTPUT_ROOT: m015OutputRoot,
+  YUMPOO_HANDOFF_ROOT: handoffRoot,
+  YUMPOO_DESKTOP_OUTPUT_ROOT: m015OutputRoot,
   YUMPOO_M016_PAYLOAD_ROOT: handoffRoot,
   YUMPOO_M018_SERVER_SMOKE_RECEIPT: serverSmokeReceiptPath,
 }
 const validationMode = process.env.YUMPOO_M018_VALIDATION_MODE ?? 'WINDOWS_X64_CI_STAGE'
 
-assertM018(process.platform === 'win32' && process.arch === 'x64', 'M0-18 Windows 门禁需要 Windows x64')
-assertM018(
+assertDelivery(process.platform === 'win32' && process.arch === 'x64', 'M0-18 Windows 门禁需要 Windows x64')
+assertDelivery(
   ['WINDOWS_X64_FULL', 'WINDOWS_X64_CI_STAGE'].includes(validationMode),
   'M0-18 Windows 验证模式无效',
 )

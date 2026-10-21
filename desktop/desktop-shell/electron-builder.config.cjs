@@ -29,8 +29,8 @@ module.exports = {
   // The assisted installer's default folder comes from executableName (Programs\YumpooDesktop).
   extraMetadata: { name: 'yumpoo-desktop', ...(versionOverride ? { version: versionOverride } : {}) },
   directories: {
-    output: process.env.YUMPOO_M015_OUTPUT_ROOT
-      ? path.resolve(process.env.YUMPOO_M015_OUTPUT_ROOT)
+    output: process.env.YUMPOO_DESKTOP_OUTPUT_ROOT
+      ? path.resolve(process.env.YUMPOO_DESKTOP_OUTPUT_ROOT)
       : path.join(__dirname, 'out', 'builder'),
     buildResources: 'build',
   },

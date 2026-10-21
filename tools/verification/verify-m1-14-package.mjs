@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { collectRegularFiles, quotePowerShellLiteral, sha256 } from './m0-16-utils.mjs'
+import { collectRegularFiles, quotePowerShellLiteral, sha256 } from './package-utils.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const out = path.join(root, 'out', 'm1-14')

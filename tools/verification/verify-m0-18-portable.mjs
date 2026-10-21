@@ -4,23 +4,23 @@ import { runPnpmSync, runSync } from './process-utils.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const baselinePath = path.resolve(
-  process.env.YUMPOO_M018_BASELINE_PATH ?? path.join(repositoryRoot, 'out', 'm0-18', 'openapi-baseline.yaml'),
+  process.env.YUMPOO_CI_BASELINE_PATH ?? path.join(repositoryRoot, 'out', 'contracts', 'openapi-baseline.yaml'),
 )
 const metadataPath = path.resolve(
-  process.env.YUMPOO_M018_BASELINE_METADATA_PATH ??
-    path.join(repositoryRoot, 'out', 'm0-18', 'openapi-baseline.metadata.json'),
+  process.env.YUMPOO_CI_BASELINE_METADATA_PATH ??
+    path.join(repositoryRoot, 'out', 'contracts', 'openapi-baseline.metadata.json'),
 )
-const baseReference = process.env.YUMPOO_M018_BASE_REF ?? 'origin/dev'
+const baseReference = process.env.YUMPOO_CI_BASE_REF ?? 'origin/dev'
 const startedAt = new Date().toISOString()
 const environment = {
   ...process.env,
-  YUMPOO_M018_STARTED_AT: startedAt,
-  YUMPOO_M018_BASELINE_PATH: baselinePath,
-  YUMPOO_M018_BASELINE_METADATA_PATH: metadataPath,
+  YUMPOO_CI_STARTED_AT: startedAt,
+  YUMPOO_CI_BASELINE_PATH: baselinePath,
+  YUMPOO_CI_BASELINE_METADATA_PATH: metadataPath,
 }
 
 runPnpmSync(['run', 'validate:m0-18:evidence'], { cwd: repositoryRoot, env: environment })
-runPnpmSync(['run', 'test:m0-18'], { cwd: repositoryRoot, env: environment })
+runPnpmSync(['run', 'test:delivery'], { cwd: repositoryRoot, env: environment })
 runSync(
   process.execPath,
   [path.join(repositoryRoot, 'tools', 'openapi', 'extract-openapi-baseline.mjs'), baseReference, baselinePath, metadataPath],

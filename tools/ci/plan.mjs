@@ -5,8 +5,8 @@ const mvn = (id, ...args) => ({ id, tool: 'maven', args })
 export function contractSteps(baseRef) {
   return [
     node('openapi-baseline', 'tools/openapi/extract-openapi-baseline.mjs', baseRef,
-      'out/m0-18/openapi-baseline.yaml', 'out/m0-18/openapi-baseline.metadata.json'),
-    node('openapi-compatibility', 'tools/openapi/check-openapi-compat.mjs', 'out/m0-18/openapi-baseline.yaml'),
+      'out/contracts/openapi-baseline.yaml', 'out/contracts/openapi-baseline.metadata.json'),
+    node('openapi-compatibility', 'tools/openapi/check-openapi-compat.mjs', 'out/contracts/openapi-baseline.yaml'),
     pnpm('openapi-compatibility-tests', 'run', 'test:openapi-compat'),
     pnpm('openapi-lint', 'run', 'lint:openapi'),
     pnpm('openapi-examples', 'run', 'validate:openapi-examples'),
@@ -36,9 +36,9 @@ export const assetSteps = [
   node('brand-assets', 'tools/branding/generate-assets.mjs', '--check'),
   ...['m0-12', 'm0-13', 'm0-14'].map(milestone =>
     node(`${milestone}-live-evidence`, `tools/verification/verify-${milestone}-live.mjs`, '--validate-evidence')),
-  node('m0-17-evidence', 'tools/verification/verify-m0-17.mjs', '--validate-contracts'),
+  node('m0-17-evidence', 'tools/verification/verify-backup-restore-output.mjs', '--validate-contracts'),
   node('m0-18-evidence', 'tools/verification/verify-m0-18-evidence.mjs'),
-  node('m1-13-evidence', 'tools/verification/verify-m1-13-evidence.mjs'),
+  node('m1-13-evidence', 'tools/verification/verify-packaged-http-report.mjs'),
   node('m1-15-assets', 'tools/verification/verify-m1-15-assets.mjs'),
   node('m1-15-deployment', 'tools/verification/verify-m1-15-deployment-assets.mjs'),
   ...['02', '08', '21a', '21', '22', '23'].map(step =>
@@ -55,7 +55,7 @@ export function plan(stage, baseRef = 'origin/dev') {
       pnpm('agent-note-tests', 'run', 'test:agent-notes'),
       pnpm('ci-policy-tests', 'run', 'test:ci'),
       pnpm('event-policy-tests', 'run', 'test:event-contract-compat'),
-      pnpm('delivery-policy-tests', 'run', 'test:m0-18'),
+      pnpm('delivery-policy-tests', 'run', 'test:delivery'),
       node('release-policy-tests', '--test', 'tools/release/github.test.mjs', 'tools/release/policy.test.mjs', 'tools/release/promote-release.test.mjs', 'tools/release/prepare-release.test.mjs', 'tools/release/release-notes.test.mjs', 'tools/release/promotion-policy.test.mjs', 'tools/release/back-merge.test.mjs', 'tools/release/ssh-deploy.test.mjs', 'tools/release/version-placeholders.test.mjs', 'tools/release/attestation.test.mjs', 'tools/release/rehearse-release.test.mjs', 'tools/release/desktop-update-signature.test.mjs', 'tools/release/desktop-release.test.mjs'),
       node('version-placeholders', 'tools/release/version-placeholders.mjs'),
       ...contractSteps(baseRef), ...nodeSteps, ...assetSteps,
@@ -65,20 +65,20 @@ export function plan(stage, baseRef = 'origin/dev') {
       mvn('bounded-heap', '-q', '-Dtest=M014BoundedHeapVerification', '-DargLine=-Xmx96m', 'test'),
     ]
     case 'portable': return [
-      node('backup-restore-evidence', 'tools/verification/verify-m0-17.mjs', '--validate-generated-after', '$BACKEND_STARTED'),
-      node('packaged-http', 'tools/verification/verify-m1-13-http.mjs'),
-      node('packaged-http-evidence', 'tools/verification/verify-m1-13-evidence.mjs', '--require-report'),
-      node('create-handoff', 'tools/verification/create-m0-18-handoff.mjs'),
-      node('verify-handoff', 'tools/verification/verify-m0-18-handoff.mjs'),
+      node('backup-restore-evidence', 'tools/verification/verify-backup-restore-output.mjs', '--validate-generated-after', '$BACKEND_STARTED'),
+      node('packaged-http', 'tools/verification/smoke-packaged-http.mjs'),
+      node('packaged-http-evidence', 'tools/verification/verify-packaged-http-report.mjs', '--require-report'),
+      node('create-handoff', 'tools/verification/create-portable-handoff.mjs'),
+      node('verify-handoff', 'tools/verification/verify-portable-handoff.mjs'),
     ]
     case 'windows': return [
       node('desktop-profile-tests', '--test', 'tools/verification/desktop-profile.test.mjs'),
       node('windows-release-restore', 'tools/release/verify-windows.mjs'),
       node('windows-evidence', 'tools/verification/verify-m0-18-windows.mjs'),
       node('desktop-release-artifact', 'tools/verification/collect-desktop-release.mjs'),
-      node('powershell-behavior', 'tools/verification/verify-m1-15-powershell.mjs'),
-      node('server-package', 'tools/verification/package-m1-15-win.mjs'),
-      node('server-package-integrity', 'tools/verification/verify-m1-15-package.mjs'),
+      node('powershell-behavior', 'tools/verification/verify-bootstrap-powershell.mjs'),
+      node('server-package', 'tools/verification/package-server-win.mjs'),
+      node('server-package-integrity', 'tools/verification/verify-server-package.mjs'),
     ]
     default: throw new Error(`未知 CI 阶段：${stage}`)
   }

@@ -2,10 +2,10 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { collectRegularFiles, fileRecord, quotePowerShellLiteral, sha256 } from './m0-16-utils.mjs'
+import { collectRegularFiles, fileRecord, quotePowerShellLiteral, sha256 } from './package-utils.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
-const outputRoot = path.join(repositoryRoot, 'out', 'm1-13')
+const outputRoot = path.join(repositoryRoot, 'out', 'packaged-http')
 const stagingRoot = path.join(outputRoot, 'deployment-staging')
 const zipPath = path.join(outputRoot, 'yumpoo-windows-m1-13.zip')
 const zipHashPath = `${zipPath}.sha256`
