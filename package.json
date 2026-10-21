@@ -8,6 +8,7 @@
     "pnpm": "11.16.x"
   },
   "scripts": {
+    "test:e2e": "node tools/e2e/run-e2e.mjs",
     "verify:deployment-config": "node tools/verification/verify-deployment-config.mjs",
     "generate:brand-assets": "node tools/branding/generate-assets.mjs",
     "check:brand-assets": "node tools/branding/generate-assets.mjs --check",
@@ -54,6 +55,7 @@
   },
   "devDependencies": {
     "@openapitools/openapi-generator-cli": "2.41.0",
+    "@playwright/test": "1.63.0",
     "@redocly/cli": "2.62.1",
     "@resvg/resvg-js": "2.6.2",
     "@typescript-eslint/eslint-plugin": "8.71.1",
