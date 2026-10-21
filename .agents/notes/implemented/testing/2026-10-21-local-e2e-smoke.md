@@ -12,7 +12,7 @@ Status: implemented
 
 Windows 默认使用系统 Edge，其他系统默认 Chrome；通过 `YUMPOO_E2E_BROWSER` 选择已安装的浏览器 channel，不下载浏览器二进制。依赖固定为发布满 14 天以上的稳定版本。每个用例收集 pageerror、console error 与 API 5xx，任意一项均使测试失败；失败保留截图与 trace。
 
-默认运行构建 Web，使用独立 PostgreSQL 容器和干净环境变量启动本地身份后端，再启动 preview。结束时清理本次拥有的进程与容器，日志和报告保留在 `out/e2e/`。`--skip-web-build` 只跳过构建。设置 `YUMPOO_E2E_BASE_URL` 时复用现有测试环境，跳过服务启动与清理，用例创建的数据留在该环境。
+默认运行构建 Web，使用独立 PostgreSQL 容器和干净环境变量启动本地身份后端，再启动 preview。构建与测试命令异步执行，正常结束、失败或收到 SIGINT / SIGTERM 时，清理本次拥有的进程树与容器；Unix 子进程使用独立进程组，Windows 使用 taskkill 结束进程树。日志和报告保留在 `out/e2e/`。`--skip-web-build` 只跳过构建。设置 `YUMPOO_E2E_BASE_URL` 时复用现有测试环境，跳过服务启动与清理，用例创建的数据留在该环境。
 
 ## Alternatives considered
 

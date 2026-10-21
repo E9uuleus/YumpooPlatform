@@ -133,7 +133,7 @@ pnpm test:e2e
 pnpm test:e2e -- --skip-web-build
 ```
 
-默认命令构建 Web，启动独立的 PostgreSQL 容器、后端和 Web preview，依次检查首页登录、创建项目、工作项详情、我的一天、收件箱和管理后台。运行前需释放 8100、18174 端口；结束后自动停止本次启动的进程并删除容器。`--skip-web-build` 复用已有 Web 构建，其他参数转交 Playwright，例如 `pnpm test:e2e -- --headed`。
+默认命令构建 Web，启动独立的 PostgreSQL 容器、后端和 Web preview，依次检查首页登录、创建项目、工作项详情、我的一天、收件箱和管理后台。运行前需释放 8100、18174 端口；正常结束、失败或收到 Ctrl+C / SIGTERM 时，自动停止本次启动的进程树并删除容器。`--skip-web-build` 复用已有 Web 构建，其他参数转交 Playwright，例如 `pnpm test:e2e -- --headed`。
 
 - `YUMPOO_E2E_BASE_URL`：指向已运行的测试环境；设置后不构建或启动服务，也不清理该环境。用例会创建一个带时间戳的项目和工作项，环境需提供“本地测试管理员”身份。
 - `YUMPOO_E2E_BROWSER`：系统浏览器 channel，例如 `msedge` 或 `chrome`；不下载浏览器二进制。

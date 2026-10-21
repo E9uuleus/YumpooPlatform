@@ -4,7 +4,7 @@ import path from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
-import { pnpmInvocation, runPnpmSync, stopProcessTree } from '../verification/process-utils.mjs'
+import { pnpmInvocation, stopProcessTree } from '../verification/process-utils.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const args = process.argv.slice(2).filter(arg => arg !== '--' && arg !== '--skip-web-build')
@@ -12,6 +12,41 @@ const skipWebBuild = process.argv.includes('--skip-web-build')
 const containerName = `yumpoo-e2e-${process.pid}`
 const children = []
 let containerStarted = false
+
+function cleanup() {
+  for (const child of children.splice(0).reverse()) {
+    try {
+      if (process.platform === 'win32') stopProcessTree(child)
+      else if (child.pid) process.kill(-child.pid, 'SIGTERM')
+    } catch (error) {
+      if (error.code !== 'ESRCH') console.error(`停止子进程失败：${error.message}`)
+    }
+  }
+  if (containerStarted) {
+    containerStarted = false
+    try { docker(['rm', '-f', containerName]) }
+    catch (error) { console.error(error.message); process.exitCode = 1 }
+  }
+}
+
+for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143]]) {
+  process.once(signal, () => {
+    cleanup()
+    process.exit(code)
+  })
+}
+
+function runPnpm(args) {
+  const invocation = pnpmInvocation(args)
+  return new Promise((resolve, reject) => {
+    const child = spawn(invocation.command, invocation.args, {
+      cwd: root, stdio: 'inherit', windowsHide: true, detached: process.platform !== 'win32',
+    })
+    children.push(child)
+    child.once('error', reject)
+    child.once('close', (code, signal) => resolve(code ?? (signal === 'SIGINT' ? 130 : 1)))
+  })
+}
 
 function docker(args) {
   const result = spawnSync('docker', args, { encoding: 'utf8', windowsHide: true })
@@ -50,7 +85,9 @@ function startLogged(command, args, env, name) {
   const logs = path.join(root, 'out/e2e/logs')
   fs.mkdirSync(logs, { recursive: true })
   const output = fs.openSync(path.join(logs, `${name}.log`), 'w')
-  const child = spawn(command, args, { cwd: root, env, windowsHide: true, stdio: ['ignore', output, output] })
+  const child = spawn(command, args, {
+    cwd: root, env, windowsHide: true, detached: process.platform !== 'win32', stdio: ['ignore', output, output],
+  })
   fs.closeSync(output)
   child.on('error', error => console.error(`${name} 启动失败：${error.message}`))
   children.push(child)
@@ -64,8 +101,10 @@ try {
       throw new Error('缺少 backend/target/yumpoo-server.jar；先运行 .\\backend\\mvnw.cmd -f backend/pom.xml -DskipTests package')
     }
     if (!skipWebBuild) {
-      runPnpmSync(['--filter', '@yumpoo/api-client', 'build'], { cwd: root, windowsHide: true })
-      runPnpmSync(['--filter', '@yumpoo/web-app', 'build'], { cwd: root, windowsHide: true })
+      for (const target of ['@yumpoo/api-client', '@yumpoo/web-app']) {
+        const code = await runPnpm(['--filter', target, 'build'])
+        if (code !== 0) throw new Error(`${target} 构建失败，退出码：${code}`)
+      }
     }
     docker(['run', '-d', '--rm', '--name', containerName, '-p', '127.0.0.1::5432',
       '-e', 'POSTGRES_DB=yumpoo_e2e', '-e', 'POSTGRES_USER=yumpoo_e2e',
@@ -93,14 +132,10 @@ try {
     startLogged(preview.command, preview.args, process.env, 'preview')
     await waitUntil(() => httpReady('http://127.0.0.1:18174/'), 60_000, 'Web preview')
   }
-  const playwright = pnpmInvocation(['exec', 'playwright', 'test', '-c', 'tools/e2e/playwright.config.ts', ...args])
-  const result = spawnSync(playwright.command, playwright.args, { cwd: root, stdio: 'inherit', windowsHide: true })
-  if (result.error) throw result.error
-  process.exitCode = result.status ?? 1
+  process.exitCode = await runPnpm(['exec', 'playwright', 'test', '-c', 'tools/e2e/playwright.config.ts', ...args])
 } catch (error) {
   console.error(error.message)
   process.exitCode = 1
 } finally {
-  for (const child of children.reverse()) stopProcessTree(child)
-  if (containerStarted) docker(['rm', '-f', containerName])
+  cleanup()
 }
