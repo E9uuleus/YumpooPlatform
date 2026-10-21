@@ -168,7 +168,7 @@ pnpm --filter @yumpoo/web-app preview
 
 统一验证入口使用 **`pnpm run ci`**，避免与 pnpm 自带的 `ci` 命令混淆。完整链路与失败定位见 [CI 与 PR](.github/CI.md)。
 
-REST 契约以 [yumpoo-v1.yaml](contracts/openapi/yumpoo-v1.yaml) 为唯一来源。修改后执行 `pnpm generate:api-client`，通过 `pnpm check:openapi` 校验；事件契约使用 `pnpm validate:event-contracts`。`packages/api-client/src/generated/` 由工具生成。
+REST 契约编辑入口是 [contracts/openapi/yumpoo-v1/](contracts/openapi/yumpoo-v1/)。修改分域源文件后运行 `pnpm generate:openapi` 生成 [yumpoo-v1.yaml](contracts/openapi/yumpoo-v1.yaml)，禁止手改生成文件；再执行 `pnpm generate:api-client`，通过 `pnpm check:openapi` 校验。兼容检查、文档和客户端生成继续读取单文件；事件契约使用 `pnpm validate:event-contracts`。`packages/api-client/src/generated/` 由工具生成。
 
 ## Windows 部署
 
