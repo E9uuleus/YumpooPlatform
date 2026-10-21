@@ -29,9 +29,9 @@ export function useTimerCandidates(active: Ref<boolean>, filters: { projects?: R
       const page = await timeTrackingApi.listTimerCandidates({
         q: query.value.trim(), scope: searching.value ? ListTimerCandidatesScopeEnum.All : scope.value,
         offset: append ? nextOffset.value ?? 0 : 0, limit: 25,
-        projectId: filters.projects?.value.length ? [...filters.projects.value] : undefined,
-        assignedToMe: filters.assignedToMe?.value ? true : undefined,
-        excludeCompleted: hideCompleted.value && !searching.value ? true : undefined,
+        ...(filters.projects?.value.length ? { projectId: [...filters.projects.value] } : {}),
+        ...(filters.assignedToMe?.value ? { assignedToMe: true } : {}),
+        ...(hideCompleted.value && !searching.value ? { excludeCompleted: true } : {}),
       }, { signal: abort.signal })
       if (request !== revision) return
       const merged = append ? [...items.value, ...page.items] : page.items

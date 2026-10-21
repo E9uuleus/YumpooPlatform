@@ -34,7 +34,8 @@ describe('候选服务端筛选', () => {
     expect(api.listTimerCandidates).toHaveBeenLastCalledWith(expect.objectContaining({ projectId: ['p'], assignedToMe: true, excludeCompleted: true, scope: 'PERSONAL' }), expect.anything())
     result.query.value = ' 周报 '
     await settle(200)
-    expect(api.listTimerCandidates).toHaveBeenLastCalledWith(expect.objectContaining({ q: '周报', scope: 'ALL', excludeCompleted: undefined, projectId: ['p'], assignedToMe: true }), expect.anything())
+    expect(api.listTimerCandidates).toHaveBeenLastCalledWith(expect.objectContaining({ q: '周报', scope: 'ALL', projectId: ['p'], assignedToMe: true }), expect.anything())
+    expect(api.listTimerCandidates.mock.calls.at(-1)![0]).not.toHaveProperty('excludeCompleted')
   })
 
   it('只从首段读取计数，追加时保留，重新加载缺省字段归零', async () => {
