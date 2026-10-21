@@ -8,6 +8,7 @@
     "pnpm": "11.16.x"
   },
   "scripts": {
+    "verify:deployment-config": "node tools/verification/verify-deployment-config.mjs",
     "generate:brand-assets": "node tools/branding/generate-assets.mjs",
     "check:brand-assets": "node tools/branding/generate-assets.mjs --check",
     "ci": "node tools/ci/run.mjs",
