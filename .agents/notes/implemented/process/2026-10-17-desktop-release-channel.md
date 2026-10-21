@@ -122,6 +122,7 @@ Status: implemented
 
 - `DesktopBridge.update` 提供 `getState / check / restart / onState`，只接受主窗口主框架的调用。Web 只在桥接存在且状态为 `ready` 时显示「重启以更新」横幅；
 - 托盘提示和托盘原生菜单在更新就绪时显示版本与「重启以更新到 X」；诊断窗显示更新状态；
+- 托盘右键菜单显示版本与更新状态，可以检查、下载和重启更新；检查与下载时保持菜单打开，旧壳缺少更新状态时隐藏该入口。
 - 发往本 origin 的请求由 `onBeforeSendHeaders` 加上 `X-Client-Type: ELECTRON`、`X-Client-Version`、`X-Client-Protocol-Version: 1`，为服务端最低版本闸门做准备。其他来源的请求不会带这些头。
 
 **卸载边界**：

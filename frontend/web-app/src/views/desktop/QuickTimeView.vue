@@ -19,6 +19,8 @@ import { groupCandidates, placementHint, projectTones, quickPlan, shortDuration,
 import brandLogo from '../../assets/brand/logo.svg'
 
 const bridge = window.yumpooDesktop?.quick
+const pinnable = !!bridge?.setPinned
+const pinned = ref(false)
 const session = useSession()
 const tracker = useTimeTracker()
 useDesktopSurfaceOpacity()
@@ -97,6 +99,7 @@ watch(() => todayDay.recordedMs.value, (to, from) => {
 }, { immediate: true })
 
 const offOpen = bridge?.onOpen(value => {
+  pinned.value = value.pinned === true
   context.value = value
   project.value = value.projectId
   openId.value = null
@@ -112,7 +115,22 @@ const offOpen = bridge?.onOpen(value => {
   void nextTick(() => search.value?.focus())
 })
 const offClosing = bridge?.onClosing(() => { closing.value = true })
-onBeforeUnmount(() => { offOpen?.(); offClosing?.(); clearTimeout(toastTimer); cancelAnimationFrame(countFrame) })
+const offPinned = bridge?.onPinned?.(value => { pinned.value = value })
+onBeforeUnmount(() => { offOpen?.(); offClosing?.(); offPinned?.(); clearTimeout(toastTimer); cancelAnimationFrame(countFrame) })
+
+function startResize(event: PointerEvent) {
+  const grip = event.currentTarget as HTMLElement
+  grip.setPointerCapture(event.pointerId)
+  void bridge!.resize!(true)
+  let ended = false
+  const end = () => {
+    if (ended) return
+    ended = true
+    void bridge!.resize!(false)
+  }
+  grip.addEventListener('pointerup', end, { once: true })
+  grip.addEventListener('lostpointercapture', end, { once: true })
+}
 
 function toggle(item: TimerCandidate) {
   if (recording.value !== 'idle') return
@@ -171,7 +189,10 @@ function keydown(event: KeyboardEvent) {
       :style="{ transformOrigin }"
       aria-label="快捷工时"
     >
-      <header class="quick-head">
+      <header
+        class="quick-head"
+        :class="{ 'is-draggable': pinnable }"
+      >
         <img
           class="quick-logo"
           :src="brandLogo"
@@ -180,13 +201,16 @@ function keydown(event: KeyboardEvent) {
         <strong>快捷工时</strong>
         <span class="quick-total"><Clock />今日 <b>{{ shortDuration(total) }}</b></span>
         <button
+          v-if="pinnable"
           type="button"
           class="quick-icon"
-          aria-label="打开主界面"
-          title="打开主界面"
-          @click="bridge?.openMain()"
+          :class="{ 'is-pinned': pinned }"
+          :aria-pressed="pinned"
+          :aria-label="pinned ? '取消固定' : '固定小窗'"
+          :title="pinned ? '取消固定' : '固定小窗'"
+          @click="bridge!.setPinned!(!pinned)"
         >
-          <TimerIcon name="external" />
+          <TimerIcon name="pin" />
         </button>
         <button
           type="button"
@@ -196,6 +220,15 @@ function keydown(event: KeyboardEvent) {
           @click="bridge?.openMain('/settings')"
         >
           <TimerIcon name="settings" />
+        </button>
+        <button
+          v-if="pinned"
+          type="button"
+          class="quick-icon"
+          aria-label="关闭"
+          @click="bridge?.close()"
+        >
+          <TimerIcon name="close" />
         </button>
       </header>
       <label class="quick-search">
@@ -301,6 +334,12 @@ function keydown(event: KeyboardEvent) {
           我的一天<ArrowRight />
         </button>
       </footer>
+      <span
+        v-if="bridge?.resize"
+        class="quick-grip"
+        aria-hidden="true"
+        @pointerdown.prevent="startResize"
+      ><TimerIcon name="resize" /></span>
       <div
         class="quick-toast"
         :class="{ 'is-visible': toastVisible }"
@@ -330,6 +369,12 @@ button:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:-2p
 .quick-icon{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;color:var(--yp-text-secondary)}
 .quick-icon:hover{background:var(--yp-timer-hover);color:var(--yp-text-primary)}
 .quick-icon svg{width:16px;height:16px}
+.quick-icon.is-pinned{color:var(--yp-timer-accent);background:color-mix(in srgb,var(--yp-timer-accent) 12%,transparent)}
+.quick-head.is-draggable{app-region:drag}
+.quick-head.is-draggable button{app-region:no-drag}
+.quick-grip{position:absolute;right:4px;bottom:4px;width:16px;height:16px;cursor:nwse-resize;opacity:.35;color:var(--yp-text-secondary)}
+.quick-grip svg{transform:rotate(90deg)}
+.quick-card:hover .quick-grip{opacity:.6}
 .quick-search{display:flex;align-items:center;gap:6px;height:32px;margin:8px 10px 6px;padding:0 10px;border-radius:8px;background:var(--yp-timer-sunken);color:var(--yp-text-muted);flex-shrink:0}
 .quick-search svg{width:15px;height:15px}
 .quick-search :deep(.el-input){flex:1;min-width:0;--el-input-height:30px}

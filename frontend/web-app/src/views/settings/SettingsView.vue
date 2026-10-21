@@ -9,6 +9,7 @@ import { useProjectRecents } from '../../composables/useProjectRecents'
 import WindowSettingsCard from '../../components/settings/WindowSettingsCard.vue'
 import GeneralSettingsCard from '../../components/settings/GeneralSettingsCard.vue'
 import AppearanceSettingsCard from '../../components/settings/AppearanceSettingsCard.vue'
+import { plainRailProjects } from '../../components/desktop/railProjects'
 
 // Shells before 1.1.0 and browsers have no preferences bridge: the page then offers appearance only.
 const bridge = window.yumpooDesktop?.preferences
@@ -38,7 +39,7 @@ async function refresh() {
 async function run(action: () => Promise<unknown>) {
   if (busy.value) return
   busy.value = true
-  try { await action() } catch { ElMessage.error('设置未能保存，请重试。') } finally { busy.value = false }
+  try { await action() } catch (error) { console.error('[YUMPOO_SETTINGS_SAVE_FAILED]', error); ElMessage.error('设置未能保存，请重试。') } finally { busy.value = false }
   await refresh().catch(() => undefined)
 }
 function change(value: DesktopPreferencesChange) {
@@ -60,7 +61,7 @@ function shortcut(value: string | null) {
   })
 }
 function saveProjects(items: RailProject[]) {
-  if (scope.value) change({ railProjects: { owner: scope.value, items } })
+  if (scope.value) change({ railProjects: { owner: scope.value, items: plainRailProjects(items) } })
 }
 
 const offChange = bridge?.onChange(value => { preferences.value = value })

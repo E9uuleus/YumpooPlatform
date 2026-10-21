@@ -159,7 +159,7 @@ function updateState(): DesktopUpdateState {
 function publishUpdateState(state: DesktopUpdateState): void {
   const window = mainWindow
   if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send(UPDATE_STATE_CHANNEL, state)
-  timerController?.setUpdateReady(state.phase === 'ready' && state.version ? { version: state.version, restart: restartForUpdate } : undefined)
+  timerController?.setUpdate(state, { check: () => updateController?.check(), download: () => updateController?.download(), restart: restartForUpdate })
 }
 
 /** Goes through the normal quit, including the timer's exit confirmation; the verified installer runs in will-quit. */

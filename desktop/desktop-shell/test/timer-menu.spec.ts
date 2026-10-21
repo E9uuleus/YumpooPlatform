@@ -56,19 +56,29 @@ beforeEach(() => { mocks.handlers.clear(); mocks.windows.length = 0; mocks.curso
 afterEach(() => { vi.useRealTimers() })
 
 describe('timer quick panel window', () => {
+  it('接受三个更新动作，检查和下载时保持打开', () => {
+    const { menu, onAction } = setup()
+    menu.prewarm(); popup().contentEvents.get('did-finish-load')?.()
+    menu.open('pointer', state)
+    act(sender(), 'check-update'); act(sender(), 'download-update')
+    expect(popup().hide).not.toHaveBeenCalled()
+    act(sender(), 'restart-update')
+    expect(popup().hide).toHaveBeenCalledOnce()
+    expect(onAction.mock.calls.map(call => call[0])).toEqual(['check-update', 'download-update', 'restart-update'])
+  })
   it('prewarms one hidden isolated popup and only opens after the page has loaded', () => {
     const { menu } = setup()
     expect(menu.open('tray', state)).toBe(false)
     menu.prewarm()
     expect(mocks.windows).toHaveLength(1)
-    expect(mocks.windows[0]!.options).toMatchObject({ frame: false, transparent: true, resizable: false, movable: false, skipTaskbar: true, type: 'toolbar', show: false, width: 312, height: 432,
+    expect(mocks.windows[0]!.options).toMatchObject({ frame: false, transparent: true, resizable: false, movable: false, skipTaskbar: true, type: 'toolbar', show: false, width: 312, height: 472,
       webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, partition: 'persist:yumpoo-authenticated' } })
     expect(popup().setAlwaysOnTop).toHaveBeenCalledWith(true, 'pop-up-menu')
     expect(mocks.load).toHaveBeenCalledWith('https://yumpoo.example/timer/menu')
     expect(menu.open('tray', state)).toBe(false)
     popup().contentEvents.get('did-finish-load')?.()
     expect(menu.open('tray', state)).toBe(true)
-    expect(popup().setBounds).toHaveBeenCalledWith({ x: 968, y: 320, width: 312, height: 432 })
+    expect(popup().setBounds).toHaveBeenCalledWith({ x: 968, y: 280, width: 312, height: 472 })
     expect(popup().webContents.send).toHaveBeenCalledWith('yumpoo:timer:menu-state', state)
     expect(popup().show).toHaveBeenCalledOnce()
     menu.update({ ...state, pinned: false })

@@ -1,13 +1,11 @@
 <script setup lang="ts">
-import { computed, type DefineComponent } from 'vue'
+import { computed } from 'vue'
 import type { TimerCandidate } from '@yumpoo/api-client'
-import { ElDatePicker as ElDatePickerRaw } from 'element-plus'
 import { Calendar, Check, Plus } from '@element-plus/icons-vue'
 import TimerIcon from '../timer/TimerIcon.vue'
 import { workItemLabelColorValue } from '../projects/workItemLabelColors'
-import { QUICK_DURATIONS, shortDuration, spokenDuration, STATUS_PILLS, type DateChoice } from './quickTime'
-
-const ElDatePicker = ElDatePickerRaw as unknown as DefineComponent
+import { QUICK_DURATIONS, shortDuration, spokenDuration, STATUS_PILLS, stepDate, stepperLabel, type DateChoice } from './quickTime'
+import { addDays } from '../team/teamDashboardModel'
 
 const props = defineProps<{
   item: TimerCandidate
@@ -30,7 +28,13 @@ const custom = defineModel<boolean>('custom', { required: true })
 const customText = defineModel<string>('customText', { required: true })
 
 const pill = computed(() => STATUS_PILLS[props.item.statusCategory] ?? { label: props.item.statusCategory, tone: 'neutral' as const })
-const dates: Array<{ value: DateChoice; label: string }> = [{ value: 'today', label: '今天' }, { value: 'yesterday', label: '昨天' }, { value: 'pick', label: '选择日期' }]
+const dates: Array<{ value: DateChoice; label: string }> = [{ value: 'today', label: '今天' }, { value: 'yesterday', label: '昨天' }]
+const target = computed(() => dateChoice.value === 'today' ? props.today : dateChoice.value === 'yesterday' ? addDays(props.today, -1) : pickedDate.value)
+function step(delta: -1 | 1) {
+  const next = stepDate(target.value, delta, props.today)
+  dateChoice.value = next.choice
+  pickedDate.value = next.picked
+}
 function chooseDuration(ms: number) { custom.value = false; durationMs.value = ms }
 </script>
 
@@ -91,17 +95,23 @@ function chooseDuration(ms: number) { custom.value = false; durationMs.value = m
               >
                 {{ option.label }}
               </button>
-              <el-date-picker
-                v-if="expanded && dateChoice === 'pick'"
-                v-model="pickedDate"
-                class="quick-date"
-                type="date"
-                size="small"
-                value-format="YYYY-MM-DD"
-                :clearable="false"
-                :disabled-date="(date: Date) => date.getTime() > Date.parse(`${today}T23:59:59`)"
-                aria-label="选择日期"
-              />
+              <span
+                class="quick-stepper"
+                :class="{ 'is-active': dateChoice === 'pick' }"
+              >
+                <button
+                  type="button"
+                  aria-label="前一天"
+                  @click="step(-1)"
+                >‹</button>
+                <span class="quick-stepper__label">{{ stepperLabel(target) }}</span>
+                <button
+                  type="button"
+                  aria-label="后一天"
+                  :disabled="target >= today"
+                  @click="step(1)"
+                >›</button>
+              </span>
             </div>
             <div
               class="quick-chips"
@@ -204,8 +214,10 @@ button:focus-visible,.quick-row:focus-visible{outline:2px solid var(--yp-timer-a
 .quick-composer{display:flex;flex-direction:column;gap:8px;padding:8px 6px 12px 20px}
 .quick-chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 .quick-chip{display:inline-flex;align-items:center;height:24px;padding:0 9px;border:1px solid var(--yp-timer-hairline);border-radius:999px;color:var(--yp-text-secondary);font-size:12px;white-space:nowrap}
-.quick-chip.is-active{border-color:var(--yp-timer-accent);background:color-mix(in srgb,var(--yp-timer-accent) 12%,transparent);color:var(--yp-timer-accent)}
-.quick-date{--el-date-editor-width:132px}
+.quick-chip.is-active,.quick-stepper.is-active{border-color:var(--yp-timer-accent);background:color-mix(in srgb,var(--yp-timer-accent) 12%,transparent);color:var(--yp-timer-accent)}
+.quick-stepper{display:inline-flex;align-items:center;height:24px;border:1px solid var(--yp-timer-hairline);border-radius:999px;color:var(--yp-text-secondary);font-size:12px}
+.quick-stepper button{width:22px}
+.quick-stepper__label{font-variant-numeric:tabular-nums}
 .quick-custom{box-sizing:border-box;width:84px;height:24px;padding:0 8px;border:1px solid var(--yp-input-border);border-radius:999px;background:var(--yp-input-bg);color:var(--yp-text-primary);font:12px var(--yp-font-family);outline:0}
 .quick-custom:focus{border-color:var(--yp-timer-accent)}
 .quick-hint{display:flex;align-items:center;gap:6px;margin:0;color:var(--yp-text-secondary);font-size:12px;font-variant-numeric:tabular-nums}

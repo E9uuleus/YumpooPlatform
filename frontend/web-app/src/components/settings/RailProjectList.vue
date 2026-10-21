@@ -8,6 +8,7 @@ import { projectsApi } from '../../api/client'
 import { MY_PROJECT_ACCESSES } from '../projects/projectScope'
 import { projectColors } from '../team/teamDashboardModel'
 import { projectInitial } from '../desktop/quickTime'
+import { sameRailProjects } from '../desktop/railProjects'
 
 const ElSelect = ElSelectRaw as unknown as DefineComponent
 const ElOption = ElOptionRaw as unknown as DefineComponent
@@ -48,6 +49,8 @@ function drop(target: number) {
     项目<span class="settings-section__aside">拖动排序 · 最多 {{ MAX_PROJECTS }} 个</span>
     <el-button
       size="small"
+      :disabled="sameRailProjects(items, defaults)"
+      :title="sameRailProjects(items, defaults) ? '已是默认项目' : undefined"
       @click="emit('update', defaults)"
     >
       恢复默认

@@ -23,6 +23,16 @@ beforeEach(() => {
 afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.unmount()); vi.useRealTimers(); vi.unstubAllGlobals() })
 
 describe('desktop quick panel', () => {
+  it('旧壳没有更新状态时隐藏更新行', async () => {
+    const wrapper = await menu(base)
+    expect(wrapper.find('.menu-meta').exists()).toBe(false)
+  })
+  it('显示检查结果并通过原通道再次检查', async () => {
+    const wrapper = await menu({ ...base, update: { phase: 'idle', currentVersion: '1.1.2', channel: null, checkedAt: now } })
+    expect(wrapper.get('.menu-meta').text()).toBe('已是最新 · v1.1.2')
+    await wrapper.get('.menu-foot button:not(.is-exit)').trigger('click')
+    expect(runMenuAction).toHaveBeenCalledWith('check-update')
+  })
   it('opens inbox and changes its independent preference only when the shell supports it', async () => {
     const setPreferences = vi.fn(async () => ({ toasts: false }))
     vi.stubGlobal('yumpooDesktop', { inbox: { getPreferences: async () => ({ toasts: true }), setPreferences }, timer: { runMenuAction, onMenuState: (listener: typeof push) => { push = listener; return vi.fn() } } })

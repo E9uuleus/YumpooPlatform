@@ -4,7 +4,9 @@ import { isTrustedAuthIpcSender } from './auth-ipc'
 import { createWindowOptions } from './window-policy'
 import { installSecurityGuards } from './security-guards'
 import { loadSurface } from './surface-load'
-import { placeBeside, placeMenu, QUICK_PANEL, taskbarEdge, type Rect } from './timer-geometry'
+import { applicationIcon } from './application-icon'
+import { clampRect, placeBeside, placeMenu, QUICK_PANEL, QUICK_PANEL_MAX, resizeFrom, taskbarEdge, type Rect } from './timer-geometry'
+import type { TimerPreferenceStore } from './timer-preferences'
 
 const CLOSE_MS = 180
 /** Pages the panel may open in the main window: the settings page, or one day of My Day. */
@@ -13,6 +15,7 @@ const MAIN_PATH = /^\/(?:settings(?:\?section=rail)?|workspace\/[a-z0-9._@-]{1,6
 export type QuickPanelRequest = { source: 'tray' | 'shortcut' } | { source: 'rail'; projectId: string; anchor: Rect; side: TimerDockSide }
 
 export interface QuickPanelHost {
+  level(): { pinned: boolean; aboveTaskbar: boolean }
   openMain(path?: string): void
   /** The panel opened, closed or switched project; the rail stays out while the panel is open for one of its projects. */
   changed(): void
@@ -31,8 +34,10 @@ export class QuickPanelController {
   private projectId: string | null = null
   private source: QuickPanelRequest['source'] = 'tray'
   private installed = false
+  private resizeTimer: ReturnType<typeof setInterval> | undefined
+  private resizeGuard: ReturnType<typeof setTimeout> | undefined
 
-  constructor(private readonly origin: string, private readonly preload: string, private readonly host: QuickPanelHost) {}
+  constructor(private readonly origin: string, private readonly preload: string, private readonly prefs: TimerPreferenceStore, private readonly host: QuickPanelHost) {}
 
   install(): void {
     if (this.installed) return
@@ -47,7 +52,18 @@ export class QuickPanelController {
       this.hide()
       this.host.openMain(path)
     })
-    app.on('will-quit', () => { clearInterval(this.watch); clearTimeout(this.closeTimer) })
+    ipcMain.handle('yumpoo:quick:pin', (event, pinned: unknown) => {
+      if (!this.isSender(event)) throw new Error('UNTRUSTED_IPC_SENDER')
+      if (typeof pinned !== 'boolean') throw new Error('INVALID_QUICK_PIN')
+      this.setPinned(pinned)
+    })
+    ipcMain.handle('yumpoo:quick:resize', (event, active: unknown) => {
+      if (!this.isSender(event)) throw new Error('UNTRUSTED_IPC_SENDER')
+      if (typeof active !== 'boolean') throw new Error('INVALID_QUICK_RESIZE')
+      if (active) { if (!this.pinned()) this.setPinned(true); this.followCursor() }
+      else this.endResize()
+    })
+    app.on('will-quit', () => { clearInterval(this.watch); clearTimeout(this.closeTimer); this.endResize() })
   }
 
   isSender(event: IpcMainInvokeEvent): boolean { return isTrustedAuthIpcSender(event, this.window, this.origin) }
@@ -56,25 +72,79 @@ export class QuickPanelController {
   isVisible(): boolean { return !!this.window && !this.window.isDestroyed() && this.window.isVisible() && !this.closeTimer }
 
   /** The rail project the open panel shows, so the rail does not tuck away beneath it. */
-  railProject(): string | null { return this.isVisible() && this.source === 'rail' ? this.projectId : null }
+  railProject(): string | null { return !this.pinned() && this.isVisible() && this.source === 'rail' ? this.projectId : null }
+
+  private pinned(): boolean { return this.prefs.get().quickPinned }
+
+  applyLevel(): void {
+    const window = this.window
+    if (!window || window.isDestroyed()) return
+    window.setSkipTaskbar(!this.pinned())
+    if (!this.pinned()) window.setAlwaysOnTop(true, 'pop-up-menu')
+    else {
+      const { pinned, aboveTaskbar } = this.host.level()
+      if (aboveTaskbar && pinned) window.setAlwaysOnTop(true, 'screen-saver')
+      else window.setAlwaysOnTop(pinned)
+    }
+  }
+
+  setPinned(value: boolean): void {
+    const window = this.window
+    this.prefs.update({ quickPinned: value, ...(value && window ? { quickBounds: window.getBounds() } : {}) })
+    this.applyLevel()
+    window?.webContents.send('yumpoo:quick:pinned', value)
+    this.host.changed()
+    clearInterval(this.watch)
+    if (!value && window?.isVisible()) {
+      this.focused = window.isFocused()
+      this.watch = setInterval(() => this.dismissWhenOutside(), 120)
+    }
+  }
+
+  private saveBounds(): void {
+    if (this.pinned() && this.window && !this.window.isDestroyed()) this.prefs.update({ quickBounds: this.window.getBounds() })
+  }
+
+  private followCursor(): void {
+    const window = this.window
+    if (!window || window.isDestroyed() || this.resizeTimer) return
+    const start = window.getBounds(), cursor = screen.getCursorScreenPoint()
+    this.resizeTimer = setInterval(() => {
+      if (window.isDestroyed()) { this.endResize(); return }
+      const point = screen.getCursorScreenPoint()
+      window.setBounds(resizeFrom(start, point.x - cursor.x, point.y - cursor.y, screen.getDisplayMatching(start).workArea))
+    }, 16)
+    this.resizeGuard = setTimeout(() => this.endResize(), 60_000)
+  }
+
+  private endResize(): void {
+    clearInterval(this.resizeTimer); clearTimeout(this.resizeGuard)
+    this.resizeTimer = undefined
+    this.saveBounds()
+  }
 
   prewarm(): void {
     if (this.window && !this.window.isDestroyed()) return
+    const size = this.prefs.get().quickBounds ?? QUICK_PANEL
     const window = new BrowserWindow({ ...createWindowOptions(this.preload, app.isPackaged),
-      width: QUICK_PANEL.width, height: QUICK_PANEL.height, minWidth: QUICK_PANEL.width, minHeight: QUICK_PANEL.height,
+      width: size.width, height: size.height, minWidth: QUICK_PANEL.width, minHeight: QUICK_PANEL.height,
+      maxWidth: QUICK_PANEL_MAX.width, maxHeight: QUICK_PANEL_MAX.height,
       frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false, thickFrame: false,
-      resizable: false, movable: false, minimizable: false, maximizable: false, fullscreenable: false,
-      skipTaskbar: true, type: 'toolbar', alwaysOnTop: true, title: 'YumpooPlatform · 快捷工时',
+      resizable: false, movable: true, minimizable: false, maximizable: false, fullscreenable: false,
+      skipTaskbar: !this.pinned(), alwaysOnTop: true, title: 'YumpooPlatform · 快捷工时', icon: applicationIcon(),
     })
     this.window = window
     this.ready = false
-    window.setAlwaysOnTop(true, 'pop-up-menu')
+    this.applyLevel()
     installSecurityGuards(window.webContents, this.origin)
     window.on('page-title-updated', event => event.preventDefault())
     window.on('focus', () => { this.focused = true })
-    window.on('blur', () => { if (this.focused) this.hide() })
+    window.on('blur', () => { if (this.focused && !this.pinned()) this.hide() })
+    window.on('will-move', () => { if (!this.pinned()) this.setPinned(true) })
+    window.on('moved', () => this.saveBounds())
     window.on('closed', () => {
       if (this.window !== window) return
+      this.endResize()
       this.window = null; this.ready = false; clearInterval(this.watch); clearTimeout(this.closeTimer); this.closeTimer = undefined
       this.host.changed()
     })
@@ -101,16 +171,30 @@ export class QuickPanelController {
     const window = this.window
     if (!window || window.isDestroyed() || !this.ready) { this.prewarm(); return false }
     const projectId = request.source === 'rail' ? request.projectId : null
-    if ((this.isVisible() || Date.now() - this.hiddenAt < 250) && projectId === this.projectId) { this.hide(); return true }
+    const pinned = this.pinned()
+    if (pinned && this.isVisible()) {
+      if (request.source === 'rail' && projectId !== this.projectId) {
+        this.projectId = projectId
+        this.source = request.source
+        window.webContents.send('yumpoo:quick:open', { projectId, projects, origin: request.side, pinned: true } satisfies QuickPanelContext)
+      }
+      window.show(); window.focus()
+      return true
+    }
+    if (!pinned && (this.isVisible() || Date.now() - this.hiddenAt < 250) && projectId === this.projectId) { this.hide(); return true }
     const cursor = screen.getCursorScreenPoint()
-    const display = request.source === 'rail' ? screen.getDisplayMatching(request.anchor) : screen.getDisplayNearestPoint(cursor)
-    window.setBounds(request.source === 'rail' ? placeBeside(request.anchor, request.side, display.workArea)
-      : placeMenu(request.source === 'tray' ? 'tray' : 'corner', cursor, display, QUICK_PANEL))
+    const saved = this.prefs.get().quickBounds
+    const bounds = saved ?? window.getBounds()
+    const display = pinned ? screen.getDisplayMatching(bounds)
+      : request.source === 'rail' ? screen.getDisplayMatching(request.anchor) : screen.getDisplayNearestPoint(cursor)
+    window.setBounds(pinned ? clampRect(bounds, display.workArea)
+      : request.source === 'rail' ? placeBeside(request.anchor, request.side, display.workArea, saved ?? QUICK_PANEL)
+      : placeMenu(request.source === 'tray' ? 'tray' : 'corner', cursor, display, saved ?? QUICK_PANEL))
     clearTimeout(this.closeTimer)
     this.closeTimer = undefined
     this.projectId = projectId
     this.source = request.source
-    const context: QuickPanelContext = { projectId, projects, origin: request.source === 'rail' ? request.side : taskbarEdge(display) }
+    const context: QuickPanelContext = { projectId, projects, pinned, origin: !pinned && request.source === 'rail' ? request.side : taskbarEdge(display) }
     window.webContents.send('yumpoo:quick:open', context)
     const focused = BrowserWindow.getFocusedWindow()
     this.opener = focused && focused !== window ? focused : null
@@ -120,7 +204,7 @@ export class QuickPanelController {
     window.focus()
     setTimeout(() => { if (this.isVisible() && !window.isFocused()) window.focus() }, 0)
     clearInterval(this.watch)
-    this.watch = setInterval(() => this.dismissWhenOutside(), 120)
+    if (!pinned) this.watch = setInterval(() => this.dismissWhenOutside(), 120)
     this.host.changed()
     return true
   }

@@ -65,6 +65,7 @@ export class UpdateController {
   private verified: VerifiedUpdate | undefined
   private lastCheck = 0
   private started = false
+  private checkedAt: number | undefined
 
   constructor(private readonly options: UpdateControllerOptions) {
     const updater = options.updater
@@ -74,7 +75,7 @@ export class UpdateController {
     updater.disableWebInstaller = true
     updater.setFeedURL(options.update.feed)
     updater.on('checking-for-update', () => this.set('checking'))
-    updater.on('update-not-available', () => this.set('idle'))
+    updater.on('update-not-available', () => { this.checkedAt = this.options.now(); this.set('idle') })
     updater.on('update-available', (info: { version?: string }) => {
       this.version = typeof info?.version === 'string' ? info.version : undefined
       if (!updater.autoDownload) { this.set('available'); return }
@@ -103,6 +104,7 @@ export class UpdateController {
       phase: this.phase,
       currentVersion: this.options.currentVersion,
       channel: this.options.update.channel,
+      ...(this.phase === 'idle' && this.checkedAt !== undefined ? { checkedAt: this.checkedAt } : {}),
       ...(this.version ? { version: this.version } : {}),
       ...(this.phase === 'downloading' && this.percent !== undefined ? { percent: this.percent } : {}),
       ...(this.phase === 'error' && this.error ? { error: this.error } : {}),

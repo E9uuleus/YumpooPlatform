@@ -64,6 +64,14 @@ async function download(updater: FakeUpdater) {
 }
 
 describe('应用内更新', () => {
+  it('检查无更新后记录时间，仅 idle 状态公开', () => {
+    const { controller, updater } = setup()
+    expect(controller.getState()).not.toHaveProperty('checkedAt')
+    updater.emit('update-not-available')
+    expect(controller.getState()).toMatchObject({ phase: 'idle', checkedAt: 1_000_000 })
+    updater.emit('checking-for-update')
+    expect(controller.getState()).not.toHaveProperty('checkedAt')
+  })
   it('按偏好自动下载，但从不自动安装，禁止降级', () => {
     expect(setup({ autoDownload: false }).updater.autoDownload).toBe(false)
     const { updater } = setup()
