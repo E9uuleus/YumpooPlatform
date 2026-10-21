@@ -43,7 +43,6 @@ contracts/              OpenAPI、事件 Schema 与契约样例
 deployment/windows/     Windows 部署模板、维护脚本与运行手册
 tools/                  契约生成、架构检查、CI 与打包工具
 scripts/                文档链接与 Agent Note 校验
-evidence/               验收记录与验证证据
 .agents/notes/           活动决策记录与冻结历史
 ```
 
@@ -186,13 +185,13 @@ REST 契约以 [yumpoo-v1.yaml](contracts/openapi/yumpoo-v1.yaml) 为唯一来�
 在 Windows x64 完成上述构建与验证后执行：
 
 ```powershell
-pnpm package:m1-15:win
-pnpm verify:m1-15:package
+pnpm package:server:win
+pnpm verify:server:package
 
 pnpm --filter @yumpoo/desktop-shell package:win
 ```
 
-服务器包位于 `out/m1-15/yumpoo-windows-server-m1-15.zip`，包含当前构建的 JAR、Web、迁移和部署资产，并附带 SHA-256 与产物清单；桌面包位于 `desktop/desktop-shell/out/Yumpoo Desktop-win32-x64/`。现有打包命令沿用里程碑编号。
+服务器包位于 `out/m1-15/yumpoo-windows-server-m1-15.zip`，包含当前构建的 JAR、Web、迁移和部署资产，并附带 SHA-256 与产物清单；桌面包位于 `desktop/desktop-shell/out/release/`。服务器产物名称暂时冻结，以兼容发布工具、构建证明与主机引擎。
 
 ### 配置与启动
 

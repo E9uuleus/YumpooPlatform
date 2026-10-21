@@ -54,7 +54,6 @@ packages/preload-contract/       Typed Electron preload IPC contract
 
 deployment/windows/              Windows deployment scripts, runbooks, and checklists
 docs/                            Product, architecture, delivery, and operations documentation
-evidence/                        Milestone acceptance evidence and verification records
 
 tools/                           Workspace validation and automation utilities
 tools/architecture/              Workspace boundary and architecture checks

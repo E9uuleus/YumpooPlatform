@@ -26,6 +26,6 @@ Element Plus 在输入框聚焦时绘制 1px 内描边，全局样式又给 `.el
 
 ## Consequences
 
-本决策覆盖 `docs/03-frontend/05-control-design.md` 中“输入框焦点同样使用 2px 外环”的写法；按钮焦点环不变。新增输入样式应引用 `--yp-input-*` Token，不得为文本输入重新加入 `outline` 或外扩 `box-shadow`。`tools/verification/verify-m2-21a-assets.mjs` 仍校验快速添加行由外层边框显示焦点，内部 wrapper 保持 `outline: none`。
+本决策覆盖 `docs/03-frontend/05-control-design.md` 中“输入框焦点同样使用 2px 外环”的写法；按钮焦点环不变。新增输入样式应引用 `--yp-input-*` Token，不得为文本输入重新加入 `outline` 或外扩 `box-shadow`。快速添加行由外层边框显示焦点，内部 wrapper 保持 `outline: none`；原里程碑源码片段检查已退役，现行验证由前端测试与构建负责。
 
 焦点外观依赖浏览器真实渲染，Vitest 只加载 CSS 原文，不断言计算样式；三主题与两种密度需在视觉验收页和真实页面人工确认。

@@ -10,19 +10,19 @@ pnpm run ci
 
 日常快速反馈可先运行 `pnpm ci:static`；涉及后端时运行 `pnpm ci:backend`。`pnpm run ci` 按相同顺序执行全部本机可运行阶段，显式 `run` 避免与 pnpm 内置的清理安装命令 `ci` 冲突。需要 Node/pnpm 的仓库固定版本、Java 21 和 Linux-container Docker；Windows 交付阶段还需要 Windows x64、PowerShell 和 Electron。Linux 本地不会运行 Windows 阶段，PR 的 Windows Delivery 始终必需。
 
-旧 `verify:m*` 命令保留切片复现用途；已退役的 `verify:m2-03/07/24` 及其 `:assets` 入口仅校验历史验收记录，不再读取产品实现。普通 PR 使用统一入口，不需要串联里程碑命令、手工修改验收报告或刷新历史哈希。
+旧里程碑命令与 `evidence/` 已退役。历史验收可从 Git 查询；当前交付使用能力命名的打包、冒烟、交接包、部署配置与契约检查。
 
 ## 当前执行链
 
 | 入口 | 保障 |
 | --- | --- |
 | `pnpm ci:contracts` | PR 基线、历史迁移与冻结清单、OpenAPI 严格兼容、例外结构、lint/样例、生成客户端漂移、全部既有事件版本与共享载荷兼容、事件库存 |
-| `pnpm ci:static` | 上述契约检查各一次，加文档/归档完整性、校验器故障测试、前端/桌面 lint、架构、类型、构建与全部现有测试、历史证据结构和当前资产 |
+| `pnpm ci:static` | 上述契约检查各一次，加文档/归档完整性、校验器故障测试、前端/桌面 lint、架构、类型、构建与全部现有测试、品牌资产与生产部署配置不变量 |
 | `pnpm ci:backend` | 一次 `clean verify`：单元/集成、安全、架构、PostgreSQL/Flyway、备份恢复；随后单独执行 96 MiB JVM 的附件流式探针 |
 | `pnpm ci:portable` | 校验当前源码的 static/backend 成功记录与新鲜备份恢复报告；运行 packaged JAR + SPA HTTP；生成和验证 JAR/Web handoff |
 | `pnpm ci:windows` | 复核 handoff，真实 Electron smoke、Windows 桌面安装包（EXE 图标/版本资源/fuse/ASAR 白名单，默认目录与 `/D=` 自定义目录的静默安装、自检、覆盖安装与卸载边界）、ZIP、PowerShell 行为及服务器包验证；服务器包逐文件对照同一 handoff；生成并核对后端与 Web 的 CycloneDX SBOM；把经过冒烟的安装包、blockmap、`latest.yml`、桌面 SBOM 与 manifest 收集到 `out/desktop` |
 
-[plan.mjs](../tools/ci/plan.mjs) 是统一入口的执行清单。M2-23 的 `:assets` 检查当前切片资产，完整契约检查归 `ci:contracts`；类别资产只执行一次，M2-03、M2-07、M2-24 等旧切片由 [historical-assets.mjs](../tools/ci/historical-assets.mjs) 校验历史报告与验收矩阵。类型检查由各包实际构建或专用类型测试承担，不再重复运行同一整套 Node 入口。Windows smoke 使用 handoff 的 Web 字节；服务器不重复编译。
+[plan.mjs](../tools/ci/plan.mjs) 是统一入口的执行清单。static 资产步骤只保留品牌资产与 [部署配置校验](../tools/verification/verify-deployment-config.mjs)。portable 显式执行备份恢复报告、打包 HTTP 冒烟和交接包；Windows 显式执行工具链、配置隔离测试、引擎行为、交接包、桌面冒烟、打包、完整性、安装、更新、产物收集、首次引导和服务器组包校验，服务器不重复编译。桌面步骤默认使用 `desktop/desktop-shell/out/release`。
 
 Windows 打包前的[配置隔离测试](../tools/verification/desktop-profile.test.mjs)验证卸载等待不会漏掉已分离的子孙进程，也不等待无关进程，并覆盖参数、退出码和超时终止。卸载助手先将挂起的根进程加入 Job Object，再恢复执行；完整进程树退出后才能恢复本机配置。失败与超时继续保留备份，具体边界见[桌面交付决策](../.agents/notes/implemented/process/2026-10-17-desktop-release-channel.md)。
 
@@ -47,7 +47,7 @@ Windows 打包前的[配置隔离测试](../tools/verification/desktop-profile.t
 
 Actions 始终尝试上传故障诊断：`out/ci` 阶段记录和 Maven Surefire/Failsafe 报告。未产生诊断文件时只警告；交付所需的 handoff/报告缺失必须失败。handoff 名称绑定 run ID 与 attempt，Windows 校验提交、文件集合和哈希。SHA 固定的 Actions、只读 token 与不持久化 checkout 凭据继续保留。
 
-Windows 本机不能构造的大小写碰撞与无特权符号链接夹具由必需 Linux job 执行。公司 HTTPS/企微、干净 Windows Server、真实生产迁移及灾备环境验收继续遵守现有 evidence 延期清单；CI 阶段报告仍标记 `WINDOWS_X64_CI_STAGE` 和相应 `NOT_RUN`，不代表生产部署或 `WINDOWS_X64_FULL`。
+Windows 本机不能构造的大小写碰撞与无特权符号链接夹具由必需 Linux job 执行。CI 只证明当前验证链通过，不代表公司 HTTPS/企微、干净 Windows Server、真实生产迁移及灾备环境验收或已部署。历史延期记录可从 Git 查询，不生成历史全链证据包。
 
 ## 已核验的故障来源
 
@@ -111,3 +111,7 @@ Dependabot 生成的 PR 标题不带步骤编号，squash 合并时按提交规�
 - **桌面发布渠道**：新建 Environment `desktop-signing`，部署分支只允许 `dev`（`workflow_run` 运行在默认分支），添加 secret `DESKTOP_UPDATE_SIGNING_KEY`；`wecom-dev` 的部署 tag 规则加入 `desktop-v*`。Environment 在被工作流首次引用时会自动创建且不带保护规则，所以要在第一次桌面版本递增之前配置好。
 - **Immutable Releases 与 secret**：开启 Immutable Releases；添加仓库 secret `WECOM_RELEASE_WEBHOOK`。
 - **供应链**：`Protect dev` 的 required checks 增加 `Dependency Review`、`Workflow Audit`、`Release Notes Policy`；开启 Dependabot alerts 与 security updates；开启 CodeQL default setup（java-kotlin、javascript-typescript、actions）。
+
+## 暂时冻结的交付标识
+
+工作流 `.github/workflows/m0-18-ci.yml` 与 `Platform CI`、Job ID `linux/windows_delivery/windows` 及名称 `M0 Portable Gate/Windows Delivery/M0 Windows x64 Gate` 保持不变。服务器 artifact `m1-15-server-<sha>-<attempt>`、桌面 artifact `desktop-<sha>-<attempt>`、`out/m1-15/`、`yumpoo-windows-server-m1-15.zip`、服务器 manifest 的 `M1-15` 与验证报告字段也保持不变：发布工具、Sigstore 构建证明和已安装主机引擎依赖它们。后续需先让发布工具与主机引擎接受新旧标识，再协调切换工作流和规则集，回退窗口结束后移除旧标识。

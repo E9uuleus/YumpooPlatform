@@ -222,7 +222,7 @@ Release 不能升级 SYSTEM 部署引擎，必须由管理员手动操作：
 本地复核现行服务器包仍使用既有入口：
 
 ```powershell
-pnpm verify:m1-15:deployment
+pnpm verify:deployment-config
 ```
 
 输出位于 `out/m1-15`，包含 `yumpoo-windows-server-m1-15.zip`、同名 `.sha256`、`artifact-manifest.json`、两份 SBOM（`yumpoo-server.cdx.json`、`yumpoo-web.cdx.json`）和 `verification-report.json`。服务器包包含已验证的 JAR/Web、当前全部迁移、Nginx 和配置模板、数据库初始化资产、维护脚本、`service/` 锁定信息、`cd/` 部署资产、本手册及历史 checklist。WinSW 二进制从锁定官方 URL 获取并核验，不提交到仓库。不得把真实 CorpID、企微 UserID、Secret、SSH 私钥或一次性输入文件打入 ZIP。

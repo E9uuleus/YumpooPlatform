@@ -31,7 +31,7 @@ Status: implemented
 
 **SBOM**：发布包附带两份 CycloneDX SBOM，作为 Release 附件。
 
-- `yumpoo-server.cdx.json`：由 Spring Boot 父 POM 预配置的 cyclonedx-maven-plugin 在构建时生成，打入 JAR 的 `META-INF/sbom`；[打包脚本](../../../../tools/verification/package-m1-15-win.mjs)从已验证 handoff 的 JAR 中取出，[包校验](../../../../tools/verification/verify-m1-15-package.mjs)再与 ZIP 内 JAR 的内嵌清单比对；
+- `yumpoo-server.cdx.json`：由 Spring Boot 父 POM 预配置的 cyclonedx-maven-plugin 在构建时生成，打入 JAR 的 `META-INF/sbom`；[打包脚本](../../../../tools/verification/package-server-win.mjs)从已验证 handoff 的 JAR 中取出，[包校验](../../../../tools/verification/verify-server-package.mjs)再与 ZIP 内 JAR 的内嵌清单比对；
 - `yumpoo-web.cdx.json`：`pnpm sbom --prod --lockfile-only` 列出 `@yumpoo/web-app` 打包进 dist 的生产依赖；
 - 两份 SBOM 的名称、大小和 SHA-256 记录在 `artifact-manifest.json`（schemaVersion 2），由[发布策略](../../../../tools/release/policy.mjs)与 ZIP 一起核验。
 
