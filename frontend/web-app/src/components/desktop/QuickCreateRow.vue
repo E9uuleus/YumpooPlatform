@@ -80,7 +80,8 @@ async function create() {
   }
 }
 
-function onTitleKeydown(event: KeyboardEvent) {
+function onTitleKeydown(event: Event | KeyboardEvent) {
+  if (!(event instanceof KeyboardEvent)) return
   if (event.isComposing || event.keyCode === 229 || event.key !== 'Enter') return
   event.preventDefault()
   void create()
