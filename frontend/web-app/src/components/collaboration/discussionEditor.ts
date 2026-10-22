@@ -8,6 +8,7 @@ import { Color, BackgroundColor, FontSize, TextStyle } from '@tiptap/extension-t
 import StarterKit from '@tiptap/starter-kit'
 import { exitSuggestion, type SuggestionProps } from '@tiptap/suggestion'
 import type { ProjectMember } from '@yumpoo/api-client'
+import './prosemirror.css'
 
 export const discussionFontSizes = [16, 18, 24, 32, 36, 48] as const
 export const discussionColors = [

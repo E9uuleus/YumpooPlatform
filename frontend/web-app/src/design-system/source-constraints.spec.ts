@@ -24,3 +24,15 @@ describe('页面视觉语言源码约束', () => {
     expect(source).not.toMatch(/\{\{\s*(?:scope\.row|selected|project)\.(?:status|lifecycle|membershipStatus|accountStatus|employmentStatus)\s*\}\}/u)
   })
 })
+
+const editorSources = import.meta.glob('../**/*.vue', { eager: true, import: 'default', query: '?raw' }) as Record<string, string>
+
+describe('富文本编辑器 CSP 约束', () => {
+  it('每个 useEditor 都关闭运行时样式注入，基础样式由 prosemirror.css 提供', () => {
+    const editors = Object.entries(editorSources).filter(([, source]) => source.includes('useEditor({'))
+    expect(editors.length).toBeGreaterThan(0)
+    for (const [path, source] of editors) {
+      expect(source.split('useEditor({').length - 1, path).toBe(source.split('injectCSS: false').length - 1)
+    }
+  })
+})

@@ -95,6 +95,7 @@ const pendingUploads = draftAttachments.pendingUploads
 const pendingEditUploads = editAttachments.pendingUploads
 
 const editor = useEditor({
+  injectCSS: false,
   editorProps: { ...draftAttachments.editorProps, attributes: { role: 'textbox', 'aria-label': '讨论正文', 'aria-multiline': 'true' } },
   content: '',
   editable: props.canPublish,
@@ -111,6 +112,7 @@ const editor = useEditor({
 })
 
 const editEditor = useEditor({
+  injectCSS: false,
   editorProps: { ...editAttachments.editorProps, attributes: { role: 'textbox', 'aria-label': '编辑讨论正文', 'aria-multiline': 'true' } },
   content: '',
   editable: true,
