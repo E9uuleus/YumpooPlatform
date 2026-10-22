@@ -4,6 +4,7 @@ import { useWorkItemEdits, type WorkItemPatchField, type WorkItemPatchValue } fr
 import { isWorkItemViewControl } from './workItemViewControls'
 import { vBrandLoading as vLoading } from '../../brand/loading'
 import { onTimeTrackingChanged, useTimeTracker } from '../../composables/useTimeTracker'
+import { onProjectWorkItemsChanged } from '../../composables/workItemChanges'
 import WorkItemTimerCell from './WorkItemTimerCell.vue'
 import { usePageOnboarding } from '../../onboarding/useOnboarding'
 import WorkItemDiscussionIcon from './WorkItemDiscussionIcon.vue'
@@ -508,6 +509,9 @@ const stopTimerUpdates = onTimeTrackingChanged(() => {
   if (sortRules.value.some(rule => rule.field === 'TIME_TRACKING') || filters.timeState || filters.timeMin !== '' || filters.timeMax !== '') void loadTable()
 })
 onBeforeUnmount(stopTimerUpdates)
+// The desktop quick panel changes statuses and creates items in its own window.
+onBeforeUnmount(onProjectWorkItemsChanged(() => projectId.value,
+  () => void (selectedView.value === 'table' ? reloadSortedTableInPlace() : refreshCurrentView())))
 type BuiltInColumnKey = 'title' | 'assignee' | 'status' | 'priority' | 'content' | 'dueDate' | 'timeTracking' | 'updatedAt'
 type ColumnKey = BuiltInColumnKey | ConnectColumnKey
 type MovableColumnKey = Exclude<BuiltInColumnKey, 'title'>
