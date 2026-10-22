@@ -79,6 +79,12 @@ async function create() {
     void nextTick(() => input.value?.focus())
   }
 }
+
+function onTitleKeydown(event: KeyboardEvent) {
+  if (event.isComposing || event.keyCode === 229 || event.key !== 'Enter') return
+  event.preventDefault()
+  void create()
+}
 </script>
 
 <template>
@@ -119,7 +125,7 @@ async function create() {
       placeholder="输入标题，Enter 创建…"
       aria-label="新工作项标题"
       :disabled="saving"
-      @keydown.enter.prevent="create"
+      @keydown="onTitleKeydown"
     />
     <button
       type="button"

@@ -152,6 +152,7 @@ function revealCreated() {
   if (candidates.loading.value || !item) return
   reveal = undefined
   if (!candidates.items.value.some(candidate => candidate.workItemId === item.workItemId)) candidates.items.value = [item, ...candidates.items.value]
+  rangeMode.value = false
   openId.value = item.workItemId
   void nextTick(() => list.value?.querySelector(`[data-work-item-id="${item.workItemId}"]`)?.scrollIntoView({ block: 'nearest' }))
 }

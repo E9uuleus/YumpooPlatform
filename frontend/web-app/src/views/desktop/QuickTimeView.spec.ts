@@ -138,13 +138,31 @@ describe('快捷工时小窗', () => {
     expect(view.get('.quick-toast').text()).toBe('已改为「进行中」· 设计评审')
   })
 
-  it('新建的工作项分配给本人，创建后展开记录区并广播', async () => {
+  it.each([{ isComposing: true }, { keyCode: 229 }])('输入法确认候选字时不创建工作项：%j', async composing => {
+    api.listProjects.mockResolvedValue({ items: [{ id: 'p1', name: 'Yumpoo 平台' }] })
+    const view = await mountView()
+    await view.get('.quick-search__add').trigger('click')
+    await flushPromises()
+    const title = view.get('.quick-create__title input')
+    await title.setValue('整理')
+    await title.trigger('compositionstart')
+    await title.trigger('keydown', { key: 'Enter', ...composing })
+    await flushPromises()
+    expect(api.createWorkItem).not.toHaveBeenCalled()
+    expect(view.find('.quick-create').exists()).toBe(true)
+  })
+
+  it('新建工作项分配给本人，展开时恢复自动排入空档并广播', async () => {
     api.listProjects.mockResolvedValue({ items: [{ id: 'p1', name: 'Yumpoo 平台' }] })
     api.listContents.mockResolvedValue({ items: [{ id: 'c2', active: true, sortOrder: 2 }, { id: 'c0', active: false, sortOrder: 0 },
       { id: 'c1', active: true, sortOrder: 1 }] })
     api.createWorkItem.mockResolvedValue({ id: 'w9', projectId: 'p1', itemNo: 'P001-9', title: '整理周报', contentName: '需求',
       contentColorToken: WorkItemLabelColorToken.EggYolk, statusCategory: 'TODO' })
     const view = await mountView()
+    await view.get('.quick-row').trigger('click')
+    await view.get('.quick-hint__action').trigger('click')
+    await view.findAll('.quick-range input')[1]!.setValue('11:30')
+    expect(view.get('.quick-item.is-expanded').find('.quick-range').exists()).toBe(true)
     await view.get('.quick-search__add').trigger('click')
     await flushPromises()
     const title = view.get('.quick-create__title input')
@@ -156,6 +174,8 @@ describe('快捷工时小窗', () => {
     expect(api.announce).toHaveBeenCalledExactlyOnceWith({ projectId: 'p1', workItemId: 'w9' })
     expect(view.find('.quick-create').exists()).toBe(false)
     expect(view.get('.quick-item.is-expanded .quick-row__title').text()).toBe('整理周报')
+    expect(view.get('.quick-item.is-expanded').find('.quick-range').exists()).toBe(false)
+    expect(view.get('.quick-item.is-expanded .quick-hint').text()).toContain('排入今日空档')
     expect(view.get('.quick-toast').text()).toBe('已创建 #P001-9 · 整理周报')
   })
 })
