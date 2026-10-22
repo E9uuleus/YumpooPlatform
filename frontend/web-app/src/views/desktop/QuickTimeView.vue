@@ -11,12 +11,13 @@ import { useInfiniteSentinel } from '../../composables/useInfiniteSentinel'
 import { useHideCompleted } from '../../composables/useHideCompleted'
 import { useDesktopSurfaceOpacity } from '../../composables/useDesktopSurfaceOpacity'
 import { useDayTimeline } from '../../components/my-time/day/useDayTimeline'
-import { HOUR, MIN_BLOCK_MS, parseDuration } from '../../components/my-time/day/dayModel'
+import { atMinute, formatClock, HOUR, MIN_BLOCK_MS, parseClock, parseDuration } from '../../components/my-time/day/dayModel'
 import { addDays, todayIn } from '../../components/team/teamDashboardModel'
 import HideCompletedSwitch from '../../components/timer/HideCompletedSwitch.vue'
 import TimerIcon from '../../components/timer/TimerIcon.vue'
 import QuickTimeRow from '../../components/desktop/QuickTimeRow.vue'
-import { groupCandidates, placementHint, projectTones, quickPlan, shortDuration, spokenDuration, type DateChoice } from '../../components/desktop/quickTime'
+import { groupCandidates, placementHint, projectTones, quickPlan, rangeFromPlan, rangeProblem, rangeRecordable, shortDuration, spokenDuration,
+  type DateChoice } from '../../components/desktop/quickTime'
 import brandLogo from '../../assets/brand/logo.svg'
 
 const bridge = window.yumpooDesktop?.quick
@@ -44,6 +45,9 @@ const pickedDate = ref(today.value)
 const durationMs = ref(HOUR)
 const custom = ref(false)
 const customText = ref('')
+const rangeMode = ref(false)
+const rangeStart = ref(0)
+const rangeEnd = ref(0)
 const recording = ref<'idle' | 'saving' | 'done'>('idle')
 const flashId = ref<string | null>(null)
 const toast = ref('')
@@ -82,7 +86,15 @@ const durationValid = computed(() => durationMs.value >= MIN_BLOCK_MS)
 const hint = computed(() => !durationValid.value ? '至少记录 15 分钟'
   : !targetDay.page.value ? '正在读取当天记录…'
   : placementHint(plan.value, targetDate.value, today.value, timezone.value, targetDay.dayRange.value.end))
-const canRecord = computed(() => durationValid.value && !!targetDay.page.value && plan.value.entries.length > 0 && !targetDay.busy.value && recording.value === 'idle')
+const range = computed(() => ({ start: rangeStart.value, end: rangeEnd.value }))
+const rangeIssue = computed(() => rangeProblem(range.value, targetDay.dayRange.value, targetDay.limit.value))
+const recordable = computed(() => rangeIssue.value ? 0 : rangeRecordable(range.value, targetDay.blocks.value, targetDay.now.value))
+const rangeNote = computed(() => rangeIssue.value || !targetDay.page.value ? rangeIssue.value
+  : !recordable.value ? '这段时间已全部记录'
+  : recordable.value < range.value.end - range.value.start ? '与已有记录重叠的部分会跳过' : '')
+const entries = computed(() => rangeMode.value ? [range.value] : plan.value.entries)
+const canRecord = computed(() => (rangeMode.value ? recordable.value > 0 : durationValid.value && plan.value.entries.length > 0)
+  && !!targetDay.page.value && !targetDay.busy.value && recording.value === 'idle')
 const transformOrigin = computed(() => {
   const origin = context.value.origin
   if (context.value.projectId) return `${origin} center`
@@ -92,6 +104,27 @@ const myDayPath = computed(() => `/workspace/${session.authentication.value?.use
 
 watch(customText, text => { if (custom.value) durationMs.value = parseDuration(text) ?? 0 })
 watch(custom, value => { if (!value) customText.value = '' })
+// Range mode keeps the duration and the range in step: a chip or custom duration moves the end, edited ends recompute the duration.
+let autoDurationMs = HOUR
+watch(rangeMode, value => {
+  // Leaving an unfinished range (end before start) gives the automatic plan back the length it had.
+  if (!value) { if (!durationValid.value) durationMs.value = autoDurationMs; return }
+  custom.value = false
+  autoDurationMs = durationValid.value ? durationMs.value : HOUR
+  const next = rangeFromPlan(plan.value, autoDurationMs, targetDay.limit.value)
+  rangeStart.value = next.start
+  rangeEnd.value = next.end
+})
+watch(durationMs, ms => { if (rangeMode.value && ms > 0 && rangeEnd.value - rangeStart.value !== ms) rangeEnd.value = rangeStart.value + ms })
+watch(range, value => { if (rangeMode.value) durationMs.value = Math.max(0, value.end - value.start) })
+watch(targetDate, (to, from) => {
+  if (!rangeMode.value) return
+  // Another day keeps the same wall-clock times; the day's own end (24:00) stays the day's end.
+  const end = atMinute(from, 1440, timezone.value)
+  const move = (ms: number) => atMinute(to, parseClock(formatClock(ms, timezone.value, end)) ?? 0, timezone.value)
+  rangeStart.value = move(rangeStart.value)
+  rangeEnd.value = move(rangeEnd.value)
+})
 watch(() => todayDay.recordedMs.value, (to, from) => {
   cancelAnimationFrame(countFrame)
   if (!countNext) { total.value = to; return }
@@ -116,6 +149,7 @@ const offOpen = bridge?.onOpen(value => {
   // The prewarmed panel can live for days; the date picker starts from the current day on every open.
   pickedDate.value = today.value
   custom.value = false
+  rangeMode.value = false
   durationMs.value = HOUR
   opening.value++
   if (query.value) query.value = ''
@@ -143,6 +177,7 @@ function startResize(event: PointerEvent) {
 function toggle(item: TimerCandidate) {
   if (recording.value !== 'idle') return
   openId.value = openId.value === item.workItemId ? null : item.workItemId
+  rangeMode.value = false
 }
 function showToast(text: string) {
   toast.value = text
@@ -152,10 +187,10 @@ function showToast(text: string) {
 }
 async function record(item: TimerCandidate) {
   if (!canRecord.value) return
-  const entries = plan.value.entries
+  const ranges = entries.value
   recording.value = 'saving'
   countNext = targetDate.value === today.value
-  const result = await targetDay.create(TimeSessionFillMode.Gaps, [item.workItemId], entries)
+  const result = await targetDay.create(TimeSessionFillMode.Gaps, [item.workItemId], ranges)
   // Nothing new because the range was already recorded: create() has already said so, and there is nothing to celebrate.
   if (!result || !(result.createdCount || result.changedCount || result.deletedCount)) {
     countNext = false
@@ -163,7 +198,7 @@ async function record(item: TimerCandidate) {
     return
   }
   recording.value = 'done'
-  const recorded = entries.reduce((sum, range) => sum + range.end - range.start, 0) - result.skippedDurationMs
+  const recorded = ranges.reduce((sum, range) => sum + range.end - range.start, 0) - result.skippedDurationMs
   setTimeout(() => {
     openId.value = null
     recording.value = 'idle'
@@ -302,6 +337,9 @@ function keydown(event: KeyboardEvent) {
               v-model:duration-ms="durationMs"
               v-model:custom="custom"
               v-model:custom-text="customText"
+              v-model:range-mode="rangeMode"
+              v-model:range-start="rangeStart"
+              v-model:range-end="rangeEnd"
               :item="item"
               :today-ms="todayMs.get(item.workItemId) ?? 0"
               :expanded="openId === item.workItemId"
@@ -309,6 +347,11 @@ function keydown(event: KeyboardEvent) {
               :flashing="flashId === item.workItemId"
               :today="today"
               :hint="hint"
+              :target-date="targetDate"
+              :timezone="timezone"
+              :day-range="targetDay.dayRange.value"
+              :range-note="rangeNote"
+              :range-invalid="!!rangeIssue"
               :can-record="canRecord"
               :recording="openId === item.workItemId ? recording : 'idle'"
               :timer-enabled="tracker.timerEnabled.value"

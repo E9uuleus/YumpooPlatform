@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { TimerCandidate } from '@yumpoo/api-client'
-import { Calendar, Check, Plus } from '@element-plus/icons-vue'
+import { Calendar, Check, Plus, RefreshLeft } from '@element-plus/icons-vue'
 import TimerIcon from '../timer/TimerIcon.vue'
+import TimeField from '../my-time/day/TimeField.vue'
+import type { Range } from '../my-time/day/dayModel'
 import { workItemLabelColorValue } from '../projects/workItemLabelColors'
 import { QUICK_DURATIONS, shortDuration, spokenDuration, STATUS_PILLS, stepDate, stepperLabel, type DateChoice } from './quickTime'
 import { addDays } from '../team/teamDashboardModel'
@@ -16,6 +18,12 @@ const props = defineProps<{
   flashing: boolean
   today: string
   hint: string
+  targetDate: string
+  timezone: string
+  dayRange: Range
+  /** Range mode's problem, or what the fill will skip; `rangeInvalid` marks it as a problem. */
+  rangeNote: string
+  rangeInvalid: boolean
   canRecord: boolean
   recording: 'idle' | 'saving' | 'done'
   timerEnabled: boolean
@@ -26,6 +34,12 @@ const pickedDate = defineModel<string>('pickedDate', { required: true })
 const durationMs = defineModel<number>('durationMs', { required: true })
 const custom = defineModel<boolean>('custom', { required: true })
 const customText = defineModel<string>('customText', { required: true })
+const rangeMode = defineModel<boolean>('rangeMode', { required: true })
+const rangeStart = defineModel<number>('rangeStart', { required: true })
+const rangeEnd = defineModel<number>('rangeEnd', { required: true })
+const fieldsValid = ref({ start: true, end: true })
+watch(rangeMode, () => { fieldsValid.value = { start: true, end: true } })
+const rangeReady = computed(() => !rangeMode.value || (fieldsValid.value.start && fieldsValid.value.end))
 
 const pill = computed(() => STATUS_PILLS[props.item.statusCategory] ?? { label: props.item.statusCategory, tone: 'neutral' as const })
 const dates: Array<{ value: DateChoice; label: string }> = [{ value: 'today', label: '今天' }, { value: 'yesterday', label: '昨天' }]
@@ -36,6 +50,14 @@ function step(delta: -1 | 1) {
   pickedDate.value = next.picked
 }
 function chooseDuration(ms: number) { custom.value = false; durationMs.value = ms }
+/** Edited ends describe the duration themselves, so no chip, not even 自定义, stays lit unless the length matches one. */
+function setRange(edge: 'start' | 'end', value: number) {
+  custom.value = false
+  if (edge === 'start') rangeStart.value = value
+  else rangeEnd.value = value
+}
+/** Enter in either time field records, after TimeField has committed what was typed. */
+function submit(event: KeyboardEvent) { if (event.target instanceof HTMLInputElement && rangeReady.value) emit('record') }
 </script>
 
 <template>
@@ -149,11 +171,63 @@ function chooseDuration(ms: number) { custom.value = false; durationMs.value = m
               >
             </div>
             <p
+              v-if="!rangeMode"
               class="quick-hint"
               role="status"
             >
-              <Calendar />{{ hint }}
+              <Calendar /><span class="quick-hint__text">{{ hint }}</span>
+              <button
+                type="button"
+                class="quick-hint__action"
+                @click="rangeMode = true"
+              >
+                改时段
+              </button>
             </p>
+            <div
+              v-else
+              class="quick-hint quick-range"
+              @keydown.enter="submit"
+            >
+              <TimeField
+                :model-value="rangeStart"
+                :date="targetDate"
+                :timezone="timezone"
+                :day-start="dayRange.start"
+                :day-end="dayRange.end"
+                label="开始时间"
+                immediate
+                @update:model-value="setRange('start', $event)"
+                @validity="fieldsValid.start = $event"
+              />
+              <span aria-hidden="true">–</span>
+              <TimeField
+                :model-value="rangeEnd"
+                :date="targetDate"
+                :timezone="timezone"
+                :day-start="dayRange.start"
+                :day-end="dayRange.end"
+                label="结束时间"
+                immediate
+                @update:model-value="setRange('end', $event)"
+                @validity="fieldsValid.end = $event"
+              />
+              <span v-if="rangeEnd > rangeStart">· {{ spokenDuration(rangeEnd - rangeStart) }}</span>
+              <button
+                type="button"
+                class="quick-hint__action"
+                title="回到自动排入空档"
+                @click="rangeMode = false"
+              >
+                <RefreshLeft />自动
+              </button>
+              <span
+                v-if="rangeNote"
+                class="quick-range__note"
+                :class="{ 'is-problem': rangeInvalid }"
+                :role="rangeInvalid ? 'alert' : 'status'"
+              >{{ rangeInvalid ? rangeNote : `· ${rangeNote}` }}</span>
+            </div>
             <div class="quick-actions">
               <button
                 v-if="timerEnabled"
@@ -167,7 +241,7 @@ function chooseDuration(ms: number) { custom.value = false; durationMs.value = m
                 type="button"
                 class="quick-button is-primary"
                 :class="{ 'is-done': recording === 'done' }"
-                :disabled="!canRecord && recording !== 'done'"
+                :disabled="!(canRecord && rangeReady) && recording !== 'done'"
                 @click="emit('record')"
               >
                 <template v-if="recording === 'done'">
@@ -222,6 +296,14 @@ button:focus-visible,.quick-row:focus-visible{outline:2px solid var(--yp-timer-a
 .quick-custom:focus{border-color:var(--yp-timer-accent)}
 .quick-hint{display:flex;align-items:center;gap:6px;margin:0;color:var(--yp-text-secondary);font-size:12px;font-variant-numeric:tabular-nums}
 .quick-hint svg{width:14px;height:14px;flex-shrink:0}
+.quick-hint__text{min-width:0}
+.quick-hint__action{display:inline-flex;align-items:center;gap:2px;margin-left:auto;padding:0 2px;border-radius:4px;color:var(--yp-timer-accent);font-size:12px;white-space:nowrap;flex-shrink:0}
+.quick-hint__action svg{width:12px;height:12px}
+.quick-hint__action:hover{text-decoration:underline}
+.quick-range{flex-wrap:wrap;row-gap:4px}
+.quick-range :deep(.time-field){width:56px;--el-input-height:24px}
+.quick-range__note{flex-basis:100%;color:var(--yp-text-muted);font-size:11.5px}
+.quick-range__note.is-problem{color:var(--yp-status-red)}
 .quick-actions{display:flex;justify-content:flex-end;gap:8px}
 .quick-button{display:inline-flex;align-items:center;gap:4px;height:30px;padding:0 10px;border:1px solid var(--yp-border-strong);border-radius:8px;color:var(--yp-text-primary);font-size:12.5px}
 .quick-button svg{width:14px;height:14px}
