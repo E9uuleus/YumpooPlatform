@@ -4,6 +4,7 @@ description: 公司管理员查看成员工时、加班统计和成员当前任�
 order: 80
 audience: [admin]
 appRoute: team-entry
+tour: team
 ---
 
 团队视图帮助公司管理员了解团队的投入：每位成员每天记录了多少工时、谁在休息日加班、每个人手上正在做什么。

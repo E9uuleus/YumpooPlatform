@@ -1,4 +1,5 @@
 export type TourId = 'welcome' | 'project-work-items' | 'workspace' | 'dashboards' | 'inbox' | 'company'
+  | 'my-time' | 'my-day' | 'team' | 'work-calendar'
 export type TourPlacement = 'top' | 'top-start' | 'top-end' | 'bottom' | 'bottom-start' | 'bottom-end' | 'left' | 'left-start' | 'right' | 'right-start'
 
 export interface TourStep {
@@ -89,6 +90,40 @@ export const TOURS: Record<TourId, TourDefinition> = {
       { target: at('company-profile'), placement: 'bottom', title: '公司信息', description: '公司名称与企微 Corp ID，可在此修改公司名称。' },
       { target: at('company-entries'), placement: 'bottom', title: '管理入口', description: '从这里直达各管理页面，卡片上显示关键状态。' },
       { target: at('company-integrations'), placement: 'top', title: '企业微信集成', description: '查看企微登录与通讯录同步的配置和最近运行状态。' },
+    ],
+  },
+  'my-time': {
+    version: 1,
+    steps: [
+      { target: at('my-time-stats'), placement: 'bottom-start', title: '本月概览', description: '本月合计、日均、记录天数和今日用时；并行计时按项数平均计入。' },
+      { target: at('my-time-calendar'), placement: 'top', title: '工时月历', description: '每格是当天合计，色条按项目区分；悬停查看工作项明细，点击日期打开当天时间线。' },
+      { target: at('time-preferences'), placement: 'bottom-end', title: '计时偏好', description: '在这里开关计时器、设置上班时间；关闭计时器后，可以在当天时间线里手动补录。' },
+    ],
+  },
+  'my-day': {
+    version: 1,
+    steps: [
+      { target: at('day-header'), placement: 'bottom-start', title: '切换日期', description: '用箭头或键盘 ← → 切换日期，右侧显示当天已记录的合计。' },
+      { target: at('day-shelf'), placement: 'right-start', title: '工作项侧栏', description: '搜索工作项，或按“最近与我的 / 全部”、“分配给我”和项目筛选；把工作项拖到右侧时间线，或点“+”按时长排入空白。' },
+      { target: at('day-timeline'), placement: 'left-start', title: '时间线', description: '在空白处拖选时段补录（最短 15 分钟），拖动卡片调整时段，点击卡片编辑或删除。' },
+    ],
+  },
+  team: {
+    version: 1,
+    steps: [
+      { target: at('context-nav'), placement: 'right-start', title: '团队视图', description: '在成员工时、加班统计和成员当前任务之间切换。',
+        fallback: { target: at('context-nav-expand'), placement: 'right-start', description: '点这里展开团队视图菜单，在成员工时、加班统计和成员当前任务之间切换。' } },
+      { target: at('team-period'), placement: 'bottom-start', title: '统计周期', description: '按周、月或季度查看，用左右箭头切换周期。' },
+      { target: at('team-grid'), placement: 'top', title: '成员工时表', description: '每行一位成员、每列一天，口径与“我的工时”一致；勾选成员后可以只导出所选。' },
+      { target: at('team-export'), placement: 'bottom-end', title: '筛选与导出', description: '隐藏没有工时的成员，或把当前表格导出为 Excel。' },
+    ],
+  },
+  'work-calendar': {
+    version: 1,
+    steps: [
+      { target: at('work-calendar-year'), placement: 'bottom-start', title: '年度工作日历', description: '按年查看工作日、休息日和调休，它决定标准工时与加班统计。' },
+      { target: at('work-calendar-import'), placement: 'bottom-end', title: '导入 Excel', description: '按模板导入节假日与调休，检查无误后点击保存才会生效。' },
+      { target: at('work-hours-threshold'), placement: 'top', title: '工时异常提醒', description: '成员单日工时超过阈值时提醒公司管理员；执行时间和启用在“定时任务”中设置。' },
     ],
   },
 }
