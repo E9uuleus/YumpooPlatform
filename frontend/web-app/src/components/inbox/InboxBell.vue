@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ArrowRight, Bell, Loading, WarningFilled } from '@element-plus/icons-vue'
+import { ArrowRight, Loading, WarningFilled } from '@element-plus/icons-vue'
 import { ElBadge, ElButton, ElIcon, ElPopover, ElRadioButton, ElRadioGroup } from 'element-plus'
 import type { NotificationItem } from '@yumpoo/api-client'
 import { useInbox, useInboxList, type InboxFilter } from '../../composables/useInbox'
@@ -9,6 +9,7 @@ import { useSession } from '../../composables/useSession'
 import { inboxEmptyCopy, notificationLink } from './inboxPresentation'
 import InboxRow from './InboxRow.vue'
 import YpEmptyState from '../yp/YpEmptyState.vue'
+import ShellIcon from '../shell/ShellIcon.vue'
 
 const inbox = useInbox(), session = useSession(), router = useRouter()
 const open = ref(false), pulse = ref(false), filter = ref<InboxFilter>('unread'), marking = ref(false)
@@ -53,7 +54,7 @@ async function readAll() {
           :class="{ 'inbox-pulse': pulse }"
           @animationend="pulse = false"
         >
-          <el-icon><bell /></el-icon>
+          <shell-icon name="bell" />
         </el-badge>
       </el-button>
     </template>
@@ -156,9 +157,9 @@ async function readAll() {
 </template>
 
 <style scoped>
-.inbox-trigger { width: 36px; padding: 0; background: transparent; border-color: transparent; }
-.inbox-trigger.is-open { background: var(--yp-bg-hover); }
-.inbox-trigger .el-icon { font-size: 18px; }
+.inbox-trigger { width: var(--yp-control-height-small); padding: 0; border-color: transparent; border-radius: var(--yp-radius-md); background: transparent; color: var(--yp-text-secondary); }
+.inbox-trigger:hover, .inbox-trigger.is-open { background: var(--yp-bg-hover); color: var(--yp-text-primary); }
+.inbox-trigger :deep(.el-badge) { display: inline-flex; }
 .inbox-trigger :deep(.el-badge__content) { background: var(--yp-status-red); font-variant-numeric: tabular-nums; }
 
 .inbox-panel { display: grid; }

@@ -84,6 +84,12 @@ onMounted(load)
             <li>自动更新在后台检查和下载，核对公司签发的更新授权后在退出时安装；可在偏好设置中关闭自动下载，改为手动下载。</li>
             <li>在「设置 → 应用」中卸载会删除程序、登录凭据、缓存和日志，只保留计时器、提醒与桌面偏好。</li>
           </ul>
+          <router-link
+            class="desktop-download__guide"
+            to="/docs/guide/desktop"
+          >
+            桌面客户端使用说明
+          </router-link>
         </details>
       </template>
       <template #actions>
@@ -171,5 +177,12 @@ onMounted(load)
 
 .desktop-download__privacy code {
   overflow-wrap: anywhere;
+}
+
+.desktop-download__guide {
+  display: inline-block;
+  margin-top: var(--yp-space-2);
+  color: var(--yp-link);
+  font-size: 14px;
 }
 </style>
