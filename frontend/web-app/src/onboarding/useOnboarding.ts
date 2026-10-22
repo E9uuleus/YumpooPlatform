@@ -27,7 +27,7 @@ function handled(id: TourId): boolean {
   return (records.value?.get(id) ?? 0) >= TOURS[id].version
 }
 
-/** 页面数据就绪时调用；页面引导要等欢迎引导处理后才会自动出现，已处理旧版本的引导只展示新增步骤。 */
+/** 页面数据就绪时调用；页面引导要等欢迎引导处理过（任一版本）才会自动出现，已处理旧版本的引导只展示新增步骤。 */
 async function ready(id: TourId, isCurrentPage: () => boolean): Promise<void> {
   const userId = useSession().authentication.value?.user.id
   if (!userId || !isCurrentPage()) return
@@ -37,7 +37,7 @@ async function ready(id: TourId, isCurrentPage: () => boolean): Promise<void> {
   const from = records.value.get(id) ?? 0
   if (!from) {
     if (id === 'welcome') welcomeOpen.value = true
-    else if (handled('welcome')) start(id)
+    else if (records.value.has('welcome')) start(id)
   }
   else if (TOURS[id].steps.some(step => (step.since ?? 1) > from)) active.value = { id, mode: 'update', from }
   else record(id)

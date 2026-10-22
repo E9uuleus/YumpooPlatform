@@ -51,14 +51,14 @@ describe('onboarding triggers', () => {
     await home.ready()
     expect(onboarding.welcomeOpen.value).toBe(true)
     onboarding.complete('welcome')
-    expect(api.completeMyOnboardingTour).toHaveBeenCalledWith({ tourId: 'welcome', xXSRFTOKEN: 'csrf', onboardingTourCompleteRequest: { version: 1 } })
+    expect(api.completeMyOnboardingTour).toHaveBeenCalledWith({ tourId: 'welcome', xXSRFTOKEN: 'csrf', onboardingTourCompleteRequest: { version: TOURS.welcome.version } })
     await project.ready()
     expect(onboarding.active.value).toEqual({ id: 'project-work-items', mode: 'automatic' })
     expect(api.getMyOnboarding).toHaveBeenCalledOnce()
   })
 
   it('skips handled tours and silently records a raised version without new steps', async () => {
-    api.getMyOnboarding.mockResolvedValue(records(['welcome', 1], ['inbox', 1]))
+    api.getMyOnboarding.mockResolvedValue(records(['welcome', TOURS.welcome.version], ['inbox', 1]))
     const onboarding = useOnboarding()
     const home = await page('welcome')
     const inbox = await page('inbox')
@@ -79,7 +79,7 @@ describe('onboarding triggers', () => {
   })
 
   it.each([true, false])('never records a replay, including an unhandled tour (handled: %s)', async handled => {
-    api.getMyOnboarding.mockResolvedValue(handled ? records(['welcome', 1], ['inbox', 1]) : records(['welcome', 1]))
+    api.getMyOnboarding.mockResolvedValue(handled ? records(['welcome', TOURS.welcome.version], ['inbox', 1]) : records(['welcome', TOURS.welcome.version]))
     const onboarding = useOnboarding()
     const home = await page('welcome')
     const inbox = await page('inbox')
@@ -112,7 +112,7 @@ describe('onboarding triggers', () => {
   })
 
   it.each(['workspace', 'company'] as const)('ignores %s data finishing after its page unmounted', async id => {
-    api.getMyOnboarding.mockResolvedValue(records(['welcome', 1]))
+    api.getMyOnboarding.mockResolvedValue(records(['welcome', TOURS.welcome.version]))
     const previous = await page(id)
     const data = deferred()
     const loading = data.promise.then(previous.ready)
@@ -132,7 +132,7 @@ describe('onboarding triggers', () => {
     const pending = previous.ready()
     await previous.router.push('/other')
     await previous.router.push('/page')
-    response.resolve(id === 'welcome' ? records() : records(['welcome', 1]))
+    response.resolve(id === 'welcome' ? records() : records(['welcome', TOURS.welcome.version]))
     await pending
     expect(useOnboarding().active.value).toBeUndefined()
     expect(useOnboarding().welcomeOpen.value).toBe(false)
@@ -159,7 +159,7 @@ describe('onboarding triggers', () => {
   })
 
   it('waits for successful page data and keeps the tour eligible after a failure', async () => {
-    api.getMyOnboarding.mockResolvedValue(records(['welcome', 1]))
+    api.getMyOnboarding.mockResolvedValue(records(['welcome', TOURS.welcome.version]))
     let succeeded = false
     const workspace = await page('workspace', () => succeeded)
     await workspace.ready()
@@ -178,7 +178,7 @@ describe('onboarding triggers', () => {
     const company = await page('company', () => succeeded)
     const pending = company.ready()
     succeeded = false
-    response.resolve(records(['welcome', 1]))
+    response.resolve(records(['welcome', TOURS.welcome.version]))
     await pending
     expect(useOnboarding().active.value).toBeUndefined()
     expect(api.completeMyOnboardingTour).not.toHaveBeenCalled()
