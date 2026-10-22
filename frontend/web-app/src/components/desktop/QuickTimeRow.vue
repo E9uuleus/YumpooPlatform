@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { TimerCandidate } from '@yumpoo/api-client'
+import type { TimerCandidate, WorkItemDetail } from '@yumpoo/api-client'
 import { Calendar, Check, Plus, RefreshLeft } from '@element-plus/icons-vue'
 import TimerIcon from '../timer/TimerIcon.vue'
 import TimeField from '../my-time/day/TimeField.vue'
+import QuickStatusButton from './QuickStatusButton.vue'
 import type { Range } from '../my-time/day/dayModel'
 import { workItemLabelColorValue } from '../projects/workItemLabelColors'
-import { QUICK_DURATIONS, shortDuration, spokenDuration, STATUS_PILLS, stepDate, stepperLabel, type DateChoice } from './quickTime'
+import { QUICK_DURATIONS, shortDuration, spokenDuration, stepDate, stepperLabel, type DateChoice } from './quickTime'
 import { addDays } from '../team/teamDashboardModel'
 
 const props = defineProps<{
@@ -28,7 +29,7 @@ const props = defineProps<{
   recording: 'idle' | 'saving' | 'done'
   timerEnabled: boolean
 }>()
-const emit = defineEmits<{ toggle: []; record: []; start: [] }>()
+const emit = defineEmits<{ toggle: []; record: []; start: []; statusChanged: [detail: WorkItemDetail, statusName: string]; statusFailed: [message: string] }>()
 const dateChoice = defineModel<DateChoice>('dateChoice', { required: true })
 const pickedDate = defineModel<string>('pickedDate', { required: true })
 const durationMs = defineModel<number>('durationMs', { required: true })
@@ -41,7 +42,6 @@ const fieldsValid = ref({ start: true, end: true })
 watch(rangeMode, () => { fieldsValid.value = { start: true, end: true } })
 const rangeReady = computed(() => !rangeMode.value || (fieldsValid.value.start && fieldsValid.value.end))
 
-const pill = computed(() => STATUS_PILLS[props.item.statusCategory] ?? { label: props.item.statusCategory, tone: 'neutral' as const })
 const dates: Array<{ value: DateChoice; label: string }> = [{ value: 'today', label: '今天' }, { value: 'yesterday', label: '昨天' }]
 const target = computed(() => dateChoice.value === 'today' ? props.today : dateChoice.value === 'yesterday' ? addDays(props.today, -1) : pickedDate.value)
 function step(delta: -1 | 1) {
@@ -82,10 +82,11 @@ function submit(event: KeyboardEvent) { if (event.target instanceof HTMLInputEle
         <span class="quick-row__text">
           <span class="quick-row__title">{{ item.title }}</span>
           <span class="quick-row__meta">
-            <span
-              class="quick-row__status"
-              :data-tone="pill.tone"
-            >{{ pill.label }}</span>
+            <span class="quick-row__status"><QuickStatusButton
+              :item="item"
+              @changed="(detail, name) => emit('statusChanged', detail, name)"
+              @failed="emit('statusFailed', $event)"
+            /></span>
             <span class="quick-row__today">{{ todayMs ? `今日 ${shortDuration(todayMs)}` : '今日未记录' }}</span>
           </span>
         </span>
@@ -273,10 +274,7 @@ button:focus-visible,.quick-row:focus-visible{outline:2px solid var(--yp-timer-a
 .quick-row__text{flex:1;min-width:0}
 .quick-row__title{display:block;overflow:hidden;font-weight:500;text-overflow:ellipsis;white-space:nowrap;transition:color .2s}
 .quick-row__meta{display:flex;align-items:center;gap:6px;margin-top:3px;color:var(--yp-text-secondary);font-size:11.5px}
-.quick-row__status{padding:1px 6px;border-radius:5px;font-size:11px;transition:opacity .2s;background:var(--yp-timer-sunken);color:var(--yp-text-secondary)}
-.quick-row__status[data-tone="accent"]{background:color-mix(in srgb,var(--yp-status-blue) 14%,transparent);color:var(--yp-status-blue)}
-.quick-row__status[data-tone="warning"]{background:color-mix(in srgb,var(--yp-status-orange) 14%,transparent);color:color-mix(in srgb,var(--yp-status-orange) 75%,var(--yp-text-primary))}
-.quick-row__status[data-tone="success"]{background:color-mix(in srgb,var(--yp-status-green) 16%,transparent);color:color-mix(in srgb,var(--yp-status-green) 70%,var(--yp-text-primary))}
+.quick-row__status{display:inline-flex;transition:opacity .2s}
 .quick-row__today{font-variant-numeric:tabular-nums}
 .quick-row__add{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;color:var(--yp-text-secondary);opacity:.55;transition:opacity .15s}
 .quick-row__add svg{width:16px;height:16px}

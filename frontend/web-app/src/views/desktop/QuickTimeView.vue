@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import { TimeSessionFillMode, type TimerCandidate } from '@yumpoo/api-client'
+import { TimeSessionFillMode, WorkItemStatusCategory, type TimerCandidate, type WorkItemDetail } from '@yumpoo/api-client'
 import type { QuickPanelContext } from '@yumpoo/preload-contract'
 import { ElInput } from 'element-plus'
-import { ArrowRight, CircleCheck, Clock } from '@element-plus/icons-vue'
+import { ArrowRight, CircleCheck, Clock, WarningFilled } from '@element-plus/icons-vue'
 import { useSession } from '../../composables/useSession'
 import { useTimeTracker } from '../../composables/useTimeTracker'
 import { useTimerCandidates } from '../../composables/useTimerCandidates'
 import { useInfiniteSentinel } from '../../composables/useInfiniteSentinel'
 import { useHideCompleted } from '../../composables/useHideCompleted'
 import { useDesktopSurfaceOpacity } from '../../composables/useDesktopSurfaceOpacity'
+import { announceWorkItemChanged } from '../../composables/workItemChanges'
 import { useDayTimeline } from '../../components/my-time/day/useDayTimeline'
 import { atMinute, formatClock, HOUR, MIN_BLOCK_MS, parseClock, parseDuration } from '../../components/my-time/day/dayModel'
 import { addDays, todayIn } from '../../components/team/teamDashboardModel'
@@ -52,6 +53,7 @@ const recording = ref<'idle' | 'saving' | 'done'>('idle')
 const flashId = ref<string | null>(null)
 const toast = ref('')
 const toastVisible = ref(false)
+const toastFailed = ref(false)
 const closing = ref(false)
 const opening = ref(0)
 const search = ref<InstanceType<typeof ElInput>>()
@@ -179,11 +181,12 @@ function toggle(item: TimerCandidate) {
   openId.value = openId.value === item.workItemId ? null : item.workItemId
   rangeMode.value = false
 }
-function showToast(text: string) {
+function showToast(text: string, failed = false) {
   toast.value = text
+  toastFailed.value = failed
   toastVisible.value = true
   clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => { toastVisible.value = false }, 1800)
+  toastTimer = setTimeout(() => { toastVisible.value = false }, failed ? 3200 : 1800)
 }
 async function record(item: TimerCandidate) {
   if (!canRecord.value) return
@@ -206,6 +209,14 @@ async function record(item: TimerCandidate) {
     showToast(`已记录 ${spokenDuration(recorded)} · ${item.title}`)
     setTimeout(() => { if (flashId.value === item.workItemId) flashId.value = null }, 900)
   }, 380)
+}
+function statusChanged(item: TimerCandidate, detail: WorkItemDetail, statusName: string) {
+  // The personal completion definition lives on the server; the reload below corrects this guess.
+  item.statusCategory = detail.statusCategory
+  item.completed = detail.statusCategory === WorkItemStatusCategory.Done || detail.statusCategory === WorkItemStatusCategory.Canceled
+  void candidates.load()
+  showToast(`已改为「${statusName}」· ${item.title}`)
+  announceWorkItemChanged({ projectId: item.projectId, workItemId: item.workItemId })
 }
 async function startTimer(item: TimerCandidate) {
   if (!await tracker.start(item.workItemId)) return
@@ -358,6 +369,8 @@ function keydown(event: KeyboardEvent) {
               @toggle="toggle(item)"
               @record="record(item)"
               @start="startTimer(item)"
+              @status-changed="(detail, name) => statusChanged(item, detail, name)"
+              @status-failed="showToast($event, true)"
             />
           </TransitionGroup>
         </div>
@@ -412,9 +425,9 @@ function keydown(event: KeyboardEvent) {
       <div
         class="quick-toast"
         :class="{ 'is-visible': toastVisible }"
-        role="status"
+        :role="toastFailed ? 'alert' : 'status'"
       >
-        <CircleCheck />{{ toast }}
+        <WarningFilled v-if="toastFailed" /><CircleCheck v-else /><span>{{ toast }}</span>
       </div>
     </section>
   </div>
@@ -468,6 +481,7 @@ button:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:-2p
   transition:opacity .18s var(--yp-timer-ease),transform .22s var(--yp-timer-ease)}
 .quick-toast.is-visible{opacity:1;transform:none}
 .quick-toast svg{width:15px;height:15px;flex-shrink:0}
+.quick-toast span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .quick-row-enter-active,.quick-row-leave-active{transition:grid-template-rows .26s var(--yp-timer-ease),opacity .2s}
 .quick-row-enter-from,.quick-row-leave-to{grid-template-rows:0fr;opacity:0}
 @keyframes quick-in{from{opacity:0;transform:translateY(10px) scale(.96)}to{opacity:1;transform:none}}
