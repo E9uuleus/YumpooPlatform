@@ -59,8 +59,27 @@ describe('M1-12 Web 全局壳', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('项目管理')
     expect(wrapper.text()).toContain('Yumpoo 测试公司')
-    expect(wrapper.text()).toContain('Web 浏览器')
+    expect(wrapper.text()).not.toContain('在线壳')
+    expect(wrapper.text()).not.toContain('Web 浏览器')
     expect(wrapper.findAll('.module-rail__item-label').map(item => item.text())).toEqual(['首页', '工作台'])
+  })
+
+  it('顶栏图标按钮：本页引导随页面启用，偏好设置进入设置页', async () => {
+    const wrapper = await mountApplication('/settings')
+    await flushPromises()
+    const tour = wrapper.get('[data-tour="topbar-tour"]')
+    expect(tour.attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-tour="topbar-appearance"]').exists()).toBe(false)
+    const router = wrapper.vm.$router
+    await router.push('/')
+    await flushPromises()
+    expect(wrapper.get('[data-tour="topbar-tour"]').attributes('disabled')).toBeUndefined()
+    await router.push('/inbox')
+    await flushPromises()
+    await wrapper.get('[data-tour="topbar-preferences"]').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.name).toBe('settings')
+    expect(wrapper.get('[data-tour="topbar-preferences"]').classes()).toContain('is-active')
   })
 
   it('管理员显示全局身份入口且保留三个子入口', async () => {

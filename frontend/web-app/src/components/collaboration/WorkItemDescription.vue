@@ -44,6 +44,7 @@ const attachments = useEditorAttachments({
 const { insertFiles, abortUploads, pendingUploads } = attachments
 
 const editor = useEditor({
+  injectCSS: false,
   content: '',
   editable: true,
   extensions: [
