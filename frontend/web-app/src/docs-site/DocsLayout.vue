@@ -95,13 +95,14 @@ onBeforeUnmount(() => {
           <span class="docs-search-trigger__text">搜索文档</span>
           <kbd>{{ shortcut }}</kbd>
         </button>
-        <yp-theme-switcher
-          class="docs-topbar__appearance"
-          :theme="appearance.themeMode.value"
-          :density="appearance.densityMode.value"
-          @update:theme="appearance.setThemeMode"
-          @update:density="appearance.setDensityMode"
-        />
+        <span class="docs-topbar__appearance">
+          <yp-theme-switcher
+            :theme="appearance.themeMode.value"
+            :density="appearance.densityMode.value"
+            @update:theme="appearance.setThemeMode"
+            @update:density="appearance.setDensityMode"
+          />
+        </span>
         <router-link
           v-if="!desktop"
           class="docs-topbar__download"

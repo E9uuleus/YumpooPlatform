@@ -75,6 +75,7 @@ const contextNavigationOpen = ref(typeof window === 'undefined'
 
 const inDesktopShell = computed(() => window.yumpooDesktop?.client === 'electron' || session.authentication.value?.client.type === AuthenticationClientType.Electron)
 const routeHelp = computed(() => routeHelpPath(route.name))
+const helpMenuOpen = ref(false)
 
 function openHelp(command: string): void {
   const href = command === 'page' ? routeHelp.value : command
@@ -428,16 +429,19 @@ onBeforeUnmount(() => {
             trigger="click"
             placement="bottom-end"
             @command="openHelp"
+            @visible-change="helpMenuOpen = $event"
           >
             <span class="app-topbar__tool-wrap">
               <el-tooltip
                 content="帮助"
                 placement="bottom"
                 :show-after="400"
+                :disabled="helpMenuOpen"
               >
                 <button
                   type="button"
                   class="app-topbar__tool"
+                  :class="{ 'is-active': helpMenuOpen }"
                   data-tour="topbar-help"
                   aria-label="帮助"
                 >
