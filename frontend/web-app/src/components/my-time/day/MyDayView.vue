@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElAlert, ElButton, ElMessage, ElPopover } from 'element-plus'
 import { TimeSessionFillMode, type TimerCandidate } from '@yumpoo/api-client'
 import { useTimeTracker } from '../../../composables/useTimeTracker'
+import { usePageOnboarding } from '../../../onboarding/useOnboarding'
 import { addDays } from '../../team/teamDashboardModel'
 import BlockPopover from './BlockPopover.vue'
 import DayHeader from './DayHeader.vue'
@@ -22,6 +23,9 @@ const tracker = useTimeTracker()
 const { page, day: calendarDay, blocks, layoutMap, shareMap, totals, recordedMs, dayRange, workday, now, limit, loading, busy,
   problem, fresh, preferences, load, hold, create, edit, remove, reassign, exclusive } = useDayTimeline(toRef(props, 'date'), toRef(props, 'timezone'))
 const timeline = ref<InstanceType<typeof DayTimeline>>()
+const onboardingReady = computed(() => Boolean(page.value) && !loading.value && !problem.value)
+const onboarding = usePageOnboarding(() => onboardingReady.value)
+watch(onboardingReady, ready => { if (ready) void onboarding.ready() }, { immediate: true, flush: 'post' })
 
 type PopoverInstance = InstanceType<typeof ElPopover> & { popperRef?: { popperInstanceRef?: { update?: () => void } } }
 const composerPopover = ref<PopoverInstance>()
