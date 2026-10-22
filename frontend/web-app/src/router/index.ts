@@ -44,6 +44,15 @@ export const routes: RouteRecordRaw[] = [
     meta: { public: true },
   },
   {
+    path: '/docs',
+    component: () => import('../docs-site/DocsLayout.vue'),
+    meta: { public: true },
+    children: [
+      { path: '', name: 'docs-home', component: () => import('../docs-site/DocsHome.vue') },
+      { path: ':slug(.*)', name: 'docs-page', component: () => import('../docs-site/DocsPage.vue') },
+    ],
+  },
+  {
     path: '/status/account-disabled',
     name: 'account-disabled',
     component: SessionStatusView,

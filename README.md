@@ -2,6 +2,8 @@
 
 面向团队的项目协作平台，提供项目与工作项管理、成员协作和企业微信身份接入。后端采用单部署的模块化单体，浏览器与 Electron 桌面端共用同一套在线 Vue SPA；桌面端需要连接服务端。
 
+部署后访问 `/docs` 查看产品与架构文档，源文件在 [frontend/web-app/src/docs-site/content/](frontend/web-app/src/docs-site/content/sections.ts)。
+
 ## 主要功能
 
 - 项目、成员和工作项类别管理，表格与看板视图、筛选和排序。
@@ -133,7 +135,7 @@ pnpm test:e2e
 pnpm test:e2e -- --skip-web-build
 ```
 
-默认命令构建 Web，启动独立的 PostgreSQL 容器、后端和 Web preview，依次检查首页登录、创建项目、工作项详情、我的一天、收件箱和管理后台。运行前需释放 8100、18174 端口；正常结束、失败或收到 Ctrl+C / SIGTERM 时，自动停止本次启动的进程树并删除容器。`--skip-web-build` 复用已有 Web 构建，其他参数转交 Playwright，例如 `pnpm test:e2e -- --headed`。
+默认命令构建 Web，启动独立的 PostgreSQL 容器、后端和 Web preview，依次检查首页登录、创建项目、工作项详情、我的一天、收件箱、管理后台和文档中心。运行前需释放 8100、18174 端口；正常结束、失败或收到 Ctrl+C / SIGTERM 时，自动停止本次启动的进程树并删除容器。`--skip-web-build` 复用已有 Web 构建，其他参数转交 Playwright，例如 `pnpm test:e2e -- --headed`。
 
 - `YUMPOO_E2E_BASE_URL`：指向已运行的测试环境；设置后不构建或启动服务，也不清理该环境。用例会创建一个带时间戳的项目和工作项，环境需提供“本地测试管理员”身份。
 - `YUMPOO_E2E_BROWSER`：系统浏览器 channel，例如 `msedge` 或 `chrome`；不下载浏览器二进制。
