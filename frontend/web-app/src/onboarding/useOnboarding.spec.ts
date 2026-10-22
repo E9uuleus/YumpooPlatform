@@ -78,6 +78,41 @@ describe('onboarding triggers', () => {
     }
   })
 
+  it('shows only new steps to people who handled an older version and records the new one', async () => {
+    api.getMyOnboarding.mockResolvedValue(records(['welcome', TOURS.welcome.version], ['project-work-items', 1]))
+    const onboarding = useOnboarding()
+    const project = await page('project-work-items')
+    await project.ready()
+    expect(onboarding.active.value).toEqual({ id: 'project-work-items', mode: 'update', from: 1 })
+    onboarding.complete('project-work-items')
+    expect(api.completeMyOnboardingTour).toHaveBeenCalledWith({ tourId: 'project-work-items', xXSRFTOKEN: 'csrf',
+      onboardingTourCompleteRequest: { version: TOURS['project-work-items'].version } })
+  })
+
+  it('updates welcome without the dialog and updates page tours before welcome is current', async () => {
+    api.getMyOnboarding.mockResolvedValue(records(['welcome', 1], ['project-work-items', 1]))
+    const onboarding = useOnboarding()
+    const project = await page('project-work-items')
+    const home = await page('welcome')
+    await project.ready()
+    expect(onboarding.active.value).toEqual({ id: 'project-work-items', mode: 'update', from: 1 })
+    onboarding.complete('project-work-items')
+    await home.ready()
+    expect(onboarding.welcomeOpen.value).toBe(false)
+    expect(onboarding.active.value).toEqual({ id: 'welcome', mode: 'update', from: 1 })
+  })
+
+  it('replays an outdated tour in full without recording it', async () => {
+    api.getMyOnboarding.mockResolvedValue(records(['welcome', TOURS.welcome.version], ['project-work-items', 1]))
+    const onboarding = useOnboarding()
+    const home = await page('welcome')
+    await home.ready()
+    onboarding.replay('project-work-items')
+    expect(onboarding.active.value).toEqual({ id: 'project-work-items', mode: 'replay' })
+    onboarding.complete('project-work-items')
+    expect(api.completeMyOnboardingTour).not.toHaveBeenCalled()
+  })
+
   it.each([true, false])('never records a replay, including an unhandled tour (handled: %s)', async handled => {
     api.getMyOnboarding.mockResolvedValue(handled ? records(['welcome', TOURS.welcome.version], ['inbox', 1]) : records(['welcome', TOURS.welcome.version]))
     const onboarding = useOnboarding()
