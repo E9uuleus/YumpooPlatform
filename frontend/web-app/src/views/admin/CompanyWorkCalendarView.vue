@@ -140,7 +140,10 @@ onMounted(load)
       :problem="error"
     />
     <div class="calendar-toolbar">
-      <div class="calendar-year">
+      <div
+        class="calendar-year"
+        data-tour="work-calendar-year"
+      >
         <el-button
           aria-label="上一年"
           :disabled="year <= 2000 || loading || saving"
@@ -167,6 +170,7 @@ onMounted(load)
         </el-button>
         <el-button
           :disabled="!canWrite || loading || saving"
+          data-tour="work-calendar-import"
           @click="fileInput?.click()"
         >
           导入 Excel
@@ -249,7 +253,11 @@ onMounted(load)
         </div>
       </article>
     </div>
-    <article v-if="alert" class="calendar-alert">
+    <article
+      v-if="alert"
+      class="calendar-alert"
+      data-tour="work-hours-threshold"
+    >
       <h3>工时异常提醒</h3>
       <div class="calendar-actions">
         <label for="work-hours-threshold">阈值（小时）</label>

@@ -6,7 +6,8 @@ import { useSession } from '../composables/useSession'
 import { TOURS, type TourId } from './tours'
 
 const records = ref<Map<string, number>>()
-const active = ref<{ id: TourId; mode: 'automatic' | 'replay' }>()
+/** `update` 只展示 `since` 晚于 `from`（用户已处理的版本）的步骤。 */
+const active = ref<{ id: TourId; mode: 'automatic' | 'replay' } | { id: TourId; mode: 'update'; from: number }>()
 const welcomeOpen = ref(false)
 let loaded: { userId: string; request: Promise<void> } | undefined
 
@@ -26,15 +27,20 @@ function handled(id: TourId): boolean {
   return (records.value?.get(id) ?? 0) >= TOURS[id].version
 }
 
-/** 页面数据就绪时调用；页面引导要等欢迎引导处理后才会自动出现。 */
+/** 页面数据就绪时调用；页面引导要等欢迎引导处理后才会自动出现，已处理旧版本的引导只展示新增步骤。 */
 async function ready(id: TourId, isCurrentPage: () => boolean): Promise<void> {
   const userId = useSession().authentication.value?.user.id
   if (!userId || !isCurrentPage()) return
   await load(userId)
   if (!isCurrentPage() || useSession().authentication.value?.user.id !== userId) return
   if (!records.value || active.value || welcomeOpen.value || handled(id)) return
-  if (id === 'welcome') welcomeOpen.value = true
-  else if (handled('welcome')) start(id)
+  const from = records.value.get(id) ?? 0
+  if (!from) {
+    if (id === 'welcome') welcomeOpen.value = true
+    else if (handled('welcome')) start(id)
+  }
+  else if (TOURS[id].steps.some(step => (step.since ?? 1) > from)) active.value = { id, mode: 'update', from }
+  else record(id)
 }
 
 function start(id: TourId): void {
@@ -57,7 +63,11 @@ function complete(id: TourId): void {
   const tour = active.value
   if (tour?.id !== id && !(id === 'welcome' && welcomeOpen.value)) return
   stop()
-  if (tour?.mode === 'replay' || handled(id)) return
+  if (tour?.mode !== 'replay') record(id)
+}
+
+function record(id: TourId): void {
+  if (handled(id)) return
   const version = TOURS[id].version
   records.value?.set(id, version)
   const csrf = readCsrfToken()

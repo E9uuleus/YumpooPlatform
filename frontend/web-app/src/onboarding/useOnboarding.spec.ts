@@ -57,7 +57,7 @@ describe('onboarding triggers', () => {
     expect(api.getMyOnboarding).toHaveBeenCalledOnce()
   })
 
-  it('skips handled tours until their version is raised', async () => {
+  it('skips handled tours and silently records a raised version without new steps', async () => {
     api.getMyOnboarding.mockResolvedValue(records(['welcome', 1], ['inbox', 1]))
     const onboarding = useOnboarding()
     const home = await page('welcome')
@@ -69,7 +69,10 @@ describe('onboarding triggers', () => {
     TOURS.inbox.version = 2
     try {
       await inbox.ready()
-      expect(onboarding.active.value).toEqual({ id: 'inbox', mode: 'automatic' })
+      expect(onboarding.active.value).toBeUndefined()
+      expect(api.completeMyOnboardingTour).toHaveBeenCalledWith({ tourId: 'inbox', xXSRFTOKEN: 'csrf', onboardingTourCompleteRequest: { version: 2 } })
+      await inbox.ready()
+      expect(api.completeMyOnboardingTour).toHaveBeenCalledOnce()
     } finally {
       TOURS.inbox.version = 1
     }

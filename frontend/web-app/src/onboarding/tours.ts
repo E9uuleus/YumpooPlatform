@@ -1,5 +1,5 @@
 export type TourId = 'welcome' | 'project-work-items' | 'workspace' | 'dashboards' | 'inbox' | 'company'
-export type TourPlacement = 'top' | 'top-start' | 'bottom' | 'bottom-start' | 'bottom-end' | 'left' | 'left-start' | 'right' | 'right-start'
+export type TourPlacement = 'top' | 'top-start' | 'top-end' | 'bottom' | 'bottom-start' | 'bottom-end' | 'left' | 'left-start' | 'right' | 'right-start'
 
 export interface TourStep {
   /** 缺省时居中展示。 */
@@ -7,6 +7,10 @@ export interface TourStep {
   title: string
   description: string
   placement?: TourPlacement
+  /** 引入或内容实质变化时的引导版本，缺省为 1；只看过更早版本的用户自动只看这些步骤。 */
+  since?: number
+  /** 主目标不可见时改用的目标与说明，例如二级导航收起时指向展开按钮。 */
+  fallback?: { target: string; description: string; placement?: TourPlacement }
 }
 
 export interface TourDefinition {
