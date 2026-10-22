@@ -1,6 +1,7 @@
 import vue from '@vitejs/plugin-vue'
 import { loadEnv, type Plugin } from 'vite'
 import { defineConfig } from 'vitest/config'
+import { docsMarkdown } from './build/docs/markdown.ts'
 
 const apiProxy = {
   '/api': {
@@ -30,7 +31,7 @@ function buildCommitMeta(commit: string): Plugin {
 export default defineConfig(({ mode }) => {
   const { YUMPOO_BUILD_COMMIT: commit = '' } = loadEnv(mode, '.', 'YUMPOO_BUILD_')
   return {
-    plugins: [vue(), buildCommitMeta(/^[0-9a-f]{40}$/u.test(commit) ? commit : 'unknown')],
+    plugins: [docsMarkdown(), vue(), buildCommitMeta(/^[0-9a-f]{40}$/u.test(commit) ? commit : 'unknown')],
     server: {
       host: '127.0.0.1',
       port: 18173,
@@ -46,7 +47,7 @@ export default defineConfig(({ mode }) => {
     },
     test: {
       environment: 'happy-dom',
-      include: ['src/**/*.spec.ts'],
+      include: ['src/**/*.spec.ts', 'build/**/*.spec.ts'],
       clearMocks: true,
       testTimeout: 20_000,
       // Source-constraint specs read stylesheets as ?raw text; normal CSS imports stay stubbed.
