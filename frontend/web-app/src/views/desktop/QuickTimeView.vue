@@ -3,7 +3,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { TimeSessionFillMode, WorkItemStatusCategory, type TimerCandidate, type WorkItemDetail } from '@yumpoo/api-client'
 import type { QuickPanelContext } from '@yumpoo/preload-contract'
 import { ElInput } from 'element-plus'
-import { ArrowRight, CircleCheck, Clock, WarningFilled } from '@element-plus/icons-vue'
+import { ArrowRight, CircleCheck, Clock, Plus, WarningFilled } from '@element-plus/icons-vue'
 import { useSession } from '../../composables/useSession'
 import { useTimeTracker } from '../../composables/useTimeTracker'
 import { useTimerCandidates } from '../../composables/useTimerCandidates'
@@ -17,6 +17,7 @@ import { addDays, todayIn } from '../../components/team/teamDashboardModel'
 import HideCompletedSwitch from '../../components/timer/HideCompletedSwitch.vue'
 import TimerIcon from '../../components/timer/TimerIcon.vue'
 import QuickTimeRow from '../../components/desktop/QuickTimeRow.vue'
+import QuickCreateRow from '../../components/desktop/QuickCreateRow.vue'
 import { groupCandidates, placementHint, projectTones, quickPlan, rangeFromPlan, rangeProblem, rangeRecordable, shortDuration, spokenDuration,
   type DateChoice } from '../../components/desktop/quickTime'
 import brandLogo from '../../assets/brand/logo.svg'
@@ -51,6 +52,11 @@ const rangeStart = ref(0)
 const rangeEnd = ref(0)
 const recording = ref<'idle' | 'saving' | 'done'>('idle')
 const flashId = ref<string | null>(null)
+const creating = ref(false)
+const createTitle = ref('')
+const createKey = ref(0)
+/** A created item to open once the list has reloaded; it is added locally when the first page does not reach it. */
+let reveal: TimerCandidate | undefined
 const toast = ref('')
 const toastVisible = ref(false)
 const toastFailed = ref(false)
@@ -141,6 +147,16 @@ watch(() => todayDay.recordedMs.value, (to, from) => {
   countFrame = requestAnimationFrame(step)
 }, { immediate: true })
 
+function revealCreated() {
+  const item = reveal
+  if (candidates.loading.value || !item) return
+  reveal = undefined
+  if (!candidates.items.value.some(candidate => candidate.workItemId === item.workItemId)) candidates.items.value = [item, ...candidates.items.value]
+  openId.value = item.workItemId
+  void nextTick(() => list.value?.querySelector(`[data-work-item-id="${item.workItemId}"]`)?.scrollIntoView({ block: 'nearest' }))
+}
+watch(() => candidates.loading.value, revealCreated)
+
 const offOpen = bridge?.onOpen(value => {
   pinned.value = value.pinned === true
   context.value = value
@@ -152,6 +168,7 @@ const offOpen = bridge?.onOpen(value => {
   pickedDate.value = today.value
   custom.value = false
   rangeMode.value = false
+  creating.value = false
   durationMs.value = HOUR
   opening.value++
   if (query.value) query.value = ''
@@ -218,6 +235,24 @@ function statusChanged(item: TimerCandidate, detail: WorkItemDetail, statusName:
   showToast(`已改为「${statusName}」· ${item.title}`)
   announceWorkItemChanged({ projectId: item.projectId, workItemId: item.workItemId })
 }
+function startCreate(title = '') {
+  createTitle.value = title
+  createKey.value++
+  creating.value = true
+}
+function created(detail: WorkItemDetail, projectName: string) {
+  creating.value = false
+  reveal = { workItemId: detail.id, projectId: detail.projectId, projectName, itemNo: detail.itemNo, title: detail.title,
+    contentName: detail.contentName, contentColorToken: detail.contentColorToken, statusCategory: detail.statusCategory, completed: false,
+    assignedToMe: true, lastTrackedAt: null, ownDurationMs: 0 }
+  showToast(`已创建 #${detail.itemNo} · ${detail.title}`)
+  announceWorkItemChanged({ projectId: detail.projectId, workItemId: detail.id })
+  // Clearing the search or switching the project chip reloads the list by itself.
+  const reloads = !!query.value || (!!project.value && project.value !== detail.projectId)
+  if (project.value) project.value = detail.projectId
+  query.value = ''
+  if (!reloads) void candidates.load().then(revealCreated)
+}
 async function startTimer(item: TimerCandidate) {
   if (!await tracker.start(item.workItemId)) return
   openId.value = null
@@ -226,7 +261,8 @@ async function startTimer(item: TimerCandidate) {
 function keydown(event: KeyboardEvent) {
   if (event.key !== 'Escape') return
   event.preventDefault()
-  if (openId.value) openId.value = null
+  if (creating.value) creating.value = false
+  else if (openId.value) openId.value = null
   else void bridge?.close()
 }
 </script>
@@ -293,6 +329,15 @@ function keydown(event: KeyboardEvent) {
           placeholder="搜索工作项（含已完成）"
           aria-label="搜索工作项"
         />
+        <button
+          type="button"
+          class="quick-icon quick-search__add"
+          aria-label="新建工作项"
+          title="新建工作项"
+          @click.prevent="startCreate()"
+        >
+          <Plus />
+        </button>
       </label>
       <div
         class="quick-projects"
@@ -329,6 +374,17 @@ function keydown(event: KeyboardEvent) {
         ref="list"
         class="quick-list"
       >
+        <QuickCreateRow
+          v-if="creating"
+          :key="createKey"
+          :preferred="[project, context.projectId]"
+          :initial-title="createTitle"
+          :user-id="session.authentication.value?.user.id ?? ''"
+          :tones="tones"
+          @close="creating = false"
+          @created="created"
+          @failed="showToast($event, true)"
+        />
         <div
           v-for="group in groups"
           :key="group.projectId"
@@ -351,6 +407,7 @@ function keydown(event: KeyboardEvent) {
               v-model:range-mode="rangeMode"
               v-model:range-start="rangeStart"
               v-model:range-end="rangeEnd"
+              :data-work-item-id="item.workItemId"
               :item="item"
               :today-ms="todayMs.get(item.workItemId) ?? 0"
               :expanded="openId === item.workItemId"
@@ -379,7 +436,15 @@ function keydown(event: KeyboardEvent) {
           class="quick-empty"
         >
           {{ candidates.loading.value ? '正在加载工作项…' : candidates.problem.value
-            || (project ? '这个项目里暂无分配给你或最近记录的工作项，可以在上方搜索。' : '暂无工作项，可以在上方搜索。') }}
+            || (query.trim() ? '没有找到匹配的工作项。' : project ? '这个项目里暂无分配给你或最近记录的工作项，可以在上方搜索。' : '暂无工作项，可以在上方搜索。') }}
+          <button
+            v-if="query.trim() && !candidates.loading.value && !candidates.problem.value && !creating"
+            type="button"
+            class="quick-empty__create"
+            @click="startCreate(query.trim())"
+          >
+            <Plus />新建「{{ query.trim() }}」
+          </button>
         </p>
         <p
           v-if="candidates.loading.value && shown.length"
@@ -470,6 +535,10 @@ button:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:-2p
 .quick-list{flex:1;min-height:0;overflow:auto;padding:2px 8px 8px}
 .quick-group{padding:8px 6px 3px;color:var(--yp-text-muted);font-size:11px}
 .quick-empty{margin:24px 12px;color:var(--yp-text-muted);font-size:12.5px;line-height:1.6;text-align:center}
+.quick-empty__create{display:flex;align-items:center;justify-content:center;gap:4px;max-width:100%;margin:8px auto 0;color:var(--yp-timer-accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.quick-empty__create svg{width:14px;height:14px;flex-shrink:0}
+.quick-search__add{width:24px;height:24px;margin-right:-6px;flex-shrink:0}
+.quick-search__add svg{width:15px;height:15px}
 .quick-status{margin:6px 0;color:var(--yp-text-muted);font-size:12px;text-align:center}
 .quick-status button{color:var(--yp-timer-accent)}
 .quick-sentinel{height:1px}
