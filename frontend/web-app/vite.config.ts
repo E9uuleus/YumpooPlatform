@@ -14,6 +14,9 @@ const apiProxy = {
   },
 }
 
+// 与 deployment/windows/nginx/yumpoo-wecom.conf 的 CSP 保持一致，让 vite preview 与本地冒烟复现线上约束。
+const productionCsp = "default-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+
 // 部署验收用该 meta 核对线上前端字节来自被发布的提交。
 function buildCommitMeta(commit: string): Plugin {
   return {
@@ -39,6 +42,7 @@ export default defineConfig(({ mode }) => {
       port: 18174,
       strictPort: true,
       proxy: apiProxy,
+      headers: { 'Content-Security-Policy': productionCsp },
     },
     test: {
       environment: 'happy-dom',
