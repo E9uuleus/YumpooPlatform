@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { CalendarDaySource, CalendarDayType, readCsrfToken, type WorkCalendarYear, type WorkHoursAlertSetting } from '@yumpoo/api-client'
 import { ElAlert, ElButton, ElDialog, ElInput, ElInputNumber, ElMessage, ElMessageBox } from 'element-plus'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { administrationApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
@@ -14,6 +14,7 @@ import { todayIn, toApiDate, weekday } from '../../components/team/teamDashboard
 import YpSegmented from '../../components/yp/YpSegmented.vue'
 import { useIdentityAdmin } from '../../composables/useIdentityAdmin'
 import { useSession } from '../../composables/useSession'
+import { usePageOnboarding } from '../../onboarding/useOnboarding'
 
 const session = useSession(), { canWrite } = useIdentityAdmin()
 const timezone = computed(() => session.authentication.value?.company.timezone ?? 'Asia/Shanghai')
@@ -26,6 +27,9 @@ const serialize = () => JSON.stringify([...draft.value.values()].sort((a, b) => 
 const saved = ref('[]'), dirty = computed(() => serialize() !== saved.value)
 const loading = ref(false), saving = ref(false), error = ref<ApiProblem>()
 const importErrors = ref<string[]>([]), fileInput = ref<HTMLInputElement>()
+const onboardingReady = computed(() => Boolean(data.value && alert.value) && !loading.value && !error.value)
+const onboarding = usePageOnboarding(() => onboardingReady.value)
+watch(onboardingReady, ready => { if (ready) void onboarding.ready() }, { flush: 'post' })
 const dates = computed(() => yearDates(year.value))
 const months = computed(() => Array.from({ length: 12 }, (_, index) => {
   const first = `${year.value}-${String(index + 1).padStart(2, '0')}-01`
@@ -140,7 +144,10 @@ onMounted(load)
       :problem="error"
     />
     <div class="calendar-toolbar">
-      <div class="calendar-year">
+      <div
+        class="calendar-year"
+        data-tour="work-calendar-year"
+      >
         <el-button
           aria-label="上一年"
           :disabled="year <= 2000 || loading || saving"
@@ -167,6 +174,7 @@ onMounted(load)
         </el-button>
         <el-button
           :disabled="!canWrite || loading || saving"
+          data-tour="work-calendar-import"
           @click="fileInput?.click()"
         >
           导入 Excel
@@ -249,7 +257,11 @@ onMounted(load)
         </div>
       </article>
     </div>
-    <article v-if="alert" class="calendar-alert">
+    <article
+      v-if="alert"
+      class="calendar-alert"
+      data-tour="work-hours-threshold"
+    >
       <h3>工时异常提醒</h3>
       <div class="calendar-actions">
         <label for="work-hours-threshold">阈值（小时）</label>

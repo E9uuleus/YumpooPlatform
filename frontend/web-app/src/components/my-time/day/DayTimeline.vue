@@ -395,6 +395,7 @@ defineExpose({ scrollToWorkday, pendingEl, discardDraft })
     ref="scroller"
     class="day-timeline"
     role="region"
+    data-tour="day-timeline"
     aria-label="当天时间线"
   >
     <div

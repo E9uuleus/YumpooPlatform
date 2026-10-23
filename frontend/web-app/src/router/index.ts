@@ -122,20 +122,20 @@ export const routes: RouteRecordRaw[] = [
         path: 'workspace/:workspaceSlug/my-time',
         name: 'my-time',
         component: () => import('../views/MyTimePageView.vue'),
-        meta: { shellSection: 'work' },
+        meta: { shellSection: 'work', onboardingTour: 'my-time' },
       },
       {
         path: 'workspace/:workspaceSlug/my-time/day/:date(\\d{4}-\\d{2}-\\d{2})',
         name: 'my-time-day',
         component: () => import('../views/MyTimeDayPageView.vue'),
-        meta: { shellSection: 'work' },
+        meta: { shellSection: 'work', onboardingTour: 'my-day' },
       },
       { path: 'team', name: 'team-entry', redirect: { name: 'team', params: { view: 'timesheet' } } },
       {
         path: 'team/:view(timesheet|overtime|workload)',
         name: 'team',
         component: () => import('../views/TeamReviewView.vue'),
-        meta: { shellSection: 'team', requiredRoles: [AuthenticationRole.AppManager, AuthenticationRole.CompanyAdmin] },
+        meta: { shellSection: 'team', requiredRoles: [AuthenticationRole.AppManager, AuthenticationRole.CompanyAdmin], onboardingTour: 'team' },
       },
       {
         path: 'projects/archived',
@@ -174,7 +174,7 @@ export const routes: RouteRecordRaw[] = [
           { path: 'activity', name: 'company-activity', component: () => import('../views/admin/CompanyActivityView.vue') },
           { path: 'sync-runs', name: 'company-sync-runs', component: IdentitySyncRunsView },
           { path: 'scheduled-jobs', name: 'company-scheduled-jobs', component: () => import('../views/admin/CompanyScheduledJobsView.vue') },
-          { path: 'work-calendar', name: 'company-work-calendar', component: () => import('../views/admin/CompanyWorkCalendarView.vue') },
+          { path: 'work-calendar', name: 'company-work-calendar', component: () => import('../views/admin/CompanyWorkCalendarView.vue'), meta: { onboardingTour: 'work-calendar' } },
         ],
       },
       {

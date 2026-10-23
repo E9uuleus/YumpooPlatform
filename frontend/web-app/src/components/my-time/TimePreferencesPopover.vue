@@ -34,6 +34,7 @@ async function save(patch: Partial<typeof preferences.value>) {
             text
             :icon="Setting"
             aria-label="工时设置"
+            data-tour="time-preferences"
           />
         </el-tooltip>
       </span>

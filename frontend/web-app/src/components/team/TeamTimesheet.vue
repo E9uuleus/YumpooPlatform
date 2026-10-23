@@ -132,7 +132,10 @@ async function exportExcel() {
         label="统计周期"
         @update:model-value="changeKind"
       />
-      <div class="team-period">
+      <div
+        class="team-period"
+        data-tour="team-period"
+      >
         <el-button
           :icon="ArrowLeft"
           text
@@ -176,7 +179,10 @@ async function exportExcel() {
           @click="step(1)"
         />
       </div>
-      <div class="team-toolbar__end">
+      <div
+        class="team-toolbar__end"
+        data-tour="team-export"
+      >
         <el-checkbox v-model="hideEmpty">
           {{ overtime ? '隐藏无加班成员' : '隐藏无工时成员' }}
         </el-checkbox>
@@ -215,6 +221,7 @@ async function exportExcel() {
       <div
         ref="sheetBox"
         class="team-sheet"
+        data-tour="team-grid"
       >
         <table
           ref="grid"

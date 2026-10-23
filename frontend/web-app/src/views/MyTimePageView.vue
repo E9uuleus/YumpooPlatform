@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { Refresh } from '@element-plus/icons-vue'
 import { ElButton, ElTooltip } from 'element-plus'
-import { ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import MyTimeView from '../components/my-time/MyTimeView.vue'
 import TimePreferencesPopover from '../components/my-time/TimePreferencesPopover.vue'
+import { usePageOnboarding } from '../onboarding/useOnboarding'
 
 const myTime = ref<InstanceType<typeof MyTimeView>>()
+const onboardingReady = computed(() => Boolean(myTime.value?.ready))
+const onboarding = usePageOnboarding(() => onboardingReady.value)
+watch(onboardingReady, ready => { if (ready) void onboarding.ready() }, { flush: 'post' })
 </script>
 
 <template>
