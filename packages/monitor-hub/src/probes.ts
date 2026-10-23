@@ -4,6 +4,8 @@ import { writeFile, rename } from 'node:fs/promises'
 import { parse as parseYaml } from 'yaml'
 
 type Sample = { metric: Record<string, string>; value: [number, string] }
+const metricNames = ['ALERTS','probe_success','up','yumpoo_ops_sample_timestamp_seconds','yumpoo_ops_io_timestamp_seconds','yumpoo_ops_alert_evaluation_timestamp_seconds']
+export const timestampQuery = metricNames.map(name => `label_replace(timestamp({__name__="${name}"}), "monitor_metric_name", "${name}", "", "")`).join(' or ')
 export class Probes {
   samples: Sample[] = []
   sampledAt = 0
@@ -22,11 +24,11 @@ export class Probes {
     try {
       // Carry the original sample timestamp, not the instant query evaluation timestamp.
       const [values, timestamps] = await Promise.all([
-        this.json(`${this.config.prometheusUrl}/api/v1/query?query=${encodeURIComponent('{__name__=~"ALERTS|probe_success|up|yumpoo_ops_sample_timestamp_seconds|yumpoo_ops_io_timestamp_seconds|yumpoo_ops_alert_evaluation_timestamp_seconds"}')}`),
-        this.json(`${this.config.prometheusUrl}/api/v1/query?query=${encodeURIComponent('timestamp({__name__=~"ALERTS|probe_success|up|yumpoo_ops_sample_timestamp_seconds|yumpoo_ops_io_timestamp_seconds|yumpoo_ops_alert_evaluation_timestamp_seconds"})')}`),
+        this.json(`${this.config.prometheusUrl}/api/v1/query?query=${encodeURIComponent(`{__name__=~"${metricNames.join('|')}"}`)}`),
+        this.json(`${this.config.prometheusUrl}/api/v1/query?query=${encodeURIComponent(timestampQuery)}`),
       ])
       if (values.status !== 'success' || timestamps.status !== 'success') throw new Error('Prometheus query failure')
-      const key = (metric: Record<string,string>) => JSON.stringify(Object.entries(metric).filter(([k]) => k !== '__name__').sort())
+      const key = (metric: Record<string,string>) => JSON.stringify([metric.__name__ ?? metric.monitor_metric_name, Object.entries(metric).filter(([k]) => k !== '__name__' && k !== 'monitor_metric_name').sort()])
       const times = new Map<string, number>((timestamps.data.result as Sample[]).map(s => [key(s.metric), Number(s.value[1])]))
       if (now - this.sampledAt >= 90_000) this.freshSince.clear()
       this.samples = (values.data.result as Sample[]).map(s => ({ ...s, value: [times.get(key(s.metric)) ?? 0, s.value[1]] }))

@@ -59,6 +59,8 @@ sudo MONITOR_BUILD=<full-commit> MONITOR_OFFLINE_DIR=<absolute-bundle-directory>
 
 离线安装先核对整个镜像归档和各镜像配置 ID，再使用 `compose.offline.yml` 中的本地锁定镜像，禁止在线拉取。后续 Compose 操作须同时传入 `-f compose.yml -f <bundle>/compose.offline.yml`。保留前一份已验证镜像包，以便独立回退监控栈。
 
+只升级通知服务、且双方已有相同摘要的五个基础监控镜像时，可使用 `node tools/monitoring/bundle.mjs <output-directory> --hub-only` 生成较小的增量包。安装仍核验全部镜像 ID；目标缺少任一锁定基础镜像时会失败，需要改用完整包。
+
 数据位于 `/var/lib/yumpoo-monitor/{hub,prometheus,alertmanager,grafana,discovery}`。不随代码升级删除数据卷。SQLite 使用 WAL 与 FULL 同步；复制数据库需要先停止 hub 或使用 SQLite 在线备份，不能只复制活动的主数据库文件。此功能不承担业务数据备份。
 
 ## Windows 接入

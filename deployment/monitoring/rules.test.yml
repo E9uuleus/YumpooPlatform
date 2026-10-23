@@ -1,6 +1,21 @@
 rule_files: [rules.yml]
 evaluation_interval: 30s
 tests:
+  - name: timestamp labels distinguish metrics without losing original scrape time
+    interval: 30s
+    input_series:
+      - series: 'up{job="external",check="health"}'
+        values: '1 1 1'
+      - series: 'probe_success{job="external",check="health"}'
+        values: '1 1 1'
+    promql_expr_test:
+      - expr: 'label_replace(timestamp(up), "monitor_metric_name", "up", "", "") or label_replace(timestamp(probe_success), "monitor_metric_name", "probe_success", "", "")'
+        eval_time: 45s
+        exp_samples:
+          - labels: '{job="external",check="health",monitor_metric_name="up"}'
+            value: 30
+          - labels: '{job="external",check="health",monitor_metric_name="probe_success"}'
+            value: 30
   - name: failed scrape needs 90 seconds and 60 seconds of confirmed recovery
     interval: 30s
     input_series:

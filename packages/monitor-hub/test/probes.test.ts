@@ -1,6 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { Probes } from '../src/probes.ts'
+import { Probes, timestampQuery } from '../src/probes.ts'
+import { Store } from '../src/store.ts'
+import { Hub } from '../src/hub.ts'
 import type { Config, ReleaseEvent } from '../src/model.ts'
 
 const manifest = {schemaVersion:1,tag:'desktop-v1.2.3',version:'1.2.3',sourceCommit:'a'.repeat(40),installer:{name:'YumpooDesktop-Setup-1.2.3-x64.exe',bytes:1234,sha256:'a'.repeat(64)}}
@@ -34,4 +36,23 @@ test('desktop discovery failure does not invalidate successful server asset disc
   assert.equal(probes.discovery.get('server'),true)
   assert.equal(probes.discovery.get('desktop'),false)
   assert.equal(probes.discoverySuccess,false)
+})
+
+test('freshness joins original metric names and preserves scrape age for identical labelsets', async () => {
+  const now=1800000000000
+  let sampledAt=now-30000
+  const cfg={...config,prometheusUrl:'http://127.0.0.1:9090',services:[{id:'server',name:'server',checks:['health']}]} as Config
+  const probes=new Probes(cfg,(async(url: string | URL | Request)=>{
+    const query=new URL(String(url)).searchParams.get('query')
+    const timestamps=query===timestampQuery
+    return Response.json({status:'success',data:{result:['up','probe_success'].map(name=>({metric:{[timestamps?'monitor_metric_name':'__name__']:name,job:'external',check:'health',instance:'https://example.com/healthz'},value:[now/1000,timestamps?String(sampledAt/1000):'1']}))}})
+  }) as typeof fetch)
+  const store=new Store(':memory:');const hub=new Hub(store,cfg);probes.discovery.set('server',true)
+  await probes.poll(hub,now)
+  assert.equal(hub.status(now).services[0]?.observed,'healthy')
+  assert.equal(hub.status(now).services[0]?.sampledAt,sampledAt)
+  sampledAt=now-120000
+  await probes.poll(hub,now)
+  assert.equal(hub.status(now).services[0]?.observed,'unknown')
+  store.close()
 })
