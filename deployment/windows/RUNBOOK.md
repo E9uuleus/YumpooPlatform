@@ -527,3 +527,12 @@ gh attestation verify '<下载目录>\YumpooDesktop-Setup-X.Y.Z-x64.exe' -R E9uu
 5. 打开 `https://wecom-dev.yumpoo.com/download`，核对版本与 SHA-256 后通知同事安装，同时把[安装机制与隐私说明](desktop-client-install-and-privacy.md)发给管理层和同事；旧便携版直接覆盖安装，登录状态与偏好保留。此后全部自动更新。
 
 **每周核对**：供应链工作流的发布演练会读取更新源上的 `latest.yml` 与 `release.json`，要求与最新已发布桌面 Release 的附件逐字节一致；不一致时检查最近一次 Desktop Release 运行和主机上的 `desktop/stable` 目录。
+## 异机监控接入补充
+
+独立监控栈、机器人配置、SSH 权限与离线部署步骤见[异机监控部署手册](../monitoring/README.md)。正常发布只有在 `host.json.monitoring.enabled=true` 时，才在前置检查通过后写入维护预告并等待 300 秒；通知失败仍等待并继续。未配置的旧主机保持原行为，回退操作不增加等待。
+
+升级监控相关固定引擎仍需使用 Prepare Release 草稿中的已验证 ZIP，在管理员维护通道运行 `Update-YumpooEngine.ps1`，并显式传入 `-EnableMonitoring -MonitoringEnvironment <environment>`。不要从普通发布包自动执行安装脚本，不直接替换正在工作的 SYSTEM 引擎。后续未传 `-EnableMonitoring` 时保留已有监控开关，显式 `-EnableMonitoring:$false` 可关闭发布接入。
+
+启用后，主机事件通过 `deployment/monitor-outbox` 和 `YumpooMonitorRelay` 独立任务投递；`YumpooMonitorTunnel` 负责受限 SSH 隧道，`YumpooMonitorWatchdog` 在监测端持续不可达时直发运维群。三者均与部署锁分离。主机部署完成是事实记录，用户公告还需异机复核目标健康及版本；异机失败不能反过来修改部署结果或自动回滚。
+
+自动维护从实际进入维护起最多 30 分钟；`recovery_required` 或超时解除预期告警静默。手工完成恢复后，管理员运行 `Send-YumpooRecoveryNotice.ps1 -RequestId <original-request>`；它检查当前公开健康与版本，提交 `deployment.recovered`，再由异机确认实际版本，不发送新版本成功公告，也不修改主机部署状态。公网继续拒绝整个 Actuator 路径，只有回环指标网关可经机器隧道读取固定指标出口。

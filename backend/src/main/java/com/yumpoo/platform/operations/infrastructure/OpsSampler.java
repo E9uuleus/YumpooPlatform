@@ -649,6 +649,11 @@ public class OpsSampler implements OperationsRuntime, SmartLifecycle {
     }
 
     @Override
+    public java.util.Optional<RuntimeSnapshot> sampledSnapshot() {
+        return java.util.Optional.ofNullable(current.get());
+    }
+
+    @Override
     public List<MetricPoint> recent() {
         synchronized (history) {
             return List.copyOf(history);

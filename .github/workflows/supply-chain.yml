@@ -131,5 +131,11 @@ jobs:
       - name: Notify WeCom
         env:
           WECOM_RELEASE_WEBHOOK: ${{ secrets.WECOM_RELEASE_WEBHOOK }}
+          MONITOR_ENABLED: ${{ vars.MONITOR_ENABLED }}
+          MONITOR_ENVIRONMENT: wecom-dev
+          MONITOR_SSH_HOST: ${{ secrets.MONITOR_SSH_HOST }}
+          MONITOR_SSH_KEY: ${{ secrets.MONITOR_SSH_KEY }}
+          MONITOR_KNOWN_HOSTS: ${{ secrets.MONITOR_KNOWN_HOSTS }}
+          MONITOR_SOURCE_SECRET: ${{ secrets.MONITOR_SOURCE_SECRET }}
           NOTIFY_TEXT: "**Yumpoo 每周供应链检查失败**\n> 漏洞扫描、工作流审计或发布演练未通过。\n> 日志：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         run: node tools/release/notify.mjs

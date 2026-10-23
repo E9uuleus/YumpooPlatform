@@ -1,0 +1,34 @@
+rule_files: [rules.yml]
+evaluation_interval: 30s
+tests:
+  - name: failed scrape needs 90 seconds and 60 seconds of confirmed recovery
+    interval: 30s
+    input_series:
+      - series: 'up{job="windows",instance="127.0.0.1:19100"}'
+        values: '1 0 0 0 0 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 1m30s
+        alertname: MonitoringTargetUnavailable
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: MonitoringTargetUnavailable
+        exp_alerts:
+          - exp_labels: { job: windows, instance: '127.0.0.1:19100', severity: critical, source_job: prometheus }
+            exp_annotations: { summary: '采集目标不可达；缺失数据不能算作恢复。' }
+      - eval_time: 4m
+        alertname: MonitoringTargetUnavailable
+        exp_alerts: []
+  - name: certificate escalates within seven days
+    interval: 30s
+    input_series:
+      - series: 'probe_ssl_earliest_cert_expiry{job="external",instance="https://example.com"}'
+        values: '500000+0x10'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: CertificateExpiring
+        exp_alerts:
+          - exp_labels: { job: external, instance: 'https://example.com', severity: warning, source_job: external }
+            exp_annotations: { summary: 'HTTPS 证书将在 30 天内到期。' }
+          - exp_labels: { job: external, instance: 'https://example.com', severity: critical, source_job: external }
+            exp_annotations: { summary: 'HTTPS 证书将在 7 天内到期。' }
+

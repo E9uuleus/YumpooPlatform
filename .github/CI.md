@@ -30,6 +30,12 @@ Windows 打包前的[配置隔离测试](../tools/verification/desktop-profile.t
 
 `out/ci/<stage>.json` 记录步骤、起止时间、状态、解析后的基线提交及源码指纹。中途失败立即非零退出；重跑会覆盖本阶段结果，不缓存跳过步骤。后续阶段拒绝旧源码、旧基线、不完整或失败报告。输出、构建目录和测试夹具不写入 Git。子进程清除继承的 `SPRING_*`、`YUMPOO_*` 和 JVM/Maven/Node 注入选项，再显式设置本次验证需要的值；不连接开发或生产数据库，也不继承受控身份 fixture。
 
+## 异机监控验证
+
+static 同时构建 `@yumpoo/monitor-hub` 与 `@yumpoo/monitor-dashboard`，执行持久队列、事件时序、维护和权限测试，以及 Compose 镜像摘要、回环监听、内存预算与 Grafana 配置检查。portable 用锁定的 Prometheus 镜像执行 `promtool test rules`。Windows 门禁验证旧配置默认关闭、正常发布等待 300 秒、回退不等待、落盘失败不改变倒计时和 Node/PowerShell HMAC 一致性。
+
+监控服务不加入业务 Release 的自动重启范围。Ubuntu 独立部署步骤见[监控部署手册](../deployment/monitoring/README.md)。GitHub 的通知步骤使用仓库变量 `MONITOR_ENABLED` 及 `MONITOR_SSH_HOST`、`MONITOR_SSH_KEY`、`MONITOR_KNOWN_HOSTS`、`MONITOR_SOURCE_SECRET` Secrets；机器密钥只能转发事件端口。开启统一入口后不会因投递失败退回旧 Webhook 重复发送；未被接收的事件会写入工作流摘要，不能视为已持久化。
+
 ## 四种事实来源
 
 - **冻结历史**：归档 Agent Note 的 manifest、已在目标分支存在的 SQL 迁移、M2-23 冻结清单与既有 OpenAPI 精确例外不可改写。换行按仓库 LF 约定比较；迁移追加更高且唯一的版本，不能删除、移动或回填旧版本。

@@ -22,7 +22,10 @@ assert(rolling?.['max-file-size'] === '50MB' && rolling['max-history'] === 90 &&
 for (const required of ['Initialize-YumpooHost.ps1', 'Invoke-YumpooDeploy.ps1', 'Start-YumpooNginx.ps1', 'YumpooDeployment.psm1', 'Update-YumpooEngine.ps1']) {
   assert(fs.statSync(path.join(deployment, 'cd', required)).isFile(), `发布包缺少固定部署程序：${required}`)
 }
-assert(application.management?.endpoints?.web?.exposure?.include === 'health,info', 'Actuator 只允许公开 health 与 info')
+assert(application.management?.endpoints?.web?.exposure?.include === 'health,info,prometheus', 'Actuator 仅允许健康、版本和内部 Prometheus 指标；公网仍由 Nginx 拒绝内部路径')
+const monitorGateway = fs.readFileSync(path.join(deployment, 'nginx/yumpoo-monitor.conf'), 'utf8')
+assert(monitorGateway.includes('listen 127.0.0.1:19100;') && monitorGateway.includes('location / { return 404; }'), '监控网关必须限于回环地址和固定路径')
+assert((monitorGateway.match(/location = \/metrics\/(windows|app)/gu) || []).length === 2 && (monitorGateway.match(/limit_except GET \{ deny all; \}/gu) || []).length === 2, '监控网关只能暴露两个只读指标路径')
 assert(application.spring?.flyway?.['ignore-migration-patterns'] === '*:future', '快速回退要求旧 JAR 忽略更高版本的已应用迁移')
 assert(application.info?.release?.tag === '${yumpoo.deployment.release-tag:unreleased}', '发布标签必须由部署引擎注入')
 const deny = nginx.indexOf('location ~ ^/(actuator|_m0)(/|$)', nginx.indexOf('listen 443 ssl;'))

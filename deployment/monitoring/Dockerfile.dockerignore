@@ -1,0 +1,17 @@
+**
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!tsconfig.base.json
+!packages/
+!packages/monitor-hub/
+!packages/monitor-hub/package.json
+!packages/monitor-hub/tsconfig.json
+!packages/monitor-hub/src/**
+!frontend/
+!frontend/monitor-dashboard/
+!frontend/monitor-dashboard/package.json
+!frontend/monitor-dashboard/tsconfig.json
+!frontend/monitor-dashboard/vite.config.ts
+!frontend/monitor-dashboard/index.html
+!frontend/monitor-dashboard/src/**
