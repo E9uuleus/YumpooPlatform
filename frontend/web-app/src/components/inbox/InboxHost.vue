@@ -16,9 +16,10 @@ const legacyReasons: readonly DesktopInboxReason[] = [
 const knownReasons = new Set<DesktopInboxReason>([...legacyReasons, 'CONNECTION_CREATED',
   'PROJECT_DELETION_SCHEDULED', 'PROJECT_DELETION_REMINDER', 'PROJECT_DELETION_CANCELLED'])
 const supportedReasons = new Set<DesktopInboxReason>(bridge?.supportedReasons ?? legacyReasons)
-const surface = ref<'main' | 'timer' | undefined>(window.yumpooDesktop ? undefined : 'main')
+const surface = ref<'main' | 'timer' | 'panel' | undefined>(window.yumpooDesktop ? undefined : 'main')
 let disposed = false
-if (window.yumpooDesktop?.timer && !isPanelSurface(window.location.pathname)) void window.yumpooDesktop.timer.getWindowState()
+if (window.yumpooDesktop && isPanelSurface(window.location.pathname)) surface.value = 'panel'
+else if (window.yumpooDesktop?.timer) void window.yumpooDesktop.timer.getWindowState()
   .then(state => { if (!disposed) surface.value = state.surface }).catch(() => undefined)
 else if (window.yumpooDesktop) surface.value = 'main'
 const active = computed(() => session.phase.value === 'authenticated' && !route.path.startsWith('/timer') && surface.value === 'main')
