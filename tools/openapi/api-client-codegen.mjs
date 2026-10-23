@@ -230,7 +230,9 @@ function applyStrictTypeScriptCompatibility(sourceRoot) {
   const timerCandidatePath = path.join(sourceRoot, 'models', 'TimerCandidate.ts')
   let timerCandidate = normalizeText(fs.readFileSync(timerCandidatePath, 'utf8'))
   for (const [field, conversion] of [['contentCode', "json['contentCode']"],
-    ['contentColorToken', "WorkItemLabelColorTokenFromJSON(json['contentColorToken'])"]]) {
+    ['contentColorToken', "WorkItemLabelColorTokenFromJSON(json['contentColorToken'])"],
+    ['statusCode', "json['statusCode']"], ['statusName', "json['statusName']"],
+    ['statusColorToken', "WorkItemLabelColorTokenFromJSON(json['statusColorToken'])"]]) {
     timerCandidate = replaceExactlyOnce(timerCandidate,
       `        '${field}': json['${field}'] == null ? undefined : ${conversion},`,
       `        ...(json['${field}'] == null ? {} : { '${field}': ${conversion} }),`,
@@ -265,11 +267,11 @@ function applyStrictTypeScriptCompatibility(sourceRoot) {
   )
   fs.writeFileSync(attachmentMetadataPath, attachmentMetadata, 'utf8')
 
-  for (const model of ['DashboardChart', 'DashboardChartSelection', 'DashboardItem', 'DashboardItemsQuery', 'DashboardQuery', 'DashboardSnapshot', 'DashboardWidget', 'DashboardTableCriteria', 'DashboardTableQuery', 'NotificationReadAllRequest', 'NotificationTarget', 'NotificationItem', 'ProjectSummary', 'ProjectDetail', 'ProjectDeletionMutation', 'WorkCalendarDayInput', 'WorkItemTableSettingsUpdateRequest']) {
+  for (const model of ['DashboardChart', 'DashboardChartSelection', 'DashboardItem', 'DashboardItemsQuery', 'DashboardQuery', 'DashboardSnapshot', 'DashboardWidget', 'DashboardTableCriteria', 'DashboardTableQuery', 'NotificationReadAllRequest', 'NotificationTarget', 'NotificationItem', 'ProjectSummary', 'ProjectDetail', 'ProjectDeletionMutation', 'WorkCalendarDayInput', 'WorkItemTableSettingsUpdateRequest', 'CurrentTimeTracker', 'TeamTimesheet', 'TimeSessionFillEntry', 'TimeSessionReassignCommand', 'TimeTrackingCommand', 'TimeTrackingSession']) {
     const modelPath = path.join(sourceRoot, 'models', `${model}.ts`)
     let source = normalizeText(fs.readFileSync(modelPath, 'utf8'))
     source = source.replace(/^        '([^']+)': json\['\1'\] == null \? undefined : (.+),$/gm, (_line, field, conversion) => {
-      const nullable = (model === 'ProjectSummary' && field === 'archivedAt') || (!['DashboardQuery', 'DashboardSnapshot', 'DashboardTableCriteria', 'DashboardTableQuery', 'NotificationReadAllRequest', 'ProjectSummary', 'ProjectDetail', 'ProjectDeletionMutation'].includes(model) && !(model === 'DashboardItem' && ['workItem', 'assignees'].includes(field)))
+      const nullable = (model === 'ProjectSummary' && field === 'archivedAt') || (!['DashboardQuery', 'DashboardSnapshot', 'DashboardTableCriteria', 'DashboardTableQuery', 'NotificationReadAllRequest', 'ProjectSummary', 'ProjectDetail', 'ProjectDeletionMutation', 'CurrentTimeTracker', 'TeamTimesheet', 'TimeSessionFillEntry', 'TimeSessionReassignCommand', 'TimeTrackingCommand'].includes(model) && !(model === 'DashboardItem' && ['workItem', 'assignees'].includes(field)))
       return nullable
         ? `        ...(json['${field}'] === undefined ? {} : { '${field}': json['${field}'] === null ? null : ${conversion} }),`
         : `        ...(json['${field}'] == null ? {} : { '${field}': ${conversion} }),`

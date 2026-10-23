@@ -19,7 +19,9 @@ vi.mock('electron', () => ({
     contentEvents = new Map<string, () => void>()
     webContents = { mainFrame: { url: 'https://yumpoo.example/timer/quick' }, send: vi.fn(), once: vi.fn(), removeListener: vi.fn(), on: (name: string, fn: () => void) => this.contentEvents.set(name, fn) }
     bounds = { x: 0, y: 0, width: 364, height: 500 }
-    isDestroyed = () => false
+    destroyed = false
+    isDestroyed = () => this.destroyed
+    destroy = vi.fn(() => { this.destroyed = true; this.events.get('closed')?.() })
     isVisible = vi.fn(() => true)
     isFocused = vi.fn(() => true)
     getBounds = vi.fn(() => ({ ...this.bounds }))
@@ -43,12 +45,13 @@ function setup(pinned = false) {
   const prefs = new TimerPreferenceStore()
   prefs.update({ quickPinned: pinned })
   const level = { pinned: true, aboveTaskbar: false }
-  const controller = new QuickPanelController('https://yumpoo.example', '/preload.js', prefs, { openMain: vi.fn(), changed: vi.fn(), level: () => level })
+  const changed = vi.fn()
+  const controller = new QuickPanelController('https://yumpoo.example', '/preload.js', prefs, { openMain: vi.fn(), changed, level: () => level })
   controller.install(); controller.prewarm()
   const window = mocks.windows[0] as Panel
   window.contentEvents.get('did-finish-load')!()
   const event = { sender: window.webContents, senderFrame: window.webContents.mainFrame }
-  return { controller, prefs, window, level, event }
+  return { controller, prefs, window, level, event, changed }
 }
 beforeEach(() => { vi.useFakeTimers(); mocks.windows.length = 0; mocks.handlers.clear(); mocks.appEvents.clear(); vi.clearAllMocks() })
 afterEach(() => { mocks.appEvents.get('will-quit')?.(); vi.useRealTimers() })
@@ -108,6 +111,20 @@ describe('快捷工时固定小窗', () => {
     expect(controller.railProject()).toBe('project')
     controller.setPinned(true)
     expect(controller.railProject()).toBeNull()
+  })
+  it.each([false, true])('stops without syncing the rail, even for pinned=%s and late load callbacks', async pinned => {
+    const { controller, window, changed } = setup(pinned)
+    controller.toggle({ source: 'tray' }, [])
+    vi.mocked(window.show).mockClear()
+    changed.mockClear()
+    controller.stop(); controller.stop()
+    window.contentEvents.get('did-finish-load')!()
+    controller.prewarm(); controller.toggle({ source: 'tray' }, [])
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(changed).not.toHaveBeenCalled()
+    expect(window.destroy).toHaveBeenCalledOnce()
+    expect(mocks.windows).toHaveLength(1)
+    expect(window.show).not.toHaveBeenCalled()
   })
   it('拒绝非布尔值的固定请求', () => {
     const { event } = setup()

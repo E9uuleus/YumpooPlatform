@@ -3,6 +3,7 @@ import { ElTour, ElTourStep } from 'element-plus'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import OnboardingHost from './OnboardingHost.vue'
+import { TOURS } from './tours'
 import { resetOnboardingForTests, useOnboarding } from './useOnboarding'
 
 const api = vi.hoisted(() => ({ completeMyOnboardingTour: vi.fn() }))
@@ -51,7 +52,7 @@ function target(name: string, height = 100) {
   return element
 }
 
-async function host() {
+async function host(stubs: Record<string, object> = {}) {
   const router = createRouter({ history: createMemoryHistory(), routes: [
     { path: '/', component: { template: '<div />' } },
     { path: '/other', component: { template: '<div />' } },
@@ -59,7 +60,7 @@ async function host() {
   await router.push('/')
   const wrapper = shallowMount(OnboardingHost, { global: {
     plugins: [router],
-    stubs: { ElTour: { props: ['modelValue', 'current'], template: '<div><slot /></div>' } },
+    stubs: { ElTour: { props: ['modelValue', 'current'], template: '<div><slot /></div>' }, ...stubs },
   } })
   return { wrapper, router }
 }
@@ -155,6 +156,57 @@ describe('onboarding host lifecycle', () => {
     await flushPromises()
     window.dispatchEvent(new Event('resize'))
     wrapper.unmount()
+    expect(frames.size).toBe(0)
+  })
+
+  it('shows only steps newer than the handled version with a new-feature tag', async () => {
+    target('home-tasks')
+    target('home-calendar')
+    target('topbar-help')
+    const { wrapper } = await host({ ElTourStep: { props: ['title'], template: '<section class="step"><slot name="header">{{ title }}</slot></section>' } })
+    useOnboarding().active.value = { id: 'welcome', mode: 'update', from: 1 }
+    await flushPromises()
+    expect(wrapper.findAll('.step').map(step => step.text())).toEqual(['新功能工时日历', '新功能帮助'])
+    expect(wrapper.findAll('.step .onboarding-new-tag')).toHaveLength(2)
+  })
+
+  it('points to the fallback target and copy while the primary target is inert', async () => {
+    target('context-nav').setAttribute('inert', '')
+    const fallback = target('context-nav-expand')
+    const { wrapper } = await host()
+    useOnboarding().replay('workspace')
+    await flushPromises()
+    const steps = wrapper.findAllComponents(ElTourStep)
+    expect(steps).toHaveLength(1)
+    expect(steps[0]!.props()).toMatchObject({
+      title: '工作台导航',
+      target: expect.any(Function),
+      placement: 'right-start',
+      description: TOURS.workspace.steps[0]!.fallback!.description,
+    })
+    expect((steps[0]!.props('target') as () => HTMLElement)()).toBe(fallback)
+  })
+
+  it('remeasures a moving target without restarting the step, then cancels tracking on close', async () => {
+    const stats = target('my-time-stats')
+    let left = 20
+    stats.getBoundingClientRect = () => new DOMRect(left, 100, 800, 80)
+    const { wrapper } = await host()
+    useOnboarding().replay('my-time')
+    await flushPromises()
+    const step = () => wrapper.findComponent(ElTourStep)
+    const initial = step().props('target')
+    expect(typeof initial).toBe('function')
+    await flushFrame()
+    expect(step().props('target')).toBe(initial)
+    left = 40
+    await flushFrame()
+    expect(step().props('target')).not.toBe(initial)
+    expect((step().props('target') as () => HTMLElement)()).toBe(stats)
+    expect(wrapper.findComponent(ElTour).props('current')).toBe(0)
+    expect(api.completeMyOnboardingTour).not.toHaveBeenCalled()
+    expect(frames.size).toBe(1)
+    useOnboarding().stop()
     expect(frames.size).toBe(0)
   })
 })

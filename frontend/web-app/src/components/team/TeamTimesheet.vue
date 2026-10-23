@@ -9,7 +9,7 @@ import YpSegmented from '../yp/YpSegmented.vue'
 import '../projects/workItemAccentBar.css'
 import { formatTimestamp } from '../../design-system/dates'
 import { exportFileName, saveExportFile, XLSX_TYPE } from '../dashboard/exportFile'
-import { buildTimesheet, dayBreakdown, hoursMinutes, periodFor, periodLabel, periodOptions, projectColors, restrictTimesheet, shiftPeriod, shortHours, timesheetColumns, todayIn, weekday,
+import { buildTimesheet, dayBreakdown, hoursMinutes, periodFor, periodLabel, periodOptions, restrictTimesheet, timesheetColors, shiftPeriod, shortHours, timesheetColumns, todayIn, weekday,
   type Period, type PeriodKind, type TimesheetRow } from './teamDashboardModel'
 import { staggerIn, useTweenedNumber, type StaggerFrom } from './teamMotion'
 
@@ -25,7 +25,7 @@ const fullModel = computed(() => props.sheet ? buildTimesheet(props.sheet) : { r
 const model = computed(() => props.overtime ? restrictTimesheet(fullModel.value, days.value) : fullModel.value)
 const holidayMs = computed(() => columns.value.filter(column => column.holiday).reduce((sum, column) => sum + (model.value.dayTotals[column.day] ?? 0), 0))
 const today = computed(() => todayIn(props.timezone))
-const colors = computed(() => projectColors(props.sheet?.workItems.map(item => item.projectId) ?? []))
+const colors = computed(() => timesheetColors(props.sheet))
 const rows = computed(() => {
   const visible = hideEmpty.value ? model.value.rows.filter(row => row.totalMs > 0) : model.value.rows
   if (!sortTotal.value) return visible
@@ -132,7 +132,10 @@ async function exportExcel() {
         label="统计周期"
         @update:model-value="changeKind"
       />
-      <div class="team-period">
+      <div
+        class="team-period"
+        data-tour="team-period"
+      >
         <el-button
           :icon="ArrowLeft"
           text
@@ -176,7 +179,10 @@ async function exportExcel() {
           @click="step(1)"
         />
       </div>
-      <div class="team-toolbar__end">
+      <div
+        class="team-toolbar__end"
+        data-tour="team-export"
+      >
         <el-checkbox v-model="hideEmpty">
           {{ overtime ? '隐藏无加班成员' : '隐藏无工时成员' }}
         </el-checkbox>
@@ -215,6 +221,7 @@ async function exportExcel() {
       <div
         ref="sheetBox"
         class="team-sheet"
+        data-tour="team-grid"
       >
         <table
           ref="grid"

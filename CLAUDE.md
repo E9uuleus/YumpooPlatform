@@ -4,6 +4,7 @@
 
 - 编码约定：当前代码文件统一使用 UTF-8 编码，注意中文显示一致性，新增文件保持一致。
 - 目录约定：`docs/` 文档和版本化原型导出物；`docs/`目录永远不被跟踪，也不加入提交、推送。
+- 文档中心：改动用户可见的界面、流程或架构时，在同一 PR 同步更新 frontend/web-app/src/docs-site/content/ 对应页面与 onboarding/tours.ts；文档全部公开，不写主机、目录、账号与密钥。
 ## Git 分支与交付
 
 - 分支模型：`dev` 是集成分支（默认分支），`main` 是已发布线。子功能开发必须基于最新的 `dev` 创建独立分支，例如 `feature/<功能名>` 或 `fix/<功能名>`；已有对应任务分支时继续使用，不为阶段切换重复建分支。线上紧急修复从 `main` 创建 `hotfix/<名称>`。
@@ -40,6 +41,7 @@ contracts/examples/              Golden contract examples
 
 frontend/web-app/                Vue 3 and Vite web application
 frontend/web-app/src/            Web UI, routing, authentication, and API integration
+frontend/web-app/src/docs-site/  Public /docs documentation site: content and renderer
 
 desktop/desktop-shell/            Electron desktop application shell
 desktop/desktop-shell/src/main/   Electron main-process runtime and security policies

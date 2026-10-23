@@ -1,7 +1,8 @@
 <script setup lang="ts">
-defineProps<{ name: 'clock' | 'search' | 'play' | 'pause' | 'pin' | 'close' | 'collapse' | 'external' | 'check' | 'loader' | 'arrow' | 'details' | 'resize' | 'settings' | 'window' | 'power' | 'swap' | 'back' | 'orb' | 'dock' | 'hidden' }>()
+defineProps<{ name: 'clock' | 'clock-add' | 'search' | 'play' | 'pause' | 'pin' | 'close' | 'collapse' | 'external' | 'check' | 'loader' | 'arrow' | 'details' | 'resize' | 'settings' | 'window' | 'power' | 'swap' | 'back' | 'orb' | 'dock' | 'hidden' }>()
 const paths = {
   clock: 'M9 2h6M12 6a8 8 0 1 0 0 16 8 8 0 0 0 0-16ZM12 10v4l3 2',
+  'clock-add': 'M20 11a9 9 0 1 0-9 9M11 6v5l3 2M18 14v8M14 18h8',
   search: 'm21 21-5-5M10.5 3a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15Z',
   play: 'm8 5 11 7-11 7Z',
   pause: 'M8 5v14M16 5v14',

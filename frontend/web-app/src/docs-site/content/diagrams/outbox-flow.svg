@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 300" role="img" aria-label="Outbox 流程：业务事务同时写业务表与 outbox_event，分发器认领后交给消费者，消费者写回执并更新投影，失败按退避重试，耗尽后进入 DEAD">
+  <defs>
+    <marker id="ob-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path class="dg-arrow" d="M0 0 10 5 0 10z"/>
+    </marker>
+  </defs>
+  <rect class="dg-group" x="20" y="30" width="190" height="150" rx="14"/>
+  <text class="dg-muted" x="36" y="52">同一个数据库事务</text>
+  <rect class="dg-node" x="40" y="64" width="150" height="44" rx="10"/>
+  <text class="dg-label" x="115" y="91" text-anchor="middle">业务表</text>
+  <rect class="dg-node dg-node--accent" x="40" y="120" width="150" height="44" rx="10"/>
+  <text class="dg-label" x="115" y="147" text-anchor="middle">outbox_event</text>
+
+  <rect class="dg-node dg-node--accent" x="260" y="100" width="170" height="64" rx="10"/>
+  <text class="dg-label" x="345" y="127" text-anchor="middle">分发器</text>
+  <text class="dg-muted" x="345" y="146" text-anchor="middle">SKIP LOCKED 认领 + 租约</text>
+
+  <rect class="dg-node" x="480" y="100" width="120" height="64" rx="10"/>
+  <text class="dg-label" x="540" y="127" text-anchor="middle">消费者</text>
+  <text class="dg-muted" x="540" y="146" text-anchor="middle">回执去重</text>
+
+  <rect class="dg-node" x="640" y="40" width="110" height="40" rx="10"/>
+  <text class="dg-label" x="695" y="65" text-anchor="middle">动态</text>
+  <rect class="dg-node" x="640" y="112" width="110" height="40" rx="10"/>
+  <text class="dg-label" x="695" y="137" text-anchor="middle">收件箱</text>
+  <rect class="dg-node" x="640" y="184" width="110" height="40" rx="10"/>
+  <text class="dg-label" x="695" y="209" text-anchor="middle">治理与提醒</text>
+
+  <rect class="dg-node" x="260" y="226" width="170" height="54" rx="10"/>
+  <text class="dg-label" x="345" y="250" text-anchor="middle">重试</text>
+  <text class="dg-muted" x="345" y="268" text-anchor="middle">1m · 5m · 30m · 2h · 8h</text>
+  <rect class="dg-node" x="480" y="226" width="120" height="54" rx="10"/>
+  <text class="dg-label" x="540" y="257" text-anchor="middle">DEAD</text>
+
+  <path class="dg-edge" d="M190 142 L 260 132" marker-end="url(#ob-arrow)"/>
+  <path class="dg-edge" d="M430 132 L 480 132" marker-end="url(#ob-arrow)"/>
+  <path class="dg-edge" d="M600 120 L 640 62" marker-end="url(#ob-arrow)"/>
+  <path class="dg-edge" d="M600 132 L 640 132" marker-end="url(#ob-arrow)"/>
+  <path class="dg-edge" d="M600 146 L 640 200" marker-end="url(#ob-arrow)"/>
+  <path class="dg-edge dg-edge--muted" d="M520 164 C 500 200, 440 230, 430 245" marker-end="url(#ob-arrow)"/>
+  <path class="dg-edge dg-edge--muted" d="M300 226 L 320 164" marker-end="url(#ob-arrow)"/>
+  <path class="dg-edge dg-edge--muted" d="M430 262 L 480 256" marker-end="url(#ob-arrow)"/>
+  <text class="dg-muted" x="452" y="208">失败</text>
+  <text class="dg-muted" x="436" y="286">耗尽</text>
+</svg>

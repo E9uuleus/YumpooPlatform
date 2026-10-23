@@ -33,9 +33,11 @@ export class QuickPanelController {
   private closeTimer: ReturnType<typeof setTimeout> | undefined
   private projectId: string | null = null
   private source: QuickPanelRequest['source'] = 'tray'
+  private stopped = false
   private installed = false
   private resizeTimer: ReturnType<typeof setInterval> | undefined
   private resizeGuard: ReturnType<typeof setTimeout> | undefined
+  private focusTimer: ReturnType<typeof setTimeout> | undefined
 
   constructor(private readonly origin: string, private readonly preload: string, private readonly prefs: TimerPreferenceStore, private readonly host: QuickPanelHost) {}
 
@@ -93,7 +95,7 @@ export class QuickPanelController {
     this.prefs.update({ quickPinned: value, ...(value && window ? { quickBounds: window.getBounds() } : {}) })
     this.applyLevel()
     window?.webContents.send('yumpoo:quick:pinned', value)
-    this.host.changed()
+    if (!this.stopped) this.host.changed()
     clearInterval(this.watch)
     if (!value && window?.isVisible()) {
       this.focused = window.isFocused()
@@ -123,7 +125,15 @@ export class QuickPanelController {
     this.saveBounds()
   }
 
+  stop(): void {
+    if (this.stopped) return
+    this.stopped = true
+    clearInterval(this.watch); clearTimeout(this.closeTimer); clearTimeout(this.focusTimer); this.endResize()
+    this.destroy()
+  }
+
   prewarm(): void {
+    if (this.stopped) return
     if (this.window && !this.window.isDestroyed()) return
     const size = this.prefs.get().quickBounds ?? QUICK_PANEL
     const window = new BrowserWindow({ ...createWindowOptions(this.preload, app.isPackaged),
@@ -146,9 +156,9 @@ export class QuickPanelController {
       if (this.window !== window) return
       this.endResize()
       this.window = null; this.ready = false; clearInterval(this.watch); clearTimeout(this.closeTimer); this.closeTimer = undefined
-      this.host.changed()
+      if (!this.stopped) this.host.changed()
     })
-    window.webContents.on('did-finish-load', () => { if (this.window === window) this.ready = true })
+    window.webContents.on('did-finish-load', () => { if (!this.stopped && this.window === window) this.ready = true })
     window.webContents.on('render-process-gone', () => { if (this.window === window) { this.ready = false; window.destroy() } })
     loadSurface(window, new URL('/timer/quick', this.origin).href).catch((error: unknown) => {
       console.error('[YUMPOO_QUICK_PANEL_LOAD_FAILED]', error instanceof Error ? error.message : '')
@@ -168,6 +178,7 @@ export class QuickPanelController {
    * while the page is not loaded so the caller can show the main window instead.
    */
   toggle(request: QuickPanelRequest, projects: RailProject[]): boolean {
+    if (this.stopped) return true
     const window = this.window
     if (!window || window.isDestroyed() || !this.ready) { this.prewarm(); return false }
     const projectId = request.source === 'rail' ? request.projectId : null
@@ -202,10 +213,11 @@ export class QuickPanelController {
     this.openedAt = Date.now()
     window.show()
     window.focus()
-    setTimeout(() => { if (this.isVisible() && !window.isFocused()) window.focus() }, 0)
+    clearTimeout(this.focusTimer)
+    this.focusTimer = setTimeout(() => { if (!this.stopped && this.isVisible() && !window.isFocused()) window.focus() }, 0)
     clearInterval(this.watch)
     if (!pinned) this.watch = setInterval(() => this.dismissWhenOutside(), 120)
-    this.host.changed()
+    if (!this.stopped) this.host.changed()
     return true
   }
 
@@ -219,6 +231,7 @@ export class QuickPanelController {
   }
 
   hide(): void {
+    clearTimeout(this.focusTimer)
     if (!this.isVisible()) return
     const window = this.window!
     clearInterval(this.watch)
@@ -229,8 +242,8 @@ export class QuickPanelController {
     this.closeTimer = setTimeout(() => {
       this.closeTimer = undefined
       if (!window.isDestroyed()) window.hide()
-      this.host.changed()
+      if (!this.stopped) this.host.changed()
     }, CLOSE_MS)
-    this.host.changed()
+    if (!this.stopped) this.host.changed()
   }
 }

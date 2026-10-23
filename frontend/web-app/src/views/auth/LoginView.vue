@@ -175,6 +175,17 @@ onBeforeUnmount(() => stopStatus?.())
         >
           7 天内免登录
         </el-checkbox>
+        <nav
+          class="login-help"
+          aria-label="登录帮助"
+        >
+          <router-link to="/docs/start/first-day">
+            使用帮助
+          </router-link>
+          <router-link :to="{ path: '/docs/guide/faq', hash: '#无法登录' }">
+            无法登录？
+          </router-link>
+        </nav>
         <p
           v-if="isDesktop && !desktopEnabled"
           class="hint"

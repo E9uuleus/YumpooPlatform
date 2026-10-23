@@ -18,6 +18,7 @@ import { useSession } from '../../composables/useSession'
 import InboxHost from './InboxHost.vue'
 
 const mounted: Array<ReturnType<typeof mount>> = []
+const initialUrl = window.location.href
 async function host(path = '/inbox') {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/:pathMatch(.*)*', component: { template: '<div />' } }] })
   await router.push(path); await router.isReady()
@@ -26,10 +27,14 @@ async function host(path = '/inbox') {
   return { wrapper, router }
 }
 beforeEach(() => {
+  window.history.replaceState(null, '', initialUrl)
   vi.clearAllMocks(); vi.stubGlobal('yumpooDesktop', undefined); useSession().phase.value = 'authenticated'
   useInbox().latest.value = []; useInbox().ready.value = true
 })
-afterEach(() => { mounted.splice(0).forEach(wrapper => wrapper.unmount()); vi.unstubAllGlobals() })
+afterEach(() => {
+  mounted.splice(0).forEach(wrapper => wrapper.unmount()); vi.unstubAllGlobals()
+  window.history.replaceState(null, '', initialUrl)
+})
 describe('inbox owner', () => {
   const notification = (id: string, reason: NotificationItem['reason']): NotificationItem => ({
     id, reason, state: NotificationState.Unread, createdAt: new Date('2026-10-03T00:00:00Z'), readAt: null,
@@ -87,6 +92,25 @@ describe('inbox owner', () => {
     vi.stubGlobal('yumpooDesktop', { timer: { getWindowState: async () => ({ surface: 'timer' }) }, inbox: { publishState, onOpen: () => vi.fn() } })
     await host('/timer-menu')
     expect(activateInbox).toHaveBeenLastCalledWith(false)
+    expect(publishState).not.toHaveBeenCalled()
+  })
+  it.each(['/timer/rail', '/timer/quick'])('never owns notifications in %s, including initial routing, logout and unmount', async path => {
+    window.history.replaceState(null, '', path)
+    const publishState = vi.fn(async () => undefined)
+    const getWindowState = vi.fn(async () => ({ surface: 'main' }))
+    vi.stubGlobal('yumpooDesktop', { timer: { getWindowState }, inbox: { publishState, onOpen: () => vi.fn() } })
+
+    // App mounts before the first navigation resolves, while the router still reports '/'.
+    const { wrapper, router } = await host('/')
+    await router.push(path)
+    await flushPromises()
+    useSession().phase.value = 'anonymous'
+    await router.push('/login')
+    await flushPromises()
+    wrapper.unmount()
+
+    expect(getWindowState).not.toHaveBeenCalled()
+    expect(activateInbox).not.toHaveBeenCalledWith(true)
     expect(publishState).not.toHaveBeenCalled()
   })
   it('publishes only from the main window and resets on logout', async () => {

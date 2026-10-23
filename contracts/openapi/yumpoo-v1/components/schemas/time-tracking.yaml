@@ -40,6 +40,14 @@ components:
         serverNow:
           type: string
           format: date-time
+    TimeCategory:
+      type: string
+      description: 不关联项目与工作项的固定非项目工时分类：出差、学习、商务、会议。
+      enum:
+        - BUSINESS_TRIP
+        - LEARNING
+        - BUSINESS
+        - MEETING
     TimeSessionFillMode:
       type: string
       enum:
@@ -49,14 +57,16 @@ components:
     TimeSessionFillEntry:
       type: object
       additionalProperties: false
+      description: workItemId 与 timeCategory 必须且只能填一个。
       required:
-        - workItemId
         - startedAt
         - stoppedAt
       properties:
         workItemId:
           type: string
           format: uuid
+        timeCategory:
+          $ref: "#/components/schemas/TimeCategory"
         startedAt:
           type: string
           format: date-time
@@ -106,12 +116,13 @@ components:
     TimeSessionReassignCommand:
       type: object
       additionalProperties: false
-      required:
-        - workItemId
+      description: 目标工作项或非项目分类，workItemId 与 timeCategory 必须且只能填一个。
       properties:
         workItemId:
           type: string
           format: uuid
+        timeCategory:
+          $ref: "#/components/schemas/TimeCategory"
     TimeTrackingCommand:
       type: object
       additionalProperties: false
@@ -123,10 +134,19 @@ components:
           type: array
           minItems: 1
           maxItems: 10
-          description: 仅 start 使用，批量并行开始的工作项。
+          description: 仅 start 使用，批量并行开始的工作项；与 timeCategories 合计最多 10 项。
           items:
             type: string
             format: uuid
+        timeCategory:
+          $ref: "#/components/schemas/TimeCategory"
+        timeCategories:
+          type: array
+          minItems: 1
+          maxItems: 10
+          description: 仅 start 使用，批量并行开始的非项目分类；与 workItemIds 合计最多 10 项。
+          items:
+            $ref: "#/components/schemas/TimeCategory"
         sessionId:
           type: string
           format: uuid
@@ -169,10 +189,18 @@ components:
           type: string
           format: uuid
           nullable: true
+          description: 为 null 时，要么项目对调用者不可见，要么这是非项目分类记录（timeCategory 有值）。
         workItemId:
           type: string
           format: uuid
           nullable: true
+          description: 为 null 时，要么工作项对调用者不可见，要么这是非项目分类记录（timeCategory 有值）。
+        timeCategory:
+          type: string
+          nullable: true
+          description: 非项目分类记录的分类；工作项记录为 null。服务端总是返回。
+          allOf:
+            - $ref: "#/components/schemas/TimeCategory"
         userId:
           type: string
           format: uuid
@@ -216,7 +244,7 @@ components:
           type: integer
           format: int32
           minimum: 0
-          description: 该记录期间本人同时计时的其他工作项数
+          description: 该记录期间本人同时计时的其他工作项与非项目分类数
         workItemNo:
           type: string
           nullable: true
@@ -299,6 +327,14 @@ components:
           $ref: "#/components/schemas/WorkItemLabelColorToken"
         statusCategory:
           type: string
+        statusCode:
+          type: string
+          description: 工作项当前的项目状态代码。
+        statusName:
+          type: string
+          description: 项目配置的实际状态名称，不是状态分类名称。
+        statusColorToken:
+          $ref: "#/components/schemas/WorkItemLabelColorToken"
         completed:
           type: boolean
           description: 按本人对该项目的完成定义计算；未设置定义时 DONE 与 CANCELED 两类状态视为完成。
@@ -390,6 +426,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/RecentTimeTrackingItem"
+        resumeCategories:
+          type: array
+          description: 与 resumeItems 同一批最近停止的非项目分类计时，按分类固定顺序排列。服务端总是返回。
+          items:
+            $ref: "#/components/schemas/TimeCategory"
         recentItems:
           type: array
           items:

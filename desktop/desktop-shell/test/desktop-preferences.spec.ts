@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { DEFAULT_DESKTOP_PREFERENCES, DesktopPreferenceStore, validAccelerator, validDesktopPreferencesChange } from '../src/main/desktop-preferences'
+import { DEFAULT_DESKTOP_PREFERENCES, DesktopPreferenceStore, validAccelerator, validAppearance, validDesktopPreferencesChange } from '../src/main/desktop-preferences'
 
 const created: string[] = []
 afterEach(async () => {
@@ -10,6 +10,18 @@ afterEach(async () => {
 })
 
 describe('桌面偏好', () => {
+  it('persists validated menu appearance without exposing it to the general preferences bridge', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'yumpoo-menu-appearance-'))
+    created.push(root)
+    const store = new DesktopPreferenceStore(root)
+    const appearance = { theme: 'night' as const, density: 'compact' as const }
+    expect(store.get().menuAppearance).toBeUndefined()
+    store.update({ menuAppearance: appearance }); await store.flush()
+    expect(new DesktopPreferenceStore(root).get().menuAppearance).toEqual(appearance)
+    expect(validDesktopPreferencesChange({ menuAppearance: appearance })).toBe(false)
+    expect(validAppearance({ ...appearance, injected: true })).toBe(false)
+    expect(validAppearance({ theme: 'unknown', density: 'compact' })).toBe(false)
+  })
   it('逐字段校验、原子写入并在下次启动恢复，拒绝越界的修改与快捷键', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'yumpoo-desktop-preferences-'))
     created.push(root)

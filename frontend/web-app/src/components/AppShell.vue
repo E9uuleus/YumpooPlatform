@@ -14,7 +14,6 @@ import { computed, nextTick, onBeforeUnmount, onMounted, provide, readonly, ref,
 import { useRoute, useRouter } from 'vue-router'
 import { operationsApi, projectsApi } from '../api/client'
 import { beginAuthentication } from '../auth/navigation'
-import { useAppearance } from '../composables/useAppearance'
 import { useProjectRecents } from '../composables/useProjectRecents'
 import { useReleaseVersion } from '../composables/useReleaseVersion'
 import { PROJECT_LIFECYCLE_CHANGED } from '../composables/projectLifecycleEvents'
@@ -33,8 +32,10 @@ import DesktopUpdateBanner from './desktop/DesktopUpdateBanner.vue'
 import InlineProblem from './InlineProblem.vue'
 import { MY_PROJECT_ACCESSES } from './projects/projectScope'
 import YpAssignee from './yp/YpAssignee.vue'
-import YpThemeSwitcher from './yp/YpThemeSwitcher.vue'
 import brandLogo from '../assets/brand/logo.svg'
+import { openDocs } from '../docs-site/openDocs'
+import { routeHelpPath } from '../docs-site/routeHelp'
+import ShellIcon from './shell/ShellIcon.vue'
 
 interface ModuleItem {
   section: ShellSection
@@ -57,7 +58,6 @@ const route = useRoute()
 const router = useRouter()
 const session = useSession()
 const inbox = useInbox()
-const appearance = useAppearance()
 const onboarding = useOnboarding()
 const routeTour = computed(() => route.meta.onboardingTour)
 const mobileNavigationOpen = ref(false)
@@ -74,7 +74,13 @@ const contextNavigationOpen = ref(typeof window === 'undefined'
   : (window.matchMedia?.('(min-width: 1280px)').matches ?? true))
 
 const inDesktopShell = computed(() => window.yumpooDesktop?.client === 'electron' || session.authentication.value?.client.type === AuthenticationClientType.Electron)
-const clientLabel = computed(() => inDesktopShell.value ? 'Electron 在线壳' : 'Web 浏览器')
+const routeHelp = computed(() => routeHelpPath(route.name))
+const helpMenuOpen = ref(false)
+
+function openHelp(command: string): void {
+  const href = command === 'page' ? routeHelp.value : command
+  if (href) openDocs(router, href)
+}
 const releaseVersion = useReleaseVersion()
 const releaseLabel = computed(() => releaseVersion.value
   ? `版本 ${releaseVersion.value.release} · ${releaseVersion.value.commit.slice(0, 8)}`
@@ -332,6 +338,7 @@ onBeforeUnmount(() => {
           v-if="hasContextNavigation"
           class="module-rail__expand"
           type="button"
+          data-tour="context-nav-expand"
           :aria-label="`展开${contextTitle}菜单`"
           aria-controls="desktop-context-navigation"
           :aria-expanded="contextNavigationOpen"
@@ -396,13 +403,94 @@ onBeforeUnmount(() => {
         </div>
       </div>
       <div class="app-topbar__actions">
-        <span class="client-badge">{{ clientLabel }}</span>
-        <inbox-bell />
-        <yp-theme-switcher
-          :theme="appearance.themeMode.value"
-          :density="appearance.densityMode.value"
-          @update:theme="appearance.setThemeMode"
-          @update:density="appearance.setDensityMode"
+        <div
+          class="app-topbar__tools"
+          role="group"
+          aria-label="工具"
+        >
+          <el-tooltip
+            :content="routeTour ? '查看本页引导' : '本页暂无引导'"
+            placement="bottom"
+            :show-after="400"
+          >
+            <span class="app-topbar__tool-wrap">
+              <button
+                type="button"
+                class="app-topbar__tool"
+                data-tour="topbar-tour"
+                aria-label="查看本页引导"
+                :disabled="!routeTour"
+                @click="routeTour && onboarding.replay(routeTour)"
+              >
+                <shell-icon name="tour" />
+              </button>
+            </span>
+          </el-tooltip>
+          <el-dropdown
+            trigger="click"
+            placement="bottom-end"
+            @command="openHelp"
+            @visible-change="helpMenuOpen = $event"
+          >
+            <span class="app-topbar__tool-wrap">
+              <el-tooltip
+                content="帮助"
+                placement="bottom"
+                :show-after="400"
+                :disabled="helpMenuOpen"
+              >
+                <button
+                  type="button"
+                  class="app-topbar__tool"
+                  :class="{ 'is-active': helpMenuOpen }"
+                  data-tour="topbar-help"
+                  aria-label="帮助"
+                >
+                  <shell-icon name="help" />
+                </button>
+              </el-tooltip>
+            </span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item
+                  command="page"
+                  :disabled="!routeHelp"
+                >
+                  本页帮助
+                </el-dropdown-item>
+                <el-dropdown-item command="/docs/start/first-day">
+                  快速开始
+                </el-dropdown-item>
+                <el-dropdown-item command="/docs">
+                  帮助中心
+                </el-dropdown-item>
+                <el-dropdown-item command="/docs/guide/faq">
+                  常见问题
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+          <inbox-bell />
+          <el-tooltip
+            content="偏好设置"
+            placement="bottom"
+            :show-after="400"
+          >
+            <button
+              type="button"
+              class="app-topbar__tool"
+              :class="{ 'is-active': route.name === 'settings' }"
+              data-tour="topbar-preferences"
+              aria-label="偏好设置"
+              @click="router.push({ name: 'settings' })"
+            >
+              <shell-icon name="settings" />
+            </button>
+          </el-tooltip>
+        </div>
+        <span
+          class="app-topbar__divider"
+          aria-hidden="true"
         />
         <el-dropdown trigger="click">
           <el-button
@@ -417,9 +505,6 @@ onBeforeUnmount(() => {
           </el-button>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item disabled>
-                {{ clientLabel }}
-              </el-dropdown-item>
               <el-dropdown-item
                 v-if="releaseLabel"
                 disabled
@@ -427,13 +512,9 @@ onBeforeUnmount(() => {
                 {{ releaseLabel }}
               </el-dropdown-item>
               <el-dropdown-item
-                divided
-                :disabled="!routeTour"
-                @click="routeTour && onboarding.replay(routeTour)"
+                :divided="!!releaseLabel"
+                @click="router.push({ name: 'settings' })"
               >
-                查看本页引导
-              </el-dropdown-item>
-              <el-dropdown-item @click="router.push({ name: 'settings' })">
                 偏好设置
               </el-dropdown-item>
               <el-dropdown-item

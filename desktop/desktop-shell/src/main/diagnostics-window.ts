@@ -10,7 +10,8 @@ const DIAGNOSTICS_ORIGIN = `${DIAGNOSTICS_SCHEME}://app`
 export const DIAGNOSTICS_PAGE_URL = `${DIAGNOSTICS_ORIGIN}/diagnostics.html`
 /** The launch screen shown over the main window until the web app has loaded; it has no preload and no script. */
 export const LAUNCH_PAGE_URL = `${DIAGNOSTICS_ORIGIN}/launch.html`
-/** Shared by the diagnostics window and the launch screen: both show only packaged pages. */
+export const MENU_PAGE_URL = `${DIAGNOSTICS_ORIGIN}/menu.html`
+/** Diagnostics, launch screen and tray menu share this session for packaged pages only. */
 export const LOCAL_PAGES_PARTITION = 'yumpoo-diagnostics'
 const DIAGNOSTICS_ASSETS: ReadonlyMap<string, string> = new Map([
   ['/diagnostics.html', 'text/html; charset=utf-8'],
@@ -19,6 +20,9 @@ const DIAGNOSTICS_ASSETS: ReadonlyMap<string, string> = new Map([
   ['/launch.html', 'text/html; charset=utf-8'],
   ['/launch.css', 'text/css; charset=utf-8'],
   ['/mark.png', 'image/png'],
+  ['/menu.html', 'text/html; charset=utf-8'],
+  ['/menu.js', 'text/javascript; charset=utf-8'],
+  ['/menu.css', 'text/css; charset=utf-8'],
 ])
 const DIAGNOSTICS_ACTIONS: ReadonlySet<string> = new Set<DiagnosticsAction>([
   'retry', 'restart-normal', 'open-web', 'reset-preferences', 'sign-out', 'register-protocol', 'open-logs', 'export',

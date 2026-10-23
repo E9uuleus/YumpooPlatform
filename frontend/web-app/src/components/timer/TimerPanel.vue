@@ -14,6 +14,7 @@ import TimerDock from './TimerDock.vue'
 import TimerOrb from './TimerOrb.vue'
 import TimerSettings from './TimerSettings.vue'
 import WorkItemGlyph from './WorkItemGlyph.vue'
+import { categoryOf, NON_PROJECT_LABEL, resumeSubjects, sessionKey, timerTitle } from './timeCategories'
 
 const CAPSULE_WIDTH = 216
 const props = withDefaults(defineProps<{ initialExpanded?: boolean; floating?: boolean; orbLayout?: TimerOrbLayout }>(), { initialExpanded: true, floating: false, orbLayout: () => ({ size: 64, side: null, detailWidth: 0 }) })
@@ -44,24 +45,30 @@ const selected = ref(0)
 const runningSessions = tracker.running
 const running = computed(() => runningSessions.value[0]?.session)
 const resumeItems = computed(() => tracker.current.value?.resumeItems ?? [])
-const resume = computed(() => resumeItems.value.length > 1 ? resumeItems.value[0] : tracker.current.value?.recentItems[0])
+const resumeKeys = computed(() => resumeSubjects(tracker.current.value))
+/** A group of categories alone resumes through its first category, which `begin` takes like a work item id. */
+const resume = computed(() => {
+  const category = resumeItems.value.length ? undefined : categoryOf(resumeKeys.value[0])
+  if (category) return { workItemId: category.key, projectId: '', title: category.label }
+  return resumeKeys.value.length > 1 ? resumeItems.value[0] : tracker.current.value?.recentItems[0]
+})
 const needsCandidates = computed(() => expanded.value || !!running.value || !!resume.value)
 const { query, scope, items, hiddenCount, loading, problem, nextOffset, searching, load } = useTimerCandidates(needsCandidates)
 const sentinel = ref<HTMLElement>()
 useInfiniteSentinel(results, sentinel, () => items.value.length,
   () => nextOffset.value !== null && !loading.value && !problem.value, () => load(true))
 const title = computed(() => running.value
-  ? `${runningSessions.value[0]!.workItemTitle ?? '不可见工作项'}${runningSessions.value.length > 1 ? ` 等 ${runningSessions.value.length} 项` : ''}`
-  : resume.value ? `${resume.value.title}${resumeItems.value.length > 1 ? ` 等 ${resumeItems.value.length} 项` : ''}` : undefined)
+  ? `${timerTitle(runningSessions.value[0]!)}${runningSessions.value.length > 1 ? ` 等 ${runningSessions.value.length} 项` : ''}`
+  : resume.value ? `${resume.value.title}${resumeKeys.value.length > 1 ? ` 等 ${resumeKeys.value.length} 项` : ''}` : undefined)
 const { hideCompleted } = useHideCompleted()
 const visible = items
 const candidates = computed(() => visible.value.filter(item => !tracker.isRunning(item.workItemId) && (running.value || !saved.value || item.workItemId !== resume.value?.workItemId)))
 const focusedItem = ref<TimerCandidate>()
-const focusedId = computed(() => running.value ? running.value.workItemId : resume.value?.workItemId)
+const focusedId = computed(() => running.value ? sessionKey(running.value) : resume.value?.workItemId)
 const currentItem = computed(() => items.value.find(item => item.workItemId === focusedId.value)
   ?? (focusedItem.value?.workItemId === focusedId.value ? focusedItem.value : undefined))
 const error = computed(() => notice.value || tracker.problem.value || (expanded.value ? problem.value : ''))
-const project = computed(() => currentItem.value?.projectName)
+const project = computed(() => currentItem.value?.projectName ?? (categoryOf(focusedId.value) ? NON_PROJECT_LABEL : undefined))
 const saved = ref(false)
 const pausedDuration = ref(0)
 const displayDuration = computed(() => running.value ? tracker.wallDuration.value : pausedDuration.value)
@@ -201,8 +208,8 @@ async function begin(id: string) {
 }
 async function pause() { notice.value = ''; await tracker.stopAll() }
 async function continueWork() {
-  if (resumeItems.value.length > 1) {
-    if (await tracker.startMany(resumeItems.value.map(item => item.workItemId))) await changeMode(false)
+  if (resumeKeys.value.length > 1) {
+    if (await tracker.startMany(resumeKeys.value)) await changeMode(false)
   } else if (resume.value) await begin(resume.value.workItemId)
 }
 function allocatedDuration(ms: number) {
@@ -466,19 +473,19 @@ function keydown(event: KeyboardEvent) {
               :key="timer.session.id"
               class="running-row"
             >
-              <span class="running-copy"><strong>{{ timer.workItemTitle ?? '不可见工作项' }}</strong><small>计入 {{ formatTrackingDuration(allocatedDuration(timer.session.allocatedDurationMs)) }}</small></span>
+              <span class="running-copy"><strong>{{ timerTitle(timer) }}</strong><small>计入 {{ formatTrackingDuration(allocatedDuration(timer.session.allocatedDurationMs)) }}</small></span>
               <button
-                v-if="runningSessions.length > 1 && timer.session.workItemId"
+                v-if="runningSessions.length > 1 && sessionKey(timer.session)"
                 class="text-button"
                 :disabled="tracker.busy.value"
-                @click="tracker.switchTo(timer.session.workItemId)"
+                @click="tracker.switchTo(sessionKey(timer.session)!)"
               >
                 只计时此项
               </button>
               <button
                 class="icon-button"
                 :disabled="tracker.busy.value"
-                :aria-label="`暂停 ${timer.workItemTitle ?? '不可见工作项'}`"
+                :aria-label="`暂停 ${timerTitle(timer)}`"
                 @click="tracker.stop(timer.session.id)"
               >
                 <TimerIcon name="pause" />

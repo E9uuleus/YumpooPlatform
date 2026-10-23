@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { DataAnalysis, FolderOpened, Message, Timer } from '@element-plus/icons-vue'
 import { ElButton, ElDialog, ElIcon, ElTour, ElTourStep } from 'element-plus'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Component } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch, type Component } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSession } from '../composables/useSession'
+import { openDocs } from '../docs-site/openDocs'
 import { TOURS, type TourStep } from './tours'
 import { useOnboarding } from './useOnboarding'
 
@@ -12,7 +13,12 @@ const onboarding = useOnboarding()
 const router = useRouter()
 const steps = ref<TourStep[]>([])
 const current = ref(0)
+const updating = computed(() => onboarding.active.value?.mode === 'update')
 let resizeFrame: number | undefined
+let targetFrame: number | undefined
+let measuredTarget: HTMLElement | null = null
+let measuredRect = ''
+const liveTarget = shallowRef<(() => HTMLElement | null)>()
 const open = computed({
   get: () => steps.value.length > 0,
   set: value => {
@@ -33,6 +39,13 @@ function visible(selector: string): boolean {
   return Boolean(element && element.getClientRects().length && !element.closest('[inert]'))
 }
 
+// 主目标不可见时改用备用目标（如二级导航收起时指向展开按钮），都不可见的步骤跳过。
+function locate({ fallback, ...step }: TourStep): TourStep | undefined {
+  delete step.since
+  if (!step.target || visible(step.target)) return step
+  return fallback && visible(fallback.target) ? { ...step, ...fallback } : undefined
+}
+
 async function refreshSteps(): Promise<void> {
   const tour = onboarding.active.value
   if (!tour) return
@@ -40,7 +53,9 @@ async function refreshSteps(): Promise<void> {
   if (onboarding.active.value !== tour) return
   const currentTitle = steps.value[current.value]?.title
   const available = TOURS[tour.id].steps
-    .filter(step => !step.target || visible(step.target))
+    .filter(step => tour.mode !== 'update' || (step.since ?? 1) > tour.from)
+    .map(locate)
+    .filter(step => step !== undefined)
     .map(step => {
       if (window.innerWidth >= 1100) return step
       const target = step.target ? document.querySelector(step.target) : null
@@ -67,10 +82,42 @@ async function refreshSteps(): Promise<void> {
   else onboarding.stop()
 }
 
+function browseDocs(): void {
+  onboarding.complete('welcome')
+  openDocs(router, '/docs')
+}
+
 function cancelResize(): void {
   if (resizeFrame !== undefined) cancelAnimationFrame(resizeFrame)
   resizeFrame = undefined
 }
+
+function cancelTarget(): void {
+  if (targetFrame !== undefined) cancelAnimationFrame(targetFrame)
+  targetFrame = undefined
+  measuredTarget = null
+  measuredRect = ''
+  liveTarget.value = undefined
+}
+
+function trackTarget(): void {
+  const selector = steps.value[current.value]?.target
+  const element = selector ? document.querySelector<HTMLElement>(selector) : null
+  const rect = element?.getBoundingClientRect()
+  const signature = rect ? [rect.x, rect.y, rect.width, rect.height].join(',') : ''
+  if (element !== measuredTarget || signature !== measuredRect) {
+    measuredTarget = element
+    measuredRect = signature
+    // ElTour caches the mask rectangle until its target changes, including during ancestor animations.
+    liveTarget.value = element ? () => element : undefined
+  }
+  if (open.value && selector) targetFrame = requestAnimationFrame(trackTarget)
+}
+
+watch([open, current, steps], () => {
+  cancelTarget()
+  if (open.value) trackTarget()
+}, { flush: 'post' })
 
 function scheduleResize(): void {
   if (resizeFrame !== undefined || !onboarding.active.value) return
@@ -82,6 +129,7 @@ function scheduleResize(): void {
 
 watch(onboarding.active, () => {
   cancelResize()
+  cancelTarget()
   steps.value = []
   current.value = 0
   void refreshSteps()
@@ -92,6 +140,7 @@ onMounted(() => window.addEventListener('resize', scheduleResize))
 onBeforeUnmount(() => {
   window.removeEventListener('resize', scheduleResize)
   cancelResize()
+  cancelTarget()
   onboarding.stop()
 })
 </script>
@@ -128,15 +177,24 @@ onBeforeUnmount(() => {
       </li>
     </ul>
     <template #footer>
-      <el-button @click="onboarding.complete('welcome')">
-        跳过
-      </el-button>
-      <el-button
-        type="primary"
-        @click="onboarding.start('welcome')"
-      >
-        开始导览（约 1 分钟）
-      </el-button>
+      <div class="onboarding-welcome__footer">
+        <el-button
+          class="onboarding-welcome__docs"
+          text
+          @click="browseDocs"
+        >
+          浏览帮助中心
+        </el-button>
+        <el-button @click="onboarding.complete('welcome')">
+          跳过
+        </el-button>
+        <el-button
+          type="primary"
+          @click="onboarding.start('welcome')"
+        >
+          开始导览（约 1 分钟）
+        </el-button>
+      </div>
     </template>
   </el-dialog>
   <el-tour
@@ -145,10 +203,21 @@ onBeforeUnmount(() => {
     :target-area-clickable="false"
   >
     <el-tour-step
-      v-for="step in steps"
+      v-for="(step, index) in steps"
       :key="step.title"
       v-bind="step"
-    />
+      :target="index === current && liveTarget ? liveTarget : step.target ?? null"
+    >
+      <template
+        v-if="updating"
+        #header
+      >
+        <span
+          role="heading"
+          class="el-tour__title"
+        ><span class="onboarding-new-tag">新功能</span>{{ step.title }}</span>
+      </template>
+    </el-tour-step>
   </el-tour>
 </template>
 
@@ -218,9 +287,31 @@ onBeforeUnmount(() => {
   line-height: 18px;
 }
 
+.onboarding-welcome__footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.onboarding-welcome__docs {
+  margin-right: auto;
+}
+
+.onboarding-new-tag {
+  margin-right: var(--yp-space-2);
+  padding: 0 6px;
+  border-radius: var(--yp-radius-sm);
+  background: color-mix(in srgb, var(--yp-action-primary) 14%, transparent);
+  color: var(--yp-action-primary);
+  font-size: 12px;
+  font-weight: 500;
+  vertical-align: 1px;
+}
+
 @media (max-width: 640px) {
   .onboarding-welcome__highlights {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>
+

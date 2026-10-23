@@ -2,7 +2,8 @@
 import { computed, ref, watch } from 'vue'
 import { ElButton } from 'element-plus'
 import { Close } from '@element-plus/icons-vue'
-import { TimeSessionFillMode, type TimerCandidate } from '@yumpoo/api-client'
+import { TimeSessionFillMode } from '@yumpoo/api-client'
+import type { SubjectOption } from '../../timer/timeCategories'
 import ItemPicker from './ItemPicker.vue'
 import OverlapModeControl from './OverlapModeControl.vue'
 import TimeField from './TimeField.vue'
@@ -10,14 +11,14 @@ import { defaultMode, durationLabel, MIN_BLOCK_MS, overlapEffect, type DayBlock,
 
 const props = defineProps<{ range: Range; blocks: DayBlock[]; bounds: Range; limit: number; date: string; timezone: string; busy: boolean }>()
 const emit = defineEmits<{
-  submit: [mode: TimeSessionFillMode, items: TimerCandidate[], range: Range]
+  submit: [mode: TimeSessionFillMode, items: SubjectOption[], range: Range]
   'update:range': [range: Range]
   close: []
 }>()
 
-const selected = ref<TimerCandidate[]>([])
+const selected = ref<SubjectOption[]>([])
 const touched = ref(false)
-const effect = computed(() => overlapEffect(props.range, selected.value.map(item => item.workItemId), props.blocks, props.limit))
+const effect = computed(() => overlapEffect(props.range, selected.value.map(item => item.key), props.blocks, props.limit))
 const mode = ref(defaultMode(effect.value))
 watch(() => effect.value.fullyCovered, () => { if (!touched.value) mode.value = defaultMode(effect.value) })
 const problem = computed(() => {
@@ -31,7 +32,7 @@ const problem = computed(() => {
 function setMode(value: TimeSessionFillMode) { touched.value = true; mode.value = value }
 function setStart(start: number) { emit('update:range', { start, end: props.range.end }) }
 function setEnd(end: number) { emit('update:range', { start: props.range.start, end }) }
-function submit(items: TimerCandidate[]) {
+function submit(items: SubjectOption[]) {
   if (problem.value || props.busy || !items.length) return
   emit('submit', effect.value.overlapping.length ? mode.value : TimeSessionFillMode.Gaps, items, props.range)
 }

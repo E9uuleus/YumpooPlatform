@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 360" role="img" aria-label="系统上下文：浏览器与桌面客户端经 HTTPS 反向代理访问静态 Web 应用和 Spring Boot 模块化单体，后端连接 PostgreSQL 与企业微信">
+  <defs>
+    <marker id="sc-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="dg-arrow" d="M0 0 10 5 0 10z"/>
+    </marker>
+  </defs>
+  <rect class="dg-node" x="20" y="40" width="150" height="56" rx="10"/>
+  <text class="dg-label" x="95" y="66" text-anchor="middle">浏览器</text>
+  <text class="dg-muted" x="95" y="84" text-anchor="middle">Web 应用</text>
+  <rect class="dg-node" x="20" y="150" width="150" height="56" rx="10"/>
+  <text class="dg-label" x="95" y="176" text-anchor="middle">桌面客户端</text>
+  <text class="dg-muted" x="95" y="194" text-anchor="middle">Electron 壳 + 同一 SPA</text>
+  <rect class="dg-node" x="20" y="270" width="150" height="56" rx="10"/>
+  <text class="dg-label" x="95" y="296" text-anchor="middle">企业微信</text>
+  <text class="dg-muted" x="95" y="314" text-anchor="middle">OAuth 与通讯录</text>
+
+  <rect class="dg-node dg-node--accent" x="230" y="95" width="130" height="56" rx="10"/>
+  <text class="dg-label" x="295" y="121" text-anchor="middle">HTTPS 反向代理</text>
+  <text class="dg-muted" x="295" y="139" text-anchor="middle">公司部署地址</text>
+
+  <rect class="dg-group" x="400" y="20" width="340" height="320" rx="14"/>
+  <text class="dg-muted" x="416" y="42">一个部署单元</text>
+  <rect class="dg-node" x="420" y="56" width="140" height="52" rx="10"/>
+  <text class="dg-label" x="490" y="80" text-anchor="middle">静态 Web 应用</text>
+  <text class="dg-muted" x="490" y="97" text-anchor="middle">Vue SPA</text>
+  <rect class="dg-node" x="580" y="56" width="140" height="52" rx="10"/>
+  <text class="dg-label" x="650" y="80" text-anchor="middle">桌面更新源</text>
+  <text class="dg-muted" x="650" y="97" text-anchor="middle">安装包与签名</text>
+  <rect class="dg-node dg-node--accent" x="420" y="150" width="300" height="64" rx="10"/>
+  <text class="dg-label" x="570" y="178" text-anchor="middle">Spring Boot 模块化单体</text>
+  <text class="dg-muted" x="570" y="198" text-anchor="middle">/api/v1 · 会话 · Outbox · 定时任务</text>
+  <rect class="dg-node" x="500" y="262" width="140" height="56" rx="10"/>
+  <text class="dg-label" x="570" y="288" text-anchor="middle">PostgreSQL</text>
+  <text class="dg-muted" x="570" y="306" text-anchor="middle">yumpoo schema</text>
+
+  <path class="dg-edge" d="M170 68 C 200 68, 205 112, 230 112" marker-end="url(#sc-arrow)"/>
+  <path class="dg-edge" d="M170 178 C 200 178, 205 136, 230 136" marker-end="url(#sc-arrow)"/>
+  <path class="dg-edge" d="M360 112 C 390 112, 395 82, 420 82" marker-end="url(#sc-arrow)"/>
+  <path class="dg-edge" d="M360 136 C 390 136, 395 182, 420 182" marker-end="url(#sc-arrow)"/>
+  <path class="dg-edge" d="M570 214 L 570 262" marker-end="url(#sc-arrow)"/>
+  <path class="dg-edge dg-edge--muted" d="M170 298 C 300 298, 380 214, 420 200" marker-start="url(#sc-arrow)" marker-end="url(#sc-arrow)"/>
+  <path class="dg-edge dg-edge--muted" d="M650 108 C 650 130, 400 125, 360 128" marker-end="url(#sc-arrow)"/>
+  <text class="dg-muted" x="250" y="250">登录与通讯录同步</text>
+</svg>

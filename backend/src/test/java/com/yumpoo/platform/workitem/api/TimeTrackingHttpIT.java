@@ -388,6 +388,98 @@ class TimeTrackingHttpIT {
     }
 
     @Test
+    void categoryTimersStartSwitchStopAndResumeWithoutDomainEvents() throws Exception {
+        JsonNode started=ok(timer("start",Map.of("workItemId",source.itemId()),"\"0\""));
+        long outbox=allEvents();
+        JsonNode meeting=ok(timer("switch",Map.of("timeCategory","MEETING"),started.path("etag").asText()));
+        assertThat(meeting.path("runningSessions")).hasSize(1);
+        JsonNode session=meeting.path("runningSessions").get(0).path("session");
+        assertThat(session.path("timeCategory").asText()).isEqualTo("MEETING");
+        assertThat(session.path("projectId").isNull()).isTrue();
+        assertThat(session.path("workItemId").isNull()).isTrue();
+        assertThat(meeting.path("runningSessions").get(0).path("workItemTitle").isNull()).isTrue();
+        assertThat(allEvents()).as("only the stopped work item publishes").isEqualTo(outbox+1);
+        JsonNode again=ok(timer("start",Map.of("timeCategory","MEETING"),meeting.path("etag").asText()));
+        assertThat(again.path("runningSessions")).hasSize(1);
+        JsonNode stopped=ok(mutate("POST","/api/v1/me/time-tracker/stop-all",member,"",again.path("etag").asText()));
+        assertThat(stopped.path("resumeCategories").toString()).isEqualTo("[\"MEETING\"]");
+        assertThat(stopped.path("resumeItems")).isEmpty();
+        JsonNode mixed=ok(timer("start",Map.of("workItemIds",List.of(target.itemId()),"timeCategories",List.of("MEETING","LEARNING")),
+                stopped.path("etag").asText()));
+        assertThat(mixed.path("runningSessions")).hasSize(3);
+        assertThat(mixed.path("runningSessions").toString()).contains("\"LEARNING\"").contains(target.itemId().toString());
+        var categories=java.util.stream.IntStream.range(0,11).mapToObj(i -> "MEETING").toList();
+        var tooMany=timer("start",Map.of("timeCategories",categories),mixed.path("etag").asText());
+        assertThat(tooMany.statusCode()).as(tooMany.body()).isIn(400,422);
+        assertThat(audits("TIME_TRACKING_STARTED")).isGreaterThanOrEqualTo(4);
+    }
+
+    @Test
+    void categoryRecordsAreFilledEditedReassignedAndDeletedByTheirOwnerOnly() throws Exception {
+        String fill="/api/v1/me/time-sessions/fill";
+        JsonNode created=ok(mutate("POST",fill,member,categoryFillBody("GAPS","MEETING","09:00","10:00"),null));
+        assertThat(created.path("createdCount").asInt()).isOne();
+        JsonNode overlap=ok(mutate("POST",fill,member,categoryFillBody("PARALLEL","MEETING","09:30","11:00"),null));
+        assertThat(overlap.path("skippedDurationMs").asLong()).isEqualTo(1800000);
+        String day="/api/v1/me/time-sessions?from=2026-09-01T08:00:00Z&to=2026-09-01T12:00:00Z";
+        JsonNode rows=ok(get(day,member)).path("items");
+        assertThat(rows).hasSize(2);
+        JsonNode first=rows.get(0).path("session");
+        assertThat(first.path("timeCategory").asText()).isEqualTo("MEETING");
+        assertThat(first.path("canEdit").asBoolean()).isTrue();
+        assertThat(rows.get(0).path("title").isNull()).isTrue();
+        String own="/api/v1/me/time-sessions/"+first.path("id").asText();
+        String edit=json.writeValueAsString(Map.of("startedAt","2026-09-01T08:30:00Z","stoppedAt","2026-09-01T10:00:00Z"));
+        assertThat(mutate("PATCH",own,member,edit,null).statusCode()).isEqualTo(428);
+        assertThat(mutate("PATCH",own,member,edit,"\"9\"").statusCode()).isEqualTo(412);
+        assertThat(mutate("PATCH",own,owner,edit,first.path("etag").asText()).statusCode()).isEqualTo(404);
+        JsonNode edited=ok(mutate("PATCH",own,member,edit,first.path("etag").asText()));
+        assertThat(edited.path("startedAt").asText()).isEqualTo("2026-09-01T08:30:00Z");
+        var overlapping=mutate("PATCH",own,member,json.writeValueAsString(Map.of("startedAt","2026-09-01T08:30:00Z",
+                "stoppedAt","2026-09-01T10:30:00Z")),edited.path("etag").asText());
+        assertThat(overlapping.statusCode()).as(overlapping.body()).isEqualTo(422);
+        assertThat(overlapping.body()).contains("TIME_OVERLAP");
+
+        String reassign=own+"/reassign";
+        var unchanged=mutate("POST",reassign,member,json.writeValueAsString(Map.of("timeCategory","MEETING")),edited.path("etag").asText());
+        assertThat(unchanged.statusCode()).as(unchanged.body()).isEqualTo(422);
+        JsonNode toItem=ok(mutate("POST",reassign,member,json.writeValueAsString(Map.of("workItemId",source.itemId())),edited.path("etag").asText()));
+        assertThat(toItem.path("deletedCount").asInt()).isOne();
+        assertThat(toItem.path("createdCount").asInt()).isOne();
+        JsonNode moved=ok(get("/api/v1/work-items/"+source.itemId()+"/time-sessions",member)).path("items").get(0);
+        JsonNode back=ok(mutate("POST","/api/v1/me/time-sessions/"+moved.path("id").asText()+"/reassign",member,
+                json.writeValueAsString(Map.of("timeCategory","LEARNING")),moved.path("etag").asText()));
+        assertThat(back.path("createdCount").asInt()).isOne();
+        assertThat(ok(get("/api/v1/work-items/"+source.itemId()+"/time-sessions",member)).path("items")).isEmpty();
+        JsonNode learning=null;
+        for(JsonNode row:ok(get(day,member)).path("items"))
+            if(row.path("session").path("timeCategory").asText().equals("LEARNING")) learning=row.path("session");
+        assertThat(learning).isNotNull();
+        JsonNode deleted=ok(mutate("DELETE","/api/v1/me/time-sessions/"+learning.path("id").asText(),member,"{}",learning.path("etag").asText()));
+        assertThat(deleted.path("deleted").asBoolean()).isTrue();
+        assertThat(ok(get(day,member)).path("items")).hasSize(1);
+    }
+
+    @Test
+    void fillRejectsEntriesWithBothOrNeitherSubjectAndTheSchemaRejectsMixedRows() throws Exception {
+        for(Map<String,Object> entry:List.<Map<String,Object>>of(
+                Map.of("startedAt","2026-09-01T09:00:00Z","stoppedAt","2026-09-01T10:00:00Z"),
+                Map.of("workItemId",source.itemId(),"timeCategory","MEETING","startedAt","2026-09-01T09:00:00Z","stoppedAt","2026-09-01T10:00:00Z"))) {
+            var rejected=mutate("POST","/api/v1/me/time-sessions/fill",member,
+                    json.writeValueAsString(Map.of("mode","GAPS","entries",List.of(entry))),null);
+            assertThat(rejected.statusCode()).as(rejected.body()).isIn(400,422);
+        }
+        for(String values:List.of(":project,:item,'MEETING'","NULL,NULL,NULL",":project,NULL,'MEETING'","NULL,NULL,'OTHER'")) {
+            String insert="INSERT INTO yumpoo.work_item_time_session(id,company_id,project_id,work_item_id,time_category,user_id,started_at,stopped_at,source) "
+                    +"VALUES (:id,:company,"+values+",:user,transaction_timestamp()-interval '1 hour',transaction_timestamp(),'MANUAL')";
+            var statement=jdbc.sql(insert).param("id",UUID.randomUUID()).param("company",COMPANY).param("user",member.userId());
+            if(values.contains(":project")) statement.param("project",source.id());
+            if(values.contains(":item")) statement.param("item",source.itemId());
+            assertThat(org.assertj.core.api.Assertions.catchThrowable(statement::update)).as(values).isNotNull();
+        }
+    }
+
+    @Test
     void personalCandidatesIncludeItemsTrackedOnlyByManualRecords() throws Exception {
         UUID manualOnly=UUID.fromString(createItem(source.id(),"只手动补录").path("id").asText());
         String candidates="/api/v1/me/time-tracker/candidates?scope=PERSONAL";
@@ -396,6 +488,34 @@ class TimeTrackingHttpIT {
         JsonNode first=ok(get(candidates,member)).path("items").get(0);
         assertThat(first.path("workItemId").asText()).isEqualTo(manualOnly.toString());
         assertThat(first.path("lastTrackedAt").asText()).isEqualTo("2026-09-01T09:00:00Z");
+    }
+
+    @Test
+    void candidatesCarryProjectStatusNamesAndColorsIncludingCustomStatuses() throws Exception {
+        UUID item=UUID.fromString(createItem(source.id(),"status-label-check").path("id").asText());
+        String path="/api/v1/me/time-tracker/candidates?scope=ALL&q=status-label-check";
+        JsonNode initial=ok(get(path,member)).path("items").get(0);
+        assertThat(initial.path("statusCode").asText()).isEqualTo("NOT_STARTED");
+        assertThat(initial.path("statusName").asText()).isEqualTo("未开始");
+        assertThat(initial.path("statusColorToken").asText()).isNotBlank();
+        jdbc.sql("""
+            INSERT INTO yumpoo.project_work_item_status_label
+              (company_id,project_id,status_code,display_name,color_token,status_category,sort_order)
+            SELECT :company,:project,'PLANNED','已排期','BRIGHT_BLUE','TODO',COALESCE(MAX(sort_order),0)+1
+            FROM yumpoo.project_work_item_status_label WHERE project_id=:project
+            """).param("company",COMPANY).param("project",source.id()).update();
+        jdbc.sql("UPDATE yumpoo.work_item SET status_code='PLANNED',status_category='TODO' WHERE id=:id")
+                .param("id",item).update();
+        JsonNode custom=ok(get(path,member)).path("items").get(0);
+        assertThat(custom.path("statusCategory").asText()).isEqualTo("TODO");
+        assertThat(custom.path("statusCode").asText()).isEqualTo("PLANNED");
+        assertThat(custom.path("statusName").asText()).isEqualTo("已排期");
+        assertThat(custom.path("statusColorToken").asText()).isEqualTo("BRIGHT_BLUE");
+        jdbc.sql("UPDATE yumpoo.project_work_item_status_label SET display_name='等待评审',color_token='PURPLE',active=false WHERE project_id=:project AND status_code='PLANNED'")
+                .param("project",source.id()).update();
+        JsonNode renamed=ok(get(path,member)).path("items").get(0);
+        assertThat(renamed.path("statusName").asText()).isEqualTo("等待评审");
+        assertThat(renamed.path("statusColorToken").asText()).isEqualTo("PURPLE");
     }
 
     @Test
@@ -491,6 +611,11 @@ class TimeTrackingHttpIT {
         assertThat(response.body()).contains("INVALID_SIZE","projectId");
     }
 
+    private String categoryFillBody(String mode,String category,String start,String stop) {
+        return json.writeValueAsString(Map.of("mode",mode,"entries",List.of(Map.of("timeCategory",category,
+                "startedAt","2026-09-01T"+start+":00Z","stoppedAt","2026-09-01T"+stop+":00Z"))));
+    }
+
     private String fillBody(String mode,UUID item,String start,String stop) {
         return json.writeValueAsString(Map.of("mode",mode,"entries",List.of(Map.of("workItemId",item,
                 "startedAt","2026-09-01T"+start+":00Z","stoppedAt","2026-09-01T"+stop+":00Z"))));
@@ -580,6 +705,13 @@ class TimeTrackingHttpIT {
     private long events(Project project) {
         return jdbc.sql("SELECT count(*) FROM yumpoo.outbox_event WHERE company_id=:company AND payload_json->>'projectId'=:project")
                 .param("company", COMPANY).param("project", project.id().toString()).query(Long.class).single();
+    }
+    private long allEvents() {
+        return jdbc.sql("SELECT count(*) FROM yumpoo.outbox_event WHERE company_id=:company").param("company", COMPANY).query(Long.class).single();
+    }
+    private long audits(String action) {
+        return jdbc.sql("SELECT count(*) FROM yumpoo.security_audit_event WHERE company_id=:company AND action=:action")
+                .param("company", COMPANY).param("action", action).query(Long.class).single();
     }
     private void awaitBlockedLock(String table, String mode) throws InterruptedException {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);

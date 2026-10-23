@@ -1,6 +1,7 @@
-import { TimeSessionFillMode } from '@yumpoo/api-client'
+import { TimeSessionFillMode, type MyTimeSession, type TimeCategory } from '@yumpoo/api-client'
 import { addDays } from '../../team/teamDashboardModel'
 import { companyDateTime, parseCompanyDateTime } from '../../timer/timeFormat'
+import { NON_PROJECT_LABEL, sessionKey, timeCategory, type SubjectKey } from '../../timer/timeCategories'
 
 export const MINUTE = 60_000
 export const HOUR = 60 * MINUTE
@@ -19,6 +20,10 @@ export const MAX_PARALLEL_ITEMS = 10
 export interface DayBlock {
   id: string
   workItemId: string | null
+  /** Set for non-project category records, which have no project or work item. */
+  timeCategory: TimeCategory | null
+  /** The work item id or category key; null when the work item is not disclosed. */
+  subjectKey: SubjectKey | null
   projectId: string | null
   title: string
   itemNo: string | null
@@ -34,9 +39,21 @@ export interface DayBlock {
 export interface Range { start: number; end: number }
 export interface BlockLayout { lane: number; lanes: number }
 export interface BlockShare { allocatedMs: number; maxParallel: number }
-export interface ItemTotal { workItemId: string; title: string; itemNo: string | null; projectName: string | null; colorToken: string | null; ms: number }
+export interface ItemTotal { key: SubjectKey; title: string; itemNo: string | null; projectName: string | null; colorToken: string | null; ms: number }
 
 export const blockEnd = (block: DayBlock, now: number) => block.end ?? Math.max(block.start, now)
+
+/** A category record reads as its category under 非项目工时; an undisclosed work item stays anonymous. */
+export function blockFromSession(item: MyTimeSession): DayBlock {
+  const category = timeCategory(item.session.timeCategory)
+  return {
+    id: item.session.id, workItemId: item.session.workItemId, timeCategory: category?.code ?? null, subjectKey: sessionKey(item.session),
+    projectId: item.session.projectId, title: category?.label ?? item.title ?? '不可见工作项', itemNo: item.itemNo,
+    projectName: category ? NON_PROJECT_LABEL : item.projectName, colorToken: category?.colorToken ?? item.contentColorToken,
+    start: item.session.startedAt.getTime(), end: item.session.stoppedAt?.getTime() ?? null,
+    canEdit: item.session.canEdit, etag: item.session.etag,
+  }
+}
 
 /** Instant of `minute` (0..1440) on the company-local `date`; 1440 is the next midnight. */
 export function atMinute(date: string, minute: number, timezone: string): number {
@@ -154,16 +171,16 @@ export function shares(blocks: DayBlock[], now: number, window: Range): Map<stri
   return result
 }
 
-/** Counted time per work item inside `window`, largest first. */
+/** Counted time per work item or category inside `window`, largest first. */
 export function itemTotals(blocks: DayBlock[], now: number, window: Range): ItemTotal[] {
   const allocated = shares(blocks, now, window)
   const totals = new Map<string, ItemTotal>()
   for (const block of blocks) {
     const ms = allocated.get(block.id)?.allocatedMs ?? 0
-    if (!block.workItemId || ms <= 0) continue
-    const total = totals.get(block.workItemId)
+    if (!block.subjectKey || ms <= 0) continue
+    const total = totals.get(block.subjectKey)
     if (total) total.ms += ms
-    else totals.set(block.workItemId, { workItemId: block.workItemId, title: block.title, itemNo: block.itemNo, projectName: block.projectName, colorToken: block.colorToken, ms })
+    else totals.set(block.subjectKey, { key: block.subjectKey, title: block.title, itemNo: block.itemNo, projectName: block.projectName, colorToken: block.colorToken, ms })
   }
   return [...totals.values()].sort((a, b) => b.ms - a.ms)
 }
@@ -201,10 +218,10 @@ export interface OverlapEffect {
 }
 
 /** Mirrors TimeSessionFillPlanner so the composer can describe each mode before saving. */
-export function overlapEffect(range: Range, itemIds: string[], blocks: DayBlock[], now: number): OverlapEffect {
+export function overlapEffect(range: Range, keys: SubjectKey[], blocks: DayBlock[], now: number): OverlapEffect {
   const overlapping = blocks.filter(block => overlaps(range, { start: block.start, end: blockEnd(block, now) }))
   const free = gaps(blocks, now, range)
-  const others = overlapping.filter(block => !block.workItemId || !itemIds.includes(block.workItemId))
+  const others = overlapping.filter(block => !block.subjectKey || !keys.includes(block.subjectKey))
   const parallelItems = [...new Set(others.map(block => block.title))]
   const replaceable = (block: DayBlock) => block.canEdit && block.end !== null
   return {
@@ -223,14 +240,14 @@ export function defaultMode(effect: OverlapEffect): TimeSessionFillMode {
   return effect.fullyCovered ? TimeSessionFillMode.Parallel : TimeSessionFillMode.Gaps
 }
 
-/** Bounds a block may move or resize within: neighbours it did not overlap when the drag began, same-item blocks, the day and now. */
+/** Bounds a block may move or resize within: neighbours it did not overlap when the drag began, same-subject blocks, the day and now. */
 export function freeInterval(block: DayBlock, blocks: DayBlock[], now: number, window: Range): Range {
   const own = { start: block.start, end: blockEnd(block, now) }
   let start = window.start, end = Math.min(window.end, now)
   for (const other of blocks) {
     if (other.id === block.id) continue
     const span = { start: other.start, end: blockEnd(other, now) }
-    const sameItem = !!block.workItemId && other.workItemId === block.workItemId
+    const sameItem = !!block.subjectKey && other.subjectKey === block.subjectKey
     if (!sameItem && overlaps(own, span)) continue
     if (span.end <= own.start) start = Math.max(start, span.end)
     else if (span.start >= own.end) end = Math.min(end, span.start)

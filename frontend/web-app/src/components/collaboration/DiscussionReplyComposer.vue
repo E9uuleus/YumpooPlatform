@@ -30,6 +30,7 @@ const attachments = useEditorAttachments({
 })
 const pendingUploads = attachments.pendingUploads
 const editor = useEditor({
+  injectCSS: false,
   content: props.draft,
   editable: props.canPublish,
   extensions: [...discussionExtensions(() => props.members, () => composer.value?.closePanel()), ...attachments.extensions],

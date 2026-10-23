@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 380" role="img" aria-label="后端模块分层：foundation 在底层，administration 在顶层编排，模块只能调用下层模块的 api 层">
+  <defs>
+    <marker id="bm-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path class="dg-arrow" d="M0 0 10 5 0 10z"/>
+    </marker>
+  </defs>
+  <text class="dg-muted" x="20" y="30">箭头表示“可调用其 api 层”，以 ArchitectureRules 为准；图中只画主要依赖。</text>
+  <rect class="dg-node dg-node--accent" x="220" y="44" width="320" height="44" rx="10"/>
+  <text class="dg-label" x="380" y="71" text-anchor="middle">administration · 管理编排</text>
+
+  <rect class="dg-node" x="120" y="118" width="160" height="44" rx="10"/>
+  <text class="dg-label" x="200" y="145" text-anchor="middle">reporting · 统计</text>
+  <rect class="dg-node" x="480" y="118" width="160" height="44" rx="10"/>
+  <text class="dg-label" x="560" y="145" text-anchor="middle">operations · 运维</text>
+
+  <rect class="dg-node" x="40" y="194" width="150" height="44" rx="10"/>
+  <text class="dg-label" x="115" y="221" text-anchor="middle">worklog · 工时</text>
+  <rect class="dg-node" x="210" y="194" width="160" height="44" rx="10"/>
+  <text class="dg-label" x="290" y="221" text-anchor="middle">workitem · 工作项</text>
+  <rect class="dg-node" x="390" y="194" width="160" height="44" rx="10"/>
+  <text class="dg-label" x="470" y="221" text-anchor="middle">notification · 通知</text>
+  <rect class="dg-node" x="570" y="194" width="150" height="44" rx="10"/>
+  <text class="dg-label" x="645" y="221" text-anchor="middle">filestorage · 附件</text>
+
+  <rect class="dg-node" x="40" y="270" width="150" height="44" rx="10"/>
+  <text class="dg-label" x="115" y="297" text-anchor="middle">catalog · 项目</text>
+  <rect class="dg-node" x="210" y="270" width="180" height="44" rx="10"/>
+  <text class="dg-label" x="300" y="297" text-anchor="middle">identityaccess · 身份</text>
+  <rect class="dg-node" x="410" y="270" width="150" height="44" rx="10"/>
+  <text class="dg-label" x="485" y="297" text-anchor="middle">audit · 审计</text>
+  <rect class="dg-node" x="580" y="270" width="140" height="44" rx="10"/>
+  <text class="dg-label" x="650" y="297" text-anchor="middle">organization</text>
+
+  <rect class="dg-node dg-node--accent" x="40" y="336" width="680" height="34" rx="10"/>
+  <text class="dg-label" x="380" y="358" text-anchor="middle">foundation · 错误模型、分页、Outbox、定时任务、请求关联（所有模块都依赖）</text>
+
+  <path class="dg-edge" d="M300 88 L 220 118" marker-end="url(#bm-arrow)"/>
+  <path class="dg-edge" d="M200 162 L 130 194" marker-end="url(#bm-arrow)"/>
+  <path class="dg-edge" d="M215 162 L 280 194" marker-end="url(#bm-arrow)"/>
+  <path class="dg-edge" d="M240 162 L 450 194" marker-end="url(#bm-arrow)"/>
+  <path class="dg-edge" d="M115 238 L 280 194" marker-end="url(#bm-arrow)"/>
+  <path class="dg-edge" d="M115 238 L 115 270" marker-end="url(#bm-arrow)"/>
+  <path class="dg-edge" d="M270 238 L 150 270" marker-end="url(#bm-arrow)"/>
+  <path class="dg-edge" d="M300 238 L 300 270" marker-end="url(#bm-arrow)"/>
+  <path class="dg-edge" d="M330 238 L 470 270" marker-end="url(#bm-arrow)"/>
+  <path class="dg-edge" d="M360 230 L 600 238" marker-end="url(#bm-arrow)"/>
+  <path class="dg-edge" d="M560 162 L 360 270" marker-end="url(#bm-arrow)"/>
+  <path class="dg-edge" d="M580 162 L 500 270" marker-end="url(#bm-arrow)"/>
+  <path class="dg-edge" d="M300 314 L 640 292" marker-end="url(#bm-arrow)"/>
+</svg>

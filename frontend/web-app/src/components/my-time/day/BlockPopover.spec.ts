@@ -8,7 +8,7 @@ import { atMinute, dayWindow, type DayBlock } from './dayModel'
 const settle = async () => { await new Promise(resolve => setTimeout(resolve)); await flushPromises() }
 const zone = 'Asia/Shanghai', date = '2026-10-08'
 const at = (hour: number) => atMinute(date, hour * 60, zone)
-const block: DayBlock = { id: 'b1', workItemId: 'item', projectId: 'p', title: '写周报', itemNo: 'T-1', projectName: '项目', colorToken: null,
+const block: DayBlock = { id: 'b1', workItemId: 'item', timeCategory: null, subjectKey: 'item', projectId: 'p', title: '写周报', itemNo: 'T-1', projectName: '项目', colorToken: null,
   start: at(9), end: at(10), canEdit: true, etag: '"3"' }
 api.listTimerCandidates.mockResolvedValue({ items: [{ workItemId: 'next', projectId: 'p', projectName: '项目', itemNo: 'T-2', title: '评审',
   contentName: '任务', contentCode: 'TASKS', statusCategory: 'TODO', assignedToMe: true, lastTrackedAt: null, ownDurationMs: 0 }], nextOffset: null })
