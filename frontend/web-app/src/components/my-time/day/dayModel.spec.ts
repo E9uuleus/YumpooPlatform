@@ -10,7 +10,7 @@ const day = dayWindow('2026-10-08', zone)
 const at = (clock: string) => atMinute('2026-10-08', parseClock(clock)!, zone)
 let sequence = 0
 function block(start: string, end: string | null, item = `item-${++sequence}`, extra: Partial<DayBlock> = {}): DayBlock {
-  return { id: `b-${++sequence}`, workItemId: item, projectId: 'project', title: item, itemNo: null, projectName: null, colorToken: null,
+  return { id: `b-${++sequence}`, workItemId: item, timeCategory: null, subjectKey: item, projectId: 'project', title: item, itemNo: null, projectName: null, colorToken: null,
     start: at(start), end: end === null ? null : at(end), canEdit: end !== null, etag: '"0"', ...extra }
 }
 

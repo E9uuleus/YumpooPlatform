@@ -1,6 +1,7 @@
 import { WorkItemLabelColorToken, type TeamTimesheet } from '@yumpoo/api-client'
 import { formatDateOnly } from '../../design-system/dates'
 import { workItemLabelColorValue } from '../projects/workItemLabelColors'
+import { categoryKey, NON_PROJECT_COLOR, NON_PROJECT_KEY, NON_PROJECT_LABEL, timeCategory } from '../timer/timeCategories'
 
 export type PeriodKind = 'WEEK' | 'MONTH' | 'QUARTER'
 /** Inclusive company-calendar dates as `YYYY-MM-DD`. */
@@ -64,7 +65,8 @@ export function hoursMinutes(ms: number): string {
   return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`
 }
 
-export interface TimesheetItemRow { key: string; workItemId: string; projectId: string; projectName: string; itemNo: string; title: string; label: string; totalMs: number; days: Record<string, number> }
+/** `subjectKey` is the work item id or a category key; category rows group under the 非项目工时 pseudo project. */
+export interface TimesheetItemRow { key: string; subjectKey: string; projectId: string; projectName: string; itemNo: string; title: string; label: string; totalMs: number; days: Record<string, number> }
 export interface TimesheetRow { key: string; userId: string; name: string; active: boolean; totalMs: number; days: Record<string, number>; children: TimesheetItemRow[] }
 export interface DayItem { key: string; itemNo: string; title: string; ms: number }
 
@@ -84,29 +86,35 @@ export function restrictTimesheet(model: TimesheetModel, days: string[]): Timesh
 }
 export interface DayProject { projectId: string; projectName: string; totalMs: number; items: DayItem[] }
 
-/** Member rows sorted by name with per-item children; the server already split cross-midnight sessions. */
+/** Member rows sorted by name with per-item children, non-project categories last; the server already split cross-midnight sessions. */
 export function buildTimesheet(sheet: TeamTimesheet): { rows: TimesheetRow[]; dayTotals: Record<string, number>; totalMs: number } {
   const items = new Map(sheet.workItems.map(item => [item.id, item]))
   const rows = new Map<string, TimesheetRow>(sheet.members.map(member => [member.userId,
     { key: member.userId, userId: member.userId, name: member.displayName, active: member.active, totalMs: 0, days: {}, children: [] }]))
   const dayTotals: Record<string, number> = {}
   let totalMs = 0
-  for (const entry of sheet.entries) {
-    const row = rows.get(entry.userId)
-    if (!row) continue
-    const date = fromApiDate(entry.date), item = items.get(entry.workItemId)
-    let child = row.children.find(c => c.workItemId === entry.workItemId)
-    if (!child) {
-      child = { key: `${row.userId}:${entry.workItemId}`, workItemId: entry.workItemId, projectId: item?.projectId ?? '', projectName: item?.projectName ?? '',
-        itemNo: item?.itemNo ?? '', title: item?.title ?? '已删除的工作项', label: item ? `${item.itemNo} ${item.title}` : '已删除的工作项', totalMs: 0, days: {} }
-      row.children.push(child)
-    }
-    for (const target of [row, child]) { target.totalMs += entry.durationMs; target.days[date] = (target.days[date] ?? 0) + entry.durationMs }
-    dayTotals[date] = (dayTotals[date] ?? 0) + entry.durationMs
-    totalMs += entry.durationMs
+  function add(userId: string, subjectKey: string, day: Date, durationMs: number, describe: () => Omit<TimesheetItemRow, 'key' | 'subjectKey' | 'totalMs' | 'days'>) {
+    const row = rows.get(userId)
+    if (!row) return
+    const date = fromApiDate(day)
+    let child = row.children.find(c => c.subjectKey === subjectKey)
+    if (!child) row.children.push(child = { key: `${row.userId}:${subjectKey}`, subjectKey, ...describe(), totalMs: 0, days: {} })
+    for (const target of [row, child]) { target.totalMs += durationMs; target.days[date] = (target.days[date] ?? 0) + durationMs }
+    dayTotals[date] = (dayTotals[date] ?? 0) + durationMs
+    totalMs += durationMs
   }
+  for (const entry of sheet.entries) add(entry.userId, entry.workItemId, entry.date, entry.durationMs, () => {
+    const item = items.get(entry.workItemId)
+    return { projectId: item?.projectId ?? '', projectName: item?.projectName ?? '', itemNo: item?.itemNo ?? '',
+      title: item?.title ?? '已删除的工作项', label: item ? `${item.itemNo} ${item.title}` : '已删除的工作项' }
+  })
+  for (const entry of sheet.categoryEntries ?? []) add(entry.userId, categoryKey(entry.timeCategory), entry.date, entry.durationMs, () => {
+    const label = timeCategory(entry.timeCategory)?.label ?? '其他'
+    return { projectId: NON_PROJECT_KEY, projectName: NON_PROJECT_LABEL, itemNo: '', title: label, label }
+  })
+  const nonProject = (item: TimesheetItemRow) => item.projectId === NON_PROJECT_KEY ? 1 : 0
   const sorted = [...rows.values()].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))
-  sorted.forEach(row => row.children.sort((a, b) => b.totalMs - a.totalMs || a.label.localeCompare(b.label, 'zh-CN')))
+  sorted.forEach(row => row.children.sort((a, b) => nonProject(a) - nonProject(b) || b.totalMs - a.totalMs || a.label.localeCompare(b.label, 'zh-CN')))
   return { rows: sorted, dayTotals, totalMs }
 }
 
@@ -129,6 +137,13 @@ export function dayBreakdown(row: TimesheetRow, day: string): DayProject[] {
 const PROJECT_COLORS = [WorkItemLabelColorToken.BrightBlue, WorkItemLabelColorToken.DarkOrange, WorkItemLabelColorToken.DarkPurple, WorkItemLabelColorToken.Aquamarine,
   WorkItemLabelColorToken.SofiaPink, WorkItemLabelColorToken.Indigo, WorkItemLabelColorToken.BrightGreen, WorkItemLabelColorToken.Lipstick,
   WorkItemLabelColorToken.Royal, WorkItemLabelColorToken.Sunset].map(workItemLabelColorValue)
+
+/** Project colours of a sheet, with the 非项目工时 group kept on its own neutral colour. */
+export function timesheetColors(sheet: TeamTimesheet | undefined): Map<string, string> {
+  const colors = projectColors(sheet?.workItems.map(item => item.projectId) ?? [])
+  colors.set(NON_PROJECT_KEY, NON_PROJECT_COLOR)
+  return colors
+}
 
 /** Hashes each project id into the preset palette and probes past taken colours: projects in one sheet stay distinct, but a colour may change when the sheet's project set changes. */
 export function projectColors(projectIds: Iterable<string>): Map<string, string> {

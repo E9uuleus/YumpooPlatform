@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CalendarDayType, type TeamTimesheet } from '@yumpoo/api-client'
-import { buildTimesheet, dayBreakdown, hoursMinutes, periodFor, periodLabel, projectColors, rangeDays, restrictTimesheet, shiftPeriod, shortHours, timesheetColumns, toApiDate } from './teamDashboardModel'
+import { buildTimesheet, dayBreakdown, hoursMinutes, periodFor, periodLabel, projectColors, rangeDays, restrictTimesheet, shiftPeriod, shortHours, timesheetColors, timesheetColumns, toApiDate } from './teamDashboardModel'
 
 describe('team dashboard periods', () => {
   it('restricts member, item and daily totals to Saturday and Sunday', () => {
@@ -21,7 +21,7 @@ describe('team dashboard periods', () => {
     expect(timesheetColumns(sheet).filter(column => column.rest)).toEqual(columns)
     const model = restrictTimesheet(buildTimesheet(sheet), columns.map(column => column.day))
     expect(model.rows.map(row => row.totalMs)).toEqual([3_600_000, 7_200_000])
-    expect(model.rows[0]!.children.map(child => child.workItemId)).toEqual(['w2'])
+    expect(model.rows[0]!.children.map(child => child.subjectKey)).toEqual(['w2'])
     expect(model.rows[0]!.children[0]!.totalMs).toBe(3_600_000)
     expect(model.dayTotals).toEqual({ '2026-10-10': 3_600_000, '2026-10-11': 7_200_000 })
     expect(model.totalMs).toBe(10_800_000)
@@ -39,6 +39,22 @@ describe('team dashboard periods', () => {
     expect(rangeDays('2026-10-30', '2026-11-02')).toEqual(['2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02'])
     expect(toApiDate('2026-10-01').toISOString().slice(0, 10)).toBe('2026-10-01')
   })
+  it('adds non-project category time as children of the 非项目工时 group, after project work', () => {
+    const sheet: TeamTimesheet = {
+      from: toApiDate('2026-10-05'), to: toApiDate('2026-10-05'), timezone: 'Asia/Shanghai', asOf: new Date(), days: [],
+      members: [{ userId: 'u1', displayName: '李四', active: true }],
+      workItems: [{ id: 'w1', projectId: 'p', projectName: '交付', itemNo: 'DEL-1', title: '任务' }],
+      entries: [{ userId: 'u1', workItemId: 'w1', date: toApiDate('2026-10-05'), durationMs: 1_800_000 }],
+      categoryEntries: [{ userId: 'u1', timeCategory: 'MEETING' as never, date: toApiDate('2026-10-05'), durationMs: 3_600_000 }],
+    }
+    const model = buildTimesheet(sheet)
+    expect(model.totalMs).toBe(5_400_000)
+    expect(model.rows[0]!.children.map(child => [child.subjectKey, child.projectName, child.label])).toEqual([
+      ['w1', '交付', 'DEL-1 任务'], ['category:MEETING', '非项目工时', '会议']])
+    expect(dayBreakdown(model.rows[0]!, '2026-10-05').map(project => project.projectName)).toEqual(['非项目工时', '交付'])
+    expect(timesheetColors(sheet).get('__non_project__')).toBe('var(--yp-label-american-gray)')
+  })
+
   it('groups entries by member and work item and keeps members without time', () => {
     const sheet = {
       from: toApiDate('2026-10-05'), to: toApiDate('2026-10-11'), timezone: 'Asia/Shanghai', asOf: new Date(),

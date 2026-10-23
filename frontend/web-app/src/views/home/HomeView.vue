@@ -19,6 +19,7 @@ import { formatDuration, onTimeTrackingChanged, useTimeTracker } from '../../com
 import { onWorkItemChanged } from '../../composables/workItemChanges'
 import { usePageOnboarding } from '../../onboarding/useOnboarding'
 import { daypart, greeting, heroDate, hubProjects, sortTasks, type HubProject, type TaskFilter } from './homeModel'
+import { timerTitle } from '../../components/timer/timeCategories'
 
 interface JumpCard { key: string; label: string; meta: string; icon: Component; tone: JumpTone; open: () => void }
 
@@ -36,7 +37,10 @@ const tasks = ref<TeamMemberTask[]>([]), projects = ref<DashboardProject[]>([]),
 const filter = ref<TaskFilter>('ALL')
 const running = computed(() => tracker.running.value.length > 0)
 const startedAt = computed(() => running.value ? new Date(Math.min(...tracker.running.value.map(timer => timer.session.startedAt.getTime()))) : undefined)
-const runningTitle = computed(() => `${tracker.running.value[0]?.workItemTitle ?? '工作项'}${tracker.running.value.length > 1 ? ` 等 ${tracker.running.value.length} 项` : ''}`)
+const runningTitle = computed(() => {
+  const first = tracker.running.value[0]
+  return `${first ? timerTitle(first, '工作项') : '工作项'}${tracker.running.value.length > 1 ? ` 等 ${tracker.running.value.length} 项` : ''}`
+})
 
 const counts = computed(() => ({
   inProgress: tasks.value.filter(task => task.statusCategory === TeamMemberTaskStatusCategoryEnum.InProgress).length,

@@ -7,6 +7,7 @@ import { workItemLabelColorValue } from '../../projects/workItemLabelColors'
 import { blockEnd, clampMove, clampResize, durationLabel, FINE_SNAP_MS, formatClock, freeInterval, gaps, HOUR, MIN_BLOCK_MS, MIN_VISUAL_MS, MINUTE,
   PX_PER_MINUTE, rangeInGap, snap, snapDown, SNAP_MS, type BlockLayout, type BlockShare, type DayBlock, type Range } from './dayModel'
 import { draggedItem, type ShelfItem } from './shelfDrag'
+import { timeCategory } from '../../timer/timeCategories'
 
 /** Space kept around every card, so stacked and side-by-side records read as separate cards. */
 const GAP_Y = 2, GAP_X = 4
@@ -497,6 +498,12 @@ defineExpose({ scrollToWorkday, pendingEl, discardDraft })
             aria-hidden="true"
           />
           <span class="day-block__head">
+            <component
+              :is="timeCategory(view.block.timeCategory)!.icon"
+              v-if="view.block.timeCategory"
+              class="day-block__icon"
+              aria-hidden="true"
+            />
             <strong class="day-block__title">{{ view.block.title }}</strong>
             <span
               v-if="view.tier === 'compact'"
@@ -631,6 +638,7 @@ defineExpose({ scrollToWorkday, pendingEl, discardDraft })
 .day-block.is-preview.is-drop{box-shadow:var(--yp-shadow-popover)}
 .day-block.is-fresh{animation:day-block-fresh 1.4s var(--yp-ease-standard)}
 .day-block__head{display:flex;align-items:center;gap:8px;min-width:0}
+.day-block__icon{flex:none;width:13px;height:13px;color:var(--day-block-color)}
 .day-block__title{flex:1;min-width:0;overflow:hidden;font-weight:600;white-space:nowrap;text-overflow:ellipsis}
 .day-block.is-compact .day-block__title{font-size:13px}
 .day-block.is-full .day-block__title{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;white-space:normal}

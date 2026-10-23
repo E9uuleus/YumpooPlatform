@@ -1,6 +1,8 @@
 import { shallowRef } from 'vue'
+import type { SubjectKey } from '../../timer/timeCategories'
 
-export interface ShelfItem { workItemId: string; title: string; itemNo: string | null; projectName: string | null; colorToken: string | null
+/** `key` is the work item id or a category key. */
+export interface ShelfItem { key: SubjectKey; title: string; itemNo: string | null; projectName: string | null; colorToken: string | null
   completed?: boolean | undefined }
 
 export const SHELF_DRAG_TYPE = 'application/x-yumpoo-work-item'

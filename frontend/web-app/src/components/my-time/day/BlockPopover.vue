@@ -10,7 +10,8 @@ import { blockEnd, durationLabel, formatClock, type BlockShare, type DayBlock, t
 
 const props = defineProps<{ block: DayBlock; share: BlockShare; bounds: Range; limit: number; date: string; timezone: string
   timerEnabled: boolean; busy: boolean }>()
-const emit = defineEmits<{ save: [range: Range]; remove: []; reassign: [workItemId: string]; exclusive: []; stop: []; close: [] }>()
+/** reassign carries the target work item id or category key. */
+const emit = defineEmits<{ save: [range: Range]; remove: []; reassign: [key: string]; exclusive: []; stop: []; close: [] }>()
 
 const view = ref<'main' | 'reassign' | 'delete'>('main')
 const start = ref(props.block.start)
@@ -136,9 +137,9 @@ function save() { if (!problem.value) emit('save', { start: start.value, end: en
 
     <ItemPicker
       v-if="view === 'reassign'"
-      :exclude="[block.workItemId]"
-      placeholder="改为记录到哪个工作项？"
-      @pick="emit('reassign', $event.workItemId)"
+      :exclude="[block.subjectKey]"
+      placeholder="改为记录到哪个工作项或分类？"
+      @pick="emit('reassign', $event.key)"
       @escape="view = 'main'"
     />
 

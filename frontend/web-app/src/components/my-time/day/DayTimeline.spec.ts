@@ -10,7 +10,7 @@ const zone = 'Asia/Shanghai', date = '2026-10-08'
 const at = (hour: number, minute = 0) => atMinute(date, hour * 60 + minute, zone)
 const bounds = dayWindow(date, zone)
 const y = (minutes: number) => minutes * PX_PER_MINUTE
-const block = (id: string, start: number, end: number): DayBlock => ({ id, workItemId: id, projectId: 'p', title: id, itemNo: null,
+const block = (id: string, start: number, end: number): DayBlock => ({ id, workItemId: id, timeCategory: null, subjectKey: id, projectId: 'p', title: id, itemNo: null,
   projectName: null, colorToken: null, start, end, canEdit: true, etag: '"0"' })
 
 function mountTimeline(blocks: DayBlock[], limit = at(18)) {
@@ -37,7 +37,7 @@ function mountTimeline(blocks: DayBlock[], limit = at(18)) {
   return wrapper
 }
 const pointer = (type: string, clientY: number, altKey = false, clientX = 300) => new PointerEvent(type, { bubbles: true, button: 0, pointerId: 1, pointerType: 'mouse', clientX, clientY, altKey })
-const shelfItem: ShelfItem = { workItemId: 'new', title: '新增工作项', itemNo: null, projectName: null, colorToken: null }
+const shelfItem: ShelfItem = { key: 'new', title: '新增工作项', itemNo: null, projectName: null, colorToken: null }
 function shelfEvent(type: string, clientY: number, clientX = 300, relatedTarget: EventTarget | null = null) {
   const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX, clientY, relatedTarget })
   Object.defineProperty(event, 'dataTransfer', { value: { dropEffect: 'none' } })

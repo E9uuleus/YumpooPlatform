@@ -9,7 +9,7 @@ import { problemMessage, toApiProblem } from '../../api/problems'
 import { useSession } from '../../composables/useSession'
 import { onTimeTrackingChanged, useTimeTracker } from '../../composables/useTimeTracker'
 import '../projects/workItemAccentBar.css'
-import { buildTimesheet, dayBreakdown, hoursMinutes, projectColors, shortHours, todayIn, toApiDate, weekday } from '../team/teamDashboardModel'
+import { buildTimesheet, dayBreakdown, hoursMinutes, shortHours, timesheetColors, todayIn, toApiDate, weekday } from '../team/teamDashboardModel'
 import { useTweenedNumber } from '../team/teamMotion'
 import { dayTargetMs, daySegments, monthGrid, monthLabel, monthProjects, monthStats, runningExtraMs, shiftMonth, weekdayLabels,
   type CalendarCell } from './myTimeModel'
@@ -34,7 +34,7 @@ const days = computed(() => {
   return totals
 })
 const segments = computed(() => daySegments(row.value))
-const colors = computed(() => projectColors(sheet.value?.workItems.map(item => item.projectId) ?? []))
+const colors = computed(() => timesheetColors(sheet.value))
 const legend = computed(() => monthProjects(row.value, month.value))
 const stats = computed(() => monthStats(days.value, month.value))
 const weekTotals = computed(() => Array.from({ length: 6 }, (_, index) => cells.value.slice(index * 7, index * 7 + 7)

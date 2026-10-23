@@ -18,6 +18,8 @@ import HideCompletedSwitch from '../../components/timer/HideCompletedSwitch.vue'
 import TimerIcon from '../../components/timer/TimerIcon.vue'
 import QuickTimeRow from '../../components/desktop/QuickTimeRow.vue'
 import QuickCreateRow from '../../components/desktop/QuickCreateRow.vue'
+import QuickFixedRow from '../../components/desktop/QuickFixedRow.vue'
+import { matchCategories, type TimeCategoryOption } from '../../components/timer/timeCategories'
 import { groupCandidates, placementHint, projectTones, quickPlan, rangeFromPlan, rangeProblem, rangeRecordable, shortDuration, spokenDuration,
   type DateChoice } from '../../components/desktop/quickTime'
 import brandLogo from '../../assets/brand/logo.svg'
@@ -85,7 +87,9 @@ const chips = computed(() => {
   return locked && !list.some(item => item.id === locked.id) ? [{ id: locked.id, name: locked.name }, ...list] : list
 })
 const tones = computed(() => projectTones(context.value.projects, chips.value.map(chip => chip.id)))
-const todayMs = computed(() => new Map(todayDay.totals.value.map(total => [total.workItemId, total.ms])))
+const todayMs = computed(() => new Map(todayDay.totals.value.map(total => [total.key, total.ms])))
+/** Non-project categories sit above the work items; a project chip narrows the list to work items only. */
+const categories = computed(() => project.value ? [] : matchCategories(query.value))
 const total = ref(0)
 
 const plan = computed(() => quickPlan({ blocks: targetDay.blocks.value, now: targetDay.now.value, workday: targetDay.workday.value,
@@ -194,9 +198,10 @@ function startResize(event: PointerEvent) {
   grip.addEventListener('lostpointercapture', end, { once: true })
 }
 
-function toggle(item: TimerCandidate) {
+/** `key` is the work item id or the category key of the row to open. */
+function toggle(key: string) {
   if (recording.value !== 'idle') return
-  openId.value = openId.value === item.workItemId ? null : item.workItemId
+  openId.value = openId.value === key ? null : key
   rangeMode.value = false
 }
 function showToast(text: string, failed = false) {
@@ -206,12 +211,12 @@ function showToast(text: string, failed = false) {
   clearTimeout(toastTimer)
   toastTimer = setTimeout(() => { toastVisible.value = false }, failed ? 3200 : 1800)
 }
-async function record(item: TimerCandidate) {
+async function record(key: string, title: string) {
   if (!canRecord.value) return
   const ranges = entries.value
   recording.value = 'saving'
   countNext = targetDate.value === today.value
-  const result = await targetDay.create(TimeSessionFillMode.Gaps, [item.workItemId], ranges)
+  const result = await targetDay.create(TimeSessionFillMode.Gaps, [key], ranges)
   // Nothing new because the range was already recorded: create() has already said so, and there is nothing to celebrate.
   if (!result || !(result.createdCount || result.changedCount || result.deletedCount)) {
     countNext = false
@@ -223,9 +228,9 @@ async function record(item: TimerCandidate) {
   setTimeout(() => {
     openId.value = null
     recording.value = 'idle'
-    flashId.value = item.workItemId
-    showToast(`已记录 ${spokenDuration(recorded)} · ${item.title}`)
-    setTimeout(() => { if (flashId.value === item.workItemId) flashId.value = null }, 900)
+    flashId.value = key
+    showToast(`已记录 ${spokenDuration(recorded)} · ${title}`)
+    setTimeout(() => { if (flashId.value === key) flashId.value = null }, 900)
   }, 380)
 }
 function statusChanged(item: TimerCandidate, detail: WorkItemDetail, statusName: string) {
@@ -254,10 +259,10 @@ function created(detail: WorkItemDetail, projectName: string) {
   query.value = ''
   if (!reloads) void candidates.load().then(revealCreated)
 }
-async function startTimer(item: TimerCandidate) {
-  if (!await tracker.start(item.workItemId)) return
+async function startTimer(key: string, title: string) {
+  if (!await tracker.start(key)) return
   openId.value = null
-  showToast(`已开始计时 · ${item.title}`)
+  showToast(`已开始计时 · ${title}`)
 }
 function keydown(event: KeyboardEvent) {
   if (event.key !== 'Escape') return
@@ -327,8 +332,8 @@ function keydown(event: KeyboardEvent) {
         <el-input
           ref="search"
           v-model="query"
-          placeholder="搜索工作项（含已完成）"
-          aria-label="搜索工作项"
+          placeholder="搜索工作项或分类（含已完成）"
+          aria-label="搜索工作项或分类"
         />
         <button
           type="button"
@@ -386,6 +391,34 @@ function keydown(event: KeyboardEvent) {
           @created="created"
           @failed="showToast($event, true)"
         />
+        <QuickFixedRow
+          v-if="categories.length"
+          v-model:date-choice="dateChoice"
+          v-model:picked-date="pickedDate"
+          v-model:duration-ms="durationMs"
+          v-model:custom="custom"
+          v-model:custom-text="customText"
+          v-model:range-mode="rangeMode"
+          v-model:range-start="rangeStart"
+          v-model:range-end="rangeEnd"
+          :categories="categories"
+          :open-key="openId"
+          :flash-key="flashId"
+          :today-ms="todayMs"
+          :today="today"
+          :hint="hint"
+          :target-date="targetDate"
+          :timezone="timezone"
+          :day-range="targetDay.dayRange.value"
+          :range-note="rangeNote"
+          :range-invalid="!!rangeIssue"
+          :can-record="canRecord"
+          :recording="recording"
+          :timer-enabled="tracker.timerEnabled.value"
+          @toggle="(category: TimeCategoryOption) => toggle(category.key)"
+          @record="(category: TimeCategoryOption) => record(category.key, category.label)"
+          @start="(category: TimeCategoryOption) => startTimer(category.key, category.label)"
+        />
         <div
           v-for="group in groups"
           :key="group.projectId"
@@ -424,9 +457,9 @@ function keydown(event: KeyboardEvent) {
               :can-record="canRecord"
               :recording="openId === item.workItemId ? recording : 'idle'"
               :timer-enabled="tracker.timerEnabled.value"
-              @toggle="toggle(item)"
-              @record="record(item)"
-              @start="startTimer(item)"
+              @toggle="toggle(item.workItemId)"
+              @record="record(item.workItemId, item.title)"
+              @start="startTimer(item.workItemId, item.title)"
               @status-changed="(detail, name) => statusChanged(item, detail, name)"
               @status-failed="showToast($event, true)"
             />

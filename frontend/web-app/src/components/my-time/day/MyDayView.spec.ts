@@ -31,8 +31,8 @@ const timelineStub = defineComponent({
 })
 const date = '2026-10-08', timezone = 'Asia/Shanghai'
 const range = { start: atMinute(date, 600, timezone), end: atMinute(date, 660, timezone) }
-const item = { workItemId: 'new', title: '新增工作项', itemNo: null, projectName: null, colorToken: null }
-const original: DayBlock = { id: 'a', workItemId: 'a', projectId: 'p', title: '原工作项', itemNo: null, projectName: null,
+const item = { key: 'new', title: '新增工作项', itemNo: null, projectName: null, colorToken: null }
+const original: DayBlock = { id: 'a', workItemId: 'a', timeCategory: null, subjectKey: 'a', projectId: 'p', title: '原工作项', itemNo: null, projectName: null,
   colorToken: null, start: range.start, end: range.end, canEdit: true, etag: '"1"' }
 function mountDay() {
   return mount(MyDayView, { props: { date, today: date, timezone }, global: { stubs: {

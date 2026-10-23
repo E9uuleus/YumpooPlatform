@@ -12,6 +12,7 @@ import { orbDuration } from '../../components/timer/timeFormat'
 import TimerIcon from '../../components/timer/TimerIcon.vue'
 import { projectInitial } from '../../components/desktop/quickTime'
 import { plainRailProjects } from '../../components/desktop/railProjects'
+import { resumeSubjects } from '../../components/timer/timeCategories'
 
 // Mirrors RAIL_ICONS and the 10px padding, 8px gaps and 14px time label that timer-geometry.ts sizes the window by.
 const ICONS = { small: 30, medium: 34, large: 40 } as const
@@ -30,7 +31,7 @@ const projects = computed(() => state.value?.projects && state.value.projects.ow
 const tones = computed(() => projectColors(projects.value.map(project => project.id)))
 const icon = computed(() => ICONS[state.value?.size ?? 'medium'])
 const running = computed(() => tracker.running.value.length > 0)
-const resume = computed(() => tracker.current.value?.resumeItems ?? [])
+const resume = computed(() => resumeSubjects(tracker.current.value))
 const slotLabel = computed(() => running.value ? orbDuration(tracker.wallDuration.value) : resume.value.length ? '继续' : '计时')
 
 const offState = bridge?.onState(value => { state.value = value })
@@ -49,7 +50,7 @@ watch([state, scope, () => recents.items.value], ([value, owner]) => {
 async function toggleTimer() {
   if (tracker.busy.value) return
   if (running.value) await tracker.stopAll()
-  else if (resume.value.length) await tracker.startMany(resume.value.map(item => item.workItemId))
+  else if (resume.value.length) await tracker.startMany(resume.value)
 }
 function open(project: RailProject, event: MouseEvent) {
   void bridge?.openProject(project.id, (event.currentTarget as HTMLElement).getBoundingClientRect().top)

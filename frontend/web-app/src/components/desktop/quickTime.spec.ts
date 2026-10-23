@@ -6,7 +6,7 @@ import { groupCandidates, placementHint, quickPlan, rangeFromPlan, rangeProblem,
 const timezone = 'Asia/Shanghai'
 const date = '2026-10-19'
 const at = (minute: number) => atMinute(date, minute, timezone)
-const block = (start: number, end: number | null): DayBlock => ({ id: `s${start}`, workItemId: 'x', projectId: 'p1', title: '', itemNo: null,
+const block = (start: number, end: number | null): DayBlock => ({ id: `s${start}`, workItemId: 'x', timeCategory: null, subjectKey: 'x', projectId: 'p1', title: '', itemNo: null,
   projectName: null, colorToken: null, start: at(start), end: end === null ? null : at(end), canEdit: true, etag: '' })
 const candidate = (workItemId: string, projectId: string, projectName: string) => ({ workItemId, projectId, projectName, title: workItemId }) as TimerCandidate
 
@@ -27,7 +27,7 @@ describe('快捷工时', () => {
       [{ id: 'p1', name: 'Yumpoo 平台' }, { id: 'p3', name: '设计系统' }])
     expect(groups.map(group => [group.projectId, group.items.map(item => item.workItemId)])).toEqual([['p1', ['b']], ['p2', ['a', 'c']]])
     const day = {
-      blocks: [{ id: 's', workItemId: 'x', projectId: 'p1', title: '', itemNo: null, projectName: null, colorToken: null,
+      blocks: [{ id: 's', workItemId: 'x', timeCategory: null, subjectKey: 'x', projectId: 'p1', title: '', itemNo: null, projectName: null, colorToken: null,
         start: atMinute(date, 540, timezone), end: atMinute(date, 870, timezone), canEdit: true, etag: '' }],
       now: atMinute(date, 960, timezone), workday: { start: atMinute(date, 540, timezone), end: atMinute(date, 1080, timezone) },
       dayRange: dayWindow(date, timezone), limit: atMinute(date, 960, timezone),

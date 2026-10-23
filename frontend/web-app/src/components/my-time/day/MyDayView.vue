@@ -2,7 +2,8 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, toRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElAlert, ElButton, ElMessage, ElPopover } from 'element-plus'
-import { TimeSessionFillMode, type TimerCandidate } from '@yumpoo/api-client'
+import { TimeSessionFillMode } from '@yumpoo/api-client'
+import type { SubjectOption } from '../../timer/timeCategories'
 import { useTimeTracker } from '../../../composables/useTimeTracker'
 import { addDays } from '../../team/teamDashboardModel'
 import BlockPopover from './BlockPopover.vue'
@@ -68,20 +69,20 @@ async function adjust(block: DayBlock, range: Range) {
   if (!await edit(block, range)) timeline.value?.discardDraft(block.id)
 }
 function dropItem(item: ShelfItem, range: Range, mode: TimeSessionFillMode.Gaps | TimeSessionFillMode.Parallel) {
-  void create(mode, [item.workItemId], [range])
+  void create(mode, [item.key], [range])
 }
 
 async function place(item: ShelfItem, durationMs: number) {
   const { entries, leftoverMs } = plan(durationMs)
   if (!entries.length) { ElMessage.warning('上班时间之后已经没有空白可以排入。'); return }
-  if (await create(TimeSessionFillMode.Gaps, [item.workItemId], entries) && leftoverMs > 0)
+  if (await create(TimeSessionFillMode.Gaps, [item.key], entries) && leftoverMs > 0)
     ElMessage.info(`空白不够，还有 ${durationLabel(leftoverMs)} 没有排入。`)
 }
 watch(openBlock, block => { if (openId.value && !block) closeBlock() })
 watch(() => props.date, () => { closeComposer(); closeBlock() })
 
-async function submit(mode: TimeSessionFillMode, items: TimerCandidate[], range: Range) {
-  if (await create(mode, items.map(item => item.workItemId), [range])) closeComposer()
+async function submit(mode: TimeSessionFillMode, items: SubjectOption[], range: Range) {
+  if (await create(mode, items.map(item => item.key), [range])) closeComposer()
 }
 async function act(action: (block: DayBlock) => Promise<boolean>) {
   const block = openBlock.value
@@ -237,7 +238,7 @@ onBeforeUnmount(() => {
         :busy="busy"
         @save="range => act(block => edit(block, range))"
         @remove="act(remove)"
-        @reassign="workItemId => act(block => reassign(block, workItemId))"
+        @reassign="key => act(block => reassign(block, key))"
         @exclusive="act(exclusive)"
         @stop="stopTimer"
         @close="closeBlock"
