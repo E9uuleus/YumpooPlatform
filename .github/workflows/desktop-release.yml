@@ -49,6 +49,12 @@ jobs:
         if: ${{ failure() }}
         env:
           WECOM_RELEASE_WEBHOOK: ${{ secrets.WECOM_RELEASE_WEBHOOK }}
+          MONITOR_ENABLED: ${{ vars.MONITOR_ENABLED }}
+          MONITOR_ENVIRONMENT: wecom-dev
+          MONITOR_SSH_HOST: ${{ secrets.MONITOR_SSH_HOST }}
+          MONITOR_SSH_KEY: ${{ secrets.MONITOR_SSH_KEY }}
+          MONITOR_KNOWN_HOSTS: ${{ secrets.MONITOR_KNOWN_HOSTS }}
+          MONITOR_SOURCE_SECRET: ${{ secrets.MONITOR_SOURCE_SECRET }}
           NOTIFY_TEXT: "**Yumpoo 桌面发布校验失败：${{ github.event.release.tag_name || inputs.tag }}**\n> 未提交到更新源，客户端不受影响。\n> 日志：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         run: node tools/release/notify.mjs
 
@@ -87,5 +93,11 @@ jobs:
         if: ${{ failure() }}
         env:
           WECOM_RELEASE_WEBHOOK: ${{ secrets.WECOM_RELEASE_WEBHOOK }}
+          MONITOR_ENABLED: ${{ vars.MONITOR_ENABLED }}
+          MONITOR_ENVIRONMENT: wecom-dev
+          MONITOR_SSH_HOST: ${{ secrets.MONITOR_SSH_HOST }}
+          MONITOR_SSH_KEY: ${{ secrets.MONITOR_SSH_KEY }}
+          MONITOR_KNOWN_HOSTS: ${{ secrets.MONITOR_KNOWN_HOSTS }}
+          MONITOR_SOURCE_SECRET: ${{ secrets.MONITOR_SOURCE_SECRET }}
           NOTIFY_TEXT: "**Yumpoo 桌面更新源写入作业失败：${{ github.event.release.tag_name || inputs.tag }}**\n> 主机任务的最终状态以主机通知为准；latest.yml 只在全部文件就位后替换。\n> 日志：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         run: node tools/release/notify.mjs

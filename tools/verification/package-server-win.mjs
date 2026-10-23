@@ -78,6 +78,8 @@ function assembleServer() {
     'deployment-checklist-m1-15.json',
     'Invoke-AppManagerMaintenance.ps1',
     'Invoke-InitialIdentityBootstrap.ps1',
+    'Install-YumpooMonitoring.ps1',
+    'Send-YumpooRecoveryNotice.ps1',
   ]) copyAs(path.join(deployment, file), path.join(stage, 'windows', file))
   for (const directory of ['config', 'secrets', 'nginx', 'database', 'service', 'cd']) {
     copyTree(path.join(deployment, directory), path.join(stage, 'windows', directory))

@@ -22,7 +22,7 @@ try {
         if (Test-Path -LiteralPath $statusPath) { continue }
         $startedAt = Get-Date
         $status = [ordered]@{ schemaVersion = 1; requestId = $folder.Name; tag = ''; sourceCommit = ''; state = 'running'; phase = 'preflight'; updatedAt = '' }
-        $record = @{ mode = 'deploy'; releaseRoot = $null; snapshot = $null }
+        $record = @{ mode = 'deploy'; releaseRoot = $null; snapshot = $null; notes = @() }
         # Ledger and notification are bookkeeping; their failure must not turn a finished deployment into a failed one.
         function Complete-Request {
             try {
@@ -31,7 +31,9 @@ try {
                     releaseRoot = $record.releaseRoot; snapshot = $record.snapshot; state = $status.state; phase = $status.phase; completedAt = $status.updatedAt
                 }
             } catch { [IO.File]::WriteAllText((Join-Path $deployment 'engine/ledger-error.txt'), $_.Exception.Message) }
-            $null = Send-YumpooNotification $Root $status ((Get-Date) - $startedAt)
+            if ((Get-YumpooMonitorSettings $settings).enabled) {
+                $null = Add-YumpooMonitorEvent $Root $settings $status 'deployment.completed' $record.mode $record.notes
+            } else { $null = Send-YumpooNotification $Root $status ((Get-Date) - $startedAt) }
         }
         function Publish-Status([string]$State, [string]$Phase, [string]$Failure = '') {
             $status.state = $State; $status.phase = $Phase; $status.updatedAt = (Get-Date).ToUniversalTime().ToString('o')
@@ -73,6 +75,7 @@ try {
                 Publish-DesktopStatus 'running' 'desktop_verify'
                 $files = Copy-YumpooDesktopUpload $folder.FullName $work $request
                 Assert-YumpooDesktopRelease $settings $request $provenance (Join-Path $work 'provenance.json')
+                if ((Get-YumpooMonitorSettings $settings).enabled) { $record.notes = @(Get-YumpooReleaseNoticeNotes $status.tag) }
                 Publish-DesktopStatus 'running' 'desktop_publish'
                 $outcome = Publish-YumpooDesktopFeed $settings $request $files $version
                 Publish-DesktopStatus 'succeeded' $outcome
@@ -125,7 +128,14 @@ try {
                     Publish-Status 'failed' $phase $failure.Exception.Message
                 }
                 RecoveryFailure = { param($failure) Set-YumpooMaintenance $settings $true; Publish-Status 'recovery_required' 'restore_failed_maintenance_retained' $failure.Exception.Message }
-                MaintenanceOn = { Publish-Status 'running' 'maintenance'; Set-YumpooMaintenance $settings $true; Start-Sleep -Seconds 3 }
+                MaintenanceOn = {
+                    Publish-Status 'running' 'maintenance_notice'
+                    Wait-YumpooMaintenanceNotice $Root $settings $status $record.mode
+                    Publish-Status 'running' 'maintenance'
+                    Set-YumpooMaintenance $settings $true
+                    $null = Add-YumpooMonitorEvent $Root $settings $status 'maintenance.started' $record.mode
+                    Start-Sleep -Seconds 3
+                }
                 Stop = { Stop-YumpooServer }
             }
             if ($record.mode -eq 'deploy') {
@@ -145,6 +155,7 @@ try {
                         # Packages built before release metadata existed cannot report their identity.
                         if (Read-YumpooReleaseMetadata $candidate) { $identity.ExpectedCommit = $provenance.sourceCommit; $identity.ExpectedTag = $provenance.tag }
                         Invoke-YumpooNginx $settings
+                        if ((Get-YumpooMonitorSettings $settings).enabled) { $record.notes = @(Get-YumpooReleaseNoticeNotes $status.tag) }
                     }
                     Backup = {
                         Publish-Status 'running' 'snapshot'

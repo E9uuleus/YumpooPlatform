@@ -51,4 +51,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOURCE_COMMIT: ${{ github.event.workflow_run.head_sha || inputs.commit }}
           WECOM_RELEASE_WEBHOOK: ${{ secrets.WECOM_RELEASE_WEBHOOK }}
+          MONITOR_ENABLED: ${{ vars.MONITOR_ENABLED }}
+          MONITOR_ENVIRONMENT: wecom-dev
+          MONITOR_SSH_HOST: ${{ secrets.MONITOR_SSH_HOST }}
+          MONITOR_SSH_KEY: ${{ secrets.MONITOR_SSH_KEY }}
+          MONITOR_KNOWN_HOSTS: ${{ secrets.MONITOR_KNOWN_HOSTS }}
+          MONITOR_SOURCE_SECRET: ${{ secrets.MONITOR_SOURCE_SECRET }}
         run: node tools/release/prepare-release.mjs

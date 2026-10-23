@@ -375,6 +375,7 @@ try {
     }
     $engineEntries = @{
         'windows/cd/YumpooDeployment.psm1' = 'new module'; 'windows/cd/Invoke-YumpooDeploy.ps1' = 'new deploy'; 'windows/cd/Start-YumpooNginx.ps1' = 'new nginx'
+        'windows/cd/Invoke-YumpooMonitorRelay.ps1' = 'new relay'; 'windows/cd/Invoke-YumpooMonitorTunnel.ps1' = 'new tunnel'; 'windows/cd/Invoke-YumpooMonitorWatchdog.ps1' = 'new watchdog'
         'windows/release-metadata.json' = ('{"schemaVersion":1,"sourceCommit":"' + ('e' * 40) + '","migrations":[]}')
     }
     & $writeZip $newPackage $engineEntries

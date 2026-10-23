@@ -15,4 +15,7 @@ if (process.env.CI && !pgBin) throw new Error('PostgreSQL tools are required for
 const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',
   'deployment/windows/cd/Test-YumpooDeployment.ps1', ...(pgBin ? ['-PgBin', pgBin] : [])], { stdio: 'inherit', env: childEnvironment })
 if (result.status !== 0) process.exit(result.status || 1)
+const monitoring = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',
+  'deployment/windows/cd/Test-YumpooMonitoring.ps1'], { stdio: 'inherit', env: childEnvironment })
+if (monitoring.status !== 0) process.exit(monitoring.status || 1)
 if (!pgBin) console.log('PostgreSQL integration was not run locally; the Windows CI gate requires it.')
