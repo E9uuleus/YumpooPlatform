@@ -128,5 +128,5 @@ groups:
         expr: yumpoo_ops_db_failures >= 2
         for: 90s
         keep_firing_for: 60s
-        labels: { severity: critical, source_job: application, service: server, expected_maintenance: 'true' }
+        labels: { severity: critical, source_job: application, service: server }
         annotations: { summary: '应用内存采样显示数据库连续不可达。' }
