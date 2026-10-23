@@ -13,9 +13,15 @@ audience: [developer]
 
 ## 壳专用页面
 
-计时浮窗、计时菜单、快捷工时小窗和项目侧边栏也是 Web 应用里的页面，集中在 `/timer` 前缀下：`/timer`、`/timer/menu`、`/timer/quick`、`/timer/rail`，定义在 [surfaces.ts](../../../../../../frontend/web-app/src/components/desktop/surfaces.ts)。`/desktop/` 前缀留给桌面更新源，任何页面都不能使用。
+计时浮窗、快捷工时小窗和项目侧边栏是 Web 应用里的页面，集中在 `/timer`、`/timer/quick`、`/timer/rail`，定义在 [surfaces.ts](../../../../../../frontend/web-app/src/components/desktop/surfaces.ts)。`/timer/menu` 保留给旧客户端；新客户端通过独立构建入口将同一 `TimerQuickMenu` 组件打入安装包，启动即预热，不依赖路由、认证或业务轮询。`/desktop/` 前缀留给桌面更新源，任何页面都不能使用。
 
 壳通过 [surface-load](../../../../../../desktop/desktop-shell/src/main/surface-load.ts) 加载这些页面：服务端返回 4xx/5xx 时按加载失败处理，而不是显示错误页。
+
+本地菜单与诊断页共用隔离会话及资源白名单，通过 `yumpoo-diagnostics://app/menu.html` 加载。菜单专用 preload 只暴露 `window.yumpooMenu`，提供状态、菜单动作与通知偏好；主进程同时核对窗口、主框架与精确页面地址。初次打开等待组件就绪和最新状态，仅本地菜单加载失败或崩溃时回退原生菜单。主题由主窗口通过可选桥同步并缓存，首次启动跟随系统。
+
+## 退出协调
+
+主进程统一管理退出请求。主页面回报检查、用户选择和保存阶段：检查与保存各有 30 秒保护，用户选择不限时。启动未就绪、页面失效或超时转由本地确认；迟到回复不能重复退出。批准后先停止全部窗口控制器、定时器与订阅，再正常调用 `app.quit()`，关闭回调不能重建侧边栏，正常退出时安装更新的流程继续生效。
 
 ## 安全加固
 

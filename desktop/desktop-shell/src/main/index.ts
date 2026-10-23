@@ -102,6 +102,7 @@ let restartAfterUpdate = false
 let launchOverlay: LaunchOverlay | undefined
 
 function failStartup(reason: DiagnosticsStartupFailure, error?: unknown): void {
+  if (timerController?.isQuitting) return
   logger.error('startup-failed', { reason, error: error instanceof Error ? error.message : undefined })
   console.error('[YUMPOO_DESKTOP_STARTUP_FAILED]', reason)
   if (smokeTest || !app.isReady()) {
@@ -115,6 +116,7 @@ function failStartup(reason: DiagnosticsStartupFailure, error?: unknown): void {
 
 /** The diagnostics window replaces the bare startup dialog, which stays as the fallback if it cannot open. */
 function openDiagnostics(reason?: DiagnosticsStartupFailure): void {
+  if (timerController?.isQuitting) return
   if (reason) startupFailure = reason
   void diagnostics().open().catch(error => {
     logger.error('diagnostics-open-failed', { error: error instanceof Error ? error.message : undefined })
@@ -418,6 +420,7 @@ function showWithLaunchOverlay(window: BrowserWindow): void {
 }
 
 async function createMainWindow(): Promise<void> {
+  if (timerController?.isQuitting) return
   if (!webAppUrl) {
     throw new Error('Web application URL is not initialized')
   }
@@ -439,11 +442,14 @@ async function createMainWindow(): Promise<void> {
     inboxNotifier.install()
     publishUpdateState(updateState())
   }
+  const window = mainWindow
   const restored = await credentialStore?.load(webAppUrl.origin)
+  if (timerController?.isQuitting || window.isDestroyed()) return
   if (restored) {
-    await installSessionCookies(mainWindow.webContents.session.cookies, webAppUrl.origin, restored)
+    await installSessionCookies(window.webContents.session.cookies, webAppUrl.origin, restored)
   }
 
+  if (timerController?.isQuitting || window.isDestroyed()) return
   if (smokeTest) {
     const timeout = setTimeout(() => failStartup('LOAD_FAILED'), SMOKE_TEST_TIMEOUT_MS)
     mainWindow.webContents.once('did-finish-load', () => {
@@ -470,9 +476,8 @@ async function createMainWindow(): Promise<void> {
     showWithLaunchOverlay(mainWindow)
   }
 
-  const window = mainWindow
   window.webContents.on('did-finish-load', () => {
-    if (mainLoaded) return
+    if (mainLoaded || timerController?.isQuitting) return
     mainLoaded = true
     logger.info('main-loaded', { safeMode, elapsedMs: Date.now() - launchStartedAt })
     // A launch only counts as healthy after surviving a while; crashes right after load still count.
@@ -491,7 +496,7 @@ async function createMainWindow(): Promise<void> {
   window.webContents.on('render-process-gone', (_event, details) => {
     inboxNotifier?.reset()
     logger.error('renderer-gone', { reason: details.reason, exitCode: details.exitCode })
-    if (details.reason === 'clean-exit') return
+    if (details.reason === 'clean-exit' || timerController?.isQuitting) return
     launchHealth.failed()
     openDiagnostics('RENDERER_GONE')
   })
@@ -648,6 +653,7 @@ if (updateCheckPath) {
 
   protocolDispatcher.dispatch(process.argv)
   app.on('second-instance', (_event, processArguments) => {
+    if (timerController?.isQuitting) return
     protocolDispatcher.dispatch(processArguments)
     if (processArguments.includes(SAFE_MODE_ARGUMENT) || processArguments.includes(DIAGNOSTICS_ARGUMENT)) {
       openDiagnostics()
@@ -675,6 +681,7 @@ if (updateCheckPath) {
   })
 
   app.on('activate', () => {
+    if (timerController?.isQuitting) return
     if (BrowserWindow.getAllWindows().length === 0) {
       void createMainWindow().catch(error => failStartup(error instanceof StartupError ? error.reason : 'STARTUP_ERROR', error))
     } else timerController?.showMain()

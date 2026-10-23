@@ -10,10 +10,10 @@ vi.mock('../../composables/useTimeTracker', async () => {
   const { ref } = await import('vue')
   const tracker = { current: ref({ session: null, recentItems: [], runningSessions: [], resumeItems: [] }), running: ref([]), wallDuration: ref(0), savedAt: ref(0), connected: ref(true), busy: ref(false), timerEnabled: ref(true), refresh: vi.fn(async () => undefined) }
   return { activateTimeTracker: vi.fn(), confirmTimerExit: vi.fn(), formatDuration: () => '0:00:00', timerClockOffset: () => 1234.4,
-    timerExitPrompt: ref(false), chooseTimerExit: vi.fn(),
+    timerExitPhase: ref('checking'), cancelTimerExit: vi.fn(), timerExitPrompt: ref(false), chooseTimerExit: vi.fn(),
     useTimeTracker: () => tracker }
 })
-import { useTimeTracker } from '../../composables/useTimeTracker'
+import { cancelTimerExit, confirmTimerExit, timerExitPhase, useTimeTracker } from '../../composables/useTimeTracker'
 import TimerHost from './TimerHost.vue'
 
 const mounted: Array<ReturnType<typeof mount>> = []
@@ -33,6 +33,43 @@ beforeEach(() => { useTimeTracker().savedAt.value = 0; setTimerEnabled(true); vi
 afterEach(() => { mounted.splice(0).forEach(wrapper => wrapper.unmount()); vi.unstubAllGlobals() })
 
 describe('shared timer surfaces', () => {
+  it('reports exit phases and drops late completion after native cancellation', async () => {
+    let exit!: (id: string) => Promise<void>
+    let cancelled!: (id: string) => void
+    let finish!: (allow: boolean) => void
+    vi.mocked(confirmTimerExit).mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+    vi.mocked(cancelTimerExit).mockClear()
+    timerExitPhase.value = 'checking'
+    const timer = {
+      getWindowState: vi.fn(async () => ({ surface: 'main' })), publishState: vi.fn(async () => undefined),
+      publishAppearance: vi.fn(async () => undefined), onCommand: vi.fn(),
+      onExitRequest: (listener: typeof exit) => { exit = listener }, onExitCancelled: (listener: typeof cancelled) => { cancelled = listener },
+      acknowledgeExit: vi.fn(async () => undefined), completeExit: vi.fn(async () => undefined), reportExitPhase: vi.fn(async () => true),
+    }
+    vi.stubGlobal('yumpooDesktop', { timer })
+    await host(); await flushPromises()
+    expect(timer.publishAppearance).toHaveBeenCalled()
+    const pending = exit('request')
+    await flushPromises()
+    expect(timer.reportExitPhase).toHaveBeenLastCalledWith('request', 'checking')
+    timerExitPhase.value = 'prompt'; await flushPromises()
+    expect(timer.reportExitPhase).toHaveBeenLastCalledWith('request', 'prompt')
+    cancelled('request'); finish(true); await pending
+    expect(cancelTimerExit).toHaveBeenCalledOnce()
+    expect(timer.completeExit).not.toHaveBeenCalled()
+  })
+  it('completes exit with an older bridge that has no phase or cancellation methods', async () => {
+    let exit!: (id: string) => Promise<void>
+    vi.mocked(confirmTimerExit).mockResolvedValueOnce(true)
+    const timer = {
+      getWindowState: vi.fn(async () => ({ surface: 'main' })), publishState: vi.fn(async () => undefined), onCommand: vi.fn(),
+      onExitRequest: (listener: typeof exit) => { exit = listener },
+      acknowledgeExit: vi.fn(async () => undefined), completeExit: vi.fn(async () => undefined),
+    }
+    vi.stubGlobal('yumpooDesktop', { timer })
+    await host(); await exit('legacy')
+    expect(timer.completeExit).toHaveBeenCalledWith('legacy', true)
+  })
   it('uses a nonmodal inline panel directly when PiP is unavailable', async () => {
     const wrapper = await host(); await wrapper.get('button').trigger('click'); await flushPromises()
     expect(window.open).not.toHaveBeenCalled()

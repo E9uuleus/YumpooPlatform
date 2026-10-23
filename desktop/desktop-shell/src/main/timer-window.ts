@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto'
+import path from 'node:path'
+import { ExitController } from './exit-controller'
 import type { DesktopUpdateState } from '@yumpoo/preload-contract'
-import { app, BrowserWindow, dialog, ipcMain, Menu, screen, Tray, type IpcMainInvokeEvent, type NativeImage } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, screen, Tray, type IpcMainInvokeEvent, type NativeImage } from 'electron'
 import type { DesktopTimerCommand, DesktopTimerState, TimerMenuAction, TimerMenuState, TimerWindowMode, TimerOrbLayout, TimerPreferencesChange } from '@yumpoo/preload-contract'
 import { isTrustedAuthIpcSender } from './auth-ipc'
 import { createWindowOptions } from './window-policy'
@@ -10,7 +12,7 @@ import { applicationIcon } from './application-icon'
 import { TimerQuickMenu } from './timer-menu'
 import { QuickPanelController } from './quick-panel'
 import { RailController } from './rail-window'
-import { DesktopPreferenceStore } from './desktop-preferences'
+import { DesktopPreferenceStore, validAppearance } from './desktop-preferences'
 import { TimerPreferenceStore, validDisplay, validDockSide, validOrbSize } from './timer-preferences'
 import { compactVisual, hitTest, ORB_SIZES, orbDetails, orbShape, panelVisual, placeOrb, placePanel, type Rect } from './timer-geometry'
 
@@ -62,7 +64,6 @@ export class TimerWindowController {
   private readonly rail: RailController
   /** "Hide" in the timer menu while the rail hosts the timer: the slot goes away until the next show. */
   private slotHidden = false
-  private menuWarmed = false
   private mode: TimerWindowMode = 'picker'
   private pinned: boolean
   private startupShown = false
@@ -80,9 +81,8 @@ export class TimerWindowController {
   private stateAt = 0
   private pendingCommand: string | undefined
   private commandTimeout: ReturnType<typeof setTimeout> | undefined
-  private approvedExit = false
-  private exitRequest: string | undefined
-  private exitTimeout: ReturnType<typeof setTimeout> | undefined
+  private readonly exit: ExitController
+  private unsubscribePreferences: (() => void) | undefined
   private update: DesktopUpdateState | undefined
   private updateActions: TimerUpdateActions | undefined
   private exitCancelled: (() => void) | undefined
@@ -90,9 +90,10 @@ export class TimerWindowController {
   constructor(private readonly main: () => BrowserWindow | null, private readonly origin: string, private readonly preload: string,
     private readonly prefs = new TimerPreferenceStore(), private readonly openDiagnostics?: () => void,
     private readonly desktopPrefs = new DesktopPreferenceStore()) {
+    this.exit = new ExitController(main, origin, { shutdown: () => this.shutdown(), cancelled: () => { this.updateTray(); this.exitCancelled?.() } })
     this.pinned = prefs.get().pinned
     this.orb = { size: ORB_SIZES[prefs.get().orbSize], side: null, detailWidth: 0 }
-    this.menu = new TimerQuickMenu(origin, preload, action => this.menuAction(action))
+    this.menu = new TimerQuickMenu(path.join(path.dirname(preload), 'menu.js'), action => this.menuAction(action), kind => this.nativeMenu(kind))
     this.quick = new QuickPanelController(origin, preload, prefs, { openMain: path => void this.openMain(path), changed: () => this.rail.sync(),
       level: () => ({ pinned: this.pinned, aboveTaskbar: this.desktopPrefs.get().aboveTaskbar }) })
     this.rail = new RailController(origin, preload, prefs, desktopPrefs, {
@@ -118,14 +119,22 @@ export class TimerWindowController {
     this.tray = new Tray(applicationIcon())
     this.tray.on('click', () => this.toggleQuick('tray'))
     this.tray.on('right-click', () => {
+      if (this.isQuitting) return
       this.updateTray()
       if (!this.menu.open('tray', this.menuState())) this.tray?.popUpContextMenu(this.contextMenu)
     })
     this.menu.install()
     this.quick.install()
     this.rail.install()
-    this.desktopPrefs.onChange(() => { this.applyLevel(); this.quick.applyLevel(); this.rail.sync(); this.updateTray() })
+    this.unsubscribePreferences = this.desktopPrefs.onChange(() => { this.applyLevel(); this.quick.applyLevel(); this.rail.sync(); this.updateTray() })
     this.updateTray()
+    this.menu.prewarm()
+    this.exit.install()
+    ipcMain.handle('yumpoo:timer:appearance', (event, appearance: unknown) => {
+      this.trusted(event, true)
+      if (!validAppearance(appearance)) throw new Error('INVALID_DESKTOP_APPEARANCE')
+      if (!this.isQuitting) this.desktopPrefs.update({ menuAppearance: appearance })
+    })
     ipcMain.handle('yumpoo:timer:show', async (event, mode: unknown = 'picker', activate: unknown = true) => {
       this.trusted(event)
       if (!validMode(mode) || typeof activate !== 'boolean') throw new Error('INVALID_TIMER_WINDOW')
@@ -171,6 +180,8 @@ export class TimerWindowController {
     ipcMain.handle('yumpoo:timer:state', (event, state: unknown) => {
       this.trusted(event, true)
       if (!validTimerState(state)) throw new Error('INVALID_TIMER_STATE')
+      if (this.isQuitting) return
+      this.exit.markReady()
       if (this.state?.accountId === state.accountId && state.rowVersion < this.state.rowVersion) return
       const previous = this.state
       const saved = state.accountId && state.savedAt > (previous?.savedAt ?? 0) && Date.now() - state.savedAt < 2600 && !state.running
@@ -180,7 +191,6 @@ export class TimerWindowController {
       this.stateAt = Date.now()
       // Another account, or none: the quick panel and the rail reload instead of showing the previous person's work.
       if (previous?.accountId !== state.accountId) { this.quick.destroy(); this.rail.destroy(); this.slotHidden = false }
-      if (!this.menuWarmed) { this.menuWarmed = true; this.menu.prewarm() }
       if (state.accountId) this.quick.prewarm()
       if (!state.accountId || this.timerOff()) this.window?.hide()
       this.updateTray()
@@ -214,37 +224,25 @@ export class TimerWindowController {
       await main.loadURL(new URL(`/projects/${projectId}/overview?workItemId=${itemId}`, this.origin).href)
       this.showMain()
     })
-    ipcMain.handle('yumpoo:timer:exit-received', (event, requestId: unknown) => {
-      this.trusted(event, true)
-      if (!validTimerId(requestId) || requestId !== this.exitRequest) throw new Error('INVALID_TIMER_EXIT')
-      clearTimeout(this.exitTimeout)
-    })
-    ipcMain.handle('yumpoo:timer:exit-complete', (event, requestId: unknown, allow: unknown) => {
-      this.trusted(event, true)
-      if (!validTimerId(requestId) || typeof allow !== 'boolean' || requestId !== this.exitRequest) throw new Error('INVALID_TIMER_EXIT')
-      clearTimeout(this.exitTimeout)
-      this.settleExit(allow)
-    })
-    app.on('before-quit', event => {
-      if (!this.approvedExit && this.main()) { event.preventDefault(); this.requestExit() }
-    })
     app.on('will-quit', () => {
       clearInterval(this.hoverTimer)
       clearTimeout(this.reframeTimer)
       clearTimeout(this.blurTimer)
-      clearTimeout(this.exitTimeout); clearTimeout(this.commandTimeout)
+      clearTimeout(this.commandTimeout)
       clearInterval(this.dragTimer); clearTimeout(this.dragGuard)
-      this.tray?.destroy()
+      this.tray?.destroy(); this.tray = undefined
     })
   }
 
   attachMain(window: BrowserWindow): void {
+    this.exit.attachMain(window)
     window.setIcon(applicationIcon())
     window.webContents.setBackgroundThrottling(false)
-    window.on('close', event => { if (!this.approvedExit) { event.preventDefault(); window.hide() } })
+    window.on('close', event => { if (!this.isQuitting) { event.preventDefault(); window.hide() } })
   }
 
   showMain(): void {
+    if (this.isQuitting) return
     const main = this.main()
     if (!main || main.isDestroyed()) return
     if (main.isMinimized()) main.restore()
@@ -253,11 +251,13 @@ export class TimerWindowController {
 
   /** Tray left-click and the global shortcut; signed out, or before the panel has loaded, the main window opens instead. */
   toggleQuick(source: 'tray' | 'shortcut'): void {
+    if (this.isQuitting) return
     if (!this.state?.accountId || !this.quick.toggle({ source }, this.railProjects())) this.showMain()
   }
 
   /** Loads `path` in the main window first when given, the same way `open-item` does. */
   private async openMain(path?: string): Promise<void> {
+    if (this.isQuitting) return
     const main = this.main()
     if (!main || main.isDestroyed()) return
     if (path) await main.loadURL(new URL(path, this.origin).href)
@@ -300,12 +300,13 @@ export class TimerWindowController {
   }
 
   private commandsEnabled(): boolean {
-    return this.ready() && !this.state?.busy && !this.pendingCommand && !this.exitRequest
+    return this.ready() && !this.state?.busy && !this.pendingCommand && !this.exit.pending
   }
 
   private menuState(): TimerMenuState {
     const state = this.state
     return {
+      starting: !state, diagnostics: !!this.openDiagnostics, appearance: this.desktopPrefs.get().menuAppearance ?? { theme: 'system', density: 'comfortable' },
       signedIn: !!state?.accountId, ready: this.ready(), enabled: this.commandsEnabled(),
       running: state?.running ? { title: state.running.title, startedAt: state.running.startedAt } : null,
       recent: state?.recent ? { title: state.recent.title } : null,
@@ -318,6 +319,7 @@ export class TimerWindowController {
   }
 
   private updateTray(): void {
+    if (this.isQuitting) return
     const state = this.state
     const signedIn = !!state?.accountId
     const ready = this.ready()
@@ -353,7 +355,7 @@ export class TimerWindowController {
         : this.update?.phase === 'idle' || this.update?.phase === 'error' ? [{ label: '检查更新', click: () => this.updateActions?.check() }]
         : this.update?.phase === 'available' ? [{ label: `下载更新 ${this.update.version}`, click: () => this.updateActions?.download() }] : []),
       ...(this.openDiagnostics ? [{ label: '诊断与修复…', click: () => this.openDiagnostics?.() }] : []),
-      { label: '退出 YumpooPlatform…', click: () => this.requestExit() },
+      { label: '退出 YumpooPlatform…', click: () => this.exit.request() },
     ])
     if (process.platform === 'linux') this.tray?.setContextMenu(this.contextMenu)
     this.menu.update(this.menuState())
@@ -372,8 +374,10 @@ export class TimerWindowController {
   }
 
   private menuAction(action: TimerMenuAction): void {
+    if (this.isQuitting) return
     const signedIn = !!this.state?.accountId
     switch (action) {
+      case 'diagnostics': this.openDiagnostics?.(); break
       case 'check-update': this.updateActions?.check(); break
       case 'download-update': this.updateActions?.download(); break
       case 'restart-update': this.updateActions?.restart(); break
@@ -401,13 +405,21 @@ export class TimerWindowController {
         break
       case 'toggle-pin': if (signedIn) this.setPinned(!this.pinned); break
       case 'preferences': void this.openMain('/settings'); break
-      case 'exit': this.requestExit(); break
+      case 'exit': this.exit.request(); break
       case 'close': break
     }
     this.updateTray()
   }
 
+  private nativeMenu(kind: 'tray' | 'pointer'): void {
+    if (this.isQuitting) return
+    this.updateTray()
+    if (kind === 'tray') this.tray?.popUpContextMenu(this.contextMenu)
+    else this.contextMenu?.popup(this.window ? { window: this.window } : {})
+  }
+
   private openSurfaceMenu(): void {
+    if (this.isQuitting) return
     this.updateTray()
     if (!this.menu.open('pointer', this.menuState())) this.contextMenu?.popup(this.window ? { window: this.window } : {})
   }
@@ -459,7 +471,7 @@ export class TimerWindowController {
   }
 
   private dispatchCommand(command: DesktopTimerCommand): void {
-    if (this.pendingCommand || this.exitRequest || this.state?.busy || !this.state?.connected || Date.now() - this.stateAt >= 15000) return
+    if (this.isQuitting || this.pendingCommand || this.exit.pending || this.state?.busy || !this.state?.connected || Date.now() - this.stateAt >= 15000) return
     const main = this.main()
     if (!main || main.isDestroyed()) return
     this.pendingCommand = command.requestId
@@ -478,28 +490,16 @@ export class TimerWindowController {
     this.window?.webContents.send('yumpoo:timer:command-failed')
   }
 
-  private requestExit(): void {
-    if (this.exitRequest) return
-    const main = this.main()
-    if (!main || main.isDestroyed()) return
-    const requestId = randomUUID()
-    this.exitRequest = requestId
-    this.showMain()
-    this.updateTray()
-    main.webContents.send('yumpoo:timer:exit-request', requestId)
-    this.exitTimeout = setTimeout(() => {
-      if (this.exitRequest !== requestId) return
-      void dialog.showMessageBox(main, { type: 'warning', message: '应用未能确认计时状态', detail: '可取消退出后重试，或明确选择继续计时并退出。计时不会自动停止。', buttons: ['取消退出', '继续计时并退出'], defaultId: 0, cancelId: 0 }).then(result => {
-        if (this.exitRequest !== requestId) return
-        this.settleExit(result.response === 1)
-      })
-    }, 30000)
-  }
+  get isQuitting(): boolean { return this.exit.quitting }
 
-  private settleExit(allow: boolean): void {
-    this.exitRequest = undefined
-    if (allow) { this.approvedExit = true; app.quit() }
-    else { this.updateTray(); this.exitCancelled?.() }
+  private shutdown(): void {
+    this.unsubscribePreferences?.()
+    clearInterval(this.hoverTimer); clearTimeout(this.reframeTimer); clearTimeout(this.blurTimer)
+    clearInterval(this.dragTimer); clearTimeout(this.dragGuard); clearTimeout(this.commandTimeout)
+    this.rail.stop()
+    this.quick.stop()
+    this.menu.stop()
+    if (this.window && !this.window.isDestroyed()) this.window.destroy()
   }
 
   /** Lays out the orb so its circle's bottom-left stays near `anchor`. */
@@ -610,6 +610,7 @@ export class TimerWindowController {
   }
 
   private async show(mode: TimerWindowMode = 'picker', activate = true): Promise<void> {
+    if (this.isQuitting) return
     if (this.timerOff()) { this.showMain(); return }
     if (mode === 'compact' && this.railHostsTimer()) {
       this.resize(mode)
@@ -620,6 +621,7 @@ export class TimerWindowController {
       return
     }
     const reveal = (window: BrowserWindow) => {
+      if (this.isQuitting || window.isDestroyed()) return
       if (window.isMinimized()) window.restore()
       if (activate) { window.show(); window.focus() }
       else window.showInactive()
@@ -665,7 +667,7 @@ export class TimerWindowController {
     window.on('system-context-menu', event => { event.preventDefault(); this.openSurfaceMenu() })
     window.webContents.on('context-menu', () => { if (this.mode === 'compact') this.openSurfaceMenu() })
     installSecurityGuards(window.webContents, this.origin)
-    window.on('close', event => { if (!this.approvedExit) { event.preventDefault(); window.hide(); this.updateTray() } })
+    window.on('close', event => { if (!this.isQuitting) { event.preventDefault(); window.hide(); this.updateTray() } })
     window.on('closed', () => {
       clearInterval(this.hoverTimer); clearTimeout(this.reframeTimer); clearTimeout(this.blurTimer); clearInterval(this.dragTimer); clearTimeout(this.dragGuard)
       this.window = null; this.dragging = false; this.updateTray()
@@ -673,7 +675,7 @@ export class TimerWindowController {
     window.once('ready-to-show', () => reveal(window))
     try { await loadSurface(window, new URL(`/timer?mode=${mode}`, this.origin).href) }
     catch (error) {
-      window.destroy()
+      if (!window.isDestroyed()) window.destroy()
       this.showMain()
       console.error('[YUMPOO_TIMER_WINDOW_LOAD_FAILED]', error instanceof Error ? error.message : '')
     }

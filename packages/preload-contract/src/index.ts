@@ -95,6 +95,8 @@ export interface RailProjects {
 }
 
 export interface DesktopPreferences {
+  /** Last appearance published by the main Web window, used before it loads on the next launch. */
+  menuAppearance?: DesktopAppearance
   railEnabled: boolean
   railMode: RailMode
   railSize: RailSize
@@ -114,7 +116,7 @@ export interface DesktopPreferencesState extends DesktopPreferences {
   shortcutActive: boolean
 }
 
-export type DesktopPreferencesChange = Partial<Omit<DesktopPreferences, 'shortcut'>> & { launchAtLogin?: boolean }
+export type DesktopPreferencesChange = Partial<Omit<DesktopPreferences, 'shortcut' | 'menuAppearance'>> & { launchAtLogin?: boolean }
 
 export interface DesktopPreferencesBridge {
   get(): Promise<DesktopPreferencesState>
@@ -205,6 +207,9 @@ export interface DesktopInboxBridge {
 }
 
 export interface DesktopTimerBridge {
+  publishAppearance?(appearance: DesktopAppearance): Promise<void>
+  reportExitPhase?(requestId: string, phase: DesktopExitPhase): Promise<boolean>
+  onExitCancelled?(listener: (requestId: string) => void): () => void
   show(mode?: TimerWindowMode, activate?: boolean): Promise<void>
   hide(): Promise<void>
   setMode(mode: TimerWindowMode): Promise<void>
@@ -269,6 +274,7 @@ export interface TimerOrbChange {
 }
 
 export type TimerMenuAction =
+  | 'diagnostics'
   | 'check-update' | 'download-update' | 'restart-update'
   | 'open-main'
   | 'open-inbox'
@@ -284,6 +290,9 @@ export type TimerMenuAction =
   | 'close'
 
 export interface TimerMenuState {
+  starting?: boolean
+  diagnostics?: boolean
+  appearance?: DesktopAppearance
   /** Absent from shells before 1.1.2. */
   update?: DesktopUpdateState
   inbox?: { unreadCount: number }
@@ -299,6 +308,22 @@ export interface TimerMenuState {
   pinned: boolean
   /** False once the person switched the timer off; timer entries are then hidden. Absent from older shells. */
   timerEnabled?: boolean
+}
+
+export type DesktopExitPhase = 'checking' | 'prompt' | 'saving'
+export interface DesktopAppearance {
+  theme: 'system' | 'light' | 'dark' | 'night'
+  density: 'comfortable' | 'compact'
+}
+
+/** Only exposed to the packaged menu; it has no authentication or business-data bridge. */
+export interface DesktopMenuBridge {
+  getState(): Promise<TimerMenuState>
+  ready(): Promise<void>
+  onState(listener: (state: TimerMenuState) => void): () => void
+  runAction(action: TimerMenuAction): Promise<void>
+  getPreferences(): Promise<DesktopInboxPreferences>
+  setPreferences(change: DesktopInboxPreferences): Promise<DesktopInboxPreferences>
 }
 
 export interface DesktopTimerState {

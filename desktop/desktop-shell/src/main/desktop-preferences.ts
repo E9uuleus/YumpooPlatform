@@ -1,7 +1,7 @@
 import path from 'node:path'
 import { readFileSync } from 'node:fs'
 import { mkdir, rename, writeFile } from 'node:fs/promises'
-import type { DesktopPreferences, DesktopPreferencesChange, RailMode, RailProjects, RailSize } from '@yumpoo/preload-contract'
+import type { DesktopAppearance, DesktopPreferences, DesktopPreferencesChange, RailMode, RailProjects, RailSize } from '@yumpoo/preload-contract'
 import { MAX_RAIL_PROJECTS } from './timer-geometry'
 
 const STORE_FILE = 'desktop-preferences.json'
@@ -19,6 +19,13 @@ export const DEFAULT_DESKTOP_PREFERENCES: Readonly<DesktopPreferences> = Object.
 
 export const validRailMode = (value: unknown): value is RailMode => value === 'autohide' || value === 'always'
 export const validRailSize = (value: unknown): value is RailSize => value === 'small' || value === 'medium' || value === 'large'
+export function validAppearance(value: unknown): value is DesktopAppearance {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const appearance = value as DesktopAppearance
+  return Object.keys(value).every(key => key === 'theme' || key === 'density')
+    && ['system', 'light', 'dark', 'night'].includes(appearance.theme)
+    && ['comfortable', 'compact'].includes(appearance.density)
+}
 export const validAccelerator = (value: unknown): value is string => typeof value === 'string' && ACCELERATOR.test(value)
 
 export function validRailProjects(value: unknown): value is RailProjects {
@@ -98,6 +105,7 @@ export class DesktopPreferenceStore {
 
 function sanitize(value: Record<string, unknown>): Partial<DesktopPreferences> {
   const result: Partial<DesktopPreferences> = {}
+  if (validAppearance(value.menuAppearance)) result.menuAppearance = { ...value.menuAppearance }
   if (typeof value.railEnabled === 'boolean') result.railEnabled = value.railEnabled
   if (validRailMode(value.railMode)) result.railMode = value.railMode
   if (validRailSize(value.railSize)) result.railSize = value.railSize

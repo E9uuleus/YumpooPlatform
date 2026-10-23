@@ -42,6 +42,7 @@ export class RailController {
   private tuckTimer: ReturnType<typeof setTimeout> | undefined
   private shapeTimer: ReturnType<typeof setTimeout> | undefined
   private reframeTimer: ReturnType<typeof setTimeout> | undefined
+  private stopped = false
   private installed = false
 
   constructor(private readonly origin: string, private readonly preload: string, private readonly timerPrefs: TimerPreferenceStore,
@@ -69,8 +70,16 @@ export class RailController {
 
   isSender(event: IpcMainInvokeEvent): boolean { return isTrustedAuthIpcSender(event, this.window, this.origin) }
 
+  stop(): void {
+    if (this.stopped) return
+    this.stopped = true
+    this.clearTimers()
+    this.destroy()
+  }
+
   /** Shows, hides or re-lays out the rail after any change to sign-in, preferences, the timer slot or the quick panel. */
   sync(): void {
+    if (this.stopped) return
     const prefs = this.prefs.get()
     if (!this.host.signedIn() || !prefs.railEnabled) { this.window?.hide(); return }
     if (!this.window || this.window.isDestroyed()) { this.create(); return }
@@ -173,6 +182,7 @@ export class RailController {
   }
 
   private create(): void {
+    if (this.stopped) return
     this.tucked = this.prefs.get().railMode === 'autohide'
     this.ready = false
     this.hovered = false
@@ -208,7 +218,7 @@ export class RailController {
       this.clearTimers()
       this.window = null
     })
-    window.once('ready-to-show', () => { if (this.window === window) { this.ready = true; this.sync() } })
+    window.once('ready-to-show', () => { if (!this.stopped && this.window === window) { this.ready = true; this.sync() } })
     loadSurface(window, new URL('/timer/rail', this.origin).href).catch((error: unknown) => {
       console.error('[YUMPOO_RAIL_WINDOW_LOAD_FAILED]', error instanceof Error ? error.message : '')
       if (!window.isDestroyed()) window.destroy()
