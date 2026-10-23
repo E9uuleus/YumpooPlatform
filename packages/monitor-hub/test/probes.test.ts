@@ -56,3 +56,26 @@ test('freshness joins original metric names and preserves scrape age for identic
   assert.equal(hub.status(now).services[0]?.observed,'unknown')
   store.close()
 })
+
+test('independent watchdog sees Prometheus and Alertmanager failures despite a live event receiver', async () => {
+  const start=1800000000000
+  let now=start; let alertmanagerUp=true; let available=true; let stale=false
+  const cfg={...config,prometheusUrl:'http://127.0.0.1:9090',services:[]} as Config
+  const probes=new Probes(cfg,(async(url: string | URL | Request)=>{
+    if(!available) throw new Error('Prometheus stopped')
+    const timestamps=new URL(String(url)).searchParams.get('query')===timestampQuery
+    return Response.json({status:'success',data:{result:['prometheus','alertmanager'].map(job=>({
+      metric:{[timestamps?'monitor_metric_name':'__name__']:'up',job},
+      value:[now/1000,timestamps?String((now-(stale?120000:0))/1000):job==='alertmanager'&&!alertmanagerUp?'0':'1'],
+    }))}})
+  }) as typeof fetch)
+  const store=new Store(':memory:'); const hub=new Hub(store,cfg)
+  await probes.poll(hub,now); assert.equal(probes.monitoringReady(now),false)
+  now+=60000; await probes.poll(hub,now); assert.equal(probes.monitoringReady(now),true)
+  alertmanagerUp=false; now+=30000; await probes.poll(hub,now); assert.equal(probes.monitoringReady(now),false)
+  alertmanagerUp=true; now+=30000; await probes.poll(hub,now); assert.equal(probes.monitoringReady(now),false)
+  now+=60000; await probes.poll(hub,now); assert.equal(probes.monitoringReady(now),true)
+  stale=true; now+=30000; await probes.poll(hub,now); assert.equal(probes.monitoringReady(now),false)
+  stale=false; available=false; now+=30000; await probes.poll(hub,now); assert.equal(probes.monitoringReady(now),false)
+  store.close()
+})

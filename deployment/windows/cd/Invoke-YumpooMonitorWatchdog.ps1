@@ -14,16 +14,19 @@ do {
             $state.downSince = $saved.downSince; $state.lastSent = $saved.lastSent; $state.notified = $saved.notified
         }
         $up = $false
-        try { $up = (Invoke-RestMethod -Uri 'http://127.0.0.1:28788/healthz' -TimeoutSec 8).status -ceq 'UP' } catch { }
+        try {
+            $health = Invoke-RestMethod -Uri 'http://127.0.0.1:28788/healthz' -TimeoutSec 8
+            $up = $health.status -ceq 'UP' -and (Get-YumpooSetting $health 'monitoring' 'UNKNOWN') -ceq 'UP'
+        } catch { }
         $now = [DateTimeOffset]::UtcNow
         $text = ''
         if ($up) {
             $state.downSince = ''
-            if ($state.notified) { $text = 'Yumpoo monitoring connection restored. This message is from the independent Windows watchdog.' }
+            if ($state.notified) { $text = 'Yumpoo monitoring connection and telemetry/alerting pipeline restored. This message is from the independent Windows watchdog.' }
         } else {
             if (-not $state.downSince) { $state.downSince = $now.ToString('o') }
             if (($now - [DateTimeOffset]::Parse($state.downSince)).TotalMinutes -ge 3 -and (-not $state.lastSent -or ($now - [DateTimeOffset]::Parse($state.lastSent)).TotalHours -ge 1)) {
-                $text = 'Yumpoo monitoring connection has been unreachable for 3 minutes. Check the monitoring host and SSH tunnel. Business availability is not confirmed by this alert.'
+                $text = 'Yumpoo monitoring connection or telemetry/alerting pipeline has been unavailable for 3 minutes. Check the monitoring host, SSH tunnel, Prometheus and Alertmanager. Business availability is not confirmed by this alert.'
             }
         }
         if ($text) {

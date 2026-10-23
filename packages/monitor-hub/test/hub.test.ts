@@ -94,6 +94,7 @@ test('stale Alertmanager resolved cannot claim recovery; fresh recovery stops re
 test('machine and admin listeners separate privileges; signed ingress rejects replay and CSRF', async () => {
   const { hub, store } = setup(); const { ui, ingress } = await createServers(hub, () => true)
   try {
+    assert.deepEqual((await ingress.inject({url:'/healthz'})).json(),{status:'UP',monitoring:'UNKNOWN'})
     assert.equal((await ingress.inject({url:'/api/v1/admin/overview'})).statusCode,404)
     assert.equal((await ui.inject({url:'/api/v1/admin/overview'})).statusCode,401)
     const body = JSON.stringify({...event('maintenance.planned'),occurredAt:new Date().toISOString()})

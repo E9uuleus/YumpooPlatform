@@ -16,7 +16,7 @@ const store = new Store(config.database)
 const hub = new Hub(store, config)
 const probes = new Probes(config)
 const worker = new DeliveryWorker(store, config.channels)
-const { ui, ingress } = await createServers(hub, alert => probes.fresh(alert), () => probes.discoverySuccess)
+const { ui, ingress } = await createServers(hub, alert => probes.fresh(alert), () => probes.discoverySuccess, () => probes.monitoringReady())
 await ui.listen({ host: '127.0.0.1', port: 8787 })
 await ingress.listen({ host: '127.0.0.1', port: 8788 })
 let polling = false

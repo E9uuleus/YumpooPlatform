@@ -18,7 +18,7 @@ groups:
         labels: { severity: critical, source_job: prometheus, service: server, expected_maintenance: 'true' }
         annotations: { summary: '应用指标采集不可达。' }
       - alert: MonitoringTargetMissing
-        expr: absent(up{job="windows"}) or absent(up{job="application"}) or absent(up{job="ubuntu"}) or absent(up{job="blackbox"}) or absent(up{job="monitor-hub"}) or absent(up{job="alertmanager"})
+        expr: absent(up{job="windows"}) or absent(up{job="application"}) or absent(up{job="ubuntu"}) or absent(up{job="blackbox"}) or absent(up{job="monitor-hub"}) or absent(up{job="alertmanager"}) or absent(up{job="grafana"})
         for: 90s
         keep_firing_for: 60s
         labels: { severity: critical, source_job: prometheus }

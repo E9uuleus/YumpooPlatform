@@ -20,6 +20,7 @@ export function prometheusConfig(siteUrl) {
     scrape_configs:[
       scrape('prometheus','127.0.0.1:9090'),scrape('blackbox','127.0.0.1:9115'),
       scrape('ubuntu','127.0.0.1:9100'),scrape('alertmanager','127.0.0.1:9093'),
+      scrape('grafana','127.0.0.1:3000'),
       scrape('monitor-hub','127.0.0.1:8788'),scrape('windows','127.0.0.1:19100','/metrics/windows'),
       scrape('application','127.0.0.1:19100','/metrics/app'),
       {
