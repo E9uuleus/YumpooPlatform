@@ -1,22 +1,27 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import { TimeSessionFillMode, type TimerCandidate } from '@yumpoo/api-client'
+import { TimeSessionFillMode, WorkItemStatusCategory, type TimerCandidate, type WorkItemDetail } from '@yumpoo/api-client'
 import type { QuickPanelContext } from '@yumpoo/preload-contract'
 import { ElInput } from 'element-plus'
-import { ArrowRight, CircleCheck, Clock } from '@element-plus/icons-vue'
+import { ArrowRight, CircleCheck, Clock, Plus, WarningFilled } from '@element-plus/icons-vue'
 import { useSession } from '../../composables/useSession'
 import { useTimeTracker } from '../../composables/useTimeTracker'
 import { useTimerCandidates } from '../../composables/useTimerCandidates'
 import { useInfiniteSentinel } from '../../composables/useInfiniteSentinel'
 import { useHideCompleted } from '../../composables/useHideCompleted'
 import { useDesktopSurfaceOpacity } from '../../composables/useDesktopSurfaceOpacity'
+import { announceWorkItemChanged } from '../../composables/workItemChanges'
 import { useDayTimeline } from '../../components/my-time/day/useDayTimeline'
-import { HOUR, MIN_BLOCK_MS, parseDuration } from '../../components/my-time/day/dayModel'
+import { atMinute, formatClock, HOUR, MIN_BLOCK_MS, parseClock, parseDuration } from '../../components/my-time/day/dayModel'
 import { addDays, todayIn } from '../../components/team/teamDashboardModel'
 import HideCompletedSwitch from '../../components/timer/HideCompletedSwitch.vue'
 import TimerIcon from '../../components/timer/TimerIcon.vue'
 import QuickTimeRow from '../../components/desktop/QuickTimeRow.vue'
-import { groupCandidates, placementHint, projectTones, quickPlan, shortDuration, spokenDuration, type DateChoice } from '../../components/desktop/quickTime'
+import QuickCreateRow from '../../components/desktop/QuickCreateRow.vue'
+import QuickFixedRow from '../../components/desktop/QuickFixedRow.vue'
+import { matchCategories, type TimeCategoryOption } from '../../components/timer/timeCategories'
+import { groupCandidates, placementHint, projectTones, quickPlan, rangeFromPlan, rangeProblem, rangeRecordable, shortDuration, spokenDuration,
+  type DateChoice } from '../../components/desktop/quickTime'
 import brandLogo from '../../assets/brand/logo.svg'
 
 const bridge = window.yumpooDesktop?.quick
@@ -44,10 +49,19 @@ const pickedDate = ref(today.value)
 const durationMs = ref(HOUR)
 const custom = ref(false)
 const customText = ref('')
+const rangeMode = ref(false)
+const rangeStart = ref(0)
+const rangeEnd = ref(0)
 const recording = ref<'idle' | 'saving' | 'done'>('idle')
 const flashId = ref<string | null>(null)
+const creating = ref(false)
+const createTitle = ref('')
+const createKey = ref(0)
+/** A created item to open once the list has reloaded; it is added locally when the first page does not reach it. */
+let reveal: TimerCandidate | undefined
 const toast = ref('')
 const toastVisible = ref(false)
+const toastFailed = ref(false)
 const closing = ref(false)
 const opening = ref(0)
 const search = ref<InstanceType<typeof ElInput>>()
@@ -73,7 +87,9 @@ const chips = computed(() => {
   return locked && !list.some(item => item.id === locked.id) ? [{ id: locked.id, name: locked.name }, ...list] : list
 })
 const tones = computed(() => projectTones(context.value.projects, chips.value.map(chip => chip.id)))
-const todayMs = computed(() => new Map(todayDay.totals.value.map(total => [total.workItemId, total.ms])))
+const todayMs = computed(() => new Map(todayDay.totals.value.map(total => [total.key, total.ms])))
+/** Non-project categories sit above the work items; a project chip narrows the list to work items only. */
+const categories = computed(() => project.value ? [] : matchCategories(query.value))
 const total = ref(0)
 
 const plan = computed(() => quickPlan({ blocks: targetDay.blocks.value, now: targetDay.now.value, workday: targetDay.workday.value,
@@ -82,7 +98,15 @@ const durationValid = computed(() => durationMs.value >= MIN_BLOCK_MS)
 const hint = computed(() => !durationValid.value ? '至少记录 15 分钟'
   : !targetDay.page.value ? '正在读取当天记录…'
   : placementHint(plan.value, targetDate.value, today.value, timezone.value, targetDay.dayRange.value.end))
-const canRecord = computed(() => durationValid.value && !!targetDay.page.value && plan.value.entries.length > 0 && !targetDay.busy.value && recording.value === 'idle')
+const range = computed(() => ({ start: rangeStart.value, end: rangeEnd.value }))
+const rangeIssue = computed(() => rangeProblem(range.value, targetDay.dayRange.value, targetDay.limit.value))
+const recordable = computed(() => rangeIssue.value ? 0 : rangeRecordable(range.value, targetDay.blocks.value, targetDay.now.value))
+const rangeNote = computed(() => rangeIssue.value || !targetDay.page.value ? rangeIssue.value
+  : !recordable.value ? '这段时间已全部记录'
+  : recordable.value < range.value.end - range.value.start ? '与已有记录重叠的部分会跳过' : '')
+const entries = computed(() => rangeMode.value ? [range.value] : plan.value.entries)
+const canRecord = computed(() => (rangeMode.value ? recordable.value > 0 : durationValid.value && plan.value.entries.length > 0)
+  && !!targetDay.page.value && !targetDay.busy.value && recording.value === 'idle')
 const transformOrigin = computed(() => {
   const origin = context.value.origin
   if (context.value.projectId) return `${origin} center`
@@ -92,6 +116,27 @@ const myDayPath = computed(() => `/workspace/${session.authentication.value?.use
 
 watch(customText, text => { if (custom.value) durationMs.value = parseDuration(text) ?? 0 })
 watch(custom, value => { if (!value) customText.value = '' })
+// Range mode keeps the duration and the range in step: a chip or custom duration moves the end, edited ends recompute the duration.
+let autoDurationMs = HOUR
+watch(rangeMode, value => {
+  // Leaving an unfinished range (end before start) gives the automatic plan back the length it had.
+  if (!value) { if (!durationValid.value) durationMs.value = autoDurationMs; return }
+  custom.value = false
+  autoDurationMs = durationValid.value ? durationMs.value : HOUR
+  const next = rangeFromPlan(plan.value, autoDurationMs, targetDay.limit.value)
+  rangeStart.value = next.start
+  rangeEnd.value = next.end
+})
+watch(durationMs, ms => { if (rangeMode.value && ms > 0 && rangeEnd.value - rangeStart.value !== ms) rangeEnd.value = rangeStart.value + ms })
+watch(range, value => { if (rangeMode.value) durationMs.value = Math.max(0, value.end - value.start) })
+watch(targetDate, (to, from) => {
+  if (!rangeMode.value) return
+  // Another day keeps the same wall-clock times; the day's own end (24:00) stays the day's end.
+  const end = atMinute(from, 1440, timezone.value)
+  const move = (ms: number) => atMinute(to, parseClock(formatClock(ms, timezone.value, end)) ?? 0, timezone.value)
+  rangeStart.value = move(rangeStart.value)
+  rangeEnd.value = move(rangeEnd.value)
+})
 watch(() => todayDay.recordedMs.value, (to, from) => {
   cancelAnimationFrame(countFrame)
   if (!countNext) { total.value = to; return }
@@ -106,6 +151,17 @@ watch(() => todayDay.recordedMs.value, (to, from) => {
   countFrame = requestAnimationFrame(step)
 }, { immediate: true })
 
+function revealCreated() {
+  const item = reveal
+  if (candidates.loading.value || !item) return
+  reveal = undefined
+  if (!candidates.items.value.some(candidate => candidate.workItemId === item.workItemId)) candidates.items.value = [item, ...candidates.items.value]
+  rangeMode.value = false
+  openId.value = item.workItemId
+  void nextTick(() => list.value?.querySelector(`[data-work-item-id="${item.workItemId}"]`)?.scrollIntoView({ block: 'nearest' }))
+}
+watch(() => candidates.loading.value, revealCreated)
+
 const offOpen = bridge?.onOpen(value => {
   pinned.value = value.pinned === true
   context.value = value
@@ -116,6 +172,8 @@ const offOpen = bridge?.onOpen(value => {
   // The prewarmed panel can live for days; the date picker starts from the current day on every open.
   pickedDate.value = today.value
   custom.value = false
+  rangeMode.value = false
+  creating.value = false
   durationMs.value = HOUR
   opening.value++
   if (query.value) query.value = ''
@@ -140,22 +198,25 @@ function startResize(event: PointerEvent) {
   grip.addEventListener('lostpointercapture', end, { once: true })
 }
 
-function toggle(item: TimerCandidate) {
+/** `key` is the work item id or the category key of the row to open. */
+function toggle(key: string) {
   if (recording.value !== 'idle') return
-  openId.value = openId.value === item.workItemId ? null : item.workItemId
+  openId.value = openId.value === key ? null : key
+  rangeMode.value = false
 }
-function showToast(text: string) {
+function showToast(text: string, failed = false) {
   toast.value = text
+  toastFailed.value = failed
   toastVisible.value = true
   clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => { toastVisible.value = false }, 1800)
+  toastTimer = setTimeout(() => { toastVisible.value = false }, failed ? 3200 : 1800)
 }
-async function record(item: TimerCandidate) {
+async function record(key: string, title: string) {
   if (!canRecord.value) return
-  const entries = plan.value.entries
+  const ranges = entries.value
   recording.value = 'saving'
   countNext = targetDate.value === today.value
-  const result = await targetDay.create(TimeSessionFillMode.Gaps, [item.workItemId], entries)
+  const result = await targetDay.create(TimeSessionFillMode.Gaps, [key], ranges)
   // Nothing new because the range was already recorded: create() has already said so, and there is nothing to celebrate.
   if (!result || !(result.createdCount || result.changedCount || result.deletedCount)) {
     countNext = false
@@ -163,24 +224,51 @@ async function record(item: TimerCandidate) {
     return
   }
   recording.value = 'done'
-  const recorded = entries.reduce((sum, range) => sum + range.end - range.start, 0) - result.skippedDurationMs
+  const recorded = ranges.reduce((sum, range) => sum + range.end - range.start, 0) - result.skippedDurationMs
   setTimeout(() => {
     openId.value = null
     recording.value = 'idle'
-    flashId.value = item.workItemId
-    showToast(`已记录 ${spokenDuration(recorded)} · ${item.title}`)
-    setTimeout(() => { if (flashId.value === item.workItemId) flashId.value = null }, 900)
+    flashId.value = key
+    showToast(`已记录 ${spokenDuration(recorded)} · ${title}`)
+    setTimeout(() => { if (flashId.value === key) flashId.value = null }, 900)
   }, 380)
 }
-async function startTimer(item: TimerCandidate) {
-  if (!await tracker.start(item.workItemId)) return
+function statusChanged(item: TimerCandidate, detail: WorkItemDetail, statusName: string) {
+  // The personal completion definition lives on the server; the reload below corrects this guess.
+  item.statusCategory = detail.statusCategory
+  item.completed = detail.statusCategory === WorkItemStatusCategory.Done || detail.statusCategory === WorkItemStatusCategory.Canceled
+  void candidates.load()
+  showToast(`已改为「${statusName}」· ${item.title}`)
+  announceWorkItemChanged({ projectId: item.projectId, workItemId: item.workItemId })
+}
+function startCreate(title = '') {
+  createTitle.value = title
+  createKey.value++
+  creating.value = true
+}
+function created(detail: WorkItemDetail, projectName: string) {
+  creating.value = false
+  reveal = { workItemId: detail.id, projectId: detail.projectId, projectName, itemNo: detail.itemNo, title: detail.title,
+    contentName: detail.contentName, contentColorToken: detail.contentColorToken, statusCategory: detail.statusCategory, completed: false,
+    assignedToMe: true, lastTrackedAt: null, ownDurationMs: 0 }
+  showToast(`已创建 #${detail.itemNo} · ${detail.title}`)
+  announceWorkItemChanged({ projectId: detail.projectId, workItemId: detail.id })
+  // Clearing the search or switching the project chip reloads the list by itself.
+  const reloads = !!query.value || (!!project.value && project.value !== detail.projectId)
+  if (project.value) project.value = detail.projectId
+  query.value = ''
+  if (!reloads) void candidates.load().then(revealCreated)
+}
+async function startTimer(key: string, title: string) {
+  if (!await tracker.start(key)) return
   openId.value = null
-  showToast(`已开始计时 · ${item.title}`)
+  showToast(`已开始计时 · ${title}`)
 }
 function keydown(event: KeyboardEvent) {
   if (event.key !== 'Escape') return
   event.preventDefault()
-  if (openId.value) openId.value = null
+  if (creating.value) creating.value = false
+  else if (openId.value) openId.value = null
   else void bridge?.close()
 }
 </script>
@@ -244,9 +332,18 @@ function keydown(event: KeyboardEvent) {
         <el-input
           ref="search"
           v-model="query"
-          placeholder="搜索工作项（含已完成）"
-          aria-label="搜索工作项"
+          placeholder="搜索工作项或分类（含已完成）"
+          aria-label="搜索工作项或分类"
         />
+        <button
+          type="button"
+          class="quick-icon quick-search__add"
+          aria-label="新建工作项"
+          title="新建工作项"
+          @click.prevent="startCreate()"
+        >
+          <Plus />
+        </button>
       </label>
       <div
         class="quick-projects"
@@ -283,6 +380,45 @@ function keydown(event: KeyboardEvent) {
         ref="list"
         class="quick-list"
       >
+        <QuickCreateRow
+          v-if="creating"
+          :key="createKey"
+          :preferred="[project, context.projectId]"
+          :initial-title="createTitle"
+          :user-id="session.authentication.value?.user.id ?? ''"
+          :tones="tones"
+          @close="creating = false"
+          @created="created"
+          @failed="showToast($event, true)"
+        />
+        <QuickFixedRow
+          v-if="categories.length"
+          v-model:date-choice="dateChoice"
+          v-model:picked-date="pickedDate"
+          v-model:duration-ms="durationMs"
+          v-model:custom="custom"
+          v-model:custom-text="customText"
+          v-model:range-mode="rangeMode"
+          v-model:range-start="rangeStart"
+          v-model:range-end="rangeEnd"
+          :categories="categories"
+          :open-key="openId"
+          :flash-key="flashId"
+          :today-ms="todayMs"
+          :today="today"
+          :hint="hint"
+          :target-date="targetDate"
+          :timezone="timezone"
+          :day-range="targetDay.dayRange.value"
+          :range-note="rangeNote"
+          :range-invalid="!!rangeIssue"
+          :can-record="canRecord"
+          :recording="recording"
+          :timer-enabled="tracker.timerEnabled.value"
+          @toggle="(category: TimeCategoryOption) => toggle(category.key)"
+          @record="(category: TimeCategoryOption) => record(category.key, category.label)"
+          @start="(category: TimeCategoryOption) => startTimer(category.key, category.label)"
+        />
         <div
           v-for="group in groups"
           :key="group.projectId"
@@ -302,6 +438,10 @@ function keydown(event: KeyboardEvent) {
               v-model:duration-ms="durationMs"
               v-model:custom="custom"
               v-model:custom-text="customText"
+              v-model:range-mode="rangeMode"
+              v-model:range-start="rangeStart"
+              v-model:range-end="rangeEnd"
+              :data-work-item-id="item.workItemId"
               :item="item"
               :today-ms="todayMs.get(item.workItemId) ?? 0"
               :expanded="openId === item.workItemId"
@@ -309,12 +449,19 @@ function keydown(event: KeyboardEvent) {
               :flashing="flashId === item.workItemId"
               :today="today"
               :hint="hint"
+              :target-date="targetDate"
+              :timezone="timezone"
+              :day-range="targetDay.dayRange.value"
+              :range-note="rangeNote"
+              :range-invalid="!!rangeIssue"
               :can-record="canRecord"
               :recording="openId === item.workItemId ? recording : 'idle'"
               :timer-enabled="tracker.timerEnabled.value"
-              @toggle="toggle(item)"
-              @record="record(item)"
-              @start="startTimer(item)"
+              @toggle="toggle(item.workItemId)"
+              @record="record(item.workItemId, item.title)"
+              @start="startTimer(item.workItemId, item.title)"
+              @status-changed="(detail, name) => statusChanged(item, detail, name)"
+              @status-failed="showToast($event, true)"
             />
           </TransitionGroup>
         </div>
@@ -323,7 +470,15 @@ function keydown(event: KeyboardEvent) {
           class="quick-empty"
         >
           {{ candidates.loading.value ? '正在加载工作项…' : candidates.problem.value
-            || (project ? '这个项目里暂无分配给你或最近记录的工作项，可以在上方搜索。' : '暂无工作项，可以在上方搜索。') }}
+            || (query.trim() ? '没有找到匹配的工作项。' : project ? '这个项目里暂无分配给你或最近记录的工作项，可以在上方搜索。' : '暂无工作项，可以在上方搜索。') }}
+          <button
+            v-if="query.trim() && !candidates.loading.value && !candidates.problem.value && !creating"
+            type="button"
+            class="quick-empty__create"
+            @click="startCreate(query.trim())"
+          >
+            <Plus />新建「{{ query.trim() }}」
+          </button>
         </p>
         <p
           v-if="candidates.loading.value && shown.length"
@@ -369,9 +524,9 @@ function keydown(event: KeyboardEvent) {
       <div
         class="quick-toast"
         :class="{ 'is-visible': toastVisible }"
-        role="status"
+        :role="toastFailed ? 'alert' : 'status'"
       >
-        <CircleCheck />{{ toast }}
+        <WarningFilled v-if="toastFailed" /><CircleCheck v-else /><span>{{ toast }}</span>
       </div>
     </section>
   </div>
@@ -414,6 +569,10 @@ button:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:-2p
 .quick-list{flex:1;min-height:0;overflow:auto;padding:2px 8px 8px}
 .quick-group{padding:8px 6px 3px;color:var(--yp-text-muted);font-size:11px}
 .quick-empty{margin:24px 12px;color:var(--yp-text-muted);font-size:12.5px;line-height:1.6;text-align:center}
+.quick-empty__create{display:flex;align-items:center;justify-content:center;gap:4px;max-width:100%;margin:8px auto 0;color:var(--yp-timer-accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.quick-empty__create svg{width:14px;height:14px;flex-shrink:0}
+.quick-search__add{width:24px;height:24px;margin-right:-6px;flex-shrink:0}
+.quick-search__add svg{width:15px;height:15px}
 .quick-status{margin:6px 0;color:var(--yp-text-muted);font-size:12px;text-align:center}
 .quick-status button{color:var(--yp-timer-accent)}
 .quick-sentinel{height:1px}
@@ -425,6 +584,7 @@ button:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:-2p
   transition:opacity .18s var(--yp-timer-ease),transform .22s var(--yp-timer-ease)}
 .quick-toast.is-visible{opacity:1;transform:none}
 .quick-toast svg{width:15px;height:15px;flex-shrink:0}
+.quick-toast span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .quick-row-enter-active,.quick-row-leave-active{transition:grid-template-rows .26s var(--yp-timer-ease),opacity .2s}
 .quick-row-enter-from,.quick-row-leave-to{grid-template-rows:0fr;opacity:0}
 @keyframes quick-in{from{opacity:0;transform:translateY(10px) scale(.96)}to{opacity:1;transform:none}}

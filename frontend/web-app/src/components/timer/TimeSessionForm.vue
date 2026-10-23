@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { TimeSessionFillMode, type MyTimeSession } from '@yumpoo/api-client'
 import { timeTrackingApi } from '../../api/client'
 import OverlapModeControl from '../my-time/day/OverlapModeControl.vue'
-import { defaultMode, MIN_BLOCK_MS, overlapEffect, type DayBlock, type Range } from '../my-time/day/dayModel'
+import { blockFromSession, defaultMode, MIN_BLOCK_MS, overlapEffect, type DayBlock, type Range } from '../my-time/day/dayModel'
 import TimeCalendar from './TimeCalendar.vue'
 import { companyDateTime, parseCompanyDateTime } from './timeFormat'
 
@@ -46,10 +46,7 @@ const range = computed<Range | undefined>(() => {
     return value.end > value.start ? value : undefined
   } catch { return undefined }
 })
-const blocks = computed<DayBlock[]>(() => existing.value.map(item => ({
-  id: item.session.id, workItemId: item.session.workItemId, projectId: item.session.projectId, title: item.title ?? '不可见工作项',
-  itemNo: item.itemNo, projectName: item.projectName, colorToken: item.contentColorToken, start: item.session.startedAt.getTime(),
-  end: item.session.stoppedAt?.getTime() ?? null, canEdit: item.session.canEdit, etag: item.session.etag })))
+const blocks = computed<DayBlock[]>(() => existing.value.map(blockFromSession))
 /** The overlap choice only appears when the new range overlaps something, with the same defaults as the day timeline. */
 const effect = computed(() => range.value && !props.editing
   ? overlapEffect(range.value, props.workItemId ? [props.workItemId] : [], blocks.value, Date.now()) : undefined)

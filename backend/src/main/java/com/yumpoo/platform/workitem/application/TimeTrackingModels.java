@@ -9,15 +9,30 @@ import java.util.UUID;
 public final class TimeTrackingModels {
     private TimeTrackingModels() {}
 
+    /** Exactly one of workItemId (with its projectId) and timeCategory is set. */
     public record Session(UUID id, UUID companyId, UUID projectId, UUID workItemId,
             UUID userId, Instant startedAt, Instant stoppedAt, String source,
-            long rowVersion, Instant deletedAt, String changeReason) {}
+            long rowVersion, Instant deletedAt, String changeReason, TimeCategory timeCategory) {
+        public Session(UUID id, UUID companyId, UUID projectId, UUID workItemId, UUID userId, Instant startedAt,
+                Instant stoppedAt, String source, long rowVersion, Instant deletedAt, String changeReason) {
+            this(id,companyId,projectId,workItemId,userId,startedAt,stoppedAt,source,rowVersion,deletedAt,changeReason,null);
+        }
+        public static Session create(UUID companyId, UUID projectId, TimeSubject subject, UUID userId,
+                Instant startedAt, Instant stoppedAt, String source) {
+            return new Session(UUID.randomUUID(),companyId,projectId,subject.workItemId(),userId,startedAt,stoppedAt,source,0,null,null,subject.timeCategory());
+        }
+        public TimeSubject subject() { return TimeSubject.of(workItemId,timeCategory); }
+        /** The same session at its next row version; project, work item and category never change in place. */
+        public Session next(Instant start, Instant stop, Instant deleted, String reason) {
+            return new Session(id,companyId,projectId,workItemId,userId,start,stop,source,rowVersion+1,deleted,reason,timeCategory);
+        }
+    }
 
     public record TimeTrackingSession(UUID id, UUID projectId, UUID workItemId,
             UUID userId, String displayName, Instant startedAt, Instant stoppedAt,
             String source, long durationMs, long rowVersion, String etag,
             boolean canEdit, boolean deleted, String changeReason, long allocatedDurationMs, int parallelItemCount,
-            String workItemNo, String workItemTitle) {}
+            String workItemNo, String workItemTitle, TimeCategory timeCategory) {}
 
     public record RunningSession(UUID userId, Instant startedAt) {}
 
@@ -40,13 +55,19 @@ public final class TimeTrackingModels {
 
     public enum TimeSessionFillMode { PARALLEL, REPLACE, GAPS }
 
-    public record TimeSessionFillEntry(UUID workItemId, Instant startedAt, Instant stoppedAt) {}
+    public record TimeSessionFillEntry(UUID workItemId, Instant startedAt, Instant stoppedAt,
+            @JsonInclude(JsonInclude.Include.NON_NULL) TimeCategory timeCategory) {
+        public static TimeSessionFillEntry of(TimeSubject subject, Instant startedAt, Instant stoppedAt) {
+            return new TimeSessionFillEntry(subject.workItemId(),startedAt,stoppedAt,subject.timeCategory());
+        }
+        public TimeSubject subject() { return TimeSubject.of(workItemId,timeCategory); }
+    }
 
     public record TimeSessionFillCommand(TimeSessionFillMode mode, List<TimeSessionFillEntry> entries) {}
 
     public record TimeSessionFillResult(int createdCount, int changedCount, int deletedCount, long skippedDurationMs) {}
 
-    public record TimeSessionReassignCommand(UUID workItemId) {}
+    public record TimeSessionReassignCommand(UUID workItemId, @JsonInclude(JsonInclude.Include.NON_NULL) TimeCategory timeCategory) {}
 
     public record RecentTimeTrackingItem(UUID workItemId, UUID projectId, String title) {}
 
@@ -78,12 +99,13 @@ public final class TimeTrackingModels {
     public record CurrentTimeTracker(TimeTrackingSession session, String workItemTitle,
             long rowVersion, String etag, Instant serverNow, List<RecentTimeTrackingItem> recentItems,
             List<CurrentRunningTimer> runningSessions, List<RecentTimeTrackingItem> resumeItems,
-            TimeTrackingPreferences preferences) {
+            List<TimeCategory> resumeCategories, TimeTrackingPreferences preferences) {
         public static CurrentTimeTracker of(List<CurrentRunningTimer> running, long version, Instant now,
-                List<RecentTimeTrackingItem> recentItems, List<RecentTimeTrackingItem> resumeItems, TimeTrackingPreferences preferences) {
+                List<RecentTimeTrackingItem> recentItems, List<RecentTimeTrackingItem> resumeItems,
+                List<TimeCategory> resumeCategories, TimeTrackingPreferences preferences) {
             var first=running.isEmpty() ? null : running.getFirst();
             return new CurrentTimeTracker(first==null ? null : first.session(),first==null ? null : first.workItemTitle(),
-                    version,StrongEtag.format(version),now,recentItems,running,resumeItems,preferences);
+                    version,StrongEtag.format(version),now,recentItems,running,resumeItems,resumeCategories,preferences);
         }
     }
 }

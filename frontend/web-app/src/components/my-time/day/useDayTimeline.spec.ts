@@ -6,7 +6,8 @@ import { TimeSessionFillMode } from '@yumpoo/api-client'
 import { useDayTimeline } from './useDayTimeline'
 import { atMinute, type DayBlock } from './dayModel'
 
-const api = vi.hoisted(() => ({ listMyTimeSessions: vi.fn(), fillMyTimeSessions: vi.fn(), getMyTimesheet: vi.fn() }))
+const api = vi.hoisted(() => ({ listMyTimeSessions: vi.fn(), fillMyTimeSessions: vi.fn(), getMyTimesheet: vi.fn(), editMyTimeSession: vi.fn(),
+  deleteMyTimeSession: vi.fn(), reassignMyTimeSession: vi.fn() }))
 vi.mock('../../../api/client', () => ({ timeTrackingApi: api, myWorkApi: api }))
 vi.mock('element-plus', () => ({ ElMessage: { error: vi.fn(), warning: vi.fn(), info: vi.fn(), success: vi.fn() } }))
 vi.mock('../../../composables/useTimeTracker', async () => {
@@ -20,7 +21,7 @@ vi.mock('../../../composables/useTimeTracker', async () => {
 })
 
 const date = '2026-10-08', zone = 'Asia/Shanghai'
-const block: DayBlock = { id: 'record', workItemId: 'item', projectId: 'project', title: '工作项',
+const block: DayBlock = { id: 'record', workItemId: 'item', timeCategory: null, subjectKey: 'item', projectId: 'project', title: '工作项',
   itemNo: null, projectName: null, colorToken: null,
   start: atMinute(date, 540, zone), end: atMinute(date, 600, zone), canEdit: true, etag: '"1"' }
 let timeline: ReturnType<typeof useDayTimeline>
@@ -37,6 +38,35 @@ beforeEach(async () => {
   await flushPromises()
 })
 afterEach(() => wrapper.unmount())
+
+describe('非项目分类', () => {
+  it('补录分类只带 timeCategory，编辑与删除走本人记录接口', async () => {
+    api.fillMyTimeSessions.mockResolvedValue({ createdCount: 1, changedCount: 0, deletedCount: 0, skippedDurationMs: 0 })
+    await timeline.create(TimeSessionFillMode.Gaps, ['category:MEETING', 'item'], [{ start: block.start, end: block.end! }])
+    expect(api.fillMyTimeSessions.mock.calls[0]![0].timeSessionFillCommand.entries).toEqual([
+      { timeCategory: 'MEETING', startedAt: new Date(block.start), stoppedAt: new Date(block.end!) },
+      { workItemId: 'item', startedAt: new Date(block.start), stoppedAt: new Date(block.end!) }])
+    api.editMyTimeSession.mockResolvedValue({})
+    api.deleteMyTimeSession.mockResolvedValue({})
+    const meeting = { ...block, workItemId: null, timeCategory: 'MEETING' as DayBlock['timeCategory'], subjectKey: 'category:MEETING' }
+    expect(await timeline.edit(meeting, { start: block.start, end: block.end! + 60_000 })).toBe(true)
+    expect(api.editMyTimeSession).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'record', ifMatch: '"1"' }))
+    expect(await timeline.remove(meeting)).toBe(true)
+    expect(api.deleteMyTimeSession).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'record' }))
+  })
+
+  it('改归属可以转到分类，分类记录显示为分类名与非项目工时', async () => {
+    api.reassignMyTimeSession.mockResolvedValue({ createdCount: 1, changedCount: 0, deletedCount: 1, skippedDurationMs: 0 })
+    expect(await timeline.reassign(block, 'category:LEARNING')).toBe(true)
+    expect(api.reassignMyTimeSession).toHaveBeenCalledWith(expect.objectContaining({ timeSessionReassignCommand: { timeCategory: 'LEARNING' } }))
+    api.listMyTimeSessions.mockResolvedValue({ items: [{ projectName: null, itemNo: null, title: null, contentColorToken: null,
+      session: { id: 's', workItemId: null, projectId: null, timeCategory: 'BUSINESS_TRIP', startedAt: new Date(block.start),
+        stoppedAt: new Date(block.end!), canEdit: true, etag: '"0"' } }] })
+    await timeline.load()
+    expect(timeline.blocks.value[0]).toMatchObject({ title: '出差', projectName: '非项目工时', subjectKey: 'category:BUSINESS_TRIP', colorToken: 'RIVER' })
+    expect(timeline.totals.value.map(total => total.key)).toEqual(['category:BUSINESS_TRIP'])
+  })
+})
 
 describe('我的一天写入反馈', () => {
   it.each([

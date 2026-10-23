@@ -12,6 +12,13 @@
  */
 
 import { mapValues } from '../runtime';
+import type { TimeCategory } from './TimeCategory';
+import {
+    TimeCategoryFromJSON,
+    TimeCategoryFromJSONTyped,
+    TimeCategoryToJSON,
+    TimeCategoryToJSONTyped,
+} from './TimeCategory';
 import type { TimeTrackingPreferences } from './TimeTrackingPreferences';
 import {
     TimeTrackingPreferencesFromJSON,
@@ -65,6 +72,12 @@ export interface CurrentTimeTracker {
      * @memberof CurrentTimeTracker
      */
     resumeItems: Array<RecentTimeTrackingItem>;
+    /**
+     * 与 resumeItems 同一批最近停止的非项目分类计时，按分类固定顺序排列。服务端总是返回。
+     * @type {Array<TimeCategory>}
+     * @memberof CurrentTimeTracker
+     */
+    resumeCategories?: Array<TimeCategory>;
     /**
      *
      * @type {Array<RecentTimeTrackingItem>}
@@ -132,6 +145,7 @@ export function CurrentTimeTrackerFromJSONTyped(json: any, ignoreDiscriminator: 
         'preferences': TimeTrackingPreferencesFromJSON(json['preferences']),
         'runningSessions': ((json['runningSessions'] as Array<any>).map(CurrentRunningTimerFromJSON)),
         'resumeItems': ((json['resumeItems'] as Array<any>).map(RecentTimeTrackingItemFromJSON)),
+        ...(json['resumeCategories'] == null ? {} : { 'resumeCategories': ((json['resumeCategories'] as Array<any>).map(TimeCategoryFromJSON)) }),
         'recentItems': ((json['recentItems'] as Array<any>).map(RecentTimeTrackingItemFromJSON)),
         'session': TimeTrackingSessionFromJSON(json['session']),
         'workItemTitle': json['workItemTitle'],
@@ -155,6 +169,7 @@ export function CurrentTimeTrackerToJSONTyped(value?: CurrentTimeTracker | null,
         'preferences': TimeTrackingPreferencesToJSON(value['preferences']),
         'runningSessions': ((value['runningSessions'] as Array<any>).map(CurrentRunningTimerToJSON)),
         'resumeItems': ((value['resumeItems'] as Array<any>).map(RecentTimeTrackingItemToJSON)),
+        'resumeCategories': value['resumeCategories'] == null ? undefined : ((value['resumeCategories'] as Array<any>).map(TimeCategoryToJSON)),
         'recentItems': ((value['recentItems'] as Array<any>).map(RecentTimeTrackingItemToJSON)),
         'session': TimeTrackingSessionToJSON(value['session']),
         'workItemTitle': value['workItemTitle'],
