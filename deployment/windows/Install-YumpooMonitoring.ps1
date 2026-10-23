@@ -36,9 +36,20 @@ log:
   level: warn
 "@
 [IO.File]::WriteAllText($exporterConfig, $yaml, (New-Object Text.UTF8Encoding($false)))
-$arguments = '/i "' + [IO.Path]::GetFullPath($ExporterMsi) + '" /qn /norestart ADDLOCAL=DefaultFeature REMOVE=FirewallException LISTEN_ADDR=127.0.0.1 LISTEN_PORT=9182 CONFIG_FILE="' + $exporterConfig + '"'
+$msiPath = [IO.Path]::GetFullPath($ExporterMsi)
+$installerApi = New-Object -ComObject WindowsInstaller.Installer
+$database = $installerApi.OpenDatabase($msiPath, 0)
+$view = $database.OpenView("SELECT Value FROM Property WHERE Property='ProductCode'")
+$view.Execute()
+$record = $view.Fetch()
+$productCode = $record.StringData(1)
+$view.Close()
+# REMOVE bypasses this MSI's automatic maintenance branch; explicitly reinstall existing core files and service settings.
+$reinstall = if ($installerApi.ProductState($productCode) -eq 5) { ' REINSTALL=DefaultFeature REINSTALLMODE=amus' } else { '' }
+$arguments = '/i "' + $msiPath + '" /qn /norestart ADDLOCAL=DefaultFeature REMOVE=FirewallException LISTEN_ADDR=127.0.0.1 LISTEN_PORT=9182 CONFIG_FILE="' + $exporterConfig + '"' + $reinstall
 $installer = Start-Process -FilePath msiexec.exe -ArgumentList $arguments -Wait -PassThru -WindowStyle Hidden
 if ($installer.ExitCode -notin @(0,3010)) { throw 'windows_exporter installation failed.' }
+Start-Service -Name windows_exporter
 $exporterService = Get-Service -Name windows_exporter
 $exporterService.WaitForStatus('Running', [TimeSpan]::FromSeconds(30))
 $destination = Join-Path $settings.nginxRoot 'conf/yumpoo-monitor.conf'

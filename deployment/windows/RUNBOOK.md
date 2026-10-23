@@ -535,6 +535,8 @@ gh attestation verify '<下载目录>\YumpooDesktop-Setup-X.Y.Z-x64.exe' -R E9uu
 
 采集器首次安装须显式选择 `DefaultFeature`，并等待 `windows_exporter` 服务运行后检查指标网关；MSI 返回成功本身不能证明采集器已安装。接入验收同时核对 CPU、内存、磁盘和服务指标，CPU 使用 0.32.0 的 `windows_cpu_time_seconds_total`。
 
+同版本重复配置须显式重装 MSI 主功能、启动服务并验证指标，不能依赖服务的延迟故障恢复；安装器会根据已验证 MSI 的产品标识自动选择这一流程。
+
 独立看门狗同时检查事件入口及 Prometheus / Alertmanager 的采样新鲜度。连接或监测链路异常持续 3 分钟会直接通知运维群，链路连续健康 60 秒后再确认恢复；事件入口仍可在采集故障时保存发布事件。
 
 启用后，主机事件通过 `deployment/monitor-outbox` 和 `YumpooMonitorRelay` 独立任务投递；`YumpooMonitorTunnel` 负责受限 SSH 隧道，`YumpooMonitorWatchdog` 在监测端持续不可达时直发运维群。三者均与部署锁分离。主机部署完成是事实记录，用户公告还需异机复核目标健康及版本；异机失败不能反过来修改部署结果或自动回滚。
