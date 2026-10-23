@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { ElMessage, ElTooltip } from 'element-plus'
 import { TimeSessionFillMode } from '@yumpoo/api-client'
 import '../../projects/workItemAccentBar.css'
 import { workItemLabelColorValue } from '../../projects/workItemLabelColors'
@@ -116,6 +116,7 @@ function hitBlock(event: MouseEvent): BlockHit | undefined {
 }
 const canDrag = (hit: BlockHit) => hit.edge === 'move' ? hit.view.movable : hit.edge === 'start' ? hit.view.startHandle : hit.view.endHandle
 function clearHover() { hoveredId.value = undefined; hoveredEdge.value = undefined; hover.value = null }
+
 
 let suppressClick = false
 function open(view: BlockView, event: MouseEvent) {
@@ -332,6 +333,30 @@ watch(draggedItem, item => {
 }, { flush: 'sync' })
 
 interface AxisMark extends Range { key: string; color: string; endLabel?: string | undefined }
+/**
+ * One hover tooltip for every card, in the project's common style: it follows the hovered card after a short pause and
+ * steps aside while a card is dragged, opened or the day is busy, so it never covers what is being edited.
+ */
+const tipId = ref<string>()
+let tipTimer: ReturnType<typeof setTimeout> | undefined
+watch([hoveredId, () => !!drag.value, () => props.selectedId, () => props.busy, () => !!draggedItem.value], ([id, dragging, selectedId, busy, shelf]) => {
+  clearTimeout(tipTimer)
+  tipId.value = undefined
+  if (!id || dragging || busy || shelf || id === selectedId) return
+  tipTimer = setTimeout(() => { tipId.value = id }, 300)
+})
+const tip = computed(() => {
+  const view = views.value.find(candidate => candidate.block.id === tipId.value)
+  const anchor = tipId.value ? blockElements.get(tipId.value) : undefined
+  if (!view || !anchor) return undefined
+  const meta = [`${clock(view.range.start)}–${view.block.end === null ? '计时中' : clock(view.range.end)}`, view.block.projectName,
+    view.duration, view.split > 1 ? `与其他 ${view.split - 1} 项并行` : ''].filter(Boolean).join(' · ')
+  return { title: view.block.title, meta, anchor }
+})
+/** The last anchor stays after hiding, so the tooltip fades out where it was instead of jumping. */
+const tipAnchor = shallowRef<HTMLElement>()
+watch(tip, value => { if (value) tipAnchor.value = value.anchor })
+
 /** Times shown on the axis: what is being dragged or selected first, then the hovered card, the open composer, or the hover line. */
 const axisMarks = computed<AxisMark[]>(() => {
   const moving = drag.value?.moved ? drag.value : undefined
@@ -355,6 +380,7 @@ onMounted(() => {
   window.addEventListener('blur', cancelOnBlur)
 })
 onBeforeUnmount(() => {
+  clearTimeout(tipTimer)
   cancelInteraction()
   draggedItem.value = null
   window.removeEventListener('keydown', cancelOnEscape)
@@ -480,7 +506,6 @@ defineExpose({ scrollToWorkday, pendingEl, discardDraft })
           }]"
           :style="view.style"
           :aria-label="view.label"
-          :title="view.label"
           :data-session-id="view.block.id"
           :aria-disabled="busy || undefined"
           @click="open(view, $event)"
@@ -580,8 +605,32 @@ defineExpose({ scrollToWorkday, pendingEl, discardDraft })
         </div>
       </div>
     </div>
+    <el-tooltip
+      v-if="tipAnchor"
+      :visible="!!tip"
+      :virtual-ref="tipAnchor"
+      virtual-triggering
+      placement="top"
+      :enterable="false"
+      :hide-after="0"
+      popper-class="day-block-tip"
+    >
+      <template #content>
+        <span
+          v-if="tip"
+          class="day-block-tip__body"
+        ><strong>{{ tip.title }}</strong><small>{{ tip.meta }}</small></span>
+      </template>
+    </el-tooltip>
   </div>
 </template>
+
+<style>
+/* Teleported with the tooltip, so outside the scoped block; the bubble itself is the shared dark tooltip. */
+.day-block-tip__body{display:grid;gap:2px}
+.day-block-tip__body strong{font-weight:600;overflow-wrap:anywhere}
+.day-block-tip__body small{font-size:inherit;opacity:.72;font-variant-numeric:tabular-nums}
+</style>
 
 <style scoped>
 .day-timeline{position:relative;height:100%;min-height:320px;overflow:auto;overscroll-behavior:contain;background:var(--yp-bg-surface);border:1px solid var(--yp-border-subtle);border-radius:var(--yp-radius-md)}

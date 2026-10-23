@@ -46,6 +46,25 @@ function shelfEvent(type: string, clientY: number, clientX = 300, relatedTarget:
 afterEach(() => { draggedItem.value = null; vi.restoreAllMocks() })
 
 describe('当天时间线', () => {
+  it('悬停卡片片刻后用统一提示显示完整标题与时段，拖动时不出现，卡片不再带原生 title', async () => {
+    vi.useFakeTimers()
+    const long = { ...block('a', at(10), at(11)), title: '一个非常长的工作项标题用于验证完整显示', projectName: 'Yumpoo 平台' }
+    const wrapper = mountTimeline([long])
+    const element = wrapper.get('.day-block').element
+    expect(element.getAttribute('title')).toBeNull()
+    wrapper.get('.day-timeline__canvas').element.dispatchEvent(pointer('pointermove', y(630)))
+    await vi.advanceTimersByTimeAsync(350)
+    const tip = () => document.querySelector<HTMLElement>('.day-block-tip')
+    expect(tip()?.textContent).toContain('一个非常长的工作项标题用于验证完整显示')
+    expect(tip()?.textContent).toContain('10:00–11:00 · Yumpoo 平台 · 1h')
+    element.dispatchEvent(pointer('pointerdown', y(630)))
+    element.dispatchEvent(pointer('pointermove', y(700)))
+    await vi.advanceTimersByTimeAsync(350)
+    expect(tip()?.style.display).toBe('none')
+    element.dispatchEvent(pointer('pointerup', y(700)))
+    vi.useRealTimers()
+    wrapper.unmount()
+  })
   it('拖动记录按 15 分钟吸附并停在相邻记录之前，不触发打开弹层', async () => {
     const moving = block('a', at(10), at(11)), neighbour = block('b', at(12), at(13))
     const wrapper = mountTimeline([moving, neighbour])

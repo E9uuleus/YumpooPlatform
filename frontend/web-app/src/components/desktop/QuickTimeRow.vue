@@ -3,6 +3,7 @@ import type { TimerCandidate, WorkItemDetail } from '@yumpoo/api-client'
 import { Plus } from '@element-plus/icons-vue'
 import QuickComposer from './QuickComposer.vue'
 import QuickStatusButton from './QuickStatusButton.vue'
+import YpOverflowText from '../yp/YpOverflowText.vue'
 import type { Range } from '../my-time/day/dayModel'
 import { workItemLabelColorValue } from '../projects/workItemLabelColors'
 import { shortDuration, type DateChoice } from './quickTime'
@@ -56,7 +57,10 @@ const rangeEnd = defineModel<number>('rangeEnd', { required: true })
           :style="{ background: workItemLabelColorValue(item.contentColorToken) }"
         />
         <span class="quick-row__text">
-          <span class="quick-row__title">{{ item.title }}</span>
+          <YpOverflowText
+            class="quick-row__title"
+            :text="item.title"
+          />
           <span class="quick-row__meta">
             <span class="quick-row__status"><QuickStatusButton
               :item="item"
