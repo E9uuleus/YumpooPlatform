@@ -220,6 +220,7 @@ function drag(event: PointerEvent) {
     v-if="authenticated && !standalone && !inline && !pipTarget && (tracker.timerEnabled.value || tracker.running.value.length)"
     class="global-timer-entry"
     :class="{ 'is-running': tracker.running.value.length }"
+    data-tour="timer-launcher"
     aria-label="查找工作与计时"
     @click="open"
   >

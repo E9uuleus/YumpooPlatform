@@ -99,6 +99,7 @@ const color = (item: ShelfItem) => ({ '--work-item-accent': workItemLabelColorVa
   <aside
     class="item-shelf"
     aria-label="工作项"
+    data-tour="day-shelf"
   >
     <header class="item-shelf__head">
       <div class="item-shelf__heading">

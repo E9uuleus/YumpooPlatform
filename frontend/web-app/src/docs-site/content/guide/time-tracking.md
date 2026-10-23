@@ -4,6 +4,7 @@ description: 开始计时、并行计时、我的工时月历与我的一天时�
 order: 50
 audience: [member]
 appRoute: home
+tour: my-time
 ---
 
 Yumpoo 用计时记录你在每个工作项上花的时间，自动汇总到首页工时日历、「我的工时」和团队视图。忘了计时也没关系，可以在「我的一天」里补录。

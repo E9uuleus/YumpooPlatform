@@ -3272,7 +3272,7 @@ onBeforeUnmount(() => {
                       </div>
                       <span class="work-item-group-add-mask" aria-hidden="true" />
                     </div>
-                    <button v-else class="quick-add monday-quick-add work-item-group-quick" :style="quickGridStyle"
+                    <button v-else class="quick-add monday-quick-add work-item-group-quick" :style="quickGridStyle" data-tour="work-item-quick-add"
                       :disabled="Boolean(groupCreateDisabledReason(scope.row.group))" :title="groupCreateDisabledReason(scope.row.group) || undefined"
                       :aria-label="`添加工作项到${scope.row.group.label}`" @click="groupCreate.open(scope.row.group)">
                       <span class="monday-quick-lead" aria-hidden="true" />

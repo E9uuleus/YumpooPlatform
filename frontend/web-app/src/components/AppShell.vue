@@ -338,6 +338,7 @@ onBeforeUnmount(() => {
           v-if="hasContextNavigation"
           class="module-rail__expand"
           type="button"
+          data-tour="context-nav-expand"
           :aria-label="`展开${contextTitle}菜单`"
           aria-controls="desktop-context-navigation"
           :aria-expanded="contextNavigationOpen"

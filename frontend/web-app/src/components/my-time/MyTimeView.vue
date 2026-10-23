@@ -164,7 +164,10 @@ defineExpose({ refresh: load, loading, ready })
           重试
         </el-button>
       </el-alert>
-      <div class="my-time__stats">
+      <div
+        class="my-time__stats"
+        data-tour="my-time-stats"
+      >
         <div class="my-time__stat">
           <small>本月合计</small><strong>{{ shortHours(shownTotal) }}</strong><span>小时</span>
         </div>
@@ -184,7 +187,10 @@ defineExpose({ refresh: load, loading, ready })
       <p class="my-time__note">
         并行计时按项数平均计入，每日合计为实际时长。
       </p>
-      <div class="my-time__board">
+      <div
+        class="my-time__board"
+        data-tour="my-time-calendar"
+      >
         <div
           class="my-time__weekdays"
           aria-hidden="true"

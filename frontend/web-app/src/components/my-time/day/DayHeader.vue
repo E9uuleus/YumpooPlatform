@@ -20,7 +20,10 @@ const dayKind = computed(() => {
 </script>
 
 <template>
-  <header class="day-header">
+  <header
+    class="day-header"
+    data-tour="day-header"
+  >
     <el-button
       text
       :icon="Back"
