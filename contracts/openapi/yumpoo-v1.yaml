@@ -1467,7 +1467,7 @@ paths:
         - TeamDashboard
       operationId: queryTeamTimesheet
       summary: 按成员、自然日与工作项统计计入时长
-      description: 仅公司管理员可用。按公司时区切分自然日，跨日记录按重叠时长拆分；运行中计时统计到 asOf，时长为按并行均摊后的计入时长。projectIds 为空表示全公司项目（含已归档），userIds 为空表示在职成员及区间内有计时的成员。区间最多 93 天，排除已删除工作项。
+      description: 仅公司管理员可用。按公司时区切分自然日，跨日记录按重叠时长拆分；运行中计时统计到 asOf，时长为按并行均摊后的计入时长。projectIds 为空表示全公司项目（含已归档），userIds 为空表示在职成员及区间内有计时的成员。区间最多 93 天，排除已删除工作项。非项目分类工时只在 projectIds 为空时通过 categoryEntries 返回。
       security:
         - sessionCookie: []
       parameters:
@@ -1764,7 +1764,7 @@ paths:
         - TimeTracking
       operationId: listMyTimeSessions
       summary: 查询本人时间段内的计时记录
-      description: 返回与 [from, to) 相交的本人未删除记录，按开始时间排序。to 必须晚于 from，且区间不超过 7 天，否则返回 INVALID_RANGE。不可见项目的标题、编号、名称和颜色不披露。
+      description: 返回与 [from, to) 相交的本人未删除记录，按开始时间排序。to 必须晚于 from，且区间不超过 7 天，否则返回 INVALID_RANGE。不可见项目的标题、编号、名称和颜色不披露。非项目分类记录的 session.timeCategory 有值，项目与工作项字段均为 null，且总是可编辑。
       security:
         - sessionCookie: []
       parameters:
@@ -1806,7 +1806,7 @@ paths:
         - TimeTracking
       operationId: fillMyTimeSessions
       summary: 按并行、替换或空白模式补录本人工时
-      description: 条目区间必须已结束，同一工作项的条目先求并集。PARALLEL 只补本项空白；REPLACE 裁剪本人可编辑的其他工作项记录后补本项空白；GAPS 只补本人没有任何记录的时段。补录不推进计时器状态版本。
+      description: 条目区间必须已结束，每条指定一个工作项或一个非项目分类，同一工作项或分类的条目先求并集。PARALLEL 只补本项空白；REPLACE 裁剪本人可编辑的其他工作项与分类记录后补本项空白；GAPS 只补本人没有任何记录的时段。非项目分类不校验项目成员身份，只发安全审计、不发领域事件。补录不推进计时器状态版本。
       security:
         - sessionCookie: []
       parameters:
@@ -1842,13 +1842,114 @@ paths:
           $ref: "#/components/responses/Conflict"
         "422":
           $ref: "#/components/responses/ValidationFailed"
+  /me/time-sessions/{sessionId}:
+    patch:
+      tags:
+        - TimeTracking
+      operationId: editMyTimeSession
+      summary: 修改本人一条已结束的计时记录的时段
+      description: 适用于工作项记录与非项目分类记录；他人的记录返回 404。要求该记录最近读取的 If-Match。运行中或已删除的记录返回 409 SESSION_NOT_EDITABLE；与同一工作项或分类的其他记录重叠返回 422 TIME_OVERLAP。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TimeTrackingCommand"
+      responses:
+        "200":
+          description: 计时事实快照。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimeTrackingSession"
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+    delete:
+      tags:
+        - TimeTracking
+      operationId: deleteMyTimeSession
+      summary: 删除本人一条已结束的计时记录
+      description: 适用于工作项记录与非项目分类记录；他人的记录返回 404。要求该记录最近读取的 If-Match，运行中或已删除的记录返回 409 SESSION_NOT_EDITABLE。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TimeTrackingCommand"
+      responses:
+        "200":
+          description: 计时事实快照。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimeTrackingSession"
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
   /me/time-sessions/{sessionId}/reassign:
     post:
       tags:
         - TimeTracking
       operationId: reassignMyTimeSession
-      summary: 把本人一条已结束的计时记录整体改归属到其他工作项
-      description: 要求该记录最近读取的 If-Match。同一事务内软删除原记录，并按 PARALLEL 方式在目标工作项补同一时段（只跳过目标项自身已有的部分），沿用 deleted 与 added 事件。运行中、已删除、所属工作项或项目已归档的记录返回 409 SESSION_NOT_EDITABLE；目标与原工作项相同返回 422 UNCHANGED。
+      summary: 把本人一条已结束的计时记录整体改归属到其他工作项或非项目分类
+      description: 要求该记录最近读取的 If-Match。同一事务内软删除原记录，并按 PARALLEL 方式在目标工作项或分类补同一时段（只跳过目标自身已有的部分），工作项一侧沿用 deleted 与 added 事件。运行中、已删除、所属工作项或项目已归档的记录返回 409 SESSION_NOT_EDITABLE；目标与原归属相同返回 422 UNCHANGED。
       security:
         - sessionCookie: []
       parameters:
@@ -2493,7 +2594,7 @@ paths:
         - MyWork
       operationId: getMyTimesheet
       summary: 按自然日与工作项统计本人计入时长
-      description: 任意有效成员可用，只返回本人计时，members 只包含本人。范围为本人当前有效成员身份的未归档项目，排除已删除计时与已删除工作项；按公司时区切分自然日，跨日记录按重叠时长拆分，运行中计时统计到 asOf，时长为按并行均摊后的计入时长。区间最多 93 天。
+      description: 任意有效成员可用，只返回本人计时，members 只包含本人。范围为本人当前有效成员身份的未归档项目，排除已删除计时与已删除工作项；按公司时区切分自然日，跨日记录按重叠时长拆分，运行中计时统计到 asOf，时长为按并行均摊后的计入时长。区间最多 93 天。categoryEntries 返回本人非项目分类工时，不受项目成员身份限制。
       security:
         - sessionCookie: []
       parameters:
@@ -9148,6 +9249,26 @@ components:
           type: integer
           format: int64
           minimum: 1
+    TeamTimesheetCategoryEntry:
+      type: object
+      additionalProperties: false
+      required:
+        - userId
+        - timeCategory
+        - date
+        - durationMs
+      properties:
+        userId:
+          $ref: "#/components/schemas/Uuid"
+        timeCategory:
+          $ref: "#/components/schemas/TimeCategory"
+        date:
+          type: string
+          format: date
+        durationMs:
+          type: integer
+          format: int64
+          minimum: 1
     TeamTimesheet:
       type: object
       additionalProperties: false
@@ -9185,6 +9306,11 @@ components:
           description: 每个成员、工作项、自然日一条，只包含大于 0 的耗时。
           items:
             $ref: "#/components/schemas/TeamTimesheetEntry"
+        categoryEntries:
+          type: array
+          description: 非项目分类工时，每个成员、分类、自然日一条，只包含大于 0 的耗时；团队工时按项目筛选时为空。服务端总是返回。
+          items:
+            $ref: "#/components/schemas/TeamTimesheetCategoryEntry"
         days:
           type: array
           items:
@@ -11483,6 +11609,14 @@ components:
         serverNow:
           type: string
           format: date-time
+    TimeCategory:
+      type: string
+      description: 不关联项目与工作项的固定非项目工时分类：出差、学习、商务、会议。
+      enum:
+        - BUSINESS_TRIP
+        - LEARNING
+        - BUSINESS
+        - MEETING
     TimeSessionFillMode:
       type: string
       enum:
@@ -11492,14 +11626,16 @@ components:
     TimeSessionFillEntry:
       type: object
       additionalProperties: false
+      description: workItemId 与 timeCategory 必须且只能填一个。
       required:
-        - workItemId
         - startedAt
         - stoppedAt
       properties:
         workItemId:
           type: string
           format: uuid
+        timeCategory:
+          $ref: "#/components/schemas/TimeCategory"
         startedAt:
           type: string
           format: date-time
@@ -11549,12 +11685,13 @@ components:
     TimeSessionReassignCommand:
       type: object
       additionalProperties: false
-      required:
-        - workItemId
+      description: 目标工作项或非项目分类，workItemId 与 timeCategory 必须且只能填一个。
       properties:
         workItemId:
           type: string
           format: uuid
+        timeCategory:
+          $ref: "#/components/schemas/TimeCategory"
     TimeTrackingCommand:
       type: object
       additionalProperties: false
@@ -11566,10 +11703,19 @@ components:
           type: array
           minItems: 1
           maxItems: 10
-          description: 仅 start 使用，批量并行开始的工作项。
+          description: 仅 start 使用，批量并行开始的工作项；与 timeCategories 合计最多 10 项。
           items:
             type: string
             format: uuid
+        timeCategory:
+          $ref: "#/components/schemas/TimeCategory"
+        timeCategories:
+          type: array
+          minItems: 1
+          maxItems: 10
+          description: 仅 start 使用，批量并行开始的非项目分类；与 workItemIds 合计最多 10 项。
+          items:
+            $ref: "#/components/schemas/TimeCategory"
         sessionId:
           type: string
           format: uuid
@@ -11612,10 +11758,18 @@ components:
           type: string
           format: uuid
           nullable: true
+          description: 为 null 时，要么项目对调用者不可见，要么这是非项目分类记录（timeCategory 有值）。
         workItemId:
           type: string
           format: uuid
           nullable: true
+          description: 为 null 时，要么工作项对调用者不可见，要么这是非项目分类记录（timeCategory 有值）。
+        timeCategory:
+          type: string
+          nullable: true
+          description: 非项目分类记录的分类；工作项记录为 null。服务端总是返回。
+          allOf:
+            - $ref: "#/components/schemas/TimeCategory"
         userId:
           type: string
           format: uuid
@@ -11659,7 +11813,7 @@ components:
           type: integer
           format: int32
           minimum: 0
-          description: 该记录期间本人同时计时的其他工作项数
+          description: 该记录期间本人同时计时的其他工作项与非项目分类数
         workItemNo:
           type: string
           nullable: true
@@ -11833,6 +11987,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/RecentTimeTrackingItem"
+        resumeCategories:
+          type: array
+          description: 与 resumeItems 同一批最近停止的非项目分类计时，按分类固定顺序排列。服务端总是返回。
+          items:
+            $ref: "#/components/schemas/TimeCategory"
         recentItems:
           type: array
           items:

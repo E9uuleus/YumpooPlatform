@@ -30,7 +30,7 @@ paths:
         - TeamDashboard
       operationId: queryTeamTimesheet
       summary: 按成员、自然日与工作项统计计入时长
-      description: 仅公司管理员可用。按公司时区切分自然日，跨日记录按重叠时长拆分；运行中计时统计到 asOf，时长为按并行均摊后的计入时长。projectIds 为空表示全公司项目（含已归档），userIds 为空表示在职成员及区间内有计时的成员。区间最多 93 天，排除已删除工作项。
+      description: 仅公司管理员可用。按公司时区切分自然日，跨日记录按重叠时长拆分；运行中计时统计到 asOf，时长为按并行均摊后的计入时长。projectIds 为空表示全公司项目（含已归档），userIds 为空表示在职成员及区间内有计时的成员。区间最多 93 天，排除已删除工作项。非项目分类工时只在 projectIds 为空时通过 categoryEntries 返回。
       security:
         - sessionCookie: []
       parameters:

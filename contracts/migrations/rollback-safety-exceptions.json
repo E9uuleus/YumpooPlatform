@@ -1,4 +1,12 @@
 {
   "schemaVersion": 1,
-  "exceptions": []
+  "exceptions": [
+    {
+      "file": "workitem/V81__non_project_time_categories.sql",
+      "sha256": "ee8e5ce8e325e3b2d918890cf036cfb3e36b7e0e5e574f052f9053d9326d8e9e",
+      "classification": "breaking",
+      "reason": "计时记录与计入份额支持无工作项的非项目固定分类：放宽 work_item_id/project_id 非空，以 CHECK 保证工作项与分类二选一，并新增分类运行计时唯一索引。上一版本读取分类行时，份额重建、停止全部、切换、归档停表与项目清除会空指针失败，回退不安全。",
+      "agentNote": ".agents/notes/implemented/architecture/2026-10-22-non-project-time-categories.md"
+    }
+  ]
 }

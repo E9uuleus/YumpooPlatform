@@ -8,7 +8,7 @@ public final class TimeShareCalculator {
     private TimeShareCalculator() {}
 
     public record Share(UUID sessionId, UUID companyId, UUID userId, UUID projectId, UUID workItemId,
-            Instant startedAt, Instant stoppedAt, int concurrency) {}
+            Instant startedAt, Instant stoppedAt, int concurrency, TimeCategory timeCategory) {}
 
     /** Splits [from, to) into segments; to == null means unbounded. */
     public static List<Share> segments(List<Session> sessions, Instant from, Instant to) {
@@ -39,6 +39,6 @@ public final class TimeShareCalculator {
     }
 
     private static void append(List<Share> shares,List<Session> sessions,Instant start,Instant stop) {
-        for(Session s:sessions) shares.add(new Share(s.id(),s.companyId(),s.userId(),s.projectId(),s.workItemId(),start,stop,sessions.size()));
+        for(Session s:sessions) shares.add(new Share(s.id(),s.companyId(),s.userId(),s.projectId(),s.workItemId(),start,stop,sessions.size(),s.timeCategory()));
     }
 }

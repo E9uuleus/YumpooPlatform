@@ -39,6 +39,18 @@ public class TeamWorkService {
             LocalDate from, LocalDate to, ZoneId zone, Instant asOf) {
         return projectIds.isEmpty() ? List.of() : repository.timeEntries(companyId, projectIds, List.of(), from, to, zone, asOf);
     }
+    public List<TeamWorkRepository.CategoryEntry> categoryEntries(CurrentActor actor, List<UUID> userIds,
+            LocalDate from, LocalDate to, ZoneId zone, Instant asOf) {
+        requireAdministrator(actor);
+        return repository.categoryEntries(actor.companyId(), userIds, from, to, zone, asOf);
+    }
+    public List<TeamWorkRepository.CategoryEntry> categoryEntriesForScheduler(UUID companyId, LocalDate from, LocalDate to, ZoneId zone, Instant asOf) {
+        return repository.categoryEntries(companyId, List.of(), from, to, zone, asOf);
+    }
+    /** Category time needs no project membership, so unlike {@link #ownTimeEntries} it is read even without projects. */
+    public List<TeamWorkRepository.CategoryEntry> ownCategoryEntries(CurrentActor actor, LocalDate from, LocalDate to, ZoneId zone, Instant asOf) {
+        return repository.categoryEntries(actor.companyId(), List.of(actor.userId()), from, to, zone, asOf);
+    }
     public List<TeamWorkRepository.Load> currentLoad(CurrentActor actor, List<UUID> projectIds, LocalDate today) {
         requireAdministrator(actor);
         return projectIds.isEmpty() ? List.of() : repository.currentLoad(actor.companyId(), projectIds, today);
