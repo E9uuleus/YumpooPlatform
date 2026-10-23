@@ -12,6 +12,13 @@ export class Probes {
   discovery = new Map<string, boolean>()
   get discoverySuccess() { return this.config.services.every(service => this.discovery.get(service.id)) }
   freshSince = new Map<string, number>()
+  monitoringReady(now = Date.now()) {
+    return now - this.sampledAt < 90_000 && ['prometheus', 'alertmanager'].every(job => {
+      const since = this.freshSince.get(job)
+      return since !== undefined && now - since >= 60_000 && this.samples.some(sample => sample.metric.__name__ === 'up'
+        && sample.metric.job === job && sample.value[1] === '1' && now - sample.value[0] * 1000 < 90_000)
+    })
+  }
   constructor(public config: Config, public send: typeof fetch = fetch) {}
   async json(url: string) {
     const response = await this.send(url, { signal: AbortSignal.timeout(8000), redirect: 'error' })

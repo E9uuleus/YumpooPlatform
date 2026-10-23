@@ -44,6 +44,28 @@ try {
     & (Join-Path $PSScriptRoot 'Invoke-YumpooMonitorRelay.ps1') -Root $directory -Once
     Assert-Monitor (@(Get-ChildItem -LiteralPath $spool -Filter '*.sent').Count -eq 2) 'Reconnection must deliver both retained events.'
     Assert-Monitor (@(Get-ChildItem -LiteralPath $spool -Filter '*.retry').Count -eq 0) 'Acknowledged events must clear their retry metadata.'
+    Write-YumpooJson (Join-Path $directory 'secrets/monitor.json') @{ watchdogWebhook = 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=test' }
+    Write-YumpooJson (Join-Path $spool 'watchdog-state.dat') @{ downSince = [DateTimeOffset]::UtcNow.AddMinutes(-4).ToString('o'); lastSent = ''; notified = $false }
+    $watchdogMock = @{ deliveries = 0; pipeline = 'UNKNOWN' }
+    function Invoke-RestMethod {
+        param($Uri)
+        if ($Uri -eq 'http://127.0.0.1:28788/healthz') { return @{ status = 'UP'; monitoring = $watchdogMock.pipeline } }
+        $watchdogMock.deliveries++
+        return @{ errcode = 0 }
+    }
+    & (Join-Path $PSScriptRoot 'Invoke-YumpooMonitorWatchdog.ps1') -Root $directory -Once
+    Assert-Monitor ($watchdogMock.deliveries -eq 1) 'An available receiver must not hide a failed monitoring pipeline.'
+    & (Join-Path $PSScriptRoot 'Invoke-YumpooMonitorWatchdog.ps1') -Root $directory -Once
+    Assert-Monitor ($watchdogMock.deliveries -eq 1) 'An ongoing failure cannot notify again within one hour.'
+    $watchdogMock.pipeline = 'UP'
+    & (Join-Path $PSScriptRoot 'Invoke-YumpooMonitorWatchdog.ps1') -Root $directory -Once
+    Assert-Monitor ($watchdogMock.deliveries -eq 2) 'Pipeline recovery must notify independently.'
+    $recovered = Get-Content -LiteralPath (Join-Path $spool 'watchdog-state.dat') -Raw | ConvertFrom-Json
+    $recovered.downSince = [DateTimeOffset]::UtcNow.AddMinutes(-4).ToString('o')
+    Write-YumpooJson (Join-Path $spool 'watchdog-state.dat') $recovered
+    $watchdogMock.pipeline = 'UNKNOWN'
+    & (Join-Path $PSScriptRoot 'Invoke-YumpooMonitorWatchdog.ps1') -Root $directory -Once
+    Assert-Monitor ($watchdogMock.deliveries -eq 3) 'A new incident after recovery must not inherit the previous reminder cooldown.'
     Remove-Item Function:Invoke-RestMethod
     Write-Output 'Monitoring compatibility, countdown, durable events and cross-runtime signatures passed.'
 } finally {

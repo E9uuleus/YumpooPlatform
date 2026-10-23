@@ -32,6 +32,8 @@ Windows 打包前的[配置隔离测试](../tools/verification/desktop-profile.t
 
 ## 异机监控验证
 
+监控回归覆盖事件入口可用但 Prometheus / Alertmanager 失效的场景；Windows 看门狗须绕过失效链路直接告警，接收端仍接受持久事件。数据库服务或连接失败不属于应用维护的静默范围。
+
 static 同时构建 `@yumpoo/monitor-hub` 与 `@yumpoo/monitor-dashboard`，执行持久队列、事件时序、维护和权限测试，以及 Compose 镜像摘要、回环监听、内存预算与 Grafana 配置检查。portable 用锁定的 Prometheus 镜像执行 `promtool test rules`。Windows 门禁验证旧配置默认关闭、正常发布等待 300 秒、回退不等待、落盘失败不改变倒计时和 Node/PowerShell HMAC 一致性。
 
 监控服务不加入业务 Release 的自动重启范围。Ubuntu 独立部署步骤见[监控部署手册](../deployment/monitoring/README.md)。GitHub 的通知步骤使用仓库变量 `MONITOR_ENABLED` 及 `MONITOR_SSH_HOST`、`MONITOR_SSH_KEY`、`MONITOR_KNOWN_HOSTS`、`MONITOR_SOURCE_SECRET` Secrets；机器密钥只能转发事件端口。开启统一入口后不会因投递失败退回旧 Webhook 重复发送；未被接收的事件会写入工作流摘要，不能视为已持久化。

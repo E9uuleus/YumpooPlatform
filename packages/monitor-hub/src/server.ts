@@ -7,7 +7,7 @@ import { parseEvent, type Config } from './model.js'
 import { authenticateSource, equal, newToken, verifyPassword } from './security.js'
 import { enqueue, safeText } from './delivery.js'
 
-export async function createServers(hub: Hub, fresh: (alert: Alert) => boolean, discovery: () => boolean = () => false) {
+export async function createServers(hub: Hub, fresh: (alert: Alert) => boolean, discovery: () => boolean = () => false, monitoringReady: () => boolean = () => false) {
   const config: Config = hub.config
   const ui = Fastify({ bodyLimit: 16_384, logger: false, requestTimeout: 10_000 })
   const ingress = Fastify({ bodyLimit: 131_072, logger: false, requestTimeout: 10_000 })
@@ -95,7 +95,7 @@ export async function createServers(hub: Hub, fresh: (alert: Alert) => boolean, 
   ui.post<{ Body: { text?: string } }>('/api/v1/admin/preview', async req => ({ text: safeText(String(req.body?.text ?? '')).slice(0, 1000) }))
   ingress.removeContentTypeParser('application/json')
   ingress.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => done(null, body))
-  ingress.get('/healthz', async () => ({ status: 'UP' }))
+  ingress.get('/healthz', async () => ({ status: 'UP', monitoring: monitoringReady() ? 'UP' : 'UNKNOWN' }))
   ingress.get('/metrics', async (_req, reply) => {
     const pending = hub.store.get<{ n: number }>("SELECT count(*) n FROM deliveries WHERE state='pending'")!.n
     const dead = hub.store.get<{ n: number }>("SELECT count(*) n FROM deliveries WHERE state='dead'")!.n

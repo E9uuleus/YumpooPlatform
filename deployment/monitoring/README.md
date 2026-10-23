@@ -77,7 +77,9 @@ sudo MONITOR_BUILD=<full-commit> MONITOR_OFFLINE_DIR=<absolute-bundle-directory>
 
 隧道在 Windows 上监听 127.0.0.1:28788，并把只读的 19100 指标网关转发到 Ubuntu 回环端口。网关只接受 `/metrics/windows` 与 `/metrics/app` 的 GET；其他路径全部拒绝。应用的 `/actuator/prometheus` 仍被公网 Nginx 拒绝。
 
-本地发布事件先原子写入 `deployment/monitor-outbox`，独立 relay 确认收到中心 ACK 才标记已发送。5 分钟预告超过截止时间直接过期；事件按请求与阶段幂等，中心拒绝用迟到的维护事件覆盖最终结果。relay 网络失败按事件退避重试（最多间隔 5 分钟），不占用部署锁；永久拒绝保留为 `.dead`，修复原因后由管理员改回原 `.json` 文件名重投。队列长度、拒绝数和任务心跳通过 exporter textfile 采集。隧道断开自动重连；看门狗连续 3 分钟无法访问监测端时直接通知运维群，未恢复时最多每小时重复一次。
+本地发布事件先原子写入 `deployment/monitor-outbox`，独立 relay 确认收到中心 ACK 才标记已发送。5 分钟预告超过截止时间直接过期；事件按请求与阶段幂等，中心拒绝用迟到的维护事件覆盖最终结果。relay 网络失败按事件退避重试（最多间隔 5 分钟），不占用部署锁；永久拒绝保留为 `.dead`，修复原因后由管理员改回原 `.json` 文件名重投。队列长度、拒绝数和任务心跳通过 exporter textfile 采集。隧道断开自动重连；看门狗发现监测端不可达或 Prometheus / Alertmanager 采样异常持续 3 分钟时，直接通知运维群，未恢复时最多每小时重复一次。监测链路需要连续新鲜健康 60 秒才确认恢复。事件入口在链路故障时仍可接收并持久化事件，不因采集故障拒绝发布事实。
+
+机器入口 `/healthz` 的 `status` 表示事件服务存活，`monitoring` 表示采集及告警链路是否新鲜可用；独立看门狗检查两者。Grafana 的回环 metrics 也纳入 Prometheus，单独故障仍由正常告警链路报告。升级既有监控栈时，应同步由 `configure.mjs` 生成的 Prometheus 采集配置；安装器不会覆盖管理员已有配置。
 
 ## GitHub 接入
 

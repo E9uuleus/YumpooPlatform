@@ -10,6 +10,8 @@ tests:
         values: '0+0x8'
       - series: 'windows_service_state{job="windows",instance="127.0.0.1:19100",service="sshd",state="running"}'
         values: '1+0x8'
+      - series: 'yumpoo_ops_db_failures{job="application",instance="127.0.0.1:19100"}'
+        values: '2+0x8'
     alert_rule_test:
       - eval_time: 2m
         alertname: WindowsServiceStopped
@@ -18,6 +20,11 @@ tests:
             exp_annotations: { summary: 'Windows 关键服务未运行。' }
           - exp_labels: { job: windows, instance: '127.0.0.1:19100', service: server, windows_service: postgresql-x64-17, state: running, severity: critical, source_job: windows }
             exp_annotations: { summary: 'Windows 关键服务未运行。' }
+      - eval_time: 2m
+        alertname: DatabaseUnavailable
+        exp_alerts:
+          - exp_labels: { job: application, instance: '127.0.0.1:19100', service: server, severity: critical, source_job: application }
+            exp_annotations: { summary: '应用内存采样显示数据库连续不可达。' }
   - name: timestamp labels distinguish metrics without losing original scrape time
     interval: 30s
     input_series:
