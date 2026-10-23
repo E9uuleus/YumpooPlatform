@@ -5,7 +5,7 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..')
 const panels = [
   ['外网探测成功率','probe_success','short'],
   ['外网响应耗时','probe_duration_seconds','s'],
-  ['Windows CPU 使用率','1 - avg(rate(windows_cpu_time_total{mode="idle"}[5m]))','percentunit'],
+  ['Windows CPU 使用率','1 - avg(rate(windows_cpu_time_seconds_total{mode="idle"}[5m]))','percentunit'],
   ['Windows 可用内存','windows_memory_available_bytes','bytes'],
   ['Windows 磁盘可用空间','windows_logical_disk_free_bytes','bytes'],
   ['Windows 关键服务','windows_service_state{state="running"}','short'],

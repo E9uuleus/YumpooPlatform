@@ -73,7 +73,9 @@ sudo MONITOR_BUILD=<full-commit> MONITOR_OFFLINE_DIR=<absolute-bundle-directory>
 
 使用正常 Prepare Release 生成的已验证服务器 ZIP，通过管理员维护通道运行 `Update-YumpooEngine.ps1 -EnableMonitoring -MonitoringEnvironment <environment>`，保留原有其他选项。旧 `host.json` 默认关闭；普通业务部署不会安装或升级 SYSTEM 引擎。
 
-下载官方 `windows_exporter-0.32.0-amd64.msi`，安装脚本核对固定 SHA-256，监听 127.0.0.1:9182，并显式移除其防火墙例外。执行同包内的 `Install-YumpooMonitoring.ps1 -ExporterMsi <msi> -GatewayConfig <yumpoo-monitor.conf>`：配置只读 Nginx 网关，校验后 reload，注册隧道、事件转发和看门狗三个独立任务。不会停止业务服务。
+下载官方 `windows_exporter-0.32.0-amd64.msi`，安装脚本核对固定 SHA-256，使用 `ADDLOCAL=DefaultFeature REMOVE=FirewallException` 安装主程序并移除防火墙例外，监听 127.0.0.1:9182。首次安装不能只传 `REMOVE`，否则可能返回成功但没有安装主程序。执行同包内的 `Install-YumpooMonitoring.ps1 -ExporterMsi <msi> -GatewayConfig <yumpoo-monitor.conf>`：等待采集服务运行，再配置只读 Nginx 网关、校验后 reload，注册隧道、事件转发和看门狗三个独立任务。不会停止业务服务。
+
+接入后核对 CPU、内存、磁盘和服务指标均有实际数据；0.32.0 的 CPU 累计时间指标为 `windows_cpu_time_seconds_total`，告警规则和看板须使用同一名称。
 
 隧道在 Windows 上监听 127.0.0.1:28788，并把只读的 19100 指标网关转发到 Ubuntu 回环端口。网关只接受 `/metrics/windows` 与 `/metrics/app` 的 GET；其他路径全部拒绝。应用的 `/actuator/prometheus` 仍被公网 Nginx 拒绝。
 

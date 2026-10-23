@@ -36,9 +36,11 @@ log:
   level: warn
 "@
 [IO.File]::WriteAllText($exporterConfig, $yaml, (New-Object Text.UTF8Encoding($false)))
-$arguments = '/i "' + [IO.Path]::GetFullPath($ExporterMsi) + '" /qn /norestart REMOVE=FirewallException LISTEN_ADDR=127.0.0.1 LISTEN_PORT=9182 CONFIG_FILE="' + $exporterConfig + '"'
+$arguments = '/i "' + [IO.Path]::GetFullPath($ExporterMsi) + '" /qn /norestart ADDLOCAL=DefaultFeature REMOVE=FirewallException LISTEN_ADDR=127.0.0.1 LISTEN_PORT=9182 CONFIG_FILE="' + $exporterConfig + '"'
 $installer = Start-Process -FilePath msiexec.exe -ArgumentList $arguments -Wait -PassThru -WindowStyle Hidden
 if ($installer.ExitCode -notin @(0,3010)) { throw 'windows_exporter installation failed.' }
+$exporterService = Get-Service -Name windows_exporter
+$exporterService.WaitForStatus('Running', [TimeSpan]::FromSeconds(30))
 $destination = Join-Path $settings.nginxRoot 'conf/yumpoo-monitor.conf'
 $main = Join-Path $settings.nginxRoot 'conf/nginx.conf'
 $before = [IO.File]::ReadAllText($main)
