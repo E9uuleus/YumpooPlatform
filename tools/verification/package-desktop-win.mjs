@@ -35,6 +35,9 @@ const EXPECTED_ASAR_ENTRIES = new Set([
   'dist/diagnostics/launch.html',
   'dist/diagnostics/mark.png',
   'dist/diagnostics/page.js',
+  'dist/diagnostics/menu.html',
+  'dist/diagnostics/menu.js',
+  'dist/diagnostics/menu.css',
   'dist/main',
   'dist/main/THIRD_PARTY_LICENSES.txt',
   'dist/main/distribution.json',
@@ -42,6 +45,7 @@ const EXPECTED_ASAR_ENTRIES = new Set([
   'dist/preload',
   'dist/preload/diagnostics.js',
   'dist/preload/index.js',
+  'dist/preload/menu.js',
   'package.json',
 ])
 const EXPECTED_RESOURCES = ['app.asar']

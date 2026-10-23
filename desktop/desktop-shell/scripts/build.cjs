@@ -28,7 +28,7 @@ const bundled = writeThirdPartyLicenses(main.metafile, path.join(dist, 'main', '
 fs.writeFileSync(path.join(dist, 'bundled-packages.json'), `${JSON.stringify(bundled, null, 2)}\n`, 'utf8')
 // Sandboxed preloads cannot require relative modules; each entry is already a single file plus type-only imports.
 esbuild.buildSync({
-  entryPoints: ['index', 'diagnostics'].map(name => path.join(root, 'src', 'preload', `${name}.ts`)),
+  entryPoints: ['index', 'diagnostics', 'menu'].map(name => path.join(root, 'src', 'preload', `${name}.ts`)),
   outdir: path.join(dist, 'preload'),
   bundle: true,
   platform: 'node',

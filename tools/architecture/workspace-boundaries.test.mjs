@@ -293,3 +293,20 @@ test('preload contract 拦截 Electron 与路径逃逸', async () => {
     1,
   )
 })
+
+test('本地菜单 preload 只允许菜单及通知偏好，拒绝认证、诊断和任意 IPC', async () => {
+  const file = 'desktop/desktop-shell/src/preload/menu.ts'
+  const prefix = "import { contextBridge, ipcRenderer } from 'electron'\nvoid contextBridge\n"
+  assert.equal((await boundaryMessages(file, prefix
+    + "void ipcRenderer.invoke('yumpoo:menu:get-state')\n"
+    + "void ipcRenderer.invoke('yumpoo:menu:ready')\n"
+    + "void ipcRenderer.invoke('yumpoo:timer:menu-action', 'exit')\n"
+    + "void ipcRenderer.invoke('yumpoo:inbox:get-preferences')\n"
+    + "void ipcRenderer.on('yumpoo:timer:menu-state', () => {})\n")).length, 0)
+  assert.equal((await boundaryMessages(file, prefix
+    + "void ipcRenderer.invoke('yumpoo:auth:start')\n"
+    + "void ipcRenderer.invoke('yumpoo:diagnostics:action', 'export')\n"
+    + "void ipcRenderer.invoke('yumpoo:timer:state', {})\n"
+    + "void ipcRenderer.invoke('yumpoo:menu:get-state', 'extra')\n"
+    + "contextBridge.exposeInMainWorld('raw', ipcRenderer)\n")).length, 5)
+})

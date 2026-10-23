@@ -32,7 +32,9 @@ vi.mock('electron', () => ({
     events = new Map<string, (...args: unknown[]) => void>()
     contentEvents = new Map<string, (...args: unknown[]) => void>()
     webContents = { mainFrame: { url: 'https://yumpoo.example/timer' }, send: vi.fn(), on: (name: string, fn: (...args: unknown[]) => void) => this.contentEvents.set(name, fn), once: vi.fn(), removeListener: vi.fn() }
-    isDestroyed = () => false
+    destroyed = false
+    isDestroyed = () => this.destroyed
+    destroy = vi.fn(() => { this.destroyed = true; this.events.get('closed')?.() })
     isVisible = vi.fn(() => true)
     bounds = { x: 0, y: 0, width: 176, height: 176 }
     getBounds = vi.fn(() => ({ ...this.bounds }))
@@ -57,16 +59,18 @@ vi.mock('../src/main/security-guards', () => ({ installSecurityGuards: vi.fn() }
 vi.mock('../src/main/timer-menu', () => ({
   TimerQuickMenu: class {
     install = vi.fn()
+    stop = vi.fn()
     prewarm = mocks.menuPrewarm
     open = mocks.menuOpen
     update = mocks.menuUpdate
     isSender = mocks.menuSender
     hide = mocks.menuHide
-    constructor(_origin: string, _preload: string, onAction: (action: TimerMenuAction) => void) { mocks.menuAction = onAction }
+    constructor(_preload: string, onAction: (action: TimerMenuAction) => void) { mocks.menuAction = onAction }
   },
 }))
 vi.mock('../src/main/quick-panel', () => ({
   QuickPanelController: class {
+    stop = vi.fn()
     applyLevel = vi.fn()
     install = vi.fn()
     prewarm = vi.fn()
@@ -78,6 +82,7 @@ vi.mock('../src/main/quick-panel', () => ({
 }))
 vi.mock('../src/main/rail-window', () => ({
   RailController: class {
+    stop = vi.fn()
     install = vi.fn()
     sync = vi.fn()
     destroy = vi.fn()
@@ -94,7 +99,7 @@ const shaped = process.platform === 'win32' || process.platform === 'linux'
 function setup(store = new TimerPreferenceStore()) {
   const events = new Map<string, (event: { preventDefault: () => void }) => void>()
   const main = { isDestroyed: () => false, isMinimized: () => false, show: vi.fn(), focus: vi.fn(), hide: vi.fn(), setIcon: vi.fn(),
-    webContents: { mainFrame: { url: 'https://yumpoo.example/work' }, send: vi.fn(), setBackgroundThrottling: vi.fn() },
+    webContents: { mainFrame: { url: 'https://yumpoo.example/work' }, send: vi.fn(), on: vi.fn(), setBackgroundThrottling: vi.fn() },
     on: (name: string, fn: (event: { preventDefault: () => void }) => void) => events.set(name, fn),
   }
   const controller = new TimerWindowController(() => main as unknown as BrowserWindow, 'https://yumpoo.example', '/preload.js', store)
@@ -558,21 +563,25 @@ describe('desktop timer and tray', () => {
   })
   it('deduplicates explicit exit and quits only after affirmative acknowledgement', async () => {
     const { main, event } = setup()
+    invoke('state', event, { ...state(), timerEnabled: false })
     menu('退出 YumpooPlatform…').click?.()
     mocks.appEvents.get('before-quit')?.({ preventDefault: vi.fn() })
     expect(main.webContents.send).toHaveBeenCalledOnce()
     const id = main.webContents.send.mock.calls[0]![1] as string
     expect(() => invoke('exit-complete', event, crypto.randomUUID(), true)).toThrow('INVALID_TIMER_EXIT')
     invoke('exit-received', event, id)
+    invoke('exit-phase', event, id, 'prompt')
     await vi.advanceTimersByTimeAsync(40000)
     expect(mocks.quit).not.toHaveBeenCalled()
     invoke('exit-complete', event, id, false)
     menu('退出 YumpooPlatform…').click?.()
     invoke('exit-complete', event, main.webContents.send.mock.calls[1]![1], true)
+    await vi.advanceTimersByTimeAsync(0)
     expect(mocks.quit).toHaveBeenCalledOnce()
   })
   it('reports a cancelled exit, whether the page declines or the person cancels the fallback dialog', async () => {
     const { controller, event, main } = setup()
+    invoke('state', event, { ...state(), timerEnabled: false })
     const cancelled = vi.fn()
     controller.onExitCancelled(cancelled)
     menu('退出 YumpooPlatform…').click?.()
@@ -582,8 +591,29 @@ describe('desktop timer and tray', () => {
     await vi.advanceTimersByTimeAsync(31000)
     expect(cancelled).toHaveBeenCalledTimes(2)
     menu('退出 YumpooPlatform…').click?.()
-    invoke('exit-complete', event, main.webContents.send.mock.calls[2]![1], true)
+    invoke('exit-complete', event, main.webContents.send.mock.calls.filter(call => call[0] === 'yumpoo:timer:exit-request').at(-1)![1], true)
+    await vi.advanceTimersByTimeAsync(0)
     expect(cancelled).toHaveBeenCalledTimes(2)
+    expect(mocks.quit).toHaveBeenCalledOnce()
+  })
+  it('ignores late state and ready-to-show callbacks after approving exit', async () => {
+    const { controller, event, main } = setup()
+    await invoke('show', event, 'picker')
+    const window = mini()
+    invoke('state', event, { ...state(), timerEnabled: false })
+    menu('退出 YumpooPlatform…').click?.()
+    const id = main.webContents.send.mock.calls.find(call => call[0] === 'yumpoo:timer:exit-request')![1]
+    invoke('exit-complete', event, id, true)
+    expect(controller.isQuitting).toBe(true)
+    vi.mocked(window.show).mockClear(); vi.mocked(window.showInactive).mockClear()
+    invoke('state', event, state(true))
+    window.events.get('ready-to-show')?.()
+    await invoke('show', event, 'compact')
+    controller.toggleQuick('tray'); controller.showMain()
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(mocks.windows).toHaveLength(1)
+    expect(window.show).not.toHaveBeenCalled()
+    expect(window.showInactive).not.toHaveBeenCalled()
     expect(mocks.quit).toHaveBeenCalledOnce()
   })
 })

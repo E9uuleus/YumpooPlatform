@@ -1,4 +1,5 @@
 import { computed, ref, shallowRef } from 'vue'
+import type { DesktopExitPhase } from '@yumpoo/preload-contract'
 import { ElMessage } from 'element-plus'
 import { readCsrfToken, type CurrentTimeTracker, type TimeTrackingPreferences, type TimeTrackingSummary, type TimeTrackingCommand } from '@yumpoo/api-client'
 import { timeTrackingApi } from '../api/client'
@@ -49,10 +50,7 @@ export function formatTrackingDuration(ms: number): string {
   return `${hours ? `${hours}h ` : ''}${Math.floor(seconds / 60) % 60}m ${seconds % 60}s`
 }
 
-export function formatDuration(ms: number): string {
-  const seconds = Math.max(0, Math.floor(ms / 1000))
-  return `${Math.floor(seconds / 3600)}:${String(Math.floor(seconds / 60) % 60).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
-}
+export { formatDuration } from '../components/timer/duration'
 
 /** Server clock minus local clock from the latest poll, published so other desktop surfaces tick the same duration. */
 export function timerClockOffset(): number { return offset }
@@ -287,28 +285,48 @@ function setPreferences(next: TimeTrackingPreferences): Promise<boolean> {
 }
 
 export const timerExitPrompt = ref(false)
+export const timerExitPhase = ref<DesktopExitPhase>('checking')
 let resolveExit: ((choice: 'stop' | 'continue' | 'cancel') => void) | undefined
 let exitPromise: Promise<boolean> | undefined
+let cancelExit: (() => void) | undefined
+let exitGeneration = 0
 export function chooseTimerExit(choice: 'stop' | 'continue' | 'cancel'): void {
   timerExitPrompt.value = false
   resolveExit?.(choice)
   resolveExit = undefined
 }
+export function cancelTimerExit(): void {
+  chooseTimerExit('cancel')
+  cancelExit?.()
+}
 export function confirmTimerExit(): Promise<boolean> {
   if (exitPromise) return exitPromise
+  const token = ++exitGeneration
+  timerExitPhase.value = 'checking'
+  const cancelled = new Promise<boolean>(resolve => { cancelExit = () => { ++exitGeneration; resolve(false) } })
   const operation = (async () => {
     let confirmed = false
     try { await refresh(); confirmed = true } catch { /* Keep explicit exit choices available while offline. */ }
+    if (token !== exitGeneration) return false
     if (confirmed && !running.value.length) return true
+    timerExitPhase.value = 'prompt'
     timerExitPrompt.value = true
     const choice = await new Promise<'stop' | 'continue' | 'cancel'>(resolve => { resolveExit = resolve })
-    if (choice === 'cancel') return false
+    if (token !== exitGeneration || choice === 'cancel') return false
     if (choice === 'continue') return true
-    if (await stopAll()) return true
+    timerExitPhase.value = 'saving'
+    const stopped = await run(async () => {
+      // A cancelled exit must not submit a stop after a delayed pre-save refresh.
+      if (token === exitGeneration) await command('stop-all')
+    })
+    if (token !== exitGeneration) return false
+    if (stopped) return true
     ElMessage.error('停止失败，尚未退出。请重试或明确选择继续计时并退出。')
     return false
   })()
-  exitPromise = operation
-  void operation.finally(() => { exitPromise = undefined })
-  return operation
+  const result = Promise.race([operation, cancelled]).finally(() => {
+    if (exitPromise === result) { exitPromise = undefined; cancelExit = undefined }
+  })
+  exitPromise = result
+  return result
 }

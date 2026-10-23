@@ -35,7 +35,7 @@ export const TOURS: Record<TourId, TourDefinition> = {
       { target: at('topbar-inbox'), placement: 'bottom-end', title: '收件箱', description: '有人 @你、评论或给你指派工作项时，这里会提醒。' },
       { target: at('topbar-help'), placement: 'bottom-end', title: '帮助', description: '打开当前页面的帮助、快速开始和常见问题；帮助中心不登录也能访问。', since: 2 },
       { target: at('topbar-tour'), placement: 'bottom-end', title: '查看本页引导', description: '随时点这里重看当前页面的引导；没有引导的页面按钮会变灰。', since: 2 },
-      { target: at('topbar-preferences'), placement: 'bottom-end', title: '偏好设置', description: '主题、界面密度等个人偏好都在这里；桌面端还能设置悬浮计时、小窗固定和全局快捷键。', since: 2 },
+      { target: at('topbar-preferences'), placement: 'bottom-end', title: '偏好设置', description: '主题、界面密度等个人偏好都在这里；桌面端还能设置悬浮计时、小窗固定和全局快捷键。新版客户端的托盘右键菜单在启动和断网时也可用，可从中打开诊断或退出。', since: 2 },
       { target: at('home-projects'), placement: 'left-start', title: '从项目开始', description: '结束导览后，点击任一项目进入工作项表格，我们会继续介绍工作项的用法。' },
     ],
   },

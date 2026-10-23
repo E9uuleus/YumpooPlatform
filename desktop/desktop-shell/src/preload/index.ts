@@ -18,6 +18,8 @@ import type {
   DesktopInboxState,
   DesktopInboxPreferences,
   DesktopTimerBridge,
+  DesktopAppearance,
+  DesktopExitPhase,
   DesktopTimerState,
   DesktopTimerCommand,
   DesktopUpdateBridge,
@@ -173,6 +175,14 @@ const desktopTimer: DesktopTimerBridge = Object.freeze({
     return () => ipcRenderer.removeListener('yumpoo:timer:exit-request', wrapped)
   },
   acknowledgeExit: async (id: string) => { await ipcRenderer.invoke('yumpoo:timer:exit-received', id) },
+  reportExitPhase: async (id: string, phase: DesktopExitPhase) => ipcRenderer.invoke('yumpoo:timer:exit-phase', id, phase),
+  publishAppearance: async (appearance: DesktopAppearance) => { await ipcRenderer.invoke('yumpoo:timer:appearance', appearance) },
+  onExitCancelled: (listener: (id: string) => void) => {
+    if (typeof listener !== 'function') throw new TypeError('Timer listener must be a function')
+    const wrapped = (_event: unknown, value: unknown) => { if (typeof value === 'string') listener(value) }
+    ipcRenderer.on('yumpoo:timer:exit-cancelled', wrapped)
+    return () => ipcRenderer.removeListener('yumpoo:timer:exit-cancelled', wrapped)
+  },
   completeExit: async (id: string, allow: boolean) => { await ipcRenderer.invoke('yumpoo:timer:exit-complete', id, allow) },
   openWorkItem: async (project: string, item: string) => { await ipcRenderer.invoke('yumpoo:timer:open-item', project, item) },
 })

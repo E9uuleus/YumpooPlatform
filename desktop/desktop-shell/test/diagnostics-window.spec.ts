@@ -23,7 +23,8 @@ describe('诊断窗', () => {
     expect(DIAGNOSTICS_PAGE_URL).toBe('yumpoo-diagnostics://app/diagnostics.html')
   })
 
-  it('协议只提供诊断页与启动页的打包文件', () => {
+  it('协议只提供诊断页、启动页与菜单的打包文件', () => {
+    for (const file of ['menu.html', 'menu.js', 'menu.css']) expect(resolveDiagnosticsAsset(`yumpoo-diagnostics://app/${file}`)?.file).toBe(file)
     expect(resolveDiagnosticsAsset('yumpoo-diagnostics://app/diagnostics.html')).toEqual({ file: 'diagnostics.html', contentType: 'text/html; charset=utf-8' })
     expect(resolveDiagnosticsAsset(LAUNCH_PAGE_URL)).toEqual({ file: 'launch.html', contentType: 'text/html; charset=utf-8' })
     expect(resolveDiagnosticsAsset('yumpoo-diagnostics://app/launch.css')?.contentType).toBe('text/css; charset=utf-8')

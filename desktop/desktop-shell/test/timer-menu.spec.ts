@@ -20,7 +20,7 @@ vi.mock('electron', () => ({
     static getFocusedWindow = () => mocks.focused
     events = new Map<string, (...args: unknown[]) => void>()
     contentEvents = new Map<string, (...args: unknown[]) => void>()
-    webContents = { mainFrame: { url: 'https://yumpoo.example/timer/menu' }, send: vi.fn(), on: (name: string, fn: (...args: unknown[]) => void) => this.contentEvents.set(name, fn), once: vi.fn(), removeListener: vi.fn() }
+    webContents = { mainFrame: { url: 'yumpoo-diagnostics://app/menu.html' }, setWindowOpenHandler: vi.fn(), send: vi.fn(), on: (name: string, fn: (...args: unknown[]) => void) => this.contentEvents.set(name, fn), once: vi.fn(), removeListener: vi.fn() }
     destroyed = false
     visible = false
     isDestroyed = () => this.destroyed
@@ -37,7 +37,7 @@ vi.mock('electron', () => ({
     on(name: string, fn: (...args: unknown[]) => void) { this.events.set(name, fn) }
   },
 }))
-vi.mock('../src/main/security-guards', () => ({ installSecurityGuards: vi.fn() }))
+vi.mock('../src/main/diagnostics-window', () => ({ MENU_PAGE_URL: 'yumpoo-diagnostics://app/menu.html', LOCAL_PAGES_PARTITION: 'yumpoo-diagnostics', prepareLocalPagesSession: vi.fn() }))
 import { TimerQuickMenu } from '../src/main/timer-menu'
 
 type Popup = { events: Map<string, (...args: unknown[]) => void>; contentEvents: Map<string, (...args: unknown[]) => void>; webContents: { mainFrame: { url: string }; send: ReturnType<typeof vi.fn> }; visible: boolean; show: ReturnType<typeof vi.fn>; hide: ReturnType<typeof vi.fn>; setBounds: ReturnType<typeof vi.fn>; setAlwaysOnTop: ReturnType<typeof vi.fn>; destroy: ReturnType<typeof vi.fn> }
@@ -45,8 +45,8 @@ const popup = (index = 0) => mocks.windows[index]!.instance as Popup
 const state: TimerMenuState = { signedIn: true, ready: true, enabled: true, running: null, recent: { title: '最近工作' }, clockOffsetMs: 0, savedAt: 0, visible: true, display: 'orb', pinned: true }
 function setup() {
   const onAction = vi.fn()
-  const menu = new TimerQuickMenu('https://yumpoo.example', '/preload.js', onAction)
-  menu.install()
+  const menu = new TimerQuickMenu('/menu.js', onAction)
+  menu.install(); menu.update(state)
   return { menu, onAction }
 }
 const act = (event: unknown, action: unknown) => mocks.handlers.get('yumpoo:timer:menu-action')?.(event, action)
@@ -58,7 +58,7 @@ afterEach(() => { vi.useRealTimers() })
 describe('timer quick panel window', () => {
   it('接受三个更新动作，检查和下载时保持打开', () => {
     const { menu, onAction } = setup()
-    menu.prewarm(); popup().contentEvents.get('did-finish-load')?.()
+    menu.prewarm(); mocks.handlers.get('yumpoo:menu:ready')?.(sender())
     menu.open('pointer', state)
     act(sender(), 'check-update'); act(sender(), 'download-update')
     expect(popup().hide).not.toHaveBeenCalled()
@@ -66,28 +66,26 @@ describe('timer quick panel window', () => {
     expect(popup().hide).toHaveBeenCalledOnce()
     expect(onAction.mock.calls.map(call => call[0])).toEqual(['check-update', 'download-update', 'restart-update'])
   })
-  it('prewarms one hidden isolated popup and only opens after the page has loaded', () => {
+  it('queues the first open while the local renderer loads, then supplies the latest state', () => {
     const { menu } = setup()
-    expect(menu.open('tray', state)).toBe(false)
+    expect(menu.open('tray', state)).toBe(true)
     menu.prewarm()
     expect(mocks.windows).toHaveLength(1)
-    expect(mocks.windows[0]!.options).toMatchObject({ frame: false, transparent: true, resizable: false, movable: false, skipTaskbar: true, type: 'toolbar', show: false, width: 312, height: 472,
-      webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, partition: 'persist:yumpoo-authenticated' } })
-    expect(popup().setAlwaysOnTop).toHaveBeenCalledWith(true, 'pop-up-menu')
-    expect(mocks.load).toHaveBeenCalledWith('https://yumpoo.example/timer/menu')
-    expect(menu.open('tray', state)).toBe(false)
-    popup().contentEvents.get('did-finish-load')?.()
-    expect(menu.open('tray', state)).toBe(true)
-    expect(popup().setBounds).toHaveBeenCalledWith({ x: 968, y: 280, width: 312, height: 472 })
-    expect(popup().webContents.send).toHaveBeenCalledWith('yumpoo:timer:menu-state', state)
-    expect(popup().show).toHaveBeenCalledOnce()
+    expect(mocks.windows[0]!.options).toMatchObject({ frame: false, transparent: true, show: false, width: 312, height: 472,
+      webPreferences: { preload: '/menu.js', sandbox: true, contextIsolation: true, nodeIntegration: false, partition: 'yumpoo-diagnostics' } })
+    expect(mocks.load).toHaveBeenCalledWith('yumpoo-diagnostics://app/menu.html')
+    expect(popup().show).not.toHaveBeenCalled()
     menu.update({ ...state, pinned: false })
-    expect(popup().webContents.send).toHaveBeenLastCalledWith('yumpoo:timer:menu-state', { ...state, pinned: false })
+    expect(mocks.handlers.get('yumpoo:menu:get-state')?.(sender())).toEqual({ ...state, pinned: false })
+    mocks.handlers.get('yumpoo:menu:ready')?.(sender())
+    expect(popup().show).toHaveBeenCalledOnce()
+    expect(popup().setBounds).toHaveBeenCalledWith({ x: 968, y: 280, width: 312, height: 472 })
+    expect(popup().webContents.send).toHaveBeenCalledWith('yumpoo:timer:menu-state', { ...state, pinned: false })
   })
 
   it('hides on blur only after gaining focus and treats a quick second tray click as close', () => {
     const { menu } = setup()
-    menu.prewarm(); popup().contentEvents.get('did-finish-load')?.()
+    menu.prewarm(); mocks.handlers.get('yumpoo:menu:ready')?.(sender())
     menu.open('pointer', state)
     popup().events.get('blur')?.()
     expect(popup().hide).toHaveBeenCalledOnce()
@@ -104,7 +102,7 @@ describe('timer quick panel window', () => {
 
   it('closes when focus leaves the window that opened it even though the panel never took focus', async () => {
     const { menu } = setup()
-    menu.prewarm(); popup().contentEvents.get('did-finish-load')?.()
+    menu.prewarm(); mocks.handlers.get('yumpoo:menu:ready')?.(sender())
     const orb = { title: 'orb' }
     mocks.focused = orb; mocks.grant = false
     menu.open('pointer', state)
@@ -122,7 +120,7 @@ describe('timer quick panel window', () => {
 
   it('closes a focused panel once focus moves anywhere else, even without a blur event', async () => {
     const { menu } = setup()
-    menu.prewarm(); popup().contentEvents.get('did-finish-load')?.()
+    menu.prewarm(); mocks.handlers.get('yumpoo:menu:ready')?.(sender())
     menu.open('pointer', state)
     await vi.advanceTimersByTimeAsync(500)
     expect(popup().hide).not.toHaveBeenCalled()
@@ -133,7 +131,7 @@ describe('timer quick panel window', () => {
 
   it('runs only closed actions from its own main frame and keeps toggles open', () => {
     const { menu, onAction } = setup()
-    menu.prewarm(); popup().contentEvents.get('did-finish-load')?.()
+    menu.prewarm(); mocks.handlers.get('yumpoo:menu:ready')?.(sender())
     menu.open('pointer', state)
     expect(() => act({ sender: {}, senderFrame: {} }, 'toggle')).toThrow('UNTRUSTED')
     expect(() => act({ ...sender(), senderFrame: { url: 'https://yumpoo.example/timer/menu' } }, 'toggle')).toThrow('UNTRUSTED')
@@ -147,16 +145,38 @@ describe('timer quick panel window', () => {
     expect(menu.isSender(sender() as never)).toBe(true)
   })
 
+  it('falls back if the packaged page never becomes ready, but never for ordinary cold loading', async () => {
+    const fallback = vi.fn()
+    const menu = new TimerQuickMenu('/menu.js', vi.fn(), fallback)
+    menu.install(); menu.update(state)
+    expect(menu.open('tray', state)).toBe(true)
+    await vi.advanceTimersByTimeAsync(9999)
+    expect(fallback).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(fallback).toHaveBeenCalledWith('tray')
+  })
+
+  it('stops queued opens and cannot be warmed or shown again after shutdown', async () => {
+    const { menu } = setup()
+    menu.open('tray', state)
+    menu.stop(); menu.stop()
+    menu.prewarm(); menu.open('pointer', state)
+    await vi.advanceTimersByTimeAsync(15_000)
+    expect(mocks.windows).toHaveLength(1)
+    expect(popup().show).not.toHaveBeenCalled()
+    expect(popup().destroy).toHaveBeenCalledOnce()
+  })
+
   it('recreates the popup after a renderer crash or failed load', async () => {
     const { menu } = setup()
-    menu.prewarm(); popup().contentEvents.get('did-finish-load')?.()
+    menu.prewarm(); mocks.handlers.get('yumpoo:menu:ready')?.(sender())
     popup().contentEvents.get('render-process-gone')?.()
     expect(popup().destroy).toHaveBeenCalledOnce()
     expect(menu.open('tray', state)).toBe(false)
     expect(mocks.windows).toHaveLength(2)
     mocks.load.mockRejectedValueOnce(new Error('offline'))
     mocks.windows.length = 0
-    const failed = new TimerQuickMenu('https://yumpoo.example', '/preload.js', vi.fn())
+    const failed = new TimerQuickMenu('/menu.js', vi.fn())
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     failed.prewarm()
     await vi.waitFor(() => expect(popup().destroy).toHaveBeenCalledOnce())

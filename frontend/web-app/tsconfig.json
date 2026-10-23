@@ -10,5 +10,5 @@
     "allowImportingTsExtensions": true,
     "types": ["vite/client", "vitest/globals"]
   },
-  "include": ["src/**/*.ts", "build/**/*.ts", "src/**/*.d.ts", "src/**/*.vue", "vite.config.ts"]
+  "include": ["src/**/*.ts", "build/**/*.ts", "src/**/*.d.ts", "src/**/*.vue", "vite.config.ts", "vite.desktop-menu.config.ts"]
 }

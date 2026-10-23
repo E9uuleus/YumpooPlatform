@@ -3,8 +3,9 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElButton, ElDialog } from 'element-plus'
 import type { DesktopTimerState, TimerOrbLayout } from '@yumpoo/preload-contract'
+import { useAppearance } from '../../composables/useAppearance'
 import { useSession } from '../../composables/useSession'
-import { activateTimeTracker, timerExitPrompt, chooseTimerExit, confirmTimerExit, formatDuration, timerClockOffset, useTimeTracker } from '../../composables/useTimeTracker'
+import { activateTimeTracker, timerExitPrompt, timerExitPhase, cancelTimerExit, chooseTimerExit, confirmTimerExit, formatDuration, timerClockOffset, useTimeTracker } from '../../composables/useTimeTracker'
 import { logoutGuard } from '../../composables/logoutGuard'
 import TimerPanel from './TimerPanel.vue'
 import TimerIcon from './TimerIcon.vue'
@@ -63,10 +64,38 @@ watch(() => tracker.running.value.length > 0, running => {
   if (running && !desktop) window.addEventListener('beforeunload', beforeUnload)
 }, { immediate: true })
 logoutGuard.check = confirmTimerExit
+const appearance = useAppearance()
+watch([surface, appearance.themeMode, appearance.densityMode], ([owner, theme, density]) => {
+  if (owner === 'main') void desktop?.publishAppearance?.({ theme, density }).catch(() => undefined)
+}, { immediate: true })
+let exitRequest: string | undefined
+const reportExitPhase = () => {
+  const id = exitRequest
+  if (!id) return
+  void desktop?.reportExitPhase?.(id, timerExitPhase.value).then(accepted => {
+    if (!accepted && exitRequest === id) { exitRequest = undefined; cancelTimerExit() }
+  }).catch(() => { if (exitRequest === id) { exitRequest = undefined; cancelTimerExit() } })
+}
+watch(timerExitPhase, reportExitPhase, { flush: 'sync' })
+const offExitCancelled = desktop?.onExitCancelled?.(id => {
+  if (exitRequest === id) { exitRequest = undefined; cancelTimerExit() }
+})
 const offExit = desktop?.onExitRequest(async requestId => {
-  await desktop.acknowledgeExit(requestId)
-  const allow = !authenticated.value || await confirmTimerExit()
-  await desktop.completeExit(requestId, allow)
+  if (exitRequest) return
+  exitRequest = requestId
+  try {
+    await desktop.acknowledgeExit(requestId)
+    if (exitRequest !== requestId) return
+    const confirmation = authenticated.value ? confirmTimerExit() : Promise.resolve(true)
+    reportExitPhase()
+    const allow = await confirmation
+    if (exitRequest === requestId) await desktop.completeExit(requestId, allow)
+  } catch {
+    if (exitRequest === requestId) {
+      cancelTimerExit()
+      await desktop.completeExit(requestId, false).catch(() => undefined)
+    }
+  } finally { if (exitRequest === requestId) exitRequest = undefined }
 })
 const offCommand = desktop?.onCommand(async command => {
   const resume = tracker.current.value?.resumeItems ?? []
@@ -100,7 +129,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('yumpoo:open-timer', openFromToolbar)
   window.removeEventListener('yumpoo:timer-started', started)
   window.removeEventListener('resize', constrainPosition)
-  offExit?.(); offCommand?.(); endDrag?.(); themeObserver?.disconnect()
+  if (exitRequest) { exitRequest = undefined; cancelTimerExit() }
+  offExitCancelled?.(); offExit?.(); offCommand?.(); endDrag?.(); themeObserver?.disconnect()
   window.removeEventListener('beforeunload', beforeUnload)
   pipWindow?.close(); activateTimeTracker(false); delete logoutGuard.check
 })
