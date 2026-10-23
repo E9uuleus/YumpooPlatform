@@ -69,6 +69,7 @@ test('文档中心', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1, name: 'Yumpoo 工作中台', exact: true })).toBeVisible()
   await page.keyboard.press('Control+K')
   await page.getByPlaceholder('搜索文档，例如 并行计时、工作日历', { exact: true }).fill('并行计时')
+  await expect(page.getByRole('option').first()).toBeVisible()
   await page.keyboard.press('Enter')
   await expect(page).toHaveURL(/\/docs\/guide\/time-tracking#/)
   await expect(page.getByRole('heading', { level: 1, name: '计时与工时', exact: true })).toBeVisible()

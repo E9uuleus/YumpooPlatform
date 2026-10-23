@@ -59,6 +59,12 @@ test('Web 只能类型依赖 preload contract', async () => {
   )
 })
 
+test('Web 构建器可读取本地资源，但运行时代码不可导入构建器', async () => {
+  assert.equal((await boundaryMessages('frontend/web-app/build/docs/markdown.ts', "import 'node:fs'\n")).length, 0)
+  assert.equal((await boundaryMessages('frontend/web-app/build/docs/markdown.ts', "import 'electron'\n")).length, 1)
+  assert.equal((await boundaryMessages('frontend/web-app/src/illegal.ts', "import '../build/docs/markdown'\n")).length, 1)
+})
+
 test('Web 可以运行时依赖 API client', async () => {
   const messages = await boundaryMessages(
     'frontend/web-app/src/api/client.ts',

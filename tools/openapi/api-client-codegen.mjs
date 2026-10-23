@@ -230,7 +230,9 @@ function applyStrictTypeScriptCompatibility(sourceRoot) {
   const timerCandidatePath = path.join(sourceRoot, 'models', 'TimerCandidate.ts')
   let timerCandidate = normalizeText(fs.readFileSync(timerCandidatePath, 'utf8'))
   for (const [field, conversion] of [['contentCode', "json['contentCode']"],
-    ['contentColorToken', "WorkItemLabelColorTokenFromJSON(json['contentColorToken'])"]]) {
+    ['contentColorToken', "WorkItemLabelColorTokenFromJSON(json['contentColorToken'])"],
+    ['statusCode', "json['statusCode']"], ['statusName', "json['statusName']"],
+    ['statusColorToken', "WorkItemLabelColorTokenFromJSON(json['statusColorToken'])"]]) {
     timerCandidate = replaceExactlyOnce(timerCandidate,
       `        '${field}': json['${field}'] == null ? undefined : ${conversion},`,
       `        ...(json['${field}'] == null ? {} : { '${field}': ${conversion} }),`,

@@ -1,5 +1,42 @@
 /* 文档中心版式：只使用 src/styles 已有的 --yp-* 令牌，浅色、深色、夜间三套主题共用。 */
 
+html:has(.docs-site) {
+  scrollbar-gutter: stable;
+}
+
+.docs-pending {
+  min-height: calc(100vh - 64px);
+  padding: var(--yp-space-8);
+  color: var(--yp-text-secondary);
+}
+
+.docs-load-error {
+  display: flex;
+  align-items: center;
+  gap: var(--yp-space-3);
+  padding: var(--yp-space-4) var(--yp-space-8);
+  color: var(--yp-status-red);
+}
+
+.docs-prose .docs-screenshot {
+  margin: var(--yp-space-5) 0 var(--yp-space-8);
+}
+
+.docs-screenshot img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--yp-border-default);
+  border-radius: var(--yp-radius-md);
+}
+
+.docs-screenshot figcaption {
+  margin-top: var(--yp-space-2);
+  color: var(--yp-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .docs-site {
   --docs-topbar-height: 64px;
   --docs-sidebar-width: 260px;

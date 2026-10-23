@@ -48,6 +48,19 @@ describe('文档内容', () => {
     for (const { doc, html } of await pages) expect(html, doc.slug).not.toMatch(/\sstyle=|<script|\son[a-z]+=/i)
   })
 
+  it('快速开始截图都有同源资源、固有尺寸、替代文本与图注', async () => {
+    for (const [slug, count] of [['start/first-day', 4], ['start/desktop', 2], ['start/admin', 3]] as const) {
+      const html = await loadDocHtml(slug)
+      const figures = [...html.matchAll(/<figure class="docs-screenshot">([\s\S]*?)<\/figure>/g)]
+      expect(figures, slug).toHaveLength(count)
+      for (const [, figure] of figures) {
+        expect(figure).toMatch(/src="\/(?!\/)[^"]+\.png(?:\?[^"]*)?"/)
+        expect(figure).toMatch(/alt="[^"]+" width="\d+" height="\d+"/)
+        expect(figure).toMatch(/<figcaption>.+<\/figcaption>/)
+      }
+    }
+  })
+
   it('appRoute 是无必填参数的路由名，tour 是已有导览', () => {
     for (const doc of orderedDocs) {
       if (doc.appRoute) {

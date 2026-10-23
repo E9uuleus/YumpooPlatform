@@ -95,7 +95,7 @@ export const TOURS: Record<TourId, TourDefinition> = {
   'my-time': {
     version: 1,
     steps: [
-      { target: at('my-time-stats'), placement: 'bottom-start', title: '本月概览', description: '本月合计、日均、记录天数和今日用时；并行计时按项数平均计入。' },
+      { target: at('my-time-stats'), placement: 'bottom-start', title: '本月概览', description: '这四张卡片分别显示本月合计、日均、记录天数和今日用时；并行计时按项数平均计入。' },
       { target: at('my-time-calendar'), placement: 'top', title: '工时月历', description: '每格是当天合计，色条按项目区分；悬停查看工作项明细，点击日期打开当天时间线。' },
       { target: at('time-preferences'), placement: 'bottom-end', title: '计时偏好', description: '在这里开关计时器、设置上班时间；关闭计时器后，可以在当天时间线里手动补录。' },
     ],

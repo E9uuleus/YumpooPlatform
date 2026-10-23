@@ -2,7 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import DocsPage from './DocsPage.vue'
-import type { DocMeta } from './docsNav'
+import { loadDocHtml, type DocMeta } from './docsNav'
 
 const meta: DocMeta = {
   slug: 'guide/sample', section: 'guide', title: '示例页', description: '一句话。', order: 1, audience: ['admin'],
@@ -10,12 +10,13 @@ const meta: DocMeta = {
 }
 const html = '<h2 id="小节">小节</h2><p><a href="/docs/guide/other#x" data-docs-link>站内</a></p>'
   + '<div class="docs-code"><button type="button" class="docs-code__copy" data-docs-copy>复制</button><pre><code class="hljs">pnpm test</code></pre></div>'
+const other: DocMeta = { ...meta, slug: 'guide/other', title: '另一页', headings: [{ depth: 2, text: '新小节', id: 'x' }] }
 
 vi.mock('./docsNav', async importOriginal => ({
   ...await importOriginal<typeof import('./docsNav')>(),
-  findDoc: (slug: string) => slug === meta.slug ? meta : undefined,
+  findDoc: (slug: string) => [meta, other].find(value => value.slug === slug),
   loadDocHtml: vi.fn(async () => html),
-  neighbours: () => ({}),
+  neighbours: (slug: string) => slug === meta.slug ? { next: other } : { previous: meta },
 }))
 
 const mounted: Array<ReturnType<typeof mount>> = []
@@ -37,6 +38,7 @@ async function render(path: string) {
 }
 
 beforeEach(() => {
+  vi.mocked(loadDocHtml).mockReset().mockResolvedValue(html)
   scrolled = []
   Element.prototype.scrollIntoView = function scrollIntoView(this: Element) { scrolled.push(this.id) }
   window.scrollTo = vi.fn() as unknown as typeof window.scrollTo
@@ -81,5 +83,48 @@ describe('文档页', () => {
     const push = vi.spyOn(router, 'push').mockResolvedValue(undefined)
     await wrapper.find('.docs-page__open').trigger('click')
     expect(push).toHaveBeenCalledWith({ name: 'home' })
+  })
+
+  it('正文加载完成前保留整页，完成后原子切换并定位一次最新锚点', async () => {
+    const { wrapper, router } = await render('/docs/guide/sample')
+    let resolve!: (value: string) => void
+    vi.mocked(loadDocHtml).mockReturnValueOnce(new Promise(done => { resolve = done }))
+    await router.push('/docs/guide/other#x')
+    await flushPromises()
+    expect(wrapper.find('h1').text()).toBe('示例页')
+    expect(wrapper.find('.docs-prose').html()).toContain('小节')
+    expect(wrapper.find('.docs-pager').text()).toContain('下一篇另一页')
+    expect(wrapper.find('.docs-page').attributes('aria-busy')).toBe('true')
+    expect(scrolled).toEqual([])
+    resolve('<h2 id="x">新小节</h2>')
+    await flushPromises()
+    expect(wrapper.find('h1').text()).toBe('另一页')
+    expect(wrapper.find('.docs-prose').text()).toBe('新小节')
+    expect(wrapper.find('.docs-pager').text()).toContain('上一篇示例页')
+    expect(scrolled).toEqual(['x'])
+  })
+
+  it('快速返回时丢弃迟到正文，加载失败保留旧页并可重试', async () => {
+    const { wrapper, router } = await render('/docs/guide/sample')
+    let resolve!: (value: string) => void
+    vi.mocked(loadDocHtml).mockReturnValueOnce(new Promise(done => { resolve = done }))
+    await router.push('/docs/guide/other')
+    await router.push('/docs/guide/sample')
+    await flushPromises()
+    resolve('<h2>迟到正文</h2>')
+    await flushPromises()
+    expect(wrapper.find('h1').text()).toBe('示例页')
+    expect(wrapper.text()).not.toContain('迟到正文')
+    vi.mocked(loadDocHtml).mockRejectedValueOnce(new Error('offline'))
+    await router.push('/docs/guide/other')
+    await flushPromises()
+    expect(wrapper.find('[role="alert"]').text()).toContain('文档加载失败')
+    expect(wrapper.find('.docs-prose').text()).toContain('小节')
+    vi.mocked(loadDocHtml).mockResolvedValueOnce('<h2>重试成功</h2>')
+    await wrapper.find('.docs-load-error button').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    expect(wrapper.find('h1').text()).toBe('另一页')
+    expect(wrapper.find('.docs-prose').text()).toBe('重试成功')
   })
 })

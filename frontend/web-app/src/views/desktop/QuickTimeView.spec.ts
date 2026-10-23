@@ -54,7 +54,8 @@ vi.mock('../../components/my-time/day/useDayTimeline', async () => {
 })
 
 const candidate: TimerCandidate = { workItemId: 'w1', projectId: 'p1', projectName: 'Yumpoo 平台', itemNo: 'P001-1', title: '设计评审',
-  contentName: '需求', statusCategory: 'TODO', completed: false, assignedToMe: true, lastTrackedAt: null, ownDurationMs: 0 }
+  contentName: '需求', statusCategory: 'TODO', statusCode: 'NOT_STARTED', statusName: '未开始', statusColorToken: WorkItemLabelColorToken.EggYolk,
+  completed: false, assignedToMe: true, lastTrackedAt: null, ownDurationMs: 0 }
 const statuses = [
   { code: 'NOT_STARTED', displayName: '未开始', colorToken: WorkItemLabelColorToken.EggYolk, statusCategory: 'TODO', sortOrder: 0, active: true },
   { code: 'DOING', displayName: '进行中', colorToken: WorkItemLabelColorToken.BrightGreen, statusCategory: 'IN_PROGRESS', sortOrder: 1, active: true },
@@ -83,6 +84,10 @@ async function mountView() {
 beforeEach(() => {
   api.load.mockResolvedValue(undefined)
   api.create.mockResolvedValue({ createdCount: 1, changedCount: 0, deletedCount: 0, skippedDurationMs: 0 })
+  api.getWorkItem.mockResolvedValue(detail('NOT_STARTED', 'TODO'))
+  api.getProject.mockResolvedValue({ id: 'p1' })
+  api.listContents.mockResolvedValue({ items: [] })
+  api.getLabels.mockResolvedValue({ statuses, priorities: [] })
 })
 afterEach(() => { wrapper?.unmount(); wrapper = undefined })
 
@@ -142,7 +147,9 @@ describe('快捷工时小窗', () => {
     api.getLabels.mockResolvedValue({ statuses, priorities: [] })
     api.transition.mockResolvedValue(detail('DOING', 'IN_PROGRESS'))
     const view = await mountView()
-    expect(view.get('.quick-status').text()).toContain('待开始')
+    expect(view.get('.quick-status').text()).toContain('未开始')
+    expect(api.getWorkItem).not.toHaveBeenCalled()
+    expect(api.getLabels).not.toHaveBeenCalled()
     await view.get('.quick-status').trigger('click')
     await flushPromises()
     expect(view.find('.quick-item.is-expanded').exists()).toBe(false)
@@ -154,9 +161,65 @@ describe('快捷工时小窗', () => {
     expect(api.transition).toHaveBeenCalledWith(expect.objectContaining({ workItemId: 'w1', ifMatch: '"NOT_STARTED"',
       workItemTransitionRequest: { toStatus: 'DOING', resolution: null } }))
     expect(api.state!.items.value[0]!.statusCategory).toBe('IN_PROGRESS')
+    expect(api.state!.items.value[0]!.statusName).toBe('进行中')
+    expect(api.state!.items.value[0]!.statusColorToken).toBe(WorkItemLabelColorToken.BrightGreen)
     expect(api.load).toHaveBeenCalled()
     expect(api.announce).toHaveBeenCalledExactlyOnceWith({ projectId: 'p1', workItemId: 'w1' })
     expect(view.get('.quick-toast').text()).toBe('已改为「进行中」· 设计评审')
+  })
+
+  it('自定义状态首屏即显示，详情缓存不会覆盖同分类的列表刷新', async () => {
+    const view = await mountView()
+    api.state!.items.value = [{ ...candidate, statusCode: 'PLANNED', statusName: '已排期', statusColorToken: WorkItemLabelColorToken.BrightBlue }]
+    api.getWorkItem.mockResolvedValue(detail('PLANNED', 'TODO'))
+    api.getLabels.mockResolvedValue({ statuses: [...statuses, { ...statuses[0], code: 'PLANNED', displayName: '已排期', colorToken: WorkItemLabelColorToken.BrightBlue }], priorities: [] })
+    await flushPromises()
+    expect(view.get('.quick-status').text()).toContain('已排期')
+    expect(api.getWorkItem).not.toHaveBeenCalled()
+    await view.get('.quick-status').trigger('click')
+    await flushPromises()
+    expect(view.get('.quick-status').text()).toContain('已排期')
+    api.state!.items.value = [{ ...candidate, statusCode: 'REVIEW', statusName: '待评审', statusColorToken: WorkItemLabelColorToken.Purple }]
+    await flushPromises()
+    expect(view.get('.quick-status').text()).toContain('待评审')
+    expect(view.get('.quick-status').text()).not.toContain('已排期')
+  })
+
+  it('旧候选响应使用中性入口，点击读取后补全真实状态', async () => {
+    const view = await mountView()
+    const { statusCode: _code, statusName: _name, statusColorToken: _color, ...legacy } = candidate
+    api.state!.items.value = [legacy]
+    await flushPromises()
+    expect(view.get('.quick-status').text()).toContain('查看状态')
+    await view.get('.quick-status').trigger('click')
+    await flushPromises()
+    expect(view.get('.quick-status').text()).toContain('未开始')
+  })
+
+  it('只读工作项保留实际标签并禁用状态迁移', async () => {
+    api.getWorkItem.mockResolvedValue({ ...detail('NOT_STARTED', 'TODO'), capabilities: { canEditFields: false, availableTransitions: [] } })
+    const view = await mountView()
+    await view.get('.quick-status').trigger('click')
+    await flushPromises()
+    expect(view.get('.quick-status').text()).toContain('未开始')
+    expect(view.text()).toContain('你没有修改权限')
+    expect(view.findAll('.status-option-pill').find(pill => pill.text() === '进行中')!.attributes('disabled')).toBeDefined()
+    expect(api.transition).not.toHaveBeenCalled()
+  })
+
+  it('迁移冲突后重新读取实际状态，不显示成功提示', async () => {
+    api.transition.mockRejectedValue(new Response(JSON.stringify({ code: 'VERSION_CONFLICT', message: '版本已变化' }), {
+      status: 412, headers: { 'Content-Type': 'application/json' },
+    }))
+    const view = await mountView()
+    await view.get('.quick-status').trigger('click')
+    await flushPromises()
+    api.getWorkItem.mockResolvedValue(detail('DOING', 'IN_PROGRESS'))
+    await view.findAll('.status-option-pill').find(pill => pill.text() === '进行中')!.trigger('click')
+    await flushPromises()
+    expect(view.get('.quick-status').text()).toContain('进行中')
+    expect(view.get('.quick-toast').text()).not.toContain('已改为')
+    expect(api.announce).not.toHaveBeenCalled()
   })
 
   it.each([{ isComposing: true }, { keyCode: 229 }])('输入法确认候选字时不创建工作项：%j', async composing => {
@@ -178,7 +241,7 @@ describe('快捷工时小窗', () => {
     api.listContents.mockResolvedValue({ items: [{ id: 'c2', active: true, sortOrder: 2 }, { id: 'c0', active: false, sortOrder: 0 },
       { id: 'c1', active: true, sortOrder: 1 }] })
     api.createWorkItem.mockResolvedValue({ id: 'w9', projectId: 'p1', itemNo: 'P001-9', title: '整理周报', contentName: '需求',
-      contentColorToken: WorkItemLabelColorToken.EggYolk, statusCategory: 'TODO' })
+      contentColorToken: WorkItemLabelColorToken.EggYolk, statusCode: 'NOT_STARTED', statusCategory: 'TODO' })
     const view = await mountView()
     await view.get('.quick-row').trigger('click')
     await view.get('.quick-item .quick-hint__action').trigger('click')
@@ -195,6 +258,7 @@ describe('快捷工时小窗', () => {
     expect(api.announce).toHaveBeenCalledExactlyOnceWith({ projectId: 'p1', workItemId: 'w9' })
     expect(view.find('.quick-create').exists()).toBe(false)
     expect(view.get('.quick-item.is-expanded .quick-row__title').text()).toBe('整理周报')
+    expect(view.get('.quick-item.is-expanded .quick-status').text()).toContain('未开始')
     expect(view.get('.quick-item.is-expanded').find('.quick-item .quick-range').exists()).toBe(false)
     expect(view.get('.quick-item.is-expanded .quick-hint').text()).toContain('排入今日空档')
     expect(view.get('.quick-toast').text()).toBe('已创建 #P001-9 · 整理周报')

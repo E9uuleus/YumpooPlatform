@@ -22,6 +22,7 @@ const DESKTOP_AREAS = {
 }
 
 const PRELOAD_ENTRY = path.join(DESKTOP_AREAS.preload, 'index.ts')
+const WEB_BUILD = path.join(PACKAGE_ROOTS.web, 'build')
 const PRELOAD_IPC_CHANNELS = new Map([
   ['invoke', new Set(['yumpoo:auth:is-enabled', 'yumpoo:auth:start', 'yumpoo:auth:cancel', 'yumpoo:auth:clear', 'yumpoo:timer:show', 'yumpoo:timer:hide', 'yumpoo:timer:mode', 'yumpoo:timer:window-state', 'yumpoo:timer:orb-layout', 'yumpoo:timer:state', 'yumpoo:timer:command-complete', 'yumpoo:timer:pin', 'yumpoo:timer:refresh', 'yumpoo:timer:appearance', 'yumpoo:timer:exit-phase', 'yumpoo:timer:exit-received', 'yumpoo:timer:exit-complete', 'yumpoo:timer:open-item', 'yumpoo:timer:preferences', 'yumpoo:timer:menu-action', 'yumpoo:timer:drag', 'yumpoo:inbox:state', 'yumpoo:inbox:preferences', 'yumpoo:inbox:get-preferences', 'yumpoo:files:save-export', 'yumpoo:update:get-state', 'yumpoo:update:check', 'yumpoo:update:restart', 'yumpoo:update:download', 'yumpoo:preferences:get', 'yumpoo:preferences:set', 'yumpoo:preferences:shortcut', 'yumpoo:quick:pin', 'yumpoo:quick:resize', 'yumpoo:quick:close', 'yumpoo:quick:open-main', 'yumpoo:rail:get-state', 'yumpoo:rail:open', 'yumpoo:rail:projects', 'yumpoo:rail:settings'])],
   ['on', new Set(['yumpoo:auth:status', 'yumpoo:timer:changed', 'yumpoo:timer:mode-changed', 'yumpoo:timer:orb-hover', 'yumpoo:timer:command', 'yumpoo:timer:command-failed', 'yumpoo:timer:exit-cancelled', 'yumpoo:timer:exit-request', 'yumpoo:timer:menu-state', 'yumpoo:timer:dragging', 'yumpoo:inbox:open', 'yumpoo:update:state', 'yumpoo:preferences:changed', 'yumpoo:quick:open', 'yumpoo:quick:closing', 'yumpoo:quick:pinned', 'yumpoo:rail:state'])],
@@ -220,7 +221,11 @@ function createRule() {
         const typeOnly = isTypeOnlyImport(node)
 
         if (owner === 'web') {
-          if (nodeBuiltin || electron) {
+          const buildTime = isInside(filename, WEB_BUILD)
+          const resolved = isPathSpecifier(specifier) ? resolvePathSpecifier(specifier, filename) : undefined
+          if (isInside(filename, path.join(PACKAGE_ROOTS.web, 'src')) && resolved && isInside(resolved, WEB_BUILD)) {
+            report(node, specifier, 'Web/renderer 不得导入构建期模块')
+          } else if ((nodeBuiltin && !buildTime) || electron) {
             report(node, specifier, 'Web/renderer 不得依赖 Node 或 Electron')
           } else if (target === 'desktop') {
             report(node, specifier, 'Web/renderer 不得依赖 desktop-shell 实现')

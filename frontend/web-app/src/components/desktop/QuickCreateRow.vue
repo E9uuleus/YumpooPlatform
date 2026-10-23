@@ -21,6 +21,7 @@ import { contentsApi, workItemsApi } from '../../api/client'
 import { problemMessage, toApiProblem } from '../../api/problems'
 import { projectColors } from '../team/teamDashboardModel'
 import TimerIcon from '../timer/TimerIcon.vue'
+import { itemStatus, type QuickItemStatus } from './quickTime'
 
 const ElSelect = ElSelectRaw as unknown as DefineComponent
 const ElOption = ElOptionRaw as unknown as DefineComponent
@@ -31,7 +32,7 @@ const props = defineProps<{
   userId: string
   tones: Map<string, string>
 }>()
-const emit = defineEmits<{ close: []; created: [detail: WorkItemDetail, projectName: string]; failed: [message: string] }>()
+const emit = defineEmits<{ close: []; created: [detail: WorkItemDetail, projectName: string, status: QuickItemStatus]; failed: [message: string] }>()
 const projects = ref<ProjectSummary[]>([])
 const projectId = ref<string>()
 const title = ref(props.initialTitle)
@@ -61,7 +62,10 @@ async function create() {
   saving.value = true
   try {
     // The quick panel files the item in the project's first category and leaves the personal table defaults alone.
-    const content = (await contentsApi.listProjectContents({ projectId: project.id })).items
+    const [catalog, labels] = await Promise.all([
+      contentsApi.listProjectContents({ projectId: project.id }), workItemsApi.getProjectWorkItemLabels({ projectId: project.id }),
+    ])
+    const content = catalog.items
       .filter(item => item.active).sort((left, right) => left.sortOrder - right.sortOrder)[0]
     if (!content) { emit('failed', '该项目没有可用的类别'); return }
     const signature = JSON.stringify([project.id, content.id, name])
@@ -71,7 +75,7 @@ async function create() {
       assigneeUserIds: [props.userId], assigneeUserId: props.userId, timelineStartDate: null, timelineEndDate: null, dueDate: null } })
     attempt = undefined
     lastProjectId = project.id
-    emit('created', detail, project.name)
+    emit('created', detail, project.name, itemStatus(detail, labels))
   } catch (reason) {
     emit('failed', problemMessage(await toApiProblem(reason)))
   } finally {

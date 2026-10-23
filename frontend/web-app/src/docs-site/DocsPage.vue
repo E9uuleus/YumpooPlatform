@@ -1,23 +1,27 @@
 <script setup lang="ts">
 import { ArrowLeft, ArrowRight, Guide, TopRight } from '@element-plus/icons-vue'
 import { ElButton, ElIcon } from 'element-plus'
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import YpResultPage from '../components/yp/YpResultPage.vue'
 import { SECTIONS } from './content/sections'
-import { AUDIENCE_LABELS, findDoc, loadDocHtml, neighbours } from './docsNav'
+import { AUDIENCE_LABELS, findDoc, loadDocHtml, neighbours, type DocMeta } from './docsNav'
 
 const route = useRoute()
 const router = useRouter()
 const slug = computed(() => typeof route.params.slug === 'string' ? route.params.slug : '')
-const doc = computed(() => findDoc(slug.value))
-const html = ref('')
+const page = shallowRef<{ meta: DocMeta; html: string }>()
+const doc = computed(() => page.value?.meta)
+const html = computed(() => page.value?.html ?? '')
+const loading = ref(false)
+const error = ref(false)
+const missing = ref(false)
 const article = ref<HTMLElement>()
 const activeId = ref('')
 const tocOpen = ref(false)
 const sectionLabel = computed(() => SECTIONS.find(section => section.id === doc.value?.section)?.label)
 const toc = computed(() => doc.value?.headings ?? [])
-const around = computed(() => neighbours(slug.value))
+const around = computed(() => neighbours(doc.value?.slug ?? ''))
 const audiences = computed(() => (doc.value?.audience ?? []).flatMap(item => AUDIENCE_LABELS[item] ? [AUDIENCE_LABELS[item]] : []))
 let observer: IntersectionObserver | undefined
 let revision = 0
@@ -41,22 +45,38 @@ function observeHeadings(): void {
   headings.forEach(heading => observer!.observe(heading))
 }
 
-watch(slug, async value => {
+async function load(value: string): Promise<void> {
   const current = ++revision
-  html.value = ''
-  tocOpen.value = false
+  error.value = false
   const meta = findDoc(value)
-  if (!meta) return
-  document.title = `${meta.title} · Yumpoo 文档`
-  const content = await loadDocHtml(value)
-  if (current !== revision) return
-  html.value = content
-  await nextTick()
-  scrollToHash()
-  observeHeadings()
-}, { immediate: true })
+  missing.value = !meta
+  if (!meta) {
+    loading.value = false
+    page.value = undefined
+    observer?.disconnect()
+    return
+  }
+  loading.value = true
+  try {
+    const content = await loadDocHtml(value)
+    if (current !== revision) return
+    observer?.disconnect()
+    page.value = { meta, html: content }
+    tocOpen.value = false
+    document.title = `${meta.title} · Yumpoo 文档`
+    await nextTick()
+    if (current !== revision) return
+    scrollToHash()
+    observeHeadings()
+  } catch {
+    if (current === revision) error.value = true
+  } finally {
+    if (current === revision) loading.value = false
+  }
+}
+watch(slug, value => { void load(value) }, { immediate: true })
 
-watch(() => route.hash, () => { if (html.value) scrollToHash() })
+watch(() => route.hash, () => { if (!loading.value && doc.value?.slug === slug.value) scrollToHash() })
 
 function onClick(event: MouseEvent): void {
   const target = event.target as HTMLElement
@@ -86,13 +106,27 @@ function openInApp(): void {
   if (doc.value?.appRoute) void router.push({ name: doc.value.appRoute })
 }
 
-onBeforeUnmount(() => observer?.disconnect())
+onBeforeUnmount(() => { ++revision; observer?.disconnect() })
 </script>
 
 <template>
   <div
+    v-if="error"
+    class="docs-load-error"
+    role="alert"
+  >
+    文档加载失败，请重试。
+    <el-button
+      size="small"
+      @click="load(slug)"
+    >
+      重试
+    </el-button>
+  </div>
+  <div
     v-if="doc"
     class="docs-page"
+    :aria-busy="loading"
   >
     <div class="docs-page__content">
       <nav
@@ -209,7 +243,7 @@ onBeforeUnmount(() => observer?.disconnect())
     </aside>
   </div>
   <div
-    v-else
+    v-else-if="missing"
     class="docs-missing"
   >
     <yp-result-page
@@ -234,5 +268,12 @@ onBeforeUnmount(() => observer?.disconnect())
         </router-link>
       </template>
     </yp-result-page>
+  </div>
+  <div
+    v-else-if="loading"
+    class="docs-pending"
+    role="status"
+  >
+    正在加载文档…
   </div>
 </template>

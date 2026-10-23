@@ -147,6 +147,7 @@ const connectionExampleSchemas = {
 }
 
 function schemaForExample(relativePath) {
+  if (relativePath === 'time-tracking/candidates.json') return 'TimerCandidatePage'
   if (connectionExampleSchemas[relativePath]) return connectionExampleSchemas[relativePath]
   if (relativePath === 'operations/log-tail.json') return 'OperationsLogTail'
   if (relativePath === 'operations/metrics-with-gap.json') return 'OperationsMetricSeries'

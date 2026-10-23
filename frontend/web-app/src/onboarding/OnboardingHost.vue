@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { DataAnalysis, FolderOpened, Message, Timer } from '@element-plus/icons-vue'
 import { ElButton, ElDialog, ElIcon, ElTour, ElTourStep } from 'element-plus'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Component } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch, type Component } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSession } from '../composables/useSession'
 import { openDocs } from '../docs-site/openDocs'
@@ -15,6 +15,10 @@ const steps = ref<TourStep[]>([])
 const current = ref(0)
 const updating = computed(() => onboarding.active.value?.mode === 'update')
 let resizeFrame: number | undefined
+let targetFrame: number | undefined
+let measuredTarget: HTMLElement | null = null
+let measuredRect = ''
+const liveTarget = shallowRef<(() => HTMLElement | null)>()
 const open = computed({
   get: () => steps.value.length > 0,
   set: value => {
@@ -88,6 +92,33 @@ function cancelResize(): void {
   resizeFrame = undefined
 }
 
+function cancelTarget(): void {
+  if (targetFrame !== undefined) cancelAnimationFrame(targetFrame)
+  targetFrame = undefined
+  measuredTarget = null
+  measuredRect = ''
+  liveTarget.value = undefined
+}
+
+function trackTarget(): void {
+  const selector = steps.value[current.value]?.target
+  const element = selector ? document.querySelector<HTMLElement>(selector) : null
+  const rect = element?.getBoundingClientRect()
+  const signature = rect ? [rect.x, rect.y, rect.width, rect.height].join(',') : ''
+  if (element !== measuredTarget || signature !== measuredRect) {
+    measuredTarget = element
+    measuredRect = signature
+    // ElTour caches the mask rectangle until its target changes, including during ancestor animations.
+    liveTarget.value = element ? () => element : undefined
+  }
+  if (open.value && selector) targetFrame = requestAnimationFrame(trackTarget)
+}
+
+watch([open, current, steps], () => {
+  cancelTarget()
+  if (open.value) trackTarget()
+}, { flush: 'post' })
+
 function scheduleResize(): void {
   if (resizeFrame !== undefined || !onboarding.active.value) return
   resizeFrame = requestAnimationFrame(() => {
@@ -98,6 +129,7 @@ function scheduleResize(): void {
 
 watch(onboarding.active, () => {
   cancelResize()
+  cancelTarget()
   steps.value = []
   current.value = 0
   void refreshSteps()
@@ -108,6 +140,7 @@ onMounted(() => window.addEventListener('resize', scheduleResize))
 onBeforeUnmount(() => {
   window.removeEventListener('resize', scheduleResize)
   cancelResize()
+  cancelTarget()
   onboarding.stop()
 })
 </script>
@@ -170,9 +203,10 @@ onBeforeUnmount(() => {
     :target-area-clickable="false"
   >
     <el-tour-step
-      v-for="step in steps"
+      v-for="(step, index) in steps"
       :key="step.title"
       v-bind="step"
+      :target="index === current && liveTarget ? liveTarget : step.target ?? null"
     >
       <template
         v-if="updating"

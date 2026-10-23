@@ -1,4 +1,4 @@
-import type { TimerCandidate } from '@yumpoo/api-client'
+import { WorkItemLabelColorToken, type TimerCandidate, type WorkItemDetail, type WorkItemLabelCatalog } from '@yumpoo/api-client'
 import type { RailProject } from '@yumpoo/preload-contract'
 import { addDays, projectColors } from '../team/teamDashboardModel'
 import { formatClock, gaps, HOUR, MIN_BLOCK_MS, MINUTE, placeSequential, type DayBlock, type Range } from '../my-time/day/dayModel'
@@ -18,12 +18,15 @@ export function stepperLabel(date: string): string {
   return `${month}月${day}日 周${'日一二三四五六'[new Date(`${date}T00:00:00Z`).getUTCDay()]}`
 }
 
-/** The candidate carries only the status category, so the pill names the category. */
-export const STATUS_PILLS: Record<string, { label: string; tone: 'accent' | 'warning' | 'success' | 'neutral' }> = {
-  TODO: { label: '待开始', tone: 'warning' },
-  IN_PROGRESS: { label: '进行中', tone: 'accent' },
-  DONE: { label: '已完成', tone: 'success' },
-  CANCELED: { label: '已取消', tone: 'neutral' },
+export type QuickItemStatus = Required<Pick<TimerCandidate, 'statusCode' | 'statusName' | 'statusColorToken'>>
+
+export function itemStatus(detail: WorkItemDetail, labels: WorkItemLabelCatalog | undefined): QuickItemStatus {
+  const status = labels?.statuses.find(value => value.code === detail.statusCode)
+  return {
+    statusCode: detail.statusCode,
+    statusName: status?.displayName ?? detail.statusCode,
+    statusColorToken: status?.colorToken ?? WorkItemLabelColorToken.Gray,
+  }
 }
 
 export interface QuickGroup { projectId: string; projectName: string; items: TimerCandidate[] }

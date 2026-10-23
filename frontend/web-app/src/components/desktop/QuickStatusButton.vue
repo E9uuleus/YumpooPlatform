@@ -6,37 +6,40 @@ import { problemMessage } from '../../api/problems'
 import WorkItemLabelPopoverContent from '../projects/WorkItemLabelPopoverContent.vue'
 import { useConnectedItem } from '../projects/connect/useConnectedItem'
 import { workItemLabelColorValue } from '../projects/workItemLabelColors'
-import { STATUS_PILLS } from './quickTime'
+import { itemStatus, type QuickItemStatus } from './quickTime'
 
 const props = defineProps<{ item: TimerCandidate }>()
-const emit = defineEmits<{ changed: [detail: WorkItemDetail, statusName: string]; failed: [message: string] }>()
+const emit = defineEmits<{
+  changed: [detail: WorkItemDetail, status: QuickItemStatus]
+  resolved: [detail: WorkItemDetail, status: QuickItemStatus]
+  failed: [message: string]
+}>()
 const open = ref(false)
 const popover = ref<InstanceType<typeof ElPopover>>()
 const connected = useConnectedItem({ changed: () => undefined })
 const { detail, loading, forbidden, problem, editable, statuses } = connected
 
-const pill = computed(() => STATUS_PILLS[props.item.statusCategory] ?? { label: props.item.statusCategory, tone: 'neutral' as const })
-/** The project's own status once loaded; a loaded status of another category is stale and falls back to the category until the next load. */
-const own = computed(() => {
-  const status = detail.value && statuses.value.find(value => value.code === detail.value!.statusCode)
-  return status && status.statusCategory === props.item.statusCategory ? status : undefined
-})
+const name = computed(() => props.item.statusName ?? '查看状态')
 const options = computed(() => statuses.value.filter(status => status.active || status.code === detail.value?.statusCode))
 
 // Every open reads the item again, so the transition runs against its latest version and capabilities.
-watch(open, value => { if (value) void connected.load(props.item.workItemId) })
+async function load() {
+  const item = props.item
+  await connected.load(item.workItemId)
+  if (item === props.item && detail.value) emit('resolved', detail.value, itemStatus(detail.value, connected.labels.value))
+}
+watch(open, value => { if (value) void load() })
 // The popover is placed around the short loading note; the status list that replaces it needs a fresh flip decision.
 watch(loading, value => { if (!value && open.value) void nextTick(() => popover.value?.popperRef?.popperInstanceRef?.update()) })
 
 async function choose(statusCode: string) {
   open.value = false
   if (!detail.value || statusCode === detail.value.statusCode) return
-  const name = statuses.value.find(status => status.code === statusCode)?.displayName ?? statusCode
-  if (await connected.transition(statusCode)) { emit('changed', detail.value, name); return }
+  if (await connected.transition(statusCode)) { emit('changed', detail.value, itemStatus(detail.value, connected.labels.value)); return }
   // A cancelled explanation prompt leaves no problem behind; anything else is reported and the item read again.
   if (!problem.value) return
   emit('failed', problemMessage(problem.value))
-  void connected.load(props.item.workItemId)
+  void load()
 }
 </script>
 
@@ -54,17 +57,16 @@ async function choose(statusCode: string) {
       <button
         type="button"
         class="quick-status"
-        :class="{ 'is-open': open, 'is-own': own }"
-        :data-tone="own ? undefined : pill.tone"
-        :style="own ? { '--quick-status-color': workItemLabelColorValue(own.colorToken) } : undefined"
+        :class="{ 'is-open': open, 'is-own': item.statusColorToken }"
+        :style="item.statusColorToken ? { '--quick-status-color': workItemLabelColorValue(item.statusColorToken) } : undefined"
         aria-haspopup="true"
         :aria-expanded="open ? 'true' : 'false'"
-        :aria-label="`状态：${own?.displayName ?? pill.label}，点击修改`"
+        :aria-label="`状态：${name}，点击修改`"
         @click.stop
         @keydown.enter.stop
         @keydown.space.stop
       >
-        {{ own?.displayName ?? pill.label }}<span
+        {{ name }}<span
           class="quick-status__caret"
           aria-hidden="true"
         >▾</span>
@@ -114,9 +116,6 @@ async function choose(statusCode: string) {
 .quick-status{display:inline-flex;align-items:center;gap:2px;padding:1px 6px;border:1px solid transparent;border-radius:5px;font:inherit;font-size:11px;cursor:pointer;
   background:var(--yp-timer-sunken);color:var(--yp-text-secondary);transition:opacity .2s,border-color .15s}
 .quick-status.is-own{background:color-mix(in srgb,var(--quick-status-color) 16%,transparent);color:color-mix(in srgb,var(--quick-status-color) 75%,var(--yp-text-primary))}
-.quick-status[data-tone="accent"]{background:color-mix(in srgb,var(--yp-status-blue) 14%,transparent);color:var(--yp-status-blue)}
-.quick-status[data-tone="warning"]{background:color-mix(in srgb,var(--yp-status-orange) 14%,transparent);color:color-mix(in srgb,var(--yp-status-orange) 75%,var(--yp-text-primary))}
-.quick-status[data-tone="success"]{background:color-mix(in srgb,var(--yp-status-green) 16%,transparent);color:color-mix(in srgb,var(--yp-status-green) 70%,var(--yp-text-primary))}
 .quick-status:hover,.quick-status:focus-visible,.quick-status.is-open{border-color:currentColor}
 .quick-status:focus-visible{outline:0}
 .quick-status__caret{width:0;overflow:hidden;font-size:9px;line-height:1;transition:width .15s}

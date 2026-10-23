@@ -1,5 +1,8 @@
 components:
   examples:
+    TimerCandidates:
+      summary: 计时候选携带项目实际状态名称与颜色
+      externalValue: ../examples/time-tracking/candidates.json
     ConnectColumnIncoming:
       summary: ConnectColumnIncoming 连接契约黄金样例
       externalValue: ../examples/connections/connect-column-incoming.json

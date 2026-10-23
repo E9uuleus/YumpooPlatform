@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { checkDiagram, compileDoc } from './markdown'
+import { resolve } from 'node:path'
+import { checkDiagram, compileDoc, docsMarkdown } from './markdown'
 
 const FRONT = '---\ntitle: 示例\ndescription: 一句话。\norder: 10\naudience: [member]\n---\n'
 const compile = (body: string, path = 'guide/sample.md') => compileDoc(`${FRONT}\n${body}`, path)
@@ -62,10 +63,31 @@ describe('文档构建期编译', () => {
     ['内联样式', '<p style="color:red">x</p>'],
     ['脚本', '<script>alert(1)</script>'],
     ['事件属性', '<a onclick="x()">x</a>'],
-    ['图片', '![截图](a.png)'],
+    ['目录外图片', '![截图](a.png "图注")'],
+    ['远程图片', '![截图](https://example.com/a.png "图注")'],
+    ['缺少替代文本', '![](../screenshots/first-day-home.png "图注")'],
+    ['缺少图注', '![截图](../screenshots/first-day-home.png)'],
+    ['行内图片', '文字 ![截图](../screenshots/first-day-home.png "图注")'],
+    ['原始图片标签', '<img src="a.png">'],
+    ['不存在的截图', '![截图](../screenshots/not-a-screenshot.png "图注")'],
     ['正文 h1', '# 标题'],
   ])('%s 会让构建失败', (_name, body) => {
     expect(() => compile(body)).toThrow(/\[docs\] guide\/sample\.md/)
+  })
+
+  it('步骤中的本地截图预留尺寸、转义图注，并作为同源 Vite 资源打包', async () => {
+    const body = '::: steps\n1. 打开首页\n\n   ![首页 & 项目](../screenshots/first-day-home.png "点击项目 & 查看工作项")\n\n2. 继续\n:::'
+    const doc = compile(body)
+    expect(doc.images).toEqual(['screenshots/first-day-home.png'])
+    expect(doc.html).toMatch(/<figure class="docs-screenshot">\s*<img/)
+    expect(doc.html).toMatch(/alt="首页 &amp; 项目" width="\d+" height="\d+" loading="lazy" decoding="async"/)
+    expect(doc.html).toContain('<figcaption>点击项目 &amp; 查看工作项</figcaption>')
+    expect(doc.search.sections[0]?.text).toContain('点击项目 & 查看工作项')
+    const transform = docsMarkdown().transform
+    if (typeof transform !== 'function') throw new Error('Missing transform')
+    const result = await transform.call({} as never, `${FRONT}\n${body}`, resolve('src/docs-site/content/guide/sample.md'))
+    expect(result).toHaveProperty('code', expect.stringContaining("import i0 from '/src/docs-site/content/screenshots/first-day-home.png?no-inline'"))
+    expect(result).toHaveProperty('code', expect.stringContaining(' + i0 + '))
   })
 
   it('front matter 缺字段或 audience 非法时报错', () => {

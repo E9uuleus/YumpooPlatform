@@ -172,7 +172,7 @@ describe('onboarding host lifecycle', () => {
 
   it('points to the fallback target and copy while the primary target is inert', async () => {
     target('context-nav').setAttribute('inert', '')
-    target('context-nav-expand')
+    const fallback = target('context-nav-expand')
     const { wrapper } = await host()
     useOnboarding().replay('workspace')
     await flushPromises()
@@ -180,9 +180,33 @@ describe('onboarding host lifecycle', () => {
     expect(steps).toHaveLength(1)
     expect(steps[0]!.props()).toMatchObject({
       title: '工作台导航',
-      target: '[data-tour="context-nav-expand"]',
+      target: expect.any(Function),
       placement: 'right-start',
       description: TOURS.workspace.steps[0]!.fallback!.description,
     })
+    expect((steps[0]!.props('target') as () => HTMLElement)()).toBe(fallback)
+  })
+
+  it('remeasures a moving target without restarting the step, then cancels tracking on close', async () => {
+    const stats = target('my-time-stats')
+    let left = 20
+    stats.getBoundingClientRect = () => new DOMRect(left, 100, 800, 80)
+    const { wrapper } = await host()
+    useOnboarding().replay('my-time')
+    await flushPromises()
+    const step = () => wrapper.findComponent(ElTourStep)
+    const initial = step().props('target')
+    expect(typeof initial).toBe('function')
+    await flushFrame()
+    expect(step().props('target')).toBe(initial)
+    left = 40
+    await flushFrame()
+    expect(step().props('target')).not.toBe(initial)
+    expect((step().props('target') as () => HTMLElement)()).toBe(stats)
+    expect(wrapper.findComponent(ElTour).props('current')).toBe(0)
+    expect(api.completeMyOnboardingTour).not.toHaveBeenCalled()
+    expect(frames.size).toBe(1)
+    useOnboarding().stop()
+    expect(frames.size).toBe(0)
   })
 })
