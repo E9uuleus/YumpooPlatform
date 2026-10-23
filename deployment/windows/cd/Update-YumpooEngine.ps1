@@ -16,16 +16,20 @@ param(
     # The desktop update feed stays off until Nginx serves DesktopFeedRoot at /desktop/ (RUNBOOK: desktop release channel).
     [switch]$EnableDesktopFeed,
     [string]$DesktopFeedRoot = 'C:/ProgramData/Yumpoo/public',
-    [ValidateRange(2, 20)][int]$DesktopRetainVersions = 3
+    [ValidateRange(2, 20)][int]$DesktopRetainVersions = 3,
+    [switch]$EnableMonitoring,
+    [ValidatePattern('^[a-zA-Z0-9_-]{1,64}$')][string]$MonitoringEnvironment = 'wecom-dev'
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 Set-StrictMode -Version Latest
 $module = Join-Path $PSScriptRoot 'YumpooDeployment.psm1'
 Import-Module $module -Force
-$result = Install-YumpooEngine -PackagePath $PackagePath -PackageSha256 $PackageSha256 -Root $Root -ExpectedModule $module -Options @{
+$options = @{
     releaseBranch = $ReleaseBranch; requireImmutable = [bool]$RequireImmutable; probeRoutes = [bool]$EnableProbeRoutes
     extraReleases = $ExtraReleases; observeMinutes = $ObserveMinutes; maxErrorLines = $MaxErrorLines
     desktopFeedEnabled = [bool]$EnableDesktopFeed; desktopFeedRoot = $DesktopFeedRoot; desktopRetainVersions = $DesktopRetainVersions
 }
+if ($PSBoundParameters.ContainsKey('EnableMonitoring')) { $options.monitoringEnabled = [bool]$EnableMonitoring; $options.monitoringEnvironment = $MonitoringEnvironment }
+$result = Install-YumpooEngine -PackagePath $PackagePath -PackageSha256 $PackageSha256 -Root $Root -ExpectedModule $module -Options $options
 Write-Output "Deployment engine installed from $($result.sourceCommit); previous engine saved in $($result.backup)."

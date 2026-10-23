@@ -27,6 +27,80 @@ function Get-YumpooSetting($Settings, [string]$Name, $Default) {
     return $value
 }
 
+function Get-YumpooMonitorSettings($Settings) {
+    return @{ enabled = [bool](Get-YumpooSetting $Settings 'monitoring.enabled' $false); environment = [string](Get-YumpooSetting $Settings 'monitoring.environment' 'wecom-dev') }
+}
+
+function Add-YumpooMonitorEvent($Root, $Settings, $Status, [string]$Type, [string]$Mode = 'deploy', [string[]]$Notes = @()) {
+    if (-not (Get-YumpooMonitorSettings $Settings).enabled) { return $false }
+    try {
+        if ($Type -cnotin @('maintenance.planned', 'maintenance.started', 'deployment.completed', 'deployment.recovered')) { throw 'Invalid monitoring event.' }
+        if ([string]$Status.requestId -notmatch '^[a-f0-9-]{36}$') { throw 'Invalid monitoring request ID.' }
+        $directory = Join-Path $Root 'deployment/monitor-outbox'
+        New-Item -ItemType Directory -Path $directory -Force | Out-Null
+        $file = Join-Path $directory ("$($Status.requestId)-$Type.json")
+        if (Test-Path -LiteralPath $file) { return $true }
+        $payload = [ordered]@{
+            target = $(if ([string]$Status.tag -clike 'desktop-v*') { 'desktop' } else { 'server' })
+            mode = $(if ($Mode -eq 'desktop-publish') { 'deploy' } else { $Mode })
+            phase = [string]$Status.phase
+        }
+        if ([string]$Status.tag -match '^(server-v|desktop-v)') { $payload.tag = [string]$Status.tag }
+        if ([string]$Status.sourceCommit -match '^[a-f0-9]{40}$') { $payload.commit = [string]$Status.sourceCommit }
+        if ($Type -clike 'deployment.*') { $payload.outcome = [string]$Status.state }
+        if ($Notes.Count) { $payload.notes = @($Notes | Select-Object -First 30) }
+        $event = [ordered]@{
+            schemaVersion = 1; id = "$($Status.requestId):$Type"; source = 'windows'
+            environment = (Get-YumpooMonitorSettings $Settings).environment; type = $Type
+            occurredAt = (Get-Date).ToUniversalTime().ToString('o'); correlationId = [string]$Status.requestId; payload = $payload
+        }
+        # The engine only commits a small local file. Network retries run outside the deployment lock.
+        Write-YumpooJson $file $event -Attempts 2 -DelayMilliseconds 100
+        return $true
+    } catch {
+        try { [IO.File]::WriteAllText((Join-Path $Root 'deployment/engine/monitor-error.txt'), 'Cannot persist monitoring event; inspect disk and administrator permissions.') } catch { }
+        return $false
+    }
+}
+
+function Wait-YumpooMaintenanceNotice($Root, $Settings, $Status, [string]$Mode, [scriptblock]$Sleep = { param($Seconds) Start-Sleep -Seconds $Seconds }) {
+    if ($Mode -cne 'deploy' -or -not (Get-YumpooMonitorSettings $Settings).enabled) { return }
+    $null = Add-YumpooMonitorEvent $Root $Settings $Status 'maintenance.planned' $Mode
+    & $Sleep 300
+}
+
+function Get-YumpooMonitorSignature([string]$Secret, [string]$Timestamp, [string]$Nonce, [string]$Body) {
+    $hmac = New-Object Security.Cryptography.HMACSHA256
+    try {
+        $hmac.Key = [Text.Encoding]::UTF8.GetBytes($Secret)
+        return ([BitConverter]::ToString($hmac.ComputeHash([Text.Encoding]::UTF8.GetBytes("$Timestamp`n$Nonce`n$Body")))).Replace('-', '').ToLowerInvariant()
+    } finally { $hmac.Dispose() }
+}
+
+function Get-YumpooReleaseNoticeNotes([string]$Tag) {
+    try {
+        if ($Tag -cnotmatch $script:ReleaseTagPattern -and $Tag -cnotmatch $script:DesktopTagPattern) { return @() }
+        $release = Get-YumpooGitHub "releases/tags/$Tag"
+        $match = [regex]::Match([string]$release.body, '(?ms)^### \u66f4\u65b0\u5185\u5bb9\s*\r?\n(.*?)(?=^### |\z)')
+        if (-not $match.Success) { return @() }
+        $notes = @($match.Groups[1].Value.Split("`n") | Where-Object { $_ -match '^\s*- ' } | ForEach-Object { $_.Trim().Substring(2) } | Select-Object -First 20)
+        $notes += @([regex]::Matches([string]$release.body, '(?m)^  - (\u8fd0\u7ef4[\uff5c|].*)$') | ForEach-Object { $_.Groups[1].Value.Trim() } | Select-Object -First 10)
+        return $notes
+    } catch { return @() }
+}
+
+function Register-YumpooMonitorTasks([string]$Root) {
+    $powershell = Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe'
+    $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+    $taskSettings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero) -StartWhenAvailable
+    foreach ($name in @('Relay', 'Tunnel', 'Watchdog')) {
+        $file = Join-Path $Root "deployment/engine/Invoke-YumpooMonitor$name.ps1"
+        if (-not (Test-Path -LiteralPath $file)) { throw 'Monitoring engine scripts are missing.' }
+        $action = New-ScheduledTaskAction -Execute $powershell -Argument ('-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $file + '" -Root "' + $Root + '"')
+        $null = Register-ScheduledTask -TaskName "YumpooMonitor$name" -Action $action -Trigger (New-ScheduledTaskTrigger -AtStartup) -Principal $principal -Settings $taskSettings -Force
+    }
+}
+
 # Status files are read over SFTP while the task runs; a reader's handle can briefly block replacement.
 # Replace atomically and retry within a bound instead of failing the deployment on a transient lock.
 function Write-YumpooJson($Path, $Value, [int]$Attempts = 60, [int]$DelayMilliseconds = 500) {
@@ -691,7 +765,8 @@ function Test-YumpooBlobSnapshot($Snapshot) {
 # Best effort: a notification failure never changes the deployment outcome.
 function Send-YumpooNotification($Root, $Status, [TimeSpan]$Elapsed, [scriptblock]$Sender = {
     param($Uri, [byte[]]$Body)
-    Invoke-RestMethod -Method Post -Uri $Uri -ContentType 'application/json; charset=utf-8' -Body $Body -TimeoutSec 10 | Out-Null
+    $result = Invoke-RestMethod -Method Post -Uri $Uri -ContentType 'application/json; charset=utf-8' -Body $Body -TimeoutSec 10
+    if ($null -eq $result -or $null -eq $result.PSObject.Properties['errcode'] -or $result.errcode -ne 0) { throw 'WeCom rejected the notification.' }
 }) {
     try {
         $config = Join-Path $Root 'secrets/deploy-notify.json'
@@ -728,7 +803,7 @@ function Send-YumpooNotification($Root, $Status, [TimeSpan]$Elapsed, [scriptbloc
         & $Sender $raw $body
         return $true
     } catch {
-        try { [IO.File]::WriteAllText((Join-Path $Root 'deployment/engine/notify-error.txt'), $_.Exception.Message) } catch { }
+        try { [IO.File]::WriteAllText((Join-Path $Root 'deployment/engine/notify-error.txt'), 'Notification delivery failed; inspect the protected channel configuration and connectivity.') } catch { }
         return $false
     }
 }
@@ -1001,7 +1076,7 @@ function Install-YumpooEngine([string]$PackagePath, [string]$PackageSha256, [str
         throw 'The package SHA-256 does not match the verified Release value.'
     }
     $engine = Join-Path $Root 'deployment/engine'
-    $files = @('YumpooDeployment.psm1', 'Invoke-YumpooDeploy.ps1', 'Start-YumpooNginx.ps1')
+    $files = @('YumpooDeployment.psm1', 'Invoke-YumpooDeploy.ps1', 'Start-YumpooNginx.ps1', 'Invoke-YumpooMonitorRelay.ps1', 'Invoke-YumpooMonitorTunnel.ps1', 'Invoke-YumpooMonitorWatchdog.ps1')
     $lock = $null; $staging = $null
     try {
         try { $lock = [IO.File]::Open((Join-Path $engine 'deploy.lock'), 'OpenOrCreate', 'ReadWrite', 'None') }
@@ -1039,6 +1114,9 @@ function Install-YumpooEngine([string]$PackagePath, [string]$PackageSha256, [str
         $feedRetain = if ($Options.ContainsKey('desktopRetainVersions')) { [int]$Options.desktopRetainVersions } else { 3 }
         $feedEnabled = $Options.ContainsKey('desktopFeedEnabled') -and [bool]$Options['desktopFeedEnabled']
         $settings.desktopFeed = [ordered]@{ enabled = $feedEnabled; root = $feedRoot; channel = 'stable'; retainVersions = $feedRetain }
+        if ($Options.ContainsKey('monitoringEnabled')) {
+            $settings.monitoring = [ordered]@{ enabled = [bool]$Options.monitoringEnabled; environment = [string]$Options.monitoringEnvironment }
+        }
         $null = Get-YumpooDesktopFeedSettings ([pscustomobject]$settings)
         if ($settings.releaseBranch -cnotin @('dev', 'main')) { throw 'The release branch must be dev or main.' }
         $backup = Join-Path $engine ('backup-' + (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssfffZ'))
@@ -1055,6 +1133,7 @@ function Install-YumpooEngine([string]$PackagePath, [string]$PackageSha256, [str
                 schemaVersion = 1; sourceCommit = $metadata.sourceCommit; packageSha256 = $PackageSha256.ToLowerInvariant()
                 installedAt = (Get-Date).ToUniversalTime().ToString('o'); files = $hashes
             })
+            if ((Get-YumpooMonitorSettings $settings).enabled) { Register-YumpooMonitorTasks $Root }
         } catch {
             foreach ($file in $files + 'host.json' + 'engine.json') {
                 if (Test-Path -LiteralPath (Join-Path $backup $file)) { Copy-Item -LiteralPath (Join-Path $backup $file) -Destination (Join-Path $engine $file) -Force }

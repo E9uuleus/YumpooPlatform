@@ -31,6 +31,12 @@ export const nodeSteps = [
   pnpm('client-tests', '--filter', '@yumpoo/api-client', 'test'),
   pnpm('web-tests', '--filter', '@yumpoo/web-app', 'test'),
   pnpm('desktop-tests', '--filter', '@yumpoo/desktop-shell', 'test'),
+  pnpm('monitor-hub-build', '--filter', '@yumpoo/monitor-hub', 'build'),
+  pnpm('monitor-hub-tests', '--filter', '@yumpoo/monitor-hub', 'test'),
+  pnpm('monitor-dashboard-build', '--filter', '@yumpoo/monitor-dashboard', 'build'),
+  node('monitor-configuration', 'tools/monitoring/check.mjs'),
+  node('monitor-dashboard', 'tools/monitoring/dashboard.mjs', '--check'),
+  node('monitor-workflow-notifications', '--test', 'tools/release/monitor-notify.test.mjs'),
 ]
 
 export const assetSteps = [
@@ -56,6 +62,7 @@ export function plan(stage, baseRef = 'origin/dev') {
       mvn('bounded-heap', '-q', '-Dtest=M014BoundedHeapVerification', '-DargLine=-Xmx96m', 'test'),
     ]
     case 'portable': return [
+      node('monitor-alert-rules', 'tools/monitoring/check.mjs', '--rules'),
       node('backup-restore-output', 'tools/verification/verify-backup-restore-output.mjs', '$BACKEND_STARTED'),
       node('packaged-http', 'tools/verification/smoke-packaged-http.mjs'),
       node('packaged-http-report', 'tools/verification/verify-packaged-http-report.mjs'),

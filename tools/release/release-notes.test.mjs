@@ -160,7 +160,7 @@ test('the desktop body and release.json notes keep only 桌面 entries and never
 
 test('GitHub-side notifications accept only the robot URL and never fail the workflow', async () => {
   const calls = []
-  const send = async (url, options) => { calls.push({ url, body: JSON.parse(options.body) }); return { ok: true } }
+  const send = async (url, options) => { calls.push({ url, body: JSON.parse(options.body) }); return { ok: true, json: async () => ({ errcode: 0 }) } }
   assert.equal(await notifyWeCom({}, 'x', send), false)
   for (const url of ['https://example.invalid/cgi-bin/webhook/send?key=a', 'https://qyapi.weixin.qq.com:443/cgi-bin/webhook/send?key=a']) {
     assert.equal(await notifyWeCom({ WECOM_RELEASE_WEBHOOK: url }, 'x', send), false)
