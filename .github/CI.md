@@ -38,6 +38,8 @@ static 同时构建 `@yumpoo/monitor-hub` 与 `@yumpoo/monitor-dashboard`，执�
 
 监控服务不加入业务 Release 的自动重启范围。Ubuntu 独立部署步骤见[监控部署手册](../deployment/monitoring/README.md)。GitHub 的通知步骤使用仓库变量 `MONITOR_ENABLED` 及 `MONITOR_SSH_HOST`、`MONITOR_SSH_KEY`、`MONITOR_KNOWN_HOSTS`、`MONITOR_SOURCE_SECRET` Secrets；机器密钥只能转发事件端口。开启统一入口后不会因投递失败退回旧 Webhook 重复发送；未被接收的事件会写入工作流摘要，不能视为已持久化。
 
+采集器实机验收同时覆盖首次安装和同版本重复配置；MSI 返回成功之外，还须确认服务运行、回环监听和实际指标。纯脚本回归不能替代上游 MSI 的安装行为验证。
+
 ## 四种事实来源
 
 - **冻结历史**：归档 Agent Note 的 manifest、已在目标分支存在的 SQL 迁移、M2-23 冻结清单与既有 OpenAPI 精确例外不可改写。换行按仓库 LF 约定比较；迁移追加更高且唯一的版本，不能删除、移动或回填旧版本。
