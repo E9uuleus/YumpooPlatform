@@ -15,7 +15,7 @@ export const MENU = { width: 288 + PANEL_MARGIN * 2, height: 448 + PANEL_MARGIN 
 export const QUICK_PANEL = { width: 340 + PANEL_MARGIN * 2, height: 476 + PANEL_MARGIN * 2 } as const
 export const QUICK_PANEL_MAX = { width: 560 + PANEL_MARGIN * 2, height: 860 + PANEL_MARGIN * 2 } as const
 export const RAIL_ICONS: Readonly<Record<RailSize, number>> = { small: 30, medium: 34, large: 40 }
-/** Space between the rail and the screen edge; tucked, the rail keeps RAIL_PEEK - RAIL_EDGE_GAP pixels in view. */
+/** Space between the rail and the screen edge; tucked, the rail leaves the screen and the RAIL_PEEK strip shows only the page's handle. */
 export const RAIL_EDGE_GAP = 6
 export const RAIL_PEEK = 10
 export const MAX_RAIL_PROJECTS = 6
