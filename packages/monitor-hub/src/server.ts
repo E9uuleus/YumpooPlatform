@@ -1,5 +1,6 @@
 import Fastify from 'fastify'
 import staticPlugin from '@fastify/static'
+import rateLimit from '@fastify/rate-limit'
 import { randomUUID } from 'node:crypto'
 import { Hub, type Alert } from './hub.js'
 import { parseEvent, type Config } from './model.js'
@@ -10,6 +11,8 @@ export async function createServers(hub: Hub, fresh: (alert: Alert) => boolean, 
   const config: Config = hub.config
   const ui = Fastify({ bodyLimit: 16_384, logger: false, requestTimeout: 10_000 })
   const ingress = Fastify({ bodyLimit: 131_072, logger: false, requestTimeout: 10_000 })
+  await ui.register(rateLimit, { global: true, max: 300, timeWindow: 60_000 })
+  await ingress.register(rateLimit, { global: true, max: 600, timeWindow: 60_000 })
   const sessions = new Map<string, { csrf: string; expires: number }>()
   let failures = 0; let blockedUntil = 0
   ui.addHook('onSend', async (_req, reply, payload) => {
@@ -25,7 +28,7 @@ export async function createServers(hub: Hub, fresh: (alert: Alert) => boolean, 
     if (!session || session.expires < Date.now()) { sessions.delete(token); return reply.code(401).send({ error: '需要管理员登录' }) }
     if (req.method !== 'GET' && !equal(session.csrf, String(req.headers['x-csrf-token'] ?? ''))) return reply.code(403).send({ error: 'CSRF 校验失败' })
   })
-  ui.post<{ Body: { username?: string; password?: string } }>('/api/v1/login', async (req, reply) => {
+  ui.post<{ Body: { username?: string; password?: string } }>('/api/v1/login', { config: { rateLimit: { max: 10, timeWindow: 60_000 } } }, async (req, reply) => {
     const now = Date.now()
     if (now < blockedUntil) return reply.code(429).send({ error: '请稍后重试' })
     if (typeof req.body?.password !== 'string' || req.body.password.length > 256 || !verifyPassword(config, String(req.body?.username ?? ''), req.body.password)) {

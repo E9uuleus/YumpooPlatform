@@ -114,6 +114,8 @@ test('machine and admin listeners separate privileges; signed ingress rejects re
     assert.equal((await ui.inject({method:'POST',url,headers:adminHeaders,payload:{action:'postpone',ends:now+900000}})).statusCode,200)
     assert.equal((await ui.inject({method:'POST',url,headers:adminHeaders,payload:{action:'cancel'}})).statusCode,200)
     assert.equal((await ui.inject({method:'POST',url,headers:adminHeaders,payload:{action:'postpone',ends:now+900000}})).statusCode,409)
+    for(let index=0;index<9;index++) assert.equal((await ui.inject({method:'POST',url:'/api/v1/login',payload:{username:'admin',password:'test-password'}})).statusCode,200)
+    assert.equal((await ui.inject({method:'POST',url:'/api/v1/login',payload:{username:'admin',password:'test-password'}})).statusCode,429)
   } finally { await ui.close(); await ingress.close(); store.close() }
 })
 
