@@ -23,6 +23,7 @@ do {
         if ($up) {
             $state.downSince = ''
             if ($state.notified) { $text = 'Yumpoo monitoring connection and telemetry/alerting pipeline restored. This message is from the independent Windows watchdog.' }
+            else { $state.lastSent = '' }
         } else {
             if (-not $state.downSince) { $state.downSince = $now.ToString('o') }
             if (($now - [DateTimeOffset]::Parse($state.downSince)).TotalMinutes -ge 3 -and (-not $state.lastSent -or ($now - [DateTimeOffset]::Parse($state.lastSent)).TotalHours -ge 1)) {
@@ -36,7 +37,7 @@ do {
                 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
                 $body = [Text.Encoding]::UTF8.GetBytes((@{ msgtype = 'markdown'; markdown = @{ content = $text } } | ConvertTo-Json -Depth 4))
                 $response = Invoke-RestMethod -Method Post -Uri $url -ContentType 'application/json' -Body $body -TimeoutSec 10
-                if ($response.errcode -eq 0) { $state.notified = -not $up; $state.lastSent = $now.ToString('o') }
+                if ($response.errcode -eq 0) { $state.notified = -not $up; $state.lastSent = $(if ($up) { '' } else { $now.ToString('o') }) }
             }
         }
         Write-YumpooJson $stateFile $state -Attempts 2 -DelayMilliseconds 100
