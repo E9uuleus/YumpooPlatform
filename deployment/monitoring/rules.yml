@@ -66,7 +66,7 @@ groups:
         labels: { severity: critical, source_job: windows }
         annotations: { summary: 'Windows 磁盘可用空间不足 10%。' }
       - alert: WindowsServiceStopped
-        expr: windows_service_state{state="running",name=~"YumpooServer|postgresql-x64-17|sshd"} == 0
+        expr: label_replace(windows_service_state{state="running",service=~"YumpooServer|postgresql-x64-17|sshd"}, "windows_service", "$1", "service", "(.*)") == 0
         for: 90s
         keep_firing_for: 60s
         labels: { severity: critical, source_job: windows, service: server, expected_maintenance: 'true' }

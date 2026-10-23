@@ -24,7 +24,7 @@ const panels = [
   ['证书剩余天数','(probe_ssl_earliest_cert_expiry-time())/86400','d'],
   ['Prometheus 存储块','prometheus_tsdb_storage_blocks_bytes','bytes'],
 ]
-const dashboard={uid:'yumpoo-offsite',title:'Yumpoo 异机监控',schemaVersion:39,version:1,refresh:'30s',timezone:'browser',time:{from:'now-6h',to:'now'},tags:['yumpoo','offsite'],panels:panels.map(([title,expr,unit],i)=>({id:i+1,title,type:'timeseries',datasource:{type:'prometheus',uid:'prometheus'},gridPos:{x:(i%2)*12,y:Math.floor(i/2)*8,w:12,h:8},targets:[{refId:'A',expr,legendFormat:'{{instance}} {{name}} {{rule}} {{severity}}'}],fieldConfig:{defaults:{unit,custom:{spanNulls:false,lineWidth:2,fillOpacity:5}},overrides:[]},options:{legend:{displayMode:'list',placement:'bottom'},tooltip:{mode:'multi'}}}))}
+const dashboard={uid:'yumpoo-offsite',title:'Yumpoo 异机监控',schemaVersion:39,version:1,refresh:'30s',timezone:'browser',time:{from:'now-6h',to:'now'},tags:['yumpoo','offsite'],panels:panels.map(([title,expr,unit],i)=>({id:i+1,title,type:'timeseries',datasource:{type:'prometheus',uid:'prometheus'},gridPos:{x:(i%2)*12,y:Math.floor(i/2)*8,w:12,h:8},targets:[{refId:'A',expr,legendFormat:'{{instance}} {{service}} {{rule}} {{severity}}'}],fieldConfig:{defaults:{unit,custom:{spanNulls:false,lineWidth:2,fillOpacity:5}},overrides:[]},options:{legend:{displayMode:'list',placement:'bottom'},tooltip:{mode:'multi'}}}))}
 const file=path.join(root,'deployment/monitoring/grafana/dashboards/yumpoo.json')
 const text=`${JSON.stringify(dashboard,null,2)}\n`
 if(process.argv.includes('--check')){if(fs.readFileSync(file,'utf8')!==text)throw new Error('Regenerate the monitoring dashboard')}

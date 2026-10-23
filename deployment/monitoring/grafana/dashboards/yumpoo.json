@@ -32,7 +32,7 @@
         {
           "refId": "A",
           "expr": "probe_success",
-          "legendFormat": "{{instance}} {{name}} {{rule}} {{severity}}"
+          "legendFormat": "{{instance}} {{service}} {{rule}} {{severity}}"
         }
       ],
       "fieldConfig": {
@@ -74,7 +74,7 @@
         {
           "refId": "A",
           "expr": "probe_duration_seconds",
-          "legendFormat": "{{instance}} {{name}} {{rule}} {{severity}}"
+          "legendFormat": "{{instance}} {{service}} {{rule}} {{severity}}"
         }
       ],
       "fieldConfig": {
@@ -116,7 +116,7 @@
         {
           "refId": "A",
           "expr": "1 - avg(rate(windows_cpu_time_total{mode=\"idle\"}[5m]))",
-          "legendFormat": "{{instance}} {{name}} {{rule}} {{severity}}"
+          "legendFormat": "{{instance}} {{service}} {{rule}} {{severity}}"
         }
       ],
       "fieldConfig": {
@@ -158,7 +158,7 @@
         {
           "refId": "A",
           "expr": "windows_memory_available_bytes",
-          "legendFormat": "{{instance}} {{name}} {{rule}} {{severity}}"
+          "legendFormat": "{{instance}} {{service}} {{rule}} {{severity}}"
         }
       ],
       "fieldConfig": {
@@ -200,7 +200,7 @@
         {
           "refId": "A",
           "expr": "windows_logical_disk_free_bytes",
-          "legendFormat": "{{instance}} {{name}} {{rule}} {{severity}}"
+          "legendFormat": "{{instance}} {{service}} {{rule}} {{severity}}"
         }
       ],
       "fieldConfig": {
@@ -242,7 +242,7 @@
         {
           "refId": "A",
           "expr": "windows_service_state{state=\"running\"}",
-          "legendFormat": "{{instance}} {{name}} {{rule}} {{severity}}"
+          "legendFormat": "{{instance}} {{service}} {{rule}} {{severity}}"
         }
       ],
       "fieldConfig": {
@@ -284,7 +284,7 @@
         {
           "refId": "A",
           "expr": "1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m]))",
-          "legendFormat": "{{instance}} {{name}} {{rule}} {{severity}}"
+          "legendFormat": "{{instance}} {{service}} {{rule}} {{severity}}"
         }
       ],
       "fieldConfig": {
@@ -326,7 +326,7 @@
         {
           "refId": "A",
           "expr": "node_memory_MemAvailable_bytes",
-          "legendFormat": "{{instance}} {{name}} {{rule}} {{severity}}"
+          "legendFormat": "{{instance}} {{service}} {{rule}} {{severity}}"
         }
       ],
       "fieldConfig": {
@@ -368,7 +368,7 @@
         {
           "refId": "A",
           "expr": "node_filesystem_avail_bytes{mountpoint=\"/\"}",
-          "legendFormat": "{{instance}} {{name}} {{rule}} {{severity}}"
+          "legendFormat": "{{instance}} {{service}} {{rule}} {{severity}}"
         }
       ],
       "fieldConfig": {
@@ -410,7 +410,7 @@
         {
           "refId": "A",
           "expr": "yumpoo_ops_heap_ratio",
-          "legendFormat": "{{instance}} {{name}} {{rule}} {{severity}}"
+          "legendFormat": "{{instance}} {{service}} {{rule}} {{severity}}"
         }
       ],
       "fieldConfig": {
@@ -452,7 +452,7 @@
         {
           "refId": "A",
           "expr": "yumpoo_ops_http_p95",
-          "legendFormat": "{{instance}} {{name}} {{rule}} {{severity}}"
+          "legendFormat": "{{instance}} {{service}} {{rule}} {{severity}}"
         }
       ],
       "fieldConfig": {
@@ -494,7 +494,7 @@
         {
           "refId": "A",
           "expr": "yumpoo_ops_http_errorrate",
-          "legendFormat": "{{instance}} {{name}} {{rule}} {{severity}}"
+          "legendFormat": "{{instance}} {{service}} {{rule}} {{severity}}"
         }
       ],
       "fieldConfig": {
@@ -536,7 +536,7 @@
         {
           "refId": "A",
           "expr": "{__name__=~\"yumpoo_ops_db_pool_active|yumpoo_ops_db_pool_pending|yumpoo_ops_db_pool_max\"}",
-          "legendFormat": "{{instance}} {{name}} {{rule}} {{severity}}"
+          "legendFormat": "{{instance}} {{service}} {{rule}} {{severity}}"
         }
       ],
       "fieldConfig": {
@@ -578,7 +578,7 @@
         {
           "refId": "A",
           "expr": "yumpoo_ops_outbox_oldestage",
-          "legendFormat": "{{instance}} {{name}} {{rule}} {{severity}}"
+          "legendFormat": "{{instance}} {{service}} {{rule}} {{severity}}"
         }
       ],
       "fieldConfig": {
@@ -620,7 +620,7 @@
         {
           "refId": "A",
           "expr": "yumpoo_ops_alert_active",
-          "legendFormat": "{{instance}} {{name}} {{rule}} {{severity}}"
+          "legendFormat": "{{instance}} {{service}} {{rule}} {{severity}}"
         }
       ],
       "fieldConfig": {
@@ -662,7 +662,7 @@
         {
           "refId": "A",
           "expr": "time() - yumpoo_ops_sample_timestamp_seconds",
-          "legendFormat": "{{instance}} {{name}} {{rule}} {{severity}}"
+          "legendFormat": "{{instance}} {{service}} {{rule}} {{severity}}"
         }
       ],
       "fieldConfig": {
@@ -704,7 +704,7 @@
         {
           "refId": "A",
           "expr": "up",
-          "legendFormat": "{{instance}} {{name}} {{rule}} {{severity}}"
+          "legendFormat": "{{instance}} {{service}} {{rule}} {{severity}}"
         }
       ],
       "fieldConfig": {
@@ -746,7 +746,7 @@
         {
           "refId": "A",
           "expr": "{__name__=~\"monitor_delivery_pending|monitor_delivery_dead\"}",
-          "legendFormat": "{{instance}} {{name}} {{rule}} {{severity}}"
+          "legendFormat": "{{instance}} {{service}} {{rule}} {{severity}}"
         }
       ],
       "fieldConfig": {
@@ -788,7 +788,7 @@
         {
           "refId": "A",
           "expr": "(probe_ssl_earliest_cert_expiry-time())/86400",
-          "legendFormat": "{{instance}} {{name}} {{rule}} {{severity}}"
+          "legendFormat": "{{instance}} {{service}} {{rule}} {{severity}}"
         }
       ],
       "fieldConfig": {
@@ -830,7 +830,7 @@
         {
           "refId": "A",
           "expr": "prometheus_tsdb_storage_blocks_bytes",
-          "legendFormat": "{{instance}} {{name}} {{rule}} {{severity}}"
+          "legendFormat": "{{instance}} {{service}} {{rule}} {{severity}}"
         }
       ],
       "fieldConfig": {
