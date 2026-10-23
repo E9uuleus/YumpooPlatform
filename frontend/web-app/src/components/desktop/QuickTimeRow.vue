@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { TimerCandidate } from '@yumpoo/api-client'
-import { Calendar, Check, Plus } from '@element-plus/icons-vue'
-import TimerIcon from '../timer/TimerIcon.vue'
+import type { TimerCandidate, WorkItemDetail } from '@yumpoo/api-client'
+import { Plus } from '@element-plus/icons-vue'
+import QuickComposer from './QuickComposer.vue'
+import QuickStatusButton from './QuickStatusButton.vue'
+import YpOverflowText from '../yp/YpOverflowText.vue'
+import type { Range } from '../my-time/day/dayModel'
 import { workItemLabelColorValue } from '../projects/workItemLabelColors'
-import { QUICK_DURATIONS, shortDuration, spokenDuration, STATUS_PILLS, stepDate, stepperLabel, type DateChoice } from './quickTime'
-import { addDays } from '../team/teamDashboardModel'
+import { shortDuration, type DateChoice } from './quickTime'
 
-const props = defineProps<{
+defineProps<{
   item: TimerCandidate
   todayMs: number
   expanded: boolean
@@ -16,26 +17,24 @@ const props = defineProps<{
   flashing: boolean
   today: string
   hint: string
+  targetDate: string
+  timezone: string
+  dayRange: Range
+  rangeNote: string
+  rangeInvalid: boolean
   canRecord: boolean
   recording: 'idle' | 'saving' | 'done'
   timerEnabled: boolean
 }>()
-const emit = defineEmits<{ toggle: []; record: []; start: [] }>()
+const emit = defineEmits<{ toggle: []; record: []; start: []; statusChanged: [detail: WorkItemDetail, statusName: string]; statusFailed: [message: string] }>()
 const dateChoice = defineModel<DateChoice>('dateChoice', { required: true })
 const pickedDate = defineModel<string>('pickedDate', { required: true })
 const durationMs = defineModel<number>('durationMs', { required: true })
 const custom = defineModel<boolean>('custom', { required: true })
 const customText = defineModel<string>('customText', { required: true })
-
-const pill = computed(() => STATUS_PILLS[props.item.statusCategory] ?? { label: props.item.statusCategory, tone: 'neutral' as const })
-const dates: Array<{ value: DateChoice; label: string }> = [{ value: 'today', label: '今天' }, { value: 'yesterday', label: '昨天' }]
-const target = computed(() => dateChoice.value === 'today' ? props.today : dateChoice.value === 'yesterday' ? addDays(props.today, -1) : pickedDate.value)
-function step(delta: -1 | 1) {
-  const next = stepDate(target.value, delta, props.today)
-  dateChoice.value = next.choice
-  pickedDate.value = next.picked
-}
-function chooseDuration(ms: number) { custom.value = false; durationMs.value = ms }
+const rangeMode = defineModel<boolean>('rangeMode', { required: true })
+const rangeStart = defineModel<number>('rangeStart', { required: true })
+const rangeEnd = defineModel<number>('rangeEnd', { required: true })
 </script>
 
 <template>
@@ -58,12 +57,16 @@ function chooseDuration(ms: number) { custom.value = false; durationMs.value = m
           :style="{ background: workItemLabelColorValue(item.contentColorToken) }"
         />
         <span class="quick-row__text">
-          <span class="quick-row__title">{{ item.title }}</span>
+          <YpOverflowText
+            class="quick-row__title"
+            :text="item.title"
+          />
           <span class="quick-row__meta">
-            <span
-              class="quick-row__status"
-              :data-tone="pill.tone"
-            >{{ pill.label }}</span>
+            <span class="quick-row__status"><QuickStatusButton
+              :item="item"
+              @changed="(detail, name) => emit('statusChanged', detail, name)"
+              @failed="emit('statusFailed', $event)"
+            /></span>
             <span class="quick-row__today">{{ todayMs ? `今日 ${shortDuration(todayMs)}` : '今日未记录' }}</span>
           </span>
         </span>
@@ -74,111 +77,29 @@ function chooseDuration(ms: number) { custom.value = false; durationMs.value = m
       </div>
       <div class="quick-composer-wrap">
         <div>
-          <div
-            class="quick-composer"
-            :inert="!expanded"
-          >
-            <div
-              class="quick-chips"
-              role="radiogroup"
-              aria-label="日期"
-            >
-              <button
-                v-for="option in dates"
-                :key="option.value"
-                type="button"
-                class="quick-chip"
-                role="radio"
-                :aria-checked="dateChoice === option.value"
-                :class="{ 'is-active': dateChoice === option.value }"
-                @click="dateChoice = option.value"
-              >
-                {{ option.label }}
-              </button>
-              <span
-                class="quick-stepper"
-                :class="{ 'is-active': dateChoice === 'pick' }"
-              >
-                <button
-                  type="button"
-                  aria-label="前一天"
-                  @click="step(-1)"
-                >‹</button>
-                <span class="quick-stepper__label">{{ stepperLabel(target) }}</span>
-                <button
-                  type="button"
-                  aria-label="后一天"
-                  :disabled="target >= today"
-                  @click="step(1)"
-                >›</button>
-              </span>
-            </div>
-            <div
-              class="quick-chips"
-              role="radiogroup"
-              aria-label="时长"
-            >
-              <button
-                v-for="ms in QUICK_DURATIONS"
-                :key="ms"
-                type="button"
-                class="quick-chip"
-                role="radio"
-                :aria-checked="!custom && durationMs === ms"
-                :class="{ 'is-active': !custom && durationMs === ms }"
-                @click="chooseDuration(ms)"
-              >
-                {{ spokenDuration(ms) }}
-              </button>
-              <button
-                type="button"
-                class="quick-chip"
-                role="radio"
-                :aria-checked="custom"
-                :class="{ 'is-active': custom }"
-                @click="custom = true"
-              >
-                自定义
-              </button>
-              <input
-                v-if="custom"
-                v-model="customText"
-                class="quick-custom"
-                placeholder="如 1h30m"
-                aria-label="自定义时长"
-              >
-            </div>
-            <p
-              class="quick-hint"
-              role="status"
-            >
-              <Calendar />{{ hint }}
-            </p>
-            <div class="quick-actions">
-              <button
-                v-if="timerEnabled"
-                type="button"
-                class="quick-button"
-                @click="emit('start')"
-              >
-                <TimerIcon name="play" />开始计时
-              </button>
-              <button
-                type="button"
-                class="quick-button is-primary"
-                :class="{ 'is-done': recording === 'done' }"
-                :disabled="!canRecord && recording !== 'done'"
-                @click="emit('record')"
-              >
-                <template v-if="recording === 'done'">
-                  <Check />已记录
-                </template>
-                <template v-else>
-                  记录 {{ spokenDuration(durationMs) || '…' }}
-                </template>
-              </button>
-            </div>
-          </div>
+          <QuickComposer
+            v-model:date-choice="dateChoice"
+            v-model:picked-date="pickedDate"
+            v-model:duration-ms="durationMs"
+            v-model:custom="custom"
+            v-model:custom-text="customText"
+            v-model:range-mode="rangeMode"
+            v-model:range-start="rangeStart"
+            v-model:range-end="rangeEnd"
+            :expanded="expanded"
+            :today="today"
+            :hint="hint"
+            :target-date="targetDate"
+            :timezone="timezone"
+            :day-range="dayRange"
+            :range-note="rangeNote"
+            :range-invalid="rangeInvalid"
+            :can-record="canRecord"
+            :recording="recording"
+            :timer-enabled="timerEnabled"
+            @record="emit('record')"
+            @start="emit('start')"
+          />
         </div>
       </div>
     </div>
@@ -188,43 +109,23 @@ function chooseDuration(ms: number) { custom.value = false; durationMs.value = m
 <style scoped>
 .quick-item{display:grid;grid-template-rows:1fr}
 .quick-item__inner,.quick-composer-wrap>div{min-height:0;overflow:hidden}
-button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;padding:0}
-button:disabled{cursor:default;opacity:.45}
-button:focus-visible,.quick-row:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:-2px}
+.quick-row:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:-2px}
 .quick-row{display:flex;align-items:center;gap:10px;padding:7px 6px;border-radius:9px;cursor:pointer;outline:0;transition:background .3s}
 .quick-row:hover{background:var(--yp-timer-hover)}
 .is-expanded .quick-row{background:var(--yp-timer-sunken)}
 .is-flashing .quick-row{background:color-mix(in srgb,var(--yp-timer-saved) 18%,transparent)}
 .quick-row__bar{width:4px;align-self:stretch;border-radius:2px;flex-shrink:0;transition:opacity .2s}
 .quick-row__text{flex:1;min-width:0}
-.quick-row__title{display:block;overflow:hidden;font-weight:500;text-overflow:ellipsis;white-space:nowrap;transition:color .2s}
+/* The title element belongs to YpOverflowText, so it is reached through :deep(). */
+.quick-row__text :deep(.quick-row__title){display:block;overflow:hidden;font-weight:500;text-overflow:ellipsis;white-space:nowrap;transition:color .2s}
 .quick-row__meta{display:flex;align-items:center;gap:6px;margin-top:3px;color:var(--yp-text-secondary);font-size:11.5px}
-.quick-row__status{padding:1px 6px;border-radius:5px;font-size:11px;transition:opacity .2s;background:var(--yp-timer-sunken);color:var(--yp-text-secondary)}
-.quick-row__status[data-tone="accent"]{background:color-mix(in srgb,var(--yp-status-blue) 14%,transparent);color:var(--yp-status-blue)}
-.quick-row__status[data-tone="warning"]{background:color-mix(in srgb,var(--yp-status-orange) 14%,transparent);color:color-mix(in srgb,var(--yp-status-orange) 75%,var(--yp-text-primary))}
-.quick-row__status[data-tone="success"]{background:color-mix(in srgb,var(--yp-status-green) 16%,transparent);color:color-mix(in srgb,var(--yp-status-green) 70%,var(--yp-text-primary))}
+.quick-row__status{display:inline-flex;transition:opacity .2s}
 .quick-row__today{font-variant-numeric:tabular-nums}
 .quick-row__add{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;color:var(--yp-text-secondary);opacity:.55;transition:opacity .15s}
 .quick-row__add svg{width:16px;height:16px}
 .quick-row:hover .quick-row__add{opacity:1}
-.is-completed .quick-row__title{color:var(--yp-text-muted);text-decoration:line-through}
+.is-completed :deep(.quick-row__title){color:var(--yp-text-muted);text-decoration:line-through}
 .is-completed .quick-row__bar,.is-completed .quick-row__status{opacity:.45}
 .quick-composer-wrap{display:grid;grid-template-rows:0fr;transition:grid-template-rows .26s var(--yp-timer-ease)}
 .is-expanded .quick-composer-wrap{grid-template-rows:1fr}
-.quick-composer{display:flex;flex-direction:column;gap:8px;padding:8px 6px 12px 20px}
-.quick-chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
-.quick-chip{display:inline-flex;align-items:center;height:24px;padding:0 9px;border:1px solid var(--yp-timer-hairline);border-radius:999px;color:var(--yp-text-secondary);font-size:12px;white-space:nowrap}
-.quick-chip.is-active,.quick-stepper.is-active{border-color:var(--yp-timer-accent);background:color-mix(in srgb,var(--yp-timer-accent) 12%,transparent);color:var(--yp-timer-accent)}
-.quick-stepper{display:inline-flex;align-items:center;height:24px;border:1px solid var(--yp-timer-hairline);border-radius:999px;color:var(--yp-text-secondary);font-size:12px}
-.quick-stepper button{width:22px}
-.quick-stepper__label{font-variant-numeric:tabular-nums}
-.quick-custom{box-sizing:border-box;width:84px;height:24px;padding:0 8px;border:1px solid var(--yp-input-border);border-radius:999px;background:var(--yp-input-bg);color:var(--yp-text-primary);font:12px var(--yp-font-family);outline:0}
-.quick-custom:focus{border-color:var(--yp-timer-accent)}
-.quick-hint{display:flex;align-items:center;gap:6px;margin:0;color:var(--yp-text-secondary);font-size:12px;font-variant-numeric:tabular-nums}
-.quick-hint svg{width:14px;height:14px;flex-shrink:0}
-.quick-actions{display:flex;justify-content:flex-end;gap:8px}
-.quick-button{display:inline-flex;align-items:center;gap:4px;height:30px;padding:0 10px;border:1px solid var(--yp-border-strong);border-radius:8px;color:var(--yp-text-primary);font-size:12.5px}
-.quick-button svg{width:14px;height:14px}
-.quick-button.is-primary{padding:0 14px;border-color:transparent;background:var(--yp-timer-accent);color:#fff;transition:background .2s}
-.quick-button.is-done{background:var(--yp-timer-saved);color:#0b2b20}
 </style>

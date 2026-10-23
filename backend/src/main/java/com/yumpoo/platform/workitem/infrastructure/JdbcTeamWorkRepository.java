@@ -19,17 +19,19 @@ public class JdbcTeamWorkRepository implements TeamWorkRepository {
         """;
     private static final String ASSIGNED = " AND EXISTS (SELECT 1 FROM yumpoo.work_item_assignee a WHERE a.company_id=w.company_id AND a.work_item_id=w.id AND a.user_id=:user)";
     private static final String UNASSIGNED = " AND NOT EXISTS (SELECT 1 FROM yumpoo.work_item_assignee a WHERE a.company_id=w.company_id AND a.work_item_id=w.id)";
+    private static final String OVERLAP = "EXTRACT(EPOCH FROM (LEAST(x.ended_at,days.day_end)-GREATEST(x.started_at,days.day_start)))*1000/x.concurrency";
+    private static final String DAYS = """
+        WITH days AS (
+          SELECT d::date AS day, d AT TIME ZONE CAST(:zone AS text) AS day_start,
+                 (d + interval '1 day') AT TIME ZONE CAST(:zone AS text) AS day_end
+          FROM generate_series(CAST(:from AS date)::timestamp, CAST(:to AS date)::timestamp, interval '1 day') AS d),
+        """;
     private final JdbcClient jdbc;
     public JdbcTeamWorkRepository(JdbcClient jdbc) { this.jdbc = jdbc; }
 
     /** Shares contribute their allocated overlap with each company-calendar day; open shares end at asOf. */
     public List<TimeEntry> timeEntries(UUID companyId, List<UUID> projectIds, List<UUID> userIds, LocalDate from, LocalDate to, ZoneId zone, Instant asOf) {
-        String overlap = "EXTRACT(EPOCH FROM (LEAST(x.ended_at,days.day_end)-GREATEST(x.started_at,days.day_start)))*1000/x.concurrency";
-        var statement = jdbc.sql("""
-            WITH days AS (
-              SELECT d::date AS day, d AT TIME ZONE CAST(:zone AS text) AS day_start,
-                     (d + interval '1 day') AT TIME ZONE CAST(:zone AS text) AS day_end
-              FROM generate_series(CAST(:from AS date)::timestamp, CAST(:to AS date)::timestamp, interval '1 day') AS d),
+        var statement = jdbc.sql(DAYS + """
             sessions AS (
               SELECT s.user_id,s.work_item_id,s.started_at,COALESCE(s.stopped_at,CAST(:asOf AS timestamptz)) AS ended_at,s.concurrency
               FROM yumpoo.work_item_time_share s
@@ -45,7 +47,7 @@ public class JdbcTeamWorkRepository implements TeamWorkRepository {
             GROUP BY x.user_id,x.work_item_id,w.project_id,w.item_no,w.title,days.day
             HAVING FLOOR(SUM(%1$s)) >= 1
             ORDER BY days.day,x.user_id,w.item_no
-            """.formatted(overlap))
+            """.formatted(OVERLAP))
                 .param("company", companyId).param("projects", projectIds).param("zone", zone.getId())
                 .param("from", from).param("to", to).param("asOf", Timestamp.from(asOf))
                 .param("rangeStart", Timestamp.from(from.atStartOfDay(zone).toInstant()))
@@ -53,6 +55,33 @@ public class JdbcTeamWorkRepository implements TeamWorkRepository {
         if (!userIds.isEmpty()) statement = statement.param("users", userIds);
         return statement.query((rs, n) -> new TimeEntry(rs.getObject("user_id", UUID.class), rs.getObject("work_item_id", UUID.class),
                 rs.getObject("project_id", UUID.class), rs.getString("item_no"), rs.getString("title"),
+                rs.getObject("day", LocalDate.class), rs.getLong("duration_ms"))).list();
+    }
+
+    /** Non-project category shares, split per company-calendar day like {@link #timeEntries}. */
+    public List<CategoryEntry> categoryEntries(UUID companyId, List<UUID> userIds, LocalDate from, LocalDate to, ZoneId zone, Instant asOf) {
+        var statement = jdbc.sql(DAYS + """
+            sessions AS (
+              SELECT s.user_id,s.time_category,s.started_at,COALESCE(s.stopped_at,CAST(:asOf AS timestamptz)) AS ended_at,s.concurrency
+              FROM yumpoo.work_item_time_share s
+              WHERE s.company_id=:company AND s.time_category IS NOT NULL
+                AND s.started_at < CAST(:rangeEnd AS timestamptz)
+                AND COALESCE(s.stopped_at,CAST(:asOf AS timestamptz)) > CAST(:rangeStart AS timestamptz)
+            """ + (userIds.isEmpty() ? "" : " AND s.user_id IN (:users)") + """
+            )
+            SELECT x.user_id,x.time_category,days.day,FLOOR(SUM(%1$s))::bigint AS duration_ms
+            FROM sessions x
+            JOIN days ON x.started_at < days.day_end AND x.ended_at > days.day_start
+            GROUP BY x.user_id,x.time_category,days.day
+            HAVING FLOOR(SUM(%1$s)) >= 1
+            ORDER BY days.day,x.user_id,x.time_category
+            """.formatted(OVERLAP))
+                .param("company", companyId).param("zone", zone.getId())
+                .param("from", from).param("to", to).param("asOf", Timestamp.from(asOf))
+                .param("rangeStart", Timestamp.from(from.atStartOfDay(zone).toInstant()))
+                .param("rangeEnd", Timestamp.from(to.plusDays(1).atStartOfDay(zone).toInstant()));
+        if (!userIds.isEmpty()) statement = statement.param("users", userIds);
+        return statement.query((rs, n) -> new CategoryEntry(rs.getObject("user_id", UUID.class), rs.getString("time_category"),
                 rs.getObject("day", LocalDate.class), rs.getLong("duration_ms"))).list();
     }
 

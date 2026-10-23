@@ -9,6 +9,7 @@ import { logoutGuard } from '../../composables/logoutGuard'
 import TimerPanel from './TimerPanel.vue'
 import TimerIcon from './TimerIcon.vue'
 import { isPanelSurface, SHELL_SURFACE } from '../desktop/surfaces'
+import { resumeSubjects, timerTitle } from './timeCategories'
 
 const route = useRoute()
 const session = useSession()
@@ -40,13 +41,15 @@ const desktopState = computed(() => {
   const current = tracker.current.value
   const running = tracker.running.value[0]
   const count = tracker.running.value.length
-  const recent = current?.resumeItems[0] ?? current?.recentItems[0]
-  const resumeCount = current?.resumeItems.length ?? 0
+  // Desktop shells only take a work item as the item to resume; a group of categories alone has none to offer there.
+  const categoryOnly = !current?.resumeItems.length && !!current?.resumeCategories?.length
+  const recent = categoryOnly ? undefined : current?.resumeItems[0] ?? current?.recentItems[0]
+  const resumeCount = resumeSubjects(current).length
   return { accountId: authenticated.value ? session.authentication.value?.user.id ?? null : null,
     rowVersion: current?.rowVersion ?? 0, connected: tracker.connected.value, busy: tracker.busy.value,
     savedAt: tracker.savedAt.value,
     running: running ? { sessionId: running.session.id, workItemId: running.session.workItemId,
-      title: `${running.workItemTitle ?? '不可见工作项'}${count > 1 ? ` 等 ${count} 项` : ''}`,
+      title: `${timerTitle(running)}${count > 1 ? ` 等 ${count} 项` : ''}`,
       startedAt: new Date(Math.min(...tracker.running.value.map(timer => timer.session.startedAt.getTime()))).toISOString() } : null,
     recent: recent ? { workItemId: recent.workItemId, title: `${recent.title}${resumeCount > 1 ? ` 等 ${resumeCount} 项` : ''}` } : null,
     clockOffsetMs: Math.round(timerClockOffset()),
@@ -71,7 +74,7 @@ const offExit = desktop?.onExitRequest(async requestId => {
 const offCommand = desktop?.onCommand(async command => {
   const resume = tracker.current.value?.resumeItems ?? []
   const success = authenticated.value && (command.action === 'stop' ? await tracker.stopAll()
-    : resume.some(item => item.workItemId === command.workItemId) ? await tracker.startMany(resume.map(item => item.workItemId)) : await tracker.start(command.workItemId))
+    : resume.some(item => item.workItemId === command.workItemId) ? await tracker.startMany(resumeSubjects(tracker.current.value)) : await tracker.start(command.workItemId))
   await desktop.completeCommand(command.requestId, success).catch(() => undefined)
 })
 const openFromToolbar = () => { if (tracker.timerEnabled.value) void open() }

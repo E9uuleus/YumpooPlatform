@@ -171,6 +171,12 @@
   box-shadow: var(--yp-shadow-overlay);
 }
 
+/* 状态迁移说明框也会在 340px 宽的快捷工时小窗里打开。 */
+.el-message-box.work-item-resolution-box {
+  width: min(420px, calc(100vw - 32px));
+  max-width: none;
+}
+
 .el-drawer {
   background: var(--yp-bg-raised);
   box-shadow: var(--yp-shadow-overlay);

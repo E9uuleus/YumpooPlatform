@@ -11,7 +11,7 @@ const zone = 'Asia/Shanghai', date = '2026-10-08'
 const at = (hour: number, minute = 0) => atMinute(date, hour * 60 + minute, zone)
 const candidate = (id: string) => ({ workItemId: id, projectId: 'p', projectName: '项目', itemNo: id.toUpperCase(), title: `工作项 ${id}`,
   contentName: '任务', contentCode: 'TASKS', statusCategory: 'TODO', assignedToMe: true, lastTrackedAt: null, ownDurationMs: 0 })
-const existing: DayBlock = { id: 'b1', workItemId: 'other', projectId: 'p', title: '已有', itemNo: null, projectName: null, colorToken: null,
+const existing: DayBlock = { id: 'b1', workItemId: 'other', timeCategory: null, subjectKey: 'other', projectId: 'p', title: '已有', itemNo: null, projectName: null, colorToken: null,
   start: at(9), end: at(10), canEdit: true, etag: '"0"' }
 api.listTimerCandidates.mockResolvedValue({ items: [candidate('a'), candidate('b')], nextOffset: null })
 
@@ -28,7 +28,7 @@ describe('补录弹层', () => {
     await wrapper.findAll('[role="option"]')[0]!.trigger('click')
     const [mode, items, range] = wrapper.emitted('submit')![0]!
     expect(mode).toBe(TimeSessionFillMode.Gaps)
-    expect((items as { workItemId: string }[]).map(item => item.workItemId)).toEqual(['a'])
+    expect((items as { key: string }[]).map(item => item.key)).toEqual(['a'])
     expect(range).toEqual({ start: at(11), end: at(12) })
   })
 
@@ -50,7 +50,7 @@ describe('补录弹层', () => {
     await options[1]!.trigger('click')
     expect(wrapper.emitted('submit')).toBeUndefined()
     await wrapper.get('.entry-composer__foot .el-button--primary').trigger('click')
-    expect((wrapper.emitted('submit')![0]![1] as { workItemId: string }[]).map(item => item.workItemId)).toEqual(['a', 'b'])
+    expect((wrapper.emitted('submit')![0]![1] as { key: string }[]).map(item => item.key)).toEqual(['a', 'b'])
     await wrapper.get('.item-picker input').trigger('keydown', { key: 'Escape' })
     expect(wrapper.emitted('close')).toHaveLength(1)
   })

@@ -5,7 +5,8 @@ import { myWorkApi, timeTrackingApi } from '../../../api/client'
 import { timeProblemMessage } from '../../../composables/timeTrackingProblems'
 import { onTimeTrackingChanged, timerMutation, useTimeTracker } from '../../../composables/useTimeTracker'
 import { toApiDate } from '../../team/teamDashboardModel'
-import { atMinute, coveredMs, dayWindow, durationLabel, itemTotals, layout, MINUTE, shares, type DayBlock, type Range } from './dayModel'
+import { subjectFields, type SubjectKey } from '../../timer/timeCategories'
+import { atMinute, blockFromSession, coveredMs, dayWindow, durationLabel, itemTotals, layout, MINUTE, shares, type DayBlock, type Range } from './dayModel'
 
 export function useDayTimeline(date: Ref<string>, timezone: Ref<string>) {
   const tracker = useTimeTracker()
@@ -28,12 +29,7 @@ export function useDayTimeline(date: Ref<string>, timezone: Ref<string>) {
     start: atMinute(date.value, preferences.value.workdayStartMinute, timezone.value),
     end: atMinute(date.value, preferences.value.workdayEndMinute, timezone.value),
   }))
-  const blocks = computed<DayBlock[]>(() => page.value?.items.map(item => ({
-    id: item.session.id, workItemId: item.session.workItemId, projectId: item.session.projectId,
-    title: item.title ?? '不可见工作项', itemNo: item.itemNo, projectName: item.projectName, colorToken: item.contentColorToken,
-    start: item.session.startedAt.getTime(), end: item.session.stoppedAt?.getTime() ?? null,
-    canEdit: item.session.canEdit, etag: item.session.etag,
-  })) ?? [])
+  const blocks = computed<DayBlock[]>(() => page.value?.items.map(blockFromSession) ?? [])
   const layoutMap = computed(() => layout(blocks.value, now.value, dayRange.value))
   const shareMap = computed(() => shares(blocks.value, now.value, dayRange.value))
   const totals = computed(() => itemTotals(blocks.value, now.value, dayRange.value))
@@ -91,16 +87,17 @@ export function useDayTimeline(date: Ref<string>, timezone: Ref<string>) {
     } finally { busy.value = false }
   }
 
-  function fill(mode: TimeSessionFillMode, workItemIds: string[], ranges: Range[]) {
-    const body = { mode, entries: workItemIds.flatMap(workItemId => ranges.map(range =>
-      ({ workItemId, startedAt: new Date(range.start), stoppedAt: new Date(range.end) }))) }
+  function fill(mode: TimeSessionFillMode, keys: SubjectKey[], ranges: Range[]) {
+    const body = { mode, entries: keys.flatMap(key => ranges.map(range =>
+      ({ ...subjectFields(key), startedAt: new Date(range.start), stoppedAt: new Date(range.end) }))) }
     return mutate(['fill', body], (idempotencyKey, xXSRFTOKEN) =>
       timeTrackingApi.fillMyTimeSessions({ idempotencyKey, xXSRFTOKEN, timeSessionFillCommand: body }))
   }
 
   /** Resolves to the fill result, which the quick panel reads for the duration actually recorded; undefined when it failed. */
-  async function create(mode: TimeSessionFillMode, workItemIds: string[], ranges: Range[]): Promise<TimeSessionFillResult | undefined> {
-    const result = await fill(mode, workItemIds, ranges)
+  /** `keys` are work item ids or category keys. */
+  async function create(mode: TimeSessionFillMode, keys: SubjectKey[], ranges: Range[]): Promise<TimeSessionFillResult | undefined> {
+    const result = await fill(mode, keys, ranges)
     if (!result) return undefined
     if (!result.createdCount && !result.changedCount && !result.deletedCount) ElMessage.warning('这段时间已全部有记录，没有新增。')
     else if (result.skippedDurationMs > 0) ElMessage.info(mode === TimeSessionFillMode.Replace
@@ -111,26 +108,26 @@ export function useDayTimeline(date: Ref<string>, timezone: Ref<string>) {
 
   async function edit(block: DayBlock, range: Range): Promise<boolean> {
     const timeTrackingCommand = { startedAt: new Date(range.start), stoppedAt: new Date(range.end) }
-    return !!await mutate(['edit', block.id, block.etag, timeTrackingCommand], (idempotencyKey, xXSRFTOKEN) => timeTrackingApi.editTimeSession({
-      workItemId: block.workItemId!, sessionId: block.id, ifMatch: block.etag, idempotencyKey, xXSRFTOKEN, timeTrackingCommand }))
+    return !!await mutate(['edit', block.id, block.etag, timeTrackingCommand], (idempotencyKey, xXSRFTOKEN) => timeTrackingApi.editMyTimeSession({
+      sessionId: block.id, ifMatch: block.etag, idempotencyKey, xXSRFTOKEN, timeTrackingCommand }))
   }
 
   async function remove(block: DayBlock): Promise<boolean> {
-    return !!await mutate(['delete', block.id, block.etag], (idempotencyKey, xXSRFTOKEN) => timeTrackingApi.deleteTimeSession({
-      workItemId: block.workItemId!, sessionId: block.id, ifMatch: block.etag, idempotencyKey, xXSRFTOKEN, timeTrackingCommand: {} }))
+    return !!await mutate(['delete', block.id, block.etag], (idempotencyKey, xXSRFTOKEN) => timeTrackingApi.deleteMyTimeSession({
+      sessionId: block.id, ifMatch: block.etag, idempotencyKey, xXSRFTOKEN, timeTrackingCommand: {} }))
   }
 
-  async function reassign(block: DayBlock, workItemId: string): Promise<boolean> {
-    const result = await mutate(['reassign', block.id, block.etag, workItemId], (idempotencyKey, xXSRFTOKEN) =>
+  async function reassign(block: DayBlock, key: SubjectKey): Promise<boolean> {
+    const result = await mutate(['reassign', block.id, block.etag, key], (idempotencyKey, xXSRFTOKEN) =>
       timeTrackingApi.reassignMyTimeSession({ sessionId: block.id, ifMatch: block.etag, idempotencyKey, xXSRFTOKEN,
-        timeSessionReassignCommand: { workItemId } }))
+        timeSessionReassignCommand: subjectFields(key) }))
     if (result?.skippedDurationMs) ElMessage.info(`目标工作项在其中 ${durationLabel(result.skippedDurationMs)} 已有记录，这部分已合并。`)
     return !!result
   }
 
   /** Keeps only this item over its own range by trimming the other editable records there. */
   async function exclusive(block: DayBlock): Promise<boolean> {
-    const result = await fill(TimeSessionFillMode.Replace, [block.workItemId!], [{ start: block.start, end: block.end! }])
+    const result = await fill(TimeSessionFillMode.Replace, [block.subjectKey!], [{ start: block.start, end: block.end! }])
     if (!result) return false
     if (result.createdCount || result.changedCount || result.deletedCount) ElMessage.success('已调整可编辑的重叠记录。')
     else ElMessage.info('没有可调整的重叠记录。')

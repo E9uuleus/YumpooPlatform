@@ -16,13 +16,20 @@ public final class TeamDashboardModels {
     public record TimesheetQuery(LocalDate from, LocalDate to, List<UUID> projectIds, List<UUID> userIds) {}
     public record TimesheetWorkItem(UUID id, UUID projectId, String projectName, String itemNo, String title) {}
     public record TimesheetEntry(UUID userId, UUID workItemId, LocalDate date, long durationMs) {}
+    /** Non-project time per fixed category; timeCategory is a code such as MEETING. */
+    public record TimesheetCategoryEntry(UUID userId, String timeCategory, LocalDate date, long durationMs) {}
     public record CalendarDay(LocalDate date, CalendarDayType dayType, String note, int standardMinutes) {
         public static List<CalendarDay> of(List<CompanyCalendarDaySnapshot> days) {
             return days.stream().map(d -> new CalendarDay(d.date(), d.dayType(), d.note(), d.standardMinutes())).toList();
         }
     }
     public record Timesheet(LocalDate from, LocalDate to, String timezone, Instant asOf, List<Member> members,
-            List<TimesheetWorkItem> workItems, List<TimesheetEntry> entries, List<CalendarDay> days) {}
+            List<TimesheetWorkItem> workItems, List<TimesheetEntry> entries, List<TimesheetCategoryEntry> categoryEntries,
+            List<CalendarDay> days) {
+        static List<TimesheetCategoryEntry> categories(List<com.yumpoo.platform.workitem.api.TeamWorkQuery.CategoryEntry> entries) {
+            return entries.stream().map(e -> new TimesheetCategoryEntry(e.userId(), e.timeCategory(), e.date(), e.durationMs())).toList();
+        }
+    }
     public record WorkloadQuery(List<UUID> projectIds, List<UUID> userIds) {}
     public record WorkloadCounts(long todo, long inProgress, long overdue) {}
     public record WorkloadMember(UUID userId, String displayName, boolean active, long todo, long inProgress, long overdue) {}

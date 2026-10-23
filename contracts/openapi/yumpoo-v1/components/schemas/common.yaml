@@ -747,6 +747,26 @@ components:
           type: integer
           format: int64
           minimum: 1
+    TeamTimesheetCategoryEntry:
+      type: object
+      additionalProperties: false
+      required:
+        - userId
+        - timeCategory
+        - date
+        - durationMs
+      properties:
+        userId:
+          $ref: "#/components/schemas/Uuid"
+        timeCategory:
+          $ref: "#/components/schemas/TimeCategory"
+        date:
+          type: string
+          format: date
+        durationMs:
+          type: integer
+          format: int64
+          minimum: 1
     TeamTimesheet:
       type: object
       additionalProperties: false
@@ -784,6 +804,11 @@ components:
           description: 每个成员、工作项、自然日一条，只包含大于 0 的耗时。
           items:
             $ref: "#/components/schemas/TeamTimesheetEntry"
+        categoryEntries:
+          type: array
+          description: 非项目分类工时，每个成员、分类、自然日一条，只包含大于 0 的耗时；团队工时按项目筛选时为空。服务端总是返回。
+          items:
+            $ref: "#/components/schemas/TeamTimesheetCategoryEntry"
         days:
           type: array
           items:

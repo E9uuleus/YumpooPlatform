@@ -17,6 +17,8 @@ public interface TimeTrackingRepository {
             Collection<UUID> matchingProjectIds, String query, boolean personal, boolean assignedToMe, boolean excludeCompleted, Instant now);
     List<RecentTimeTrackingItem> recentItems(UUID companyId, UUID userId);
     List<RecentTimeTrackingItem> resumeItems(UUID companyId, UUID userId);
+    /** Categories stopped together with the user's latest stopped timer batch, in catalog order. */
+    List<TimeCategory> resumeCategories(UUID companyId, UUID userId);
     List<UUID> visibleItemIds(UUID companyId, UUID projectId, Collection<UUID> ids);
     long stateVersion(UUID companyId, UUID userId, boolean lock);
     void advanceState(UUID companyId, UUID userId);
@@ -27,7 +29,7 @@ public interface TimeTrackingRepository {
     Optional<Session> find(UUID companyId, UUID sessionId);
     List<Session> history(UUID companyId, UUID workItemId, boolean includeChildren, Instant before, UUID beforeId, int limit);
     List<MySessionRow> mySessions(UUID companyId, UUID userId, Instant from, Instant to);
-    boolean sameItemOverlaps(UUID companyId, UUID userId, UUID workItemId, Instant start, Instant stop, UUID excludedId);
+    boolean sameSubjectOverlaps(UUID companyId, UUID userId, TimeSubject subject, Instant start, Instant stop, UUID excludedId);
     void save(Session session);
     void advanceProjects(UUID companyId, Collection<UUID> projectIds);
     void touchProjects(UUID companyId, Collection<UUID> projectIds);

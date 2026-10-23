@@ -21,6 +21,15 @@ public class TeamWorkAdapter implements TeamWorkQuery {
     public List<TimeEntry> timeEntriesForScheduler(UUID companyId, List<UUID> projectIds, LocalDate from, LocalDate to, ZoneId zone, Instant asOf) {
         return entries(service.timeEntriesForScheduler(companyId, projectIds, from, to, zone, asOf));
     }
+    public List<CategoryEntry> categoryEntries(CurrentActor actor, List<UUID> userIds, LocalDate from, LocalDate to, ZoneId zone, Instant asOf) {
+        return categories(service.categoryEntries(actor, userIds, from, to, zone, asOf));
+    }
+    public List<CategoryEntry> categoryEntriesForScheduler(UUID companyId, LocalDate from, LocalDate to, ZoneId zone, Instant asOf) {
+        return categories(service.categoryEntriesForScheduler(companyId, from, to, zone, asOf));
+    }
+    public List<CategoryEntry> ownCategoryEntries(CurrentActor actor, LocalDate from, LocalDate to, ZoneId zone, Instant asOf) {
+        return categories(service.ownCategoryEntries(actor, from, to, zone, asOf));
+    }
     public List<Load> currentLoad(CurrentActor actor, List<UUID> projectIds, LocalDate today) {
         return service.currentLoad(actor, projectIds, today).stream().map(l -> new Load(l.userId(), l.todo(), l.inProgress(), l.overdue())).toList();
     }
@@ -39,6 +48,9 @@ public class TeamWorkAdapter implements TeamWorkQuery {
 
     private static List<TimeEntry> entries(List<TeamWorkRepository.TimeEntry> entries) {
         return entries.stream().map(e -> new TimeEntry(e.userId(), e.workItemId(), e.projectId(), e.itemNo(), e.title(), e.date(), e.durationMs())).toList();
+    }
+    private static List<CategoryEntry> categories(List<TeamWorkRepository.CategoryEntry> entries) {
+        return entries.stream().map(e -> new CategoryEntry(e.userId(), e.timeCategory(), e.date(), e.durationMs())).toList();
     }
     private static TaskPage tasks(TeamWorkService.TaskPage page) {
         return new TaskPage(page.items().stream().map(t -> new Task(t.id(), t.projectId(), t.itemNo(), t.title(), t.statusName(), t.statusCategory(),

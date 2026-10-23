@@ -12,6 +12,14 @@
  */
 
 import { mapValues } from '../runtime';
+import type { TimeCategory } from './TimeCategory';
+import {
+    TimeCategoryFromJSON,
+    TimeCategoryFromJSONTyped,
+    TimeCategoryToJSON,
+    TimeCategoryToJSONTyped,
+} from './TimeCategory';
+
 /**
  *
  * @export
@@ -25,11 +33,23 @@ export interface TimeTrackingCommand {
      */
     workItemId?: string;
     /**
-     * 仅 start 使用，批量并行开始的工作项。
+     * 仅 start 使用，批量并行开始的工作项；与 timeCategories 合计最多 10 项。
      * @type {Array<string>}
      * @memberof TimeTrackingCommand
      */
     workItemIds?: Array<string>;
+    /**
+     *
+     * @type {TimeCategory}
+     * @memberof TimeTrackingCommand
+     */
+    timeCategory?: TimeCategory;
+    /**
+     * 仅 start 使用，批量并行开始的非项目分类；与 workItemIds 合计最多 10 项。
+     * @type {Array<TimeCategory>}
+     * @memberof TimeTrackingCommand
+     */
+    timeCategories?: Array<TimeCategory>;
     /**
      *
      * @type {string}
@@ -56,6 +76,8 @@ export interface TimeTrackingCommand {
     reason?: string;
 }
 
+
+
 /**
  * Check if a given object implements the TimeTrackingCommand interface.
  */
@@ -73,12 +95,14 @@ export function TimeTrackingCommandFromJSONTyped(json: any, ignoreDiscriminator:
     }
     return {
 
-        'workItemId': json['workItemId'] == null ? undefined : json['workItemId'],
-        'workItemIds': json['workItemIds'] == null ? undefined : json['workItemIds'],
-        'sessionId': json['sessionId'] == null ? undefined : json['sessionId'],
+        ...(json['workItemId'] == null ? {} : { 'workItemId': json['workItemId'] }),
+        ...(json['workItemIds'] == null ? {} : { 'workItemIds': json['workItemIds'] }),
+        ...(json['timeCategory'] == null ? {} : { 'timeCategory': TimeCategoryFromJSON(json['timeCategory']) }),
+        ...(json['timeCategories'] == null ? {} : { 'timeCategories': ((json['timeCategories'] as Array<any>).map(TimeCategoryFromJSON)) }),
+        ...(json['sessionId'] == null ? {} : { 'sessionId': json['sessionId'] }),
         ...(json['startedAt'] == null ? {} : { 'startedAt': new Date(json['startedAt']) }),
         ...(json['stoppedAt'] == null ? {} : { 'stoppedAt': new Date(json['stoppedAt']) }),
-        'reason': json['reason'] == null ? undefined : json['reason'],
+        ...(json['reason'] == null ? {} : { 'reason': json['reason'] }),
     };
 }
 
@@ -95,6 +119,8 @@ export function TimeTrackingCommandToJSONTyped(value?: TimeTrackingCommand | nul
 
         'workItemId': value['workItemId'],
         'workItemIds': value['workItemIds'],
+        'timeCategory': TimeCategoryToJSON(value['timeCategory']),
+        'timeCategories': value['timeCategories'] == null ? undefined : ((value['timeCategories'] as Array<any>).map(TimeCategoryToJSON)),
         'sessionId': value['sessionId'],
         'startedAt': value['startedAt'] == null ? value['startedAt'] : value['startedAt'].toISOString(),
         'stoppedAt': value['stoppedAt'] == null ? value['stoppedAt'] : value['stoppedAt'].toISOString(),
