@@ -491,6 +491,34 @@ class TimeTrackingHttpIT {
     }
 
     @Test
+    void candidatesCarryProjectStatusNamesAndColorsIncludingCustomStatuses() throws Exception {
+        UUID item=UUID.fromString(createItem(source.id(),"status-label-check").path("id").asText());
+        String path="/api/v1/me/time-tracker/candidates?scope=ALL&q=status-label-check";
+        JsonNode initial=ok(get(path,member)).path("items").get(0);
+        assertThat(initial.path("statusCode").asText()).isEqualTo("NOT_STARTED");
+        assertThat(initial.path("statusName").asText()).isEqualTo("未开始");
+        assertThat(initial.path("statusColorToken").asText()).isNotBlank();
+        jdbc.sql("""
+            INSERT INTO yumpoo.project_work_item_status_label
+              (company_id,project_id,status_code,display_name,color_token,status_category,sort_order)
+            SELECT :company,:project,'PLANNED','已排期','BRIGHT_BLUE','TODO',COALESCE(MAX(sort_order),0)+1
+            FROM yumpoo.project_work_item_status_label WHERE project_id=:project
+            """).param("company",COMPANY).param("project",source.id()).update();
+        jdbc.sql("UPDATE yumpoo.work_item SET status_code='PLANNED',status_category='TODO' WHERE id=:id")
+                .param("id",item).update();
+        JsonNode custom=ok(get(path,member)).path("items").get(0);
+        assertThat(custom.path("statusCategory").asText()).isEqualTo("TODO");
+        assertThat(custom.path("statusCode").asText()).isEqualTo("PLANNED");
+        assertThat(custom.path("statusName").asText()).isEqualTo("已排期");
+        assertThat(custom.path("statusColorToken").asText()).isEqualTo("BRIGHT_BLUE");
+        jdbc.sql("UPDATE yumpoo.project_work_item_status_label SET display_name='等待评审',color_token='PURPLE',active=false WHERE project_id=:project AND status_code='PLANNED'")
+                .param("project",source.id()).update();
+        JsonNode renamed=ok(get(path,member)).path("items").get(0);
+        assertThat(renamed.path("statusName").asText()).isEqualTo("等待评审");
+        assertThat(renamed.path("statusColorToken").asText()).isEqualTo("PURPLE");
+    }
+
+    @Test
     void candidatesMarkCompletionByThePersonalProjectDefinition() throws Exception {
         createItem(source.id(),"completion-check");
         String candidates="/api/v1/me/time-tracker/candidates?scope=ALL&q=completion-check";

@@ -35,7 +35,8 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
         return statement.query((rs,n) -> new TimerCandidate(rs.getObject("id",UUID.class),
                 rs.getObject("project_id",UUID.class), "", rs.getString("item_no"), rs.getString("title"),
                 rs.getString("content_name"), rs.getString("content_code"), rs.getString("content_color_token"),
-                rs.getString("status_category"), rs.getBoolean("completed"), rs.getBoolean("assigned"),
+                rs.getString("status_category"), rs.getString("status_code"), rs.getString("status_name"),
+                rs.getString("status_color_token"), rs.getBoolean("completed"), rs.getBoolean("assigned"),
                 instant(rs,"last_tracked_at"), rs.getLong("duration"))).list();
     }
 
@@ -72,11 +73,14 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
               SELECT t.work_item_id,t.last_tracked_at,COALESCE(a.duration,0) AS duration
               FROM last_tracked t LEFT JOIN allocated a ON a.work_item_id=t.work_item_id), base AS (
             SELECT w.id, w.project_id, w.item_no, w.title, w.updated_at, c.name AS content_name, c.code AS content_code,
-              c.color_token AS content_color_token, w.status_category,
+              c.color_token AS content_color_token, w.status_category, w.status_code,
+              COALESCE(label.display_name,w.status_code) AS status_name, COALESCE(label.color_token,'GRAY') AS status_color_token,
               COALESCE(s.completed_status_codes @> jsonb_build_array(w.status_code), w.status_category IN ('DONE','CANCELED')) AS completed,
               EXISTS (SELECT 1 FROM yumpoo.work_item_assignee a WHERE a.work_item_id=w.id AND a.user_id=:user) AS assigned, own.last_tracked_at, COALESCE(own.duration,0) AS duration
             FROM yumpoo.work_item w JOIN yumpoo.content c ON c.id=w.content_id AND c.company_id=w.company_id
             LEFT JOIN own ON own.work_item_id=w.id
+            LEFT JOIN yumpoo.project_work_item_status_label label
+              ON label.company_id=w.company_id AND label.project_id=w.project_id AND label.status_code=w.status_code
             LEFT JOIN yumpoo.work_item_table_settings s ON s.company_id=w.company_id AND s.project_id=w.project_id AND s.user_id=:user
             WHERE w.company_id=:company AND w.project_id IN (:projects) AND w.deleted_at IS NULL AND NOT w.archived
               AND (:personal=false OR EXISTS (SELECT 1 FROM yumpoo.work_item_assignee a WHERE a.work_item_id=w.id AND a.user_id=:user) OR own.last_tracked_at IS NOT NULL)

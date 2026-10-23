@@ -327,6 +327,14 @@ components:
           $ref: "#/components/schemas/WorkItemLabelColorToken"
         statusCategory:
           type: string
+        statusCode:
+          type: string
+          description: 工作项当前的项目状态代码。
+        statusName:
+          type: string
+          description: 项目配置的实际状态名称，不是状态分类名称。
+        statusColorToken:
+          $ref: "#/components/schemas/WorkItemLabelColorToken"
         completed:
           type: boolean
           description: 按本人对该项目的完成定义计算；未设置定义时 DONE 与 CANCELED 两类状态视为完成。

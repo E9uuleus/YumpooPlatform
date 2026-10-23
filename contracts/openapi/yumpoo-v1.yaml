@@ -2062,6 +2062,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TimerCandidatePage"
+              examples:
+                actualStatuses:
+                  $ref: "#/components/examples/TimerCandidates"
         "400":
           $ref: "#/components/responses/ValidationFailed"
         "401":
@@ -11896,6 +11899,14 @@ components:
           $ref: "#/components/schemas/WorkItemLabelColorToken"
         statusCategory:
           type: string
+        statusCode:
+          type: string
+          description: 工作项当前的项目状态代码。
+        statusName:
+          type: string
+          description: 项目配置的实际状态名称，不是状态分类名称。
+        statusColorToken:
+          $ref: "#/components/schemas/WorkItemLabelColorToken"
         completed:
           type: boolean
           description: 按本人对该项目的完成定义计算；未设置定义时 DONE 与 CANCELED 两类状态视为完成。
@@ -17067,6 +17078,9 @@ components:
         format: int32
         minimum: 1
   examples:
+    TimerCandidates:
+      summary: 计时候选携带项目实际状态名称与颜色
+      externalValue: ../examples/time-tracking/candidates.json
     ConnectColumnIncoming:
       summary: ConnectColumnIncoming 连接契约黄金样例
       externalValue: ../examples/connections/connect-column-incoming.json

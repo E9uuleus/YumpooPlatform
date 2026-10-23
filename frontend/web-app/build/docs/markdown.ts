@@ -1,4 +1,6 @@
 import MarkdownIt from 'markdown-it'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import container from 'markdown-it-container'
 import hljs from 'highlight.js/lib/core'
 import bash from 'highlight.js/lib/languages/bash'
@@ -47,9 +49,10 @@ export interface CompiledDoc {
   search: { slug: string; title: string; sections: Array<{ heading: string; id: string; text: string }> }
   html: string
   diagrams: string[]
+  images: string[]
 }
 
-interface RenderEnv { file: string; diagrams: string[] }
+interface RenderEnv { file: string; contentRoot: string; diagrams: string[]; images: string[] }
 
 /** 与 scripts/verify-md-links.ts 的 githubSlug 保持一致，doc-sync 用同一算法校验文档锚点。 */
 export function githubSlug(heading: string): string {
@@ -79,6 +82,7 @@ function normalizePath(path: string): string | undefined {
 
 function inlineText(token: Token): string {
   return (token.children ?? []).map(child => child.type === 'text' || child.type === 'code_inline' ? child.content
+    : child.type === 'image' ? `${child.content} ${child.attrGet('title') ?? ''}`
     : child.type === 'softbreak' || child.type === 'hardbreak' ? ' ' : '').join('')
 }
 
@@ -154,7 +158,43 @@ function createRenderer(): MarkdownIt {
   }
   md.renderer.rules.table_open = () => '<div class="docs-table-wrap"><table>\n'
   md.renderer.rules.table_close = () => '</table></div>\n'
-  md.renderer.rules.image = (_tokens, _index, _options, env: RenderEnv) => fail(env.file, '文档不使用图片，请改用 ::: diagram 或文字说明')
+  md.renderer.rules.image = (tokens, index, _options, env: RenderEnv) => {
+    const token = tokens[index]!
+    const source = token.attrGet('src') ?? ''
+    const directory = env.file.split('/').slice(0, -1).join('/')
+    const path = normalizePath(`${directory}/${source}`)
+    if (!/^(?:\.\.\/)*screenshots\/[a-z0-9-]+\.png$/.test(source) || !path?.startsWith('screenshots/'))
+      fail(env.file, '截图必须引用 content/screenshots/ 下的本地 PNG')
+    const alt = token.content.trim()
+    const caption = token.attrGet('title')?.trim()
+    if (!alt || !caption) fail(env.file, '截图需要替代文本和 title 图注')
+    let bytes: Buffer
+    try { bytes = readFileSync(resolve(env.contentRoot, path)) }
+    catch { fail(env.file, `截图不存在：${path}`) }
+    if (bytes.length < 24 || bytes.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a' || bytes.toString('ascii', 12, 16) !== 'IHDR')
+      fail(env.file, `截图不是有效 PNG：${path}`)
+    const width = bytes.readUInt32BE(16), height = bytes.readUInt32BE(20)
+    if (!width || !height) fail(env.file, `截图尺寸无效：${path}`)
+    const image = env.images.push(path) - 1
+    return `<img src="\u0000image:${image}\u0000" alt="${escapeHtml(alt)}" width="${width}" height="${height}" loading="lazy" decoding="async">`
+      + `<figcaption>${escapeHtml(caption)}</figcaption>`
+  }
+
+  md.core.ruler.push('docs_images', state => {
+    const env = state.env as RenderEnv
+    state.tokens.forEach((token, index) => {
+      if ([token, ...(token.children ?? [])].some(child => /^html_/.test(child.type) && /<img\b/i.test(child.content)))
+        fail(env.file, '截图请使用 Markdown 图片语法')
+      const images = token.children?.filter(child => child.type === 'image') ?? []
+      if (!images.length) return
+      const open = state.tokens[index - 1], close = state.tokens[index + 1]
+      if (token.children?.length !== 1 || open?.type !== 'paragraph_open' || close?.type !== 'paragraph_close')
+        fail(env.file, '每张截图必须独占一个段落')
+      open.tag = close.tag = 'figure'
+      open.hidden = close.hidden = false
+      open.attrSet('class', 'docs-screenshot')
+    })
+  })
 
   md.core.ruler.push('docs_headings', state => {
     const env = state.env as RenderEnv
@@ -236,11 +276,11 @@ function searchSections(tokens: Token[], title: string) {
 }
 
 /** relativePath 为 content/ 下的 posix 相对路径，例如 guide/time-tracking.md。 */
-export function compileDoc(source: string, relativePath: string): CompiledDoc {
+export function compileDoc(source: string, relativePath: string, contentRoot = resolve('src/docs-site/content')): CompiledDoc {
   const segments = relativePath.split('/')
   if (segments.length < 2 || !relativePath.endsWith('.md')) fail(relativePath, '文档必须位于分区目录下')
   const { attributes, body } = parseFrontMatter(source, relativePath)
-  const env: RenderEnv = { file: relativePath, diagrams: [] }
+  const env: RenderEnv = { file: relativePath, contentRoot, diagrams: [], images: [] }
   const tokens = renderer.parse(body, env)
   const html = renderer.renderer.render(tokens, renderer.options, env)
   if (UNSAFE_HTML.test(html.replace(DIAGRAM_PLACEHOLDER, ''))) fail(relativePath, '输出包含 style=、<script 或 on*= 事件属性，违反 CSP')
@@ -252,6 +292,7 @@ export function compileDoc(source: string, relativePath: string): CompiledDoc {
     search: { slug, title: attributes.title, sections: searchSections(tokens, attributes.title) },
     html,
     diagrams: env.diagrams,
+    images: env.images,
   }
 }
 
@@ -268,8 +309,13 @@ function moduleCode(doc: CompiledDoc, query: string): string {
   if (query === 'meta') return `export default ${JSON.stringify(doc.meta)}`
   if (query === 'search') return `export default ${JSON.stringify(doc.search)}`
   const imports = doc.diagrams.map((name, index) => `import d${index} from '${CONTENT_MARKER}diagrams/${name}.svg?raw'`)
-  let index = 0
-  const html = doc.html.split(DIAGRAM_PLACEHOLDER).map((part, position) => position % 2 ? `d${index++}` : JSON.stringify(part)).join(' + ')
+  imports.push(...doc.images.map((path, index) => `import i${index} from '${CONTENT_MARKER}${path}?no-inline'`))
+  let diagram = 0
+  const html = doc.html.split(/(\u0000(?:diagram:[a-z0-9-]+|image:\d+)\u0000)/).map(part => {
+    if (part.startsWith('\u0000diagram:')) return `d${diagram++}`
+    if (part.startsWith('\u0000image:')) return `i${Number(part.slice(7, -1))}`
+    return JSON.stringify(part)
+  }).join(' + ')
   return `${imports.join('\n')}\nexport default { html: ${html} }`
 }
 
@@ -289,7 +335,7 @@ export function docsMarkdown(): Plugin {
         return { code: `export default ${JSON.stringify(checkDiagram(JSON.parse(raw) as string, relativePath))}`, map: null }
       }
       if (!path.endsWith('.md') || !['', 'meta', 'search'].includes(query)) return undefined
-      return { code: moduleCode(compileDoc(code, relativePath), query), map: null }
+      return { code: moduleCode(compileDoc(code, relativePath, path.slice(0, at + CONTENT_MARKER.length)), query), map: null }
     },
   }
 }

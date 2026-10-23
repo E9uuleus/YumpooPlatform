@@ -303,6 +303,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TimerCandidatePage"
+              examples:
+                actualStatuses:
+                  $ref: "#/components/examples/TimerCandidates"
         "400":
           $ref: "#/components/responses/ValidationFailed"
         "401":

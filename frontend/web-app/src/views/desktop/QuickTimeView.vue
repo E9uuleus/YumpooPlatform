@@ -3,7 +3,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { TimeSessionFillMode, WorkItemStatusCategory, type TimerCandidate, type WorkItemDetail } from '@yumpoo/api-client'
 import type { QuickPanelContext } from '@yumpoo/preload-contract'
 import { ElInput } from 'element-plus'
-import { ArrowRight, CircleCheck, Clock, Plus, WarningFilled } from '@element-plus/icons-vue'
+import { ArrowRight, CircleCheck, Clock, DocumentAdd, WarningFilled } from '@element-plus/icons-vue'
 import { useSession } from '../../composables/useSession'
 import { useTimeTracker } from '../../composables/useTimeTracker'
 import { useTimerCandidates } from '../../composables/useTimerCandidates'
@@ -21,7 +21,7 @@ import QuickCreateRow from '../../components/desktop/QuickCreateRow.vue'
 import QuickFixedRow from '../../components/desktop/QuickFixedRow.vue'
 import { matchCategories, type TimeCategoryOption } from '../../components/timer/timeCategories'
 import { groupCandidates, placementHint, projectTones, quickPlan, rangeFromPlan, rangeProblem, rangeRecordable, shortDuration, spokenDuration,
-  type DateChoice } from '../../components/desktop/quickTime'
+  type DateChoice, type QuickItemStatus } from '../../components/desktop/quickTime'
 import brandLogo from '../../assets/brand/logo.svg'
 
 const bridge = window.yumpooDesktop?.quick
@@ -233,12 +233,15 @@ async function record(key: string, title: string) {
     setTimeout(() => { if (flashId.value === key) flashId.value = null }, 900)
   }, 380)
 }
-function statusChanged(item: TimerCandidate, detail: WorkItemDetail, statusName: string) {
+function statusResolved(item: TimerCandidate, detail: WorkItemDetail, status: QuickItemStatus) {
+  Object.assign(item, status, { statusCategory: detail.statusCategory })
+}
+function statusChanged(item: TimerCandidate, detail: WorkItemDetail, status: QuickItemStatus) {
+  statusResolved(item, detail, status)
   // The personal completion definition lives on the server; the reload below corrects this guess.
-  item.statusCategory = detail.statusCategory
   item.completed = detail.statusCategory === WorkItemStatusCategory.Done || detail.statusCategory === WorkItemStatusCategory.Canceled
   void candidates.load()
-  showToast(`已改为「${statusName}」· ${item.title}`)
+  showToast(`已改为「${status.statusName}」· ${item.title}`)
   announceWorkItemChanged({ projectId: item.projectId, workItemId: item.workItemId })
 }
 function startCreate(title = '') {
@@ -246,10 +249,10 @@ function startCreate(title = '') {
   createKey.value++
   creating.value = true
 }
-function created(detail: WorkItemDetail, projectName: string) {
+function created(detail: WorkItemDetail, projectName: string, status: QuickItemStatus) {
   creating.value = false
   reveal = { workItemId: detail.id, projectId: detail.projectId, projectName, itemNo: detail.itemNo, title: detail.title,
-    contentName: detail.contentName, contentColorToken: detail.contentColorToken, statusCategory: detail.statusCategory, completed: false,
+    contentName: detail.contentName, contentColorToken: detail.contentColorToken, statusCategory: detail.statusCategory, ...status, completed: false,
     assignedToMe: true, lastTrackedAt: null, ownDurationMs: 0 }
   showToast(`已创建 #${detail.itemNo} · ${detail.title}`)
   announceWorkItemChanged({ projectId: detail.projectId, workItemId: detail.id })
@@ -342,7 +345,7 @@ function keydown(event: KeyboardEvent) {
           title="新建工作项"
           @click.prevent="startCreate()"
         >
-          <Plus />
+          <DocumentAdd />
         </button>
       </label>
       <div
@@ -460,7 +463,8 @@ function keydown(event: KeyboardEvent) {
               @toggle="toggle(item.workItemId)"
               @record="record(item.workItemId, item.title)"
               @start="startTimer(item.workItemId, item.title)"
-              @status-changed="(detail, name) => statusChanged(item, detail, name)"
+              @status-changed="(detail, status) => statusChanged(item, detail, status)"
+              @status-resolved="(detail, status) => statusResolved(item, detail, status)"
               @status-failed="showToast($event, true)"
             />
           </TransitionGroup>
@@ -477,7 +481,7 @@ function keydown(event: KeyboardEvent) {
             class="quick-empty__create"
             @click="startCreate(query.trim())"
           >
-            <Plus />新建「{{ query.trim() }}」
+            <DocumentAdd />新建「{{ query.trim() }}」
           </button>
         </p>
         <p

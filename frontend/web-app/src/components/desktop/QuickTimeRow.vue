@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import type { TimerCandidate, WorkItemDetail } from '@yumpoo/api-client'
-import { Plus } from '@element-plus/icons-vue'
+import TimerIcon from '../timer/TimerIcon.vue'
 import QuickComposer from './QuickComposer.vue'
 import QuickStatusButton from './QuickStatusButton.vue'
 import YpOverflowText from '../yp/YpOverflowText.vue'
 import type { Range } from '../my-time/day/dayModel'
 import { workItemLabelColorValue } from '../projects/workItemLabelColors'
-import { shortDuration, type DateChoice } from './quickTime'
+import { shortDuration, type DateChoice, type QuickItemStatus } from './quickTime'
 
 defineProps<{
   item: TimerCandidate
@@ -26,7 +26,12 @@ defineProps<{
   recording: 'idle' | 'saving' | 'done'
   timerEnabled: boolean
 }>()
-const emit = defineEmits<{ toggle: []; record: []; start: []; statusChanged: [detail: WorkItemDetail, statusName: string]; statusFailed: [message: string] }>()
+const emit = defineEmits<{
+  toggle: []; record: []; start: []
+  statusChanged: [detail: WorkItemDetail, status: QuickItemStatus]
+  statusResolved: [detail: WorkItemDetail, status: QuickItemStatus]
+  statusFailed: [message: string]
+}>()
 const dateChoice = defineModel<DateChoice>('dateChoice', { required: true })
 const pickedDate = defineModel<string>('pickedDate', { required: true })
 const durationMs = defineModel<number>('durationMs', { required: true })
@@ -48,6 +53,7 @@ const rangeEnd = defineModel<number>('rangeEnd', { required: true })
         role="button"
         tabindex="0"
         :aria-expanded="expanded"
+        :aria-label="`为「${item.title}」添加工时`"
         @click="emit('toggle')"
         @keydown.enter.prevent="emit('toggle')"
         @keydown.space.prevent="emit('toggle')"
@@ -64,7 +70,8 @@ const rangeEnd = defineModel<number>('rangeEnd', { required: true })
           <span class="quick-row__meta">
             <span class="quick-row__status"><QuickStatusButton
               :item="item"
-              @changed="(detail, name) => emit('statusChanged', detail, name)"
+              @changed="(detail, status) => emit('statusChanged', detail, status)"
+              @resolved="(detail, status) => emit('statusResolved', detail, status)"
               @failed="emit('statusFailed', $event)"
             /></span>
             <span class="quick-row__today">{{ todayMs ? `今日 ${shortDuration(todayMs)}` : '今日未记录' }}</span>
@@ -72,8 +79,9 @@ const rangeEnd = defineModel<number>('rangeEnd', { required: true })
         </span>
         <span
           class="quick-row__add"
+          title="添加工时"
           aria-hidden="true"
-        ><Plus /></span>
+        ><TimerIcon name="clock-add" /></span>
       </div>
       <div class="quick-composer-wrap">
         <div>

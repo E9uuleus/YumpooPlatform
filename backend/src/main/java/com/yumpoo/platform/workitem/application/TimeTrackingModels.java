@@ -73,11 +73,12 @@ public final class TimeTrackingModels {
 
     /** completed 按本人对该项目的完成定义计算，未设置时 DONE 与 CANCELED 两类状态视为完成。 */
     public record TimerCandidate(UUID workItemId, UUID projectId, String projectName, String itemNo,
-            String title, String contentName, String contentCode, String contentColorToken, String statusCategory, boolean completed,
+            String title, String contentName, String contentCode, String contentColorToken, String statusCategory,
+            String statusCode, String statusName, String statusColorToken, boolean completed,
             boolean assignedToMe, Instant lastTrackedAt, long ownDurationMs) {
         public TimerCandidate withProjectName(String name) {
             return new TimerCandidate(workItemId, projectId, name, itemNo, title, contentName, contentCode, contentColorToken,
-                    statusCategory, completed, assignedToMe, lastTrackedAt, ownDurationMs);
+                    statusCategory, statusCode, statusName, statusColorToken, completed, assignedToMe, lastTrackedAt, ownDurationMs);
         }
     }
 

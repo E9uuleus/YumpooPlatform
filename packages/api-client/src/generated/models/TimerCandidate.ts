@@ -81,6 +81,24 @@ export interface TimerCandidate {
      */
     statusCategory: string;
     /**
+     * 工作项当前的项目状态代码。
+     * @type {string}
+     * @memberof TimerCandidate
+     */
+    statusCode?: string;
+    /**
+     * 项目配置的实际状态名称，不是状态分类名称。
+     * @type {string}
+     * @memberof TimerCandidate
+     */
+    statusName?: string;
+    /**
+     *
+     * @type {WorkItemLabelColorToken}
+     * @memberof TimerCandidate
+     */
+    statusColorToken?: WorkItemLabelColorToken;
+    /**
      * 按本人对该项目的完成定义计算；未设置定义时 DONE 与 CANCELED 两类状态视为完成。
      * @type {boolean}
      * @memberof TimerCandidate
@@ -145,6 +163,9 @@ export function TimerCandidateFromJSONTyped(json: any, ignoreDiscriminator: bool
         ...(json['contentCode'] == null ? {} : { 'contentCode': json['contentCode'] }),
         ...(json['contentColorToken'] == null ? {} : { 'contentColorToken': WorkItemLabelColorTokenFromJSON(json['contentColorToken']) }),
         'statusCategory': json['statusCategory'],
+        ...(json['statusCode'] == null ? {} : { 'statusCode': json['statusCode'] }),
+        ...(json['statusName'] == null ? {} : { 'statusName': json['statusName'] }),
+        ...(json['statusColorToken'] == null ? {} : { 'statusColorToken': WorkItemLabelColorTokenFromJSON(json['statusColorToken']) }),
         'completed': json['completed'],
         'assignedToMe': json['assignedToMe'],
         'lastTrackedAt': (json['lastTrackedAt'] == null ? null : new Date(json['lastTrackedAt'])),
@@ -172,6 +193,9 @@ export function TimerCandidateToJSONTyped(value?: TimerCandidate | null, ignoreD
         'contentCode': value['contentCode'],
         'contentColorToken': WorkItemLabelColorTokenToJSON(value['contentColorToken']),
         'statusCategory': value['statusCategory'],
+        'statusCode': value['statusCode'],
+        'statusName': value['statusName'],
+        'statusColorToken': WorkItemLabelColorTokenToJSON(value['statusColorToken']),
         'completed': value['completed'],
         'assignedToMe': value['assignedToMe'],
         'lastTrackedAt': value['lastTrackedAt'] == null ? value['lastTrackedAt'] : value['lastTrackedAt'].toISOString(),

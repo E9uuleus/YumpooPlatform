@@ -1,0 +1,31 @@
+{
+  "items": [
+    {
+      "workItemId": "62000000-0000-4000-8000-000000000001",
+      "projectId": "62000000-0000-4000-8000-000000000002",
+      "projectName": "产品演示",
+      "itemNo": "P001-1",
+      "title": "准备设计评审",
+      "contentName": "需求",
+      "contentCode": "REQUIREMENT",
+      "contentColorToken": "BRIGHT_BLUE",
+      "statusCategory": "TODO",
+      "statusCode": "PLANNED",
+      "statusName": "已排期",
+      "statusColorToken": "EGG_YOLK",
+      "completed": false,
+      "assignedToMe": true,
+      "lastTrackedAt": null,
+      "ownDurationMs": 0
+    }
+  ],
+  "nextOffset": null,
+  "projects": [
+    {
+      "projectId": "62000000-0000-4000-8000-000000000002",
+      "projectName": "产品演示",
+      "count": 1
+    }
+  ],
+  "hiddenCompletedCount": 0
+}
