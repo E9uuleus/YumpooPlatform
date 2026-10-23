@@ -24,7 +24,7 @@ export const TIME_CATEGORIES: readonly TimeCategoryOption[] = ([
   ['BUSINESS_TRIP', '出差', 'RIVER', Suitcase],
   ['LEARNING', '学习', 'SALADISH', Reading],
   ['BUSINESS', '商务', 'BERRY', Briefcase],
-  ['MEETING', '会议', 'NAVY', ChatDotRound],
+  ['MEETING', '会议', 'ORCHID', ChatDotRound],
 ] as const).map(([code, label, colorToken, icon]) => ({ code: code as TimeCategory, key: categoryKey(code as TimeCategory), label,
   colorToken: colorToken as WorkItemLabelColorToken, icon }))
 

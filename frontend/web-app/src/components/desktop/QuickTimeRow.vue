@@ -116,14 +116,15 @@ const rangeEnd = defineModel<number>('rangeEnd', { required: true })
 .is-flashing .quick-row{background:color-mix(in srgb,var(--yp-timer-saved) 18%,transparent)}
 .quick-row__bar{width:4px;align-self:stretch;border-radius:2px;flex-shrink:0;transition:opacity .2s}
 .quick-row__text{flex:1;min-width:0}
-.quick-row__title{display:block;overflow:hidden;font-weight:500;text-overflow:ellipsis;white-space:nowrap;transition:color .2s}
+/* The title element belongs to YpOverflowText, so it is reached through :deep(). */
+.quick-row__text :deep(.quick-row__title){display:block;overflow:hidden;font-weight:500;text-overflow:ellipsis;white-space:nowrap;transition:color .2s}
 .quick-row__meta{display:flex;align-items:center;gap:6px;margin-top:3px;color:var(--yp-text-secondary);font-size:11.5px}
 .quick-row__status{display:inline-flex;transition:opacity .2s}
 .quick-row__today{font-variant-numeric:tabular-nums}
 .quick-row__add{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;color:var(--yp-text-secondary);opacity:.55;transition:opacity .15s}
 .quick-row__add svg{width:16px;height:16px}
 .quick-row:hover .quick-row__add{opacity:1}
-.is-completed .quick-row__title{color:var(--yp-text-muted);text-decoration:line-through}
+.is-completed :deep(.quick-row__title){color:var(--yp-text-muted);text-decoration:line-through}
 .is-completed .quick-row__bar,.is-completed .quick-row__status{opacity:.45}
 .quick-composer-wrap{display:grid;grid-template-rows:0fr;transition:grid-template-rows .26s var(--yp-timer-ease)}
 .is-expanded .quick-composer-wrap{grid-template-rows:1fr}
