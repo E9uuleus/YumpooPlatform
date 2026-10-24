@@ -26,6 +26,9 @@
         <tika.version>4.1.0</tika.version>
         <jsoup.version>1.23.2</jsoup.version>
         <yumpoo.build.commit>unknown</yumpoo.build.commit>
+        <!-- Spring Boot 4.1.1 管理的版本有已知漏洞，Boot 跟进后删除；见 .agents/notes/implemented/process/2026-10-19-dependency-security-overrides.md -->
+        <tomcat.version>11.0.27</tomcat.version>
+        <jackson-bom.version>3.1.7</jackson-bom.version>
     </properties>
 
     <dependencies>
