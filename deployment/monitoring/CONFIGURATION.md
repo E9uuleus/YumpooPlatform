@@ -130,7 +130,7 @@ Windows 的 `<Root>/secrets/monitor.json` 示例：
 | 类型 | 名称 | 值 / 来源 |
 | --- | --- | --- |
 | Variable | `MONITOR_ENABLED` | `true` 启用统一通知入口 |
-| Variable | `MONITOR_ENVIRONMENT` | 与 Hub / Windows 完全相同；未设置时兼容默认 `wecom-dev` |
+| Variable | `MONITOR_ENVIRONMENT` | 与 Hub / Windows 完全相同；未设置时由通知脚本使用默认 `wecom-dev` 并在工作流摘要提示；与 Hub 不一致的事件会被拒绝，摘要单独标明 |
 | Secret | `MONITOR_SSH_HOST` | Ubuntu 地址或主机名，不含账号或端口 |
 | Secret | `MONITOR_SSH_KEY` | GitHub 专用 SSH 私钥完整内容 |
 | Secret | `MONITOR_KNOWN_HOSTS` | 核验后的 SSH 主机公钥记录 |

@@ -21,6 +21,20 @@ const signingSecret = 'DESKTOP_UPDATE_SIGNING_KEY'
 const steps = job => job.steps ?? []
 const deploySecrets = ['WINDOWS_DEPLOY_HOST', 'WINDOWS_DEPLOY_SSH_KEY', 'WINDOWS_DEPLOY_KNOWN_HOSTS']
 
+test('monitor notification steps pass the environment through without a workflow default', () => {
+  let count = 0
+  for (const name of fs.readdirSync(new URL('../../.github/workflows/', import.meta.url)).filter(name => /\.ya?ml$/u.test(name))) {
+    for (const job of Object.values(read(name).jobs ?? {})) {
+      for (const step of steps(job)) {
+        if (!Object.hasOwn(step.env ?? {}, 'MONITOR_ENABLED')) continue
+        assert.equal(step.env.MONITOR_ENVIRONMENT, '${{ vars.MONITOR_ENVIRONMENT }}', name)
+        count++
+      }
+    }
+  }
+  assert.equal(count, 9)
+})
+
 // Release jobs run `node --test tools/release/*.test.mjs` and the release tools without installing dependencies,
 // so everything they load, including relative imports outside tools/release, must use Node built-ins only.
 test('release tooling and its tests load only Node built-in modules', () => {

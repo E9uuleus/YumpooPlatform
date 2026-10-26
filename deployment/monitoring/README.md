@@ -15,7 +15,7 @@
 }
 ```
 
-本地建议存放在用户配置目录的 `.codex/secrets/yumpoo-monitoring/`，仅当前用户与 SYSTEM 可读写。可以临时指向同一个机器人；限流按机器人地址计算，两个逻辑通道共用 15 条/分钟额度。
+本地建议存放在仓库外、仅当前用户与 SYSTEM 可读写的受保护目录。可以临时指向同一个机器人；限流按机器人地址计算，两个逻辑通道共用 15 条/分钟额度。
 
 ```powershell
 node tools/monitoring/configure.mjs <protected-output-directory> https://<site-host> <environment> <channels-json>
