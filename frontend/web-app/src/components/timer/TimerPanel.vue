@@ -49,7 +49,7 @@ const resumeKeys = computed(() => resumeSubjects(tracker.current.value))
 /** A group of categories alone resumes through its first category, which `begin` takes like a work item id. */
 const resume = computed(() => {
   const category = resumeItems.value.length ? undefined : categoryOf(resumeKeys.value[0])
-  if (category) return { workItemId: category.key, projectId: '', title: category.label }
+  if (category) return { workItemId: resumeKeys.value[0]!, projectId: '', title: category.label }
   return resumeKeys.value.length > 1 ? resumeItems.value[0] : tracker.current.value?.recentItems[0]
 })
 const needsCandidates = computed(() => expanded.value || !!running.value || !!resume.value)
