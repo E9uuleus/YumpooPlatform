@@ -10,6 +10,20 @@ afterEach(async () => {
 })
 
 describe('桌面偏好', () => {
+  it('保留合法项目简称，整体拒收含四字简称的项目列表', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'yumpoo-rail-labels-'))
+    created.push(root)
+    const owner = `${crypto.randomUUID()}:${crypto.randomUUID()}`
+    const items = [{ id: crypto.randomUUID(), name: '研发项目', label: '研发' }, { id: crypto.randomUUID(), name: '运维项目', label: '运维一' }]
+    const store = new DesktopPreferenceStore(root)
+    store.update({ railProjects: { owner, items } })
+    await store.flush()
+    expect(new DesktopPreferenceStore(root).get().railProjects).toEqual({ owner, items })
+    const invalid = { owner, items: [items[0]!, { ...items[1]!, label: '四个汉字' }] }
+    expect(validDesktopPreferencesChange({ railProjects: invalid })).toBe(false)
+    store.update({ railProjects: invalid })
+    expect(store.get().railProjects).toEqual({ owner, items })
+  })
   it('persists validated menu appearance without exposing it to the general preferences bridge', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'yumpoo-menu-appearance-'))
     created.push(root)
