@@ -8,7 +8,47 @@ export type PeriodKind = 'WEEK' | 'MONTH' | 'QUARTER'
 export interface Period { kind: PeriodKind; from: string; to: string }
 export const MAX_RANGE_DAYS = 93
 export const periodOptions = [{ value: 'WEEK', label: '周' }, { value: 'MONTH', label: '月' }, { value: 'QUARTER', label: '季' }] as const
-export type TeamView = 'TIMESHEET' | 'OVERTIME' | 'WORKLOAD'
+export type TeamView = 'TIMESHEET' | 'PROJECTS' | 'OVERTIME' | 'WORKLOAD'
+
+/** Heat strength (percent) of a day cell. */
+export const heatMix = (ms: number) => ms >= 8 * 3_600_000 ? 52 : ms >= 4 * 3_600_000 ? 36 : ms >= 2 * 3_600_000 ? 24 : 14
+
+/** A member line, or a category line holding that project's linked category time across members. */
+export interface ProjectHoursChild { key: string; label: string; userId: string | null; totalMs: number; days: Record<string, number> }
+export interface ProjectHoursRow { key: string; projectId: string; name: string; totalMs: number; days: Record<string, number>; children: ProjectHoursChild[] }
+export type ProjectHoursModel = ReturnType<typeof buildProjectHours>
+
+/** Projects by total, members before categories inside each; category time that names no project closes the list under 未关联项目. */
+export function buildProjectHours(sheet: TeamTimesheet): { rows: ProjectHoursRow[]; dayTotals: Record<string, number>; totalMs: number } {
+  const items = new Map(sheet.workItems.map(item => [item.id, item]))
+  const names = new Map(sheet.members.map(member => [member.userId, member.displayName]))
+  const rows = new Map<string, ProjectHoursRow>()
+  const dayTotals: Record<string, number> = {}
+  let totalMs = 0
+  function add(projectId: string, projectName: string, key: string, label: string, userId: string | null, day: Date, ms: number) {
+    let row = rows.get(projectId)
+    if (!row) rows.set(projectId, row = { key: projectId, projectId, name: projectName, totalMs: 0, days: {}, children: [] })
+    let child = row.children.find(candidate => candidate.key === key)
+    if (!child) row.children.push(child = { key, label, userId, totalMs: 0, days: {} })
+    const date = fromApiDate(day)
+    for (const target of [row, child]) { target.totalMs += ms; target.days[date] = (target.days[date] ?? 0) + ms }
+    dayTotals[date] = (dayTotals[date] ?? 0) + ms
+    totalMs += ms
+  }
+  for (const entry of sheet.entries) {
+    const item = items.get(entry.workItemId)
+    if (item) add(item.projectId, item.projectName, `user:${entry.userId}`, names.get(entry.userId) ?? '历史成员', entry.userId, entry.date, entry.durationMs)
+  }
+  for (const entry of sheet.categoryEntries ?? []) {
+    add(entry.projectId ?? NON_PROJECT_KEY, entry.projectName ?? NON_PROJECT_LABEL, categoryKey(entry.timeCategory),
+      timeCategory(entry.timeCategory)?.label ?? '其他', null, entry.date, entry.durationMs)
+  }
+  const unlinked = (row: ProjectHoursRow) => row.projectId === NON_PROJECT_KEY ? 1 : 0
+  const category = (child: ProjectHoursChild) => child.userId ? 0 : 1
+  const list = [...rows.values()].sort((a, b) => unlinked(a) - unlinked(b) || b.totalMs - a.totalMs || a.name.localeCompare(b.name, 'zh-CN'))
+  list.forEach(row => row.children.sort((a, b) => category(a) - category(b) || b.totalMs - a.totalMs || a.label.localeCompare(b.label, 'zh-CN')))
+  return { rows: list, dayTotals, totalMs }
+}
 
 const DAY = 86_400_000
 const weekdays = ['日', '一', '二', '三', '四', '五', '六']
