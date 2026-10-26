@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 type Service = { id:string; name:string; state:string; observed:string; sampledAt:number|null }
 type Maintenance = { id:string; title:string; service:string; starts:number; ends:number; state:string; automatic:number }
-type Delivery = { id:number; channel:string; content:string; state:string; attempts:number; created:number; error:string|null }
+type Delivery = { id:number; channel:string; content:string; state:string; attempts:number; created:number; expires:number|null; sent:number|null; error:string|null }
 type Overview = { services:Service[]; maintenance:Maintenance[]; history:{service:string;state:string;at:number;maintained:number}[]; channels?:{channel:string;configured:boolean;counts:{state:string;count:number}[]}[]; deliveries?:Delivery[]; audit?:{at:number;action:string;subject:string}[] }
 const data = ref<Overview>({ services:[],maintenance:[],history:[] })
 const admin = ref(false); const panel = ref('status'); const username = ref(''); const password = ref(''); const csrf = ref(''); const error = ref(''); const busy = ref(false); const stale = ref(false)
 const title = ref('计划维护'); const service = ref('server'); const starts = ref(''); const ends = ref(''); const preview = ref('')
+const previewError = ref('')
 const labels:Record<string,string> = { healthy:'运行正常',down:'访问异常',unknown:'状态未知',maintenance:'维护中',active:'进行中',ended:'已结束',cancelled:'已取消',expired:'已超时',failed:'异常',pending:'待发送',sent:'已发送',dead:'投递失败',superseded:'已被后续消息取代',operations:'运维群',announcements:'公告群' }
+const deliveryLabels:Record<string,string> = { ...labels, expired:'已过期', abandoned:'已放弃' }
 const time = (value:number|null) => value ? new Date(value).toLocaleString('zh-CN') : '暂无采样'
 const overall = computed(() => stale.value || data.value.services.some(s=>s.state==='unknown') ? '状态待确认' : data.value.services.some(s=>s.state==='down') ? '部分服务访问异常' : data.value.services.some(s=>s.state==='maintenance') ? '正在维护' : '所有服务运行正常')
 async function api(path:string, body?:unknown) {
@@ -19,8 +21,27 @@ async function api(path:string, body?:unknown) {
 async function refresh() { try { data.value=await api(admin.value ? 'admin/overview':'status'); stale.value=false } catch { stale.value=true } }
 async function action(work:()=>Promise<void>) { busy.value=true; error.value=''; try { await work(); await refresh() } catch(e) { error.value=e instanceof Error ? e.message:'操作失败' } finally {busy.value=false} }
 async function login() { await action(async()=>{ const result=await api('login',{username:username.value,password:password.value}); csrf.value=result.csrf; password.value=''; admin.value=true; panel.value='manage' }) }
-async function createMaintenance() { await action(async()=>{ await api('admin/maintenance',{title:title.value,service:service.value,starts:new Date(starts.value).getTime(),ends:new Date(ends.value).getTime()}) }) }
+const maintenancePayload = () => ({title:title.value,service:service.value,starts:new Date(starts.value).getTime(),ends:new Date(ends.value).getTime()})
+async function createMaintenance() { await action(async()=>{ await api('admin/maintenance',maintenancePayload()) }) }
 async function changeMaintenance(item:Maintenance, change:string) { await action(async()=>{ await api(`admin/maintenance/${item.id}`,{action:change,...(change==='postpone'?{ends:item.ends+30*60000}:{})}) }) }
+async function discardDelivery(item:Delivery) {
+  if (!window.confirm('放弃后该消息不再投递，确认？')) return
+  await action(async()=>{ await api(`admin/deliveries/${item.id}/discard`,{}) })
+}
+watch([title,service,starts,ends,admin], (_values,_old,onCleanup) => {
+  preview.value=''; previewError.value=''
+  if (!admin.value || !title.value.trim() || !service.value || !starts.value || !ends.value) return
+  let cancelled=false
+  const pending=setTimeout(async()=>{
+    try {
+      const result=await api('admin/preview',maintenancePayload())
+      if (!cancelled) preview.value=result.text
+    } catch(e) {
+      if (!cancelled) previewError.value=e instanceof Error ? e.message:'公告预览暂不可用'
+    }
+  },400)
+  onCleanup(()=>{cancelled=true;clearTimeout(pending)})
+})
 let timer:ReturnType<typeof setInterval>|undefined
 onMounted(()=>{void refresh();timer=setInterval(()=>void refresh(),30000)})
 onUnmounted(()=>clearInterval(timer))
@@ -151,7 +172,7 @@ onUnmounted(()=>clearInterval(timer))
               v-for="count in channel.counts"
               :key="count.state"
               class="metric"
-            >{{ labels[count.state] }} {{ count.count }}</span>
+            >{{ deliveryLabels[count.state] }} {{ count.count }}</span>
           </article>
         </div>
         <section class="card">
@@ -183,10 +204,19 @@ onUnmounted(()=>clearInterval(timer))
             >
               创建并通知
             </button>
-          </form>
+          </form><pre
+            class="preview"
+            :class="{muted:!preview}"
+            aria-live="polite"
+          >{{ preview || previewError || '填写开始和结束时间后显示公告预览' }}</pre>
         </section>
         <section>
-          <h2>维护窗口</h2><article
+          <h2>维护窗口</h2><p
+            v-if="!data.maintenance.length"
+            class="muted"
+          >
+            暂无维护窗口
+          </p><article
             v-for="item in data.maintenance"
             :key="item.id"
             class="list-row"
@@ -217,13 +247,6 @@ onUnmounted(()=>clearInterval(timer))
             </div>
           </article>
         </section>
-        <section class="card">
-          <h2>公告文字预览</h2><textarea
-            v-model="preview"
-            placeholder="预览公告文字"
-            maxlength="1000"
-          /><pre>{{ preview.replace(/[&lt;&gt;`*\[\]\\]/g,'') }}</pre>
-        </section>
         <section>
           <h2>投递记录</h2><div class="table-wrap">
             <table>
@@ -234,13 +257,19 @@ onUnmounted(()=>clearInterval(timer))
                 >
                   <td>{{ time(item.created) }}<br>{{ labels[item.channel] }}</td><td class="message">
                     {{ item.content }}
-                  </td><td>{{ labels[item.state] }}<small v-if="item.error">{{ item.error }}</small></td><td>
+                  </td><td>{{ deliveryLabels[item.state] }}<small v-if="item.state==='sent' && item.sent">发送于 {{ time(item.sent) }}</small><small v-if="item.error">{{ item.error }}</small></td><td>
                     <button
-                      v-if="item.state==='dead'"
+                      v-if="item.state==='dead' && (!item.expires || item.expires > Date.now())"
                       :disabled="busy"
                       @click="action(async()=>{await api(`admin/deliveries/${item.id}/retry`,{})})"
                     >
                       重试
+                    </button><button
+                      v-if="item.state==='dead'"
+                      :disabled="busy"
+                      @click="discardDelivery(item)"
+                    >
+                      放弃
                     </button>
                   </td>
                 </tr>
