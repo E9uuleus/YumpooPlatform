@@ -46,9 +46,9 @@ public class JdbcTimeShareRepository implements TimeShareRepository {
         return query.query(JdbcTimeTrackingRepository::map).list();
     }
     public void insert(List<Share> shares) {
-        for(Share s:shares) jdbc.sql("INSERT INTO yumpoo.work_item_time_share(session_id,started_at,stopped_at,company_id,user_id,project_id,work_item_id,concurrency,time_category) VALUES (:id,:start,:stop,:c,:u,:p,:w,:n,:category)")
+        for(Share s:shares) jdbc.sql("INSERT INTO yumpoo.work_item_time_share(session_id,started_at,stopped_at,company_id,user_id,project_id,work_item_id,concurrency,time_category,category_project_id) VALUES (:id,:start,:stop,:c,:u,:p,:w,:n,:category,:cp)")
                 .param("id",s.sessionId()).param("start",Timestamp.from(s.startedAt())).param("stop",s.stoppedAt()==null ? null : Timestamp.from(s.stoppedAt()))
                 .param("c",s.companyId()).param("u",s.userId()).param("p",s.projectId()).param("w",s.workItemId()).param("n",s.concurrency())
-                .param("category",s.timeCategory()==null ? null : s.timeCategory().name()).update();
+                .param("category",s.timeCategory()==null ? null : s.timeCategory().name()).param("cp",s.categoryProjectId()).update();
     }
 }

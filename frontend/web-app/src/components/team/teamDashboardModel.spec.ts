@@ -39,7 +39,7 @@ describe('team dashboard periods', () => {
     expect(rangeDays('2026-10-30', '2026-11-02')).toEqual(['2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02'])
     expect(toApiDate('2026-10-01').toISOString().slice(0, 10)).toBe('2026-10-01')
   })
-  it('adds non-project category time as children of the 非项目工时 group, after project work', () => {
+  it('adds non-project category time as children of the 未关联项目 group, after project work', () => {
     const sheet: TeamTimesheet = {
       from: toApiDate('2026-10-05'), to: toApiDate('2026-10-05'), timezone: 'Asia/Shanghai', asOf: new Date(), days: [],
       members: [{ userId: 'u1', displayName: '李四', active: true }],
@@ -50,8 +50,8 @@ describe('team dashboard periods', () => {
     const model = buildTimesheet(sheet)
     expect(model.totalMs).toBe(5_400_000)
     expect(model.rows[0]!.children.map(child => [child.subjectKey, child.projectName, child.label])).toEqual([
-      ['w1', '交付', 'DEL-1 任务'], ['category:MEETING', '非项目工时', '会议']])
-    expect(dayBreakdown(model.rows[0]!, '2026-10-05').map(project => project.projectName)).toEqual(['非项目工时', '交付'])
+      ['w1', '交付', 'DEL-1 任务'], ['category:MEETING', '未关联项目', '会议']])
+    expect(dayBreakdown(model.rows[0]!, '2026-10-05').map(project => project.projectName)).toEqual(['未关联项目', '交付'])
     expect(timesheetColors(sheet).get('__non_project__')).toBe('var(--yp-label-american-gray)')
   })
 

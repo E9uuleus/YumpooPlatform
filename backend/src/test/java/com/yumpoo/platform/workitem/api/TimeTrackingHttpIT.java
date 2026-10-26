@@ -415,6 +415,19 @@ class TimeTrackingHttpIT {
     }
 
     @Test
+    void categoryFillReturnsItsLinkedProjectInMySessions() throws Exception {
+        String body=json.writeValueAsString(Map.of("mode","PARALLEL","entries",List.of(Map.of(
+                "timeCategory","MEETING","categoryProjectId",source.id(),
+                "startedAt","2026-09-01T09:00:00Z","stoppedAt","2026-09-01T09:30:00Z"))));
+        JsonNode filled=ok(mutate("POST","/api/v1/me/time-sessions/fill",member,body,null));
+        assertThat(filled.path("createdCount").asInt()).isOne();
+        JsonNode rows=ok(get("/api/v1/me/time-sessions?from=2026-09-01T08:00:00Z&to=2026-09-01T12:00:00Z",member)).path("items");
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).path("projectName").asText()).isEqualTo("原计时项目");
+        assertThat(rows.get(0).path("session").path("categoryProjectId").asText()).isEqualTo(source.id().toString());
+    }
+
+    @Test
     void categoryRecordsAreFilledEditedReassignedAndDeletedByTheirOwnerOnly() throws Exception {
         String fill="/api/v1/me/time-sessions/fill";
         JsonNode created=ok(mutate("POST",fill,member,categoryFillBody("GAPS","MEETING","09:00","10:00"),null));

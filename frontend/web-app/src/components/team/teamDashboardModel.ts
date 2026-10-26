@@ -65,7 +65,7 @@ export function hoursMinutes(ms: number): string {
   return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`
 }
 
-/** `subjectKey` is the work item id or a category key; category rows group under the 非项目工时 pseudo project. */
+/** `subjectKey` is the work item id or a category key; unlinked category rows group under the 未关联项目 pseudo project. */
 export interface TimesheetItemRow { key: string; subjectKey: string; projectId: string; projectName: string; itemNo: string; title: string; label: string; totalMs: number; days: Record<string, number> }
 export interface TimesheetRow { key: string; userId: string; name: string; active: boolean; totalMs: number; days: Record<string, number>; children: TimesheetItemRow[] }
 export interface DayItem { key: string; itemNo: string; title: string; ms: number }
@@ -86,7 +86,7 @@ export function restrictTimesheet(model: TimesheetModel, days: string[]): Timesh
 }
 export interface DayProject { projectId: string; projectName: string; totalMs: number; items: DayItem[] }
 
-/** Member rows sorted by name with per-item children, non-project categories last; the server already split cross-midnight sessions. */
+/** Member rows sorted by name with per-item children, 未关联项目 categories last; the server already split cross-midnight sessions. */
 export function buildTimesheet(sheet: TeamTimesheet): { rows: TimesheetRow[]; dayTotals: Record<string, number>; totalMs: number } {
   const items = new Map(sheet.workItems.map(item => [item.id, item]))
   const rows = new Map<string, TimesheetRow>(sheet.members.map(member => [member.userId,
@@ -108,9 +108,9 @@ export function buildTimesheet(sheet: TeamTimesheet): { rows: TimesheetRow[]; da
     return { projectId: item?.projectId ?? '', projectName: item?.projectName ?? '', itemNo: item?.itemNo ?? '',
       title: item?.title ?? '已删除的工作项', label: item ? `${item.itemNo} ${item.title}` : '已删除的工作项' }
   })
-  for (const entry of sheet.categoryEntries ?? []) add(entry.userId, categoryKey(entry.timeCategory), entry.date, entry.durationMs, () => {
+  for (const entry of sheet.categoryEntries ?? []) add(entry.userId, categoryKey(entry.timeCategory, entry.projectId), entry.date, entry.durationMs, () => {
     const label = timeCategory(entry.timeCategory)?.label ?? '其他'
-    return { projectId: NON_PROJECT_KEY, projectName: NON_PROJECT_LABEL, itemNo: '', title: label, label }
+    return { projectId: entry.projectId ?? NON_PROJECT_KEY, projectName: entry.projectName ?? NON_PROJECT_LABEL, itemNo: '', title: label, label }
   })
   const nonProject = (item: TimesheetItemRow) => item.projectId === NON_PROJECT_KEY ? 1 : 0
   const sorted = [...rows.values()].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))
@@ -138,9 +138,10 @@ const PROJECT_COLORS = [WorkItemLabelColorToken.BrightBlue, WorkItemLabelColorTo
   WorkItemLabelColorToken.SofiaPink, WorkItemLabelColorToken.Indigo, WorkItemLabelColorToken.BrightGreen, WorkItemLabelColorToken.Lipstick,
   WorkItemLabelColorToken.Royal, WorkItemLabelColorToken.Sunset].map(workItemLabelColorValue)
 
-/** Project colours of a sheet, with the 非项目工时 group kept on its own neutral colour. */
+/** Project colours of a sheet, with the 未关联项目 group kept on its own neutral colour. */
 export function timesheetColors(sheet: TeamTimesheet | undefined): Map<string, string> {
-  const colors = projectColors(sheet?.workItems.map(item => item.projectId) ?? [])
+  const colors = projectColors([...(sheet?.workItems.map(item => item.projectId) ?? []),
+    ...(sheet?.categoryEntries ?? []).flatMap(entry => entry.projectId ? [entry.projectId] : [])])
   colors.set(NON_PROJECT_KEY, NON_PROJECT_COLOR)
   return colors
 }

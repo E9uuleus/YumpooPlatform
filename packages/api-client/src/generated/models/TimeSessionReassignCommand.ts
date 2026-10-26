@@ -27,6 +27,12 @@ import {
  */
 export interface TimeSessionReassignCommand {
     /**
+     * 仅与 timeCategory 一起使用，把分类记录关联到本人可写的项目。
+     * @type {string}
+     * @memberof TimeSessionReassignCommand
+     */
+    categoryProjectId?: string;
+    /**
      *
      * @type {string}
      * @memberof TimeSessionReassignCommand
@@ -59,6 +65,7 @@ export function TimeSessionReassignCommandFromJSONTyped(json: any, ignoreDiscrim
     }
     return {
 
+        ...(json['categoryProjectId'] == null ? {} : { 'categoryProjectId': json['categoryProjectId'] }),
         ...(json['workItemId'] == null ? {} : { 'workItemId': json['workItemId'] }),
         ...(json['timeCategory'] == null ? {} : { 'timeCategory': TimeCategoryFromJSON(json['timeCategory']) }),
     };
@@ -75,6 +82,7 @@ export function TimeSessionReassignCommandToJSONTyped(value?: TimeSessionReassig
 
     return {
 
+        'categoryProjectId': value['categoryProjectId'],
         'workItemId': value['workItemId'],
         'timeCategory': TimeCategoryToJSON(value['timeCategory']),
     };

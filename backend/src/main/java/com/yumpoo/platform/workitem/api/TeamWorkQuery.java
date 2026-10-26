@@ -29,7 +29,7 @@ public interface TeamWorkQuery {
 
     record TimeEntry(UUID userId, UUID workItemId, UUID projectId, String itemNo, String title, LocalDate date, long durationMs) {}
     /** timeCategory is the code of a fixed non-project category, e.g. MEETING. */
-    record CategoryEntry(UUID userId, String timeCategory, LocalDate date, long durationMs) {}
+    record CategoryEntry(UUID userId, String timeCategory, UUID projectId, LocalDate date, long durationMs) {}
     /** A null user groups open work without assignees. */
     record Load(UUID userId, long todo, long inProgress, long overdue) {}
     record Task(UUID id, UUID projectId, String itemNo, String title, String statusName, String statusCategory, String statusColor,

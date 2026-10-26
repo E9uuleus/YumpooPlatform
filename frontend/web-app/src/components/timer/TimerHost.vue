@@ -43,7 +43,7 @@ const desktopState = computed(() => {
   const running = tracker.running.value[0]
   const count = tracker.running.value.length
   // Desktop shells only take a work item as the item to resume; a group of categories alone has none to offer there.
-  const categoryOnly = !current?.resumeItems.length && !!current?.resumeCategories?.length
+  const categoryOnly = !current?.resumeItems.length && !!current?.resumeCategorySubjects?.length
   const recent = categoryOnly ? undefined : current?.resumeItems[0] ?? current?.recentItems[0]
   const resumeCount = resumeSubjects(current).length
   return { accountId: authenticated.value ? session.authentication.value?.user.id ?? null : null,

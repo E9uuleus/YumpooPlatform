@@ -233,6 +233,7 @@ export * from './TeamWorkloadCounts';
 export * from './TeamWorkloadMember';
 export * from './TeamWorkloadQuery';
 export * from './TimeCategory';
+export * from './TimeCategorySubject';
 export * from './TimeSessionFillCommand';
 export * from './TimeSessionFillEntry';
 export * from './TimeSessionFillMode';
