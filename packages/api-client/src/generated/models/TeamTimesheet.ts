@@ -97,7 +97,7 @@ export interface TeamTimesheet {
      */
     entries: Array<TeamTimesheetEntry>;
     /**
-     * 非项目分类工时，每个成员、分类、自然日一条，只包含大于 0 的耗时；团队工时按项目筛选时为空。服务端总是返回。
+     * 分类工时，每个成员、分类、关联项目、自然日一条，只包含大于 0 的耗时；有项目筛选时只含关联到这些项目的分类工时。服务端总是返回。
      * @type {Array<TeamTimesheetCategoryEntry>}
      * @memberof TeamTimesheet
      */

@@ -6,11 +6,20 @@ Status: implemented
 
 出差、学习、商务、会议这类工作没有对应的项目或工作项。之前，用户只能找一个工作项挂靠，或者干脆不记。挂靠会把工时算进不相干的项目统计，不记则会让个人和团队日工时偏低。
 
-用户要的是：在「我的一天」和快捷工时小窗里像记工作项一样记这类时间，记录、补录、计时都和工作项一致，只是不关联工作项和项目。
+用户要的是：在「我的一天」和快捷工时小窗里像记工作项一样记这类时间，记录、补录、计时都和工作项一致，只是不关联工作项，可选关联项目。
 
 原模型里，`work_item_time_session` 与 `work_item_time_share` 的 `work_item_id`、`project_id` 都是 NOT NULL，所有写路径与报表都假定记录属于某个工作项。
 
 ## Decision
+
+### 关联项目（2026-10-26）
+
+- 分类记录的关联项目保存在会话与份额新增的 `category_project_id`；原 `project_id` 与 `work_item_id` 仍为 NULL，V81 的 CHECK 与按 `project_id` 的统计口径保持不变。
+- V82 只新增可空列与索引，旧版本会忽略新字段，支持快速回退，不登记回退例外。
+- 同一用户同一分类仍只能有一个运行计时，与关联项目无关；开始「会议@B」时先停止正在运行的「会议@A」。
+- 写入只允许关联本人可写的项目；分类仍属于个人，不加项目锁，不发领域事件。
+- 项目归档不停止关联分类计时，项目统计、工作项汇总与工作项表格不包含分类工时。
+- 不复用 `project_id`：复用会破坏 V81 的 CHECK，并迫使所有按项目统计的查询逐一排除分类；旧版本回退时也无法保持原有口径。
 
 ### 数据模型
 
@@ -23,7 +32,7 @@ Status: implemented
   - 同一用户同一分类最多一个运行计时，由部分唯一索引 `uq_work_item_running_timer_category` 保证。原工作项唯一索引不变，因为 NULL 在唯一索引里互不冲突。
   - 外键不变：MATCH SIMPLE 会跳过 NULL。
 - **记录归属（subject）**：
-  - 应用层用 `TimeSubject`（`Item(workItemId)` 或 `Category(timeCategory)`）表示一条记录记在什么上。
+  - 应用层用 `TimeSubject`（`Item(workItemId)` 或 `Category(timeCategory, projectId)`）表示一条记录记在什么上。
   - 补录合并、PARALLEL 阻挡、REPLACE 的目标排除、同项重叠校验、切换与开始的去重，都改为按 subject 比较，不再比较工作项 ID。
   - 份额计算本就与 subject 无关：分类与工作项按并发 1/N 分摊，份额行带上分类。
 
@@ -37,7 +46,7 @@ Status: implemented
   - REPLACE 只能裁剪「已停止且未删除」的分类记录；工作项记录仍须满足原有的可编辑条件。
   - `reassign` 支持工作项与分类之间的四个方向；目标与原归属相同返回 UNCHANGED。
 - **计时**：`start` 和 `switch` 接受 `timeCategory`；批量 `start` 合并 `workItemIds` 与 `timeCategories`，合计 1–10 项。
-  - `currentTimeTracker.resumeCategories` 与 `resumeItems` 取自同一批最近停止的计时，所以「继续」能恢复混合的一组。
+  - `currentTimeTracker.resumeCategorySubjects` 与 `resumeItems` 取自同一批最近停止的计时，所以「继续」能恢复混合的一组及分类关联项目；`resumeCategories` 保留分类代码供旧客户端读取。
 - **编辑与删除**：原 `/work-items/{id}/time-sessions/{sessionId}` 路径要求带工作项，所以新增只限本人的 `PATCH` / `DELETE /me/time-sessions/{sessionId}`。
   - 工作项记录委托给原 edit/delete 逻辑，会重新校验可见性。
   - 分类记录在本人计时状态锁内校验 If-Match、运行状态与同分类重叠。
@@ -55,7 +64,7 @@ Status: implemented
   - 归档项目只停该项目的计时；项目清除不删除分类记录。
 - **报表口径**：
   - `/me/timesheet` 与团队工时表新增 `categoryEntries`，按成员、分类、自然日给出均摊后的计入时长。本人工时不依赖项目成员身份。
-  - 团队工时只在不按项目筛选时返回分类，因为项目筛选的含义是「这些项目的工时」。
+  - 团队工时按项目筛选时只返回关联到所选项目的分类；未筛选时返回所有分类。关联项目的名称仅在调用者可见范围内披露。
   - 工时异常定时任务把分类计入每人每日合计。
   - 项目统计、工作项汇总、候选与最近工作项都按工作项或项目过滤，不含分类。
 
@@ -65,9 +74,11 @@ Status: implemented
 - **独立的分类工时表**：分类与工作项必须共同参与并发分摊、GAPS 空档和 REPLACE 裁剪。拆成两张表会复制整条写路径与分摊逻辑。
 - **拆成两次发布（先容错、再放宽约束）**：可以保留快速回退，但要多一次发版，功能也要推迟到第二次发布才能用。用户选择一次发布，并把 V81 如实登记为破坏性迁移。
 - **管理员可配置分类**：需要新表、管理页和接口。当前四类足够，按需再加。
-- **分类可选关联项目**：会让分类工时进入项目统计，并带来项目权限问题。当前不关联。
+- **复用 `project_id` 关联分类**：会破坏 V81 的 CHECK 和项目统计口径。采用独立可空字段，只校验关联项目可写性，不改变分类个人记录属性。
 
 ## Consequences
+
+- **项目口径**：项目统计页仍不含分类工时；团队「项目工时」包含关联到项目的分类工时。
 
 - **回退**：V81 在 `contracts/migrations/rollback-safety-exceptions.json` 登记为 `breaking`。晋升到 `main` 的 PR 须加 `release:breaking-migration` 标签，上线后不能用 Server Rollback 快速回退到上一版本。旧版本读到分类行时，会在份额重建、停止全部、切换、归档停表和项目清除处空指针失败，也会丢失分类份额。
 - **项目工时稀释**：分类与工作项按并发分摊，会议和工作项重叠时，工作项计入的工时会减半。项目统计本身不含分类工时。

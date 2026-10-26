@@ -34,7 +34,7 @@ class TimeShareCalculatorTest {
     }
     @Test
     void categoryRecordsShareConcurrencyWithWorkItemsAndKeepTheirCategory() {
-        var meeting=new Session(UUID.randomUUID(),UUID.randomUUID(),null,null,UUID.randomUUID(),at(0),at(20),"MANUAL",0,null,null,TimeCategory.MEETING);
+        var meeting=new Session(UUID.randomUUID(),UUID.randomUUID(),null,null,UUID.randomUUID(),at(0),at(20),"MANUAL",0,null,null,TimeCategory.MEETING, null);
         var rows=TimeShareCalculator.segments(List.of(meeting,session(10,30)),at(0),at(30));
         assertThat(rows).extracting(TimeShareCalculator.Share::concurrency).containsExactly(1,2,2,1);
         assertThat(rows).filteredOn(row -> row.sessionId().equals(meeting.id()))
