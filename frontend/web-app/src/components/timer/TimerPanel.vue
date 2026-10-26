@@ -14,7 +14,7 @@ import TimerDock from './TimerDock.vue'
 import TimerOrb from './TimerOrb.vue'
 import TimerSettings from './TimerSettings.vue'
 import WorkItemGlyph from './WorkItemGlyph.vue'
-import { categoryOf, NON_PROJECT_LABEL, resumeSubjects, sessionKey, timerTitle } from './timeCategories'
+import { categoryOf, resumeSubjects, sessionKey, timerTitle } from './timeCategories'
 
 const CAPSULE_WIDTH = 216
 const props = withDefaults(defineProps<{ initialExpanded?: boolean; floating?: boolean; orbLayout?: TimerOrbLayout }>(), { initialExpanded: true, floating: false, orbLayout: () => ({ size: 64, side: null, detailWidth: 0 }) })
@@ -68,7 +68,7 @@ const focusedId = computed(() => running.value ? sessionKey(running.value) : res
 const currentItem = computed(() => items.value.find(item => item.workItemId === focusedId.value)
   ?? (focusedItem.value?.workItemId === focusedId.value ? focusedItem.value : undefined))
 const error = computed(() => notice.value || tracker.problem.value || (expanded.value ? problem.value : ''))
-const project = computed(() => currentItem.value?.projectName ?? (categoryOf(focusedId.value) ? NON_PROJECT_LABEL : undefined))
+const project = computed(() => currentItem.value?.projectName)
 const saved = ref(false)
 const pausedDuration = ref(0)
 const displayDuration = computed(() => running.value ? tracker.wallDuration.value : pausedDuration.value)

@@ -104,7 +104,7 @@ export const TOURS: Record<TourId, TourDefinition> = {
     version: 1,
     steps: [
       { target: at('day-header'), placement: 'bottom-start', title: '切换日期', description: '用箭头或键盘 ← → 切换日期，右侧显示当天已记录的合计。' },
-      { target: at('day-shelf'), placement: 'right-start', title: '工作项侧栏', description: '搜索工作项，或按“最近与我的 / 全部”、“分配给我”和项目筛选；出差、学习、商务、会议在“非项目工时”一节。把它们拖到右侧时间线，或点“+”按时长排入空白。' },
+      { target: at('day-shelf'), placement: 'right-start', title: '工作项侧栏', description: '搜索工作项，或按“最近与我的 / 全部”、“分配给我”和项目筛选；出差、学习、商务、会议在“通用工时”一节，只筛选一个项目时会记到该项目。把它们拖到右侧时间线，或点“+”按时长排入空白。' },
       { target: at('day-timeline'), placement: 'left-start', title: '时间线', description: '在空白处拖选时段补录（最短 15 分钟），拖动卡片调整时段，点击卡片编辑或删除；悬停卡片可看完整标题。' },
     ],
   },

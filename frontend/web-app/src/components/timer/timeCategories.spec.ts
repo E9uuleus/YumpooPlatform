@@ -20,7 +20,7 @@ describe('非项目分类', () => {
   })
 
   it('恢复组先列工作项再列分类，计时标题优先使用分类名', () => {
-    expect(resumeSubjects({ resumeItems: [{ workItemId: 'w1' }], resumeCategories: [TimeCategory.Meeting] })).toEqual(['w1', 'category:MEETING'])
+    expect(resumeSubjects({ resumeItems: [{ workItemId: 'w1' }], resumeCategorySubjects: [{ timeCategory: TimeCategory.Meeting }] })).toEqual(['w1', 'category:MEETING'])
     expect(resumeSubjects({ resumeItems: [] })).toEqual([])
     expect(timerTitle({ session: { timeCategory: TimeCategory.BusinessTrip }, workItemTitle: null })).toBe('出差')
     expect(timerTitle({ session: {}, workItemTitle: null })).toBe('不可见工作项')

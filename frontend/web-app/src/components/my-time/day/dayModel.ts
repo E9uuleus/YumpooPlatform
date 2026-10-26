@@ -1,7 +1,7 @@
 import { TimeSessionFillMode, type MyTimeSession, type TimeCategory } from '@yumpoo/api-client'
 import { addDays } from '../../team/teamDashboardModel'
 import { companyDateTime, parseCompanyDateTime } from '../../timer/timeFormat'
-import { NON_PROJECT_LABEL, sessionKey, timeCategory, type SubjectKey } from '../../timer/timeCategories'
+import { sessionKey, timeCategory, type SubjectKey } from '../../timer/timeCategories'
 
 export const MINUTE = 60_000
 export const HOUR = 60 * MINUTE
@@ -20,7 +20,7 @@ export const MAX_PARALLEL_ITEMS = 10
 export interface DayBlock {
   id: string
   workItemId: string | null
-  /** Set for non-project category records, which have no project or work item. */
+  /** Set for category records, which do not name a work item. */
   timeCategory: TimeCategory | null
   /** The work item id or category key; null when the work item is not disclosed. */
   subjectKey: SubjectKey | null
@@ -43,13 +43,13 @@ export interface ItemTotal { key: SubjectKey; title: string; itemNo: string | nu
 
 export const blockEnd = (block: DayBlock, now: number) => block.end ?? Math.max(block.start, now)
 
-/** A category record reads as its category under 非项目工时; an undisclosed work item stays anonymous. */
+/** A category record reads as its category, under its linked project if any; an undisclosed work item stays anonymous. */
 export function blockFromSession(item: MyTimeSession): DayBlock {
   const category = timeCategory(item.session.timeCategory)
   return {
     id: item.session.id, workItemId: item.session.workItemId, timeCategory: category?.code ?? null, subjectKey: sessionKey(item.session),
     projectId: item.session.projectId, title: category?.label ?? item.title ?? '不可见工作项', itemNo: item.itemNo,
-    projectName: category ? NON_PROJECT_LABEL : item.projectName, colorToken: category?.colorToken ?? item.contentColorToken,
+    projectName: item.projectName, colorToken: category?.colorToken ?? item.contentColorToken,
     start: item.session.startedAt.getTime(), end: item.session.stoppedAt?.getTime() ?? null,
     canEdit: item.session.canEdit, etag: item.session.etag,
   }

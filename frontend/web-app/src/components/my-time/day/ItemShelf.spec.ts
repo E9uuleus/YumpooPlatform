@@ -36,13 +36,15 @@ describe('工作项侧栏', () => {
     const sections = wrapper.findAll('.item-shelf__section')
     expect(sections[0]!.text()).toContain('写周报')
     expect(sections[0]!.text()).toContain('1h30m')
-    expect(sections[1]!.text()).toContain('非项目工时')
+    expect(sections[1]!.text()).toContain('通用工时')
     expect(sections[2]!.text()).not.toContain('写周报')
     expect(sections[2]!.text()).toContain('评审')
     wrapper.unmount()
   })
 
-  it('非项目分类列在工作项上方，可按名称搜索，按项目筛选时隐藏', async () => {
+  it('分类可按名称搜索，筛选一个项目时关联它，筛选多个项目时不关联', async () => {
+    api.listTimerCandidates.mockResolvedValue({ items: [], nextOffset: null,
+      projects: [{ projectId: 'pa', projectName: '项目 A', count: 1 }, { projectId: 'pb', projectName: '项目 B', count: 1 }] })
     const wrapper = mount(ItemShelf, { props: { totals: [], busy: false }, attachTo: document.body })
     await settle()
     const fixed = () => wrapper.findAll('.item-shelf__row.is-category').map(row => row.text())
@@ -56,11 +58,25 @@ describe('工作项侧栏', () => {
     await vi.advanceTimersByTimeAsync(200)
     expect(fixed()).toEqual([expect.stringContaining('会议')])
     vi.useRealTimers()
+    await wrapper.findAll('.item-shelf__filter')[1]!.trigger('click')
+    await flushPromises()
+    const projectOption = (name: string) => [...document.querySelectorAll<HTMLElement>('.item-shelf-projects__option')]
+      .find(option => option.textContent?.includes(name))!.querySelector<HTMLInputElement>('input[type="checkbox"]')!
+    projectOption('项目 A').click()
+    await settle()
+    await wrapper.get('.item-shelf__row.is-category').trigger('dragstart', { dataTransfer: { setData: vi.fn(), effectAllowed: '' } })
+    expect(draggedItem.value?.key).toBe('category:MEETING:pa')
+    await wrapper.get('.item-shelf__row.is-category').trigger('dragend')
+    projectOption('项目 B').click()
+    await settle()
+    await wrapper.get('.item-shelf__row.is-category').trigger('dragstart', { dataTransfer: { setData: vi.fn(), effectAllowed: '' } })
+    expect(draggedItem.value?.key).toBe('category:MEETING')
+    await wrapper.get('.item-shelf__row.is-category').trigger('dragend')
     wrapper.unmount()
   })
 
-  it('今天已记录的分类留在今天一节，不在非项目工时中重复', async () => {
-    const wrapper = mount(ItemShelf, { props: { totals: [{ key: 'category:MEETING', title: '会议', itemNo: null, projectName: '非项目工时',
+  it('今天已记录的分类留在今天一节，不在通用工时中重复', async () => {
+    const wrapper = mount(ItemShelf, { props: { totals: [{ key: 'category:MEETING', title: '会议', itemNo: null, projectName: '通用工时',
       colorToken: null, ms: HOUR }], busy: false }, attachTo: document.body })
     await settle()
     const sections = wrapper.findAll('.item-shelf__section')
@@ -129,7 +145,7 @@ describe('工作项侧栏', () => {
     projectB().querySelector<HTMLInputElement>('input[type="checkbox"]')!.click()
     await settle()
     expect(api.listTimerCandidates).toHaveBeenLastCalledWith(expect.objectContaining({ projectId: ['pb'] }), expect.anything())
-    expect(wrapper.get('.item-shelf__section h3').text()).toContain('筛选结果1')
+    expect(wrapper.findAll('.item-shelf__section h3').at(-1)!.text()).toContain('筛选结果1')
     await projectTrigger.trigger('click')
     await wrapper.findAll('[role="radio"]')[0]!.trigger('click')
     await settle()
