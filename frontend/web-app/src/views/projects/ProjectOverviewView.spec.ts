@@ -642,7 +642,7 @@ describe('项目级工作项首页', () => {
     expect(state.moveProjectWorkItemOrder).not.toHaveBeenCalled()
   })
 
-  it('分组态只向顺序接口提交本组锚点，拒绝跨组拖动和保存全局排序', async () => {
+  it('分组态只向顺序接口提交本组锚点，拒绝跨组拖动并逐组保存排序', async () => {
     const first = item('a1'), second = item('a2'), other = { ...item('b1'), statusCode: 'DONE' }
     state.listProjectWorkItems.mockImplementation(async (request: { status?: Set<string> }) =>
       page(request.status?.has('BACKLOG') ? [first, second] : request.status?.has('DONE') ? [other] : [first, second, other]))
@@ -664,8 +664,10 @@ describe('项目级工作项首页', () => {
       projectWorkItemOrderMoveRequest: { previousVisibleWorkItemId: second.id, nextVisibleWorkItemId: null } }))
     state.moveProjectWorkItemOrder.mockClear()
     view.sortRules = [{ field: 'TITLE', direction: 'ASC' }]; await flushPromises()
+    expect(wrapper.find('[aria-label="保存工作项名称排序后的工作项顺序"]').exists()).toBe(true)
     await view.saveSortedWorkItemOrder()
-    expect(state.moveProjectWorkItemOrder).not.toHaveBeenCalled()
+    expect(state.moveProjectWorkItemOrder).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ workItemId: second.id,
+      projectWorkItemOrderMoveRequest: { previousVisibleWorkItemId: first.id, nextVisibleWorkItemId: null } }))
     expect(wrapper.find('[aria-label="保存工作项名称排序后的工作项顺序"]').exists()).toBe(false)
   })
 
