@@ -84,6 +84,7 @@ function drop(target: number) {
         class="rail-projects__label"
         size="small"
         :model-value="item.label ?? ''"
+        :model-modifiers="{ lazy: true }"
         :maxlength="3"
         placeholder="简称"
         :aria-label="`${item.name} 的侧边栏简称`"
