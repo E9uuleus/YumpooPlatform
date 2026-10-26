@@ -63,6 +63,7 @@ describe('工作项侧栏', () => {
     const projectOption = (name: string) => [...document.querySelectorAll<HTMLElement>('.item-shelf-projects__option')]
       .find(option => option.textContent?.includes(name))!.querySelector<HTMLInputElement>('input[type="checkbox"]')!
     projectOption('项目 A').click()
+    await new Promise(resolve => setTimeout(resolve, 220))
     await settle()
     await wrapper.get('.item-shelf__row.is-category').trigger('dragstart', { dataTransfer: { setData: vi.fn(), effectAllowed: '' } })
     expect(draggedItem.value?.key).toBe('category:MEETING:pa')
