@@ -155,7 +155,7 @@ describe('快捷工时小窗', () => {
     expect(view.find('.quick-item.is-expanded').exists()).toBe(false)
     expect(api.getWorkItem).toHaveBeenCalledWith({ workItemId: 'w1' })
     expect(view.get('.quick-status').text()).toContain('未开始')
-    const doing = view.findAll('.status-option-pill').find(pill => pill.text() === '进行中')!
+    const doing = view.findAll('.quick-status-option').find(pill => pill.text() === '进行中')!
     await doing.trigger('click')
     await flushPromises()
     expect(api.transition).toHaveBeenCalledWith(expect.objectContaining({ workItemId: 'w1', ifMatch: '"NOT_STARTED"',
@@ -203,7 +203,7 @@ describe('快捷工时小窗', () => {
     await flushPromises()
     expect(view.get('.quick-status').text()).toContain('未开始')
     expect(view.text()).toContain('你没有修改权限')
-    expect(view.findAll('.status-option-pill').find(pill => pill.text() === '进行中')!.attributes('disabled')).toBeDefined()
+    expect(view.findAll('.quick-status-option').find(pill => pill.text() === '进行中')!.attributes('disabled')).toBeDefined()
     expect(api.transition).not.toHaveBeenCalled()
   })
 
@@ -215,7 +215,7 @@ describe('快捷工时小窗', () => {
     await view.get('.quick-status').trigger('click')
     await flushPromises()
     api.getWorkItem.mockResolvedValue(detail('DOING', 'IN_PROGRESS'))
-    await view.findAll('.status-option-pill').find(pill => pill.text() === '进行中')!.trigger('click')
+    await view.findAll('.quick-status-option').find(pill => pill.text() === '进行中')!.trigger('click')
     await flushPromises()
     expect(view.get('.quick-status').text()).toContain('进行中')
     expect(view.get('.quick-toast').text()).not.toContain('已改为')
