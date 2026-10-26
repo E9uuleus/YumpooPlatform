@@ -42,12 +42,25 @@ components:
           format: date-time
     TimeCategory:
       type: string
-      description: 不关联项目与工作项的固定非项目工时分类：出差、学习、商务、会议。
+      description: 固定工时分类：出差、学习、商务、会议；可选关联一个项目，但不关联工作项。
       enum:
         - BUSINESS_TRIP
         - LEARNING
         - BUSINESS
         - MEETING
+    TimeCategorySubject:
+      type: object
+      additionalProperties: false
+      required:
+        - timeCategory
+      properties:
+        timeCategory:
+          $ref: "#/components/schemas/TimeCategory"
+        projectId:
+          type: string
+          format: uuid
+          nullable: true
+          description: 关联的项目；为 null 时不关联项目。
     TimeSessionFillMode:
       type: string
       enum:
@@ -62,6 +75,10 @@ components:
         - startedAt
         - stoppedAt
       properties:
+        categoryProjectId:
+          type: string
+          format: uuid
+          description: 仅与 timeCategory 一起使用，把分类记录关联到本人可写的项目。
         workItemId:
           type: string
           format: uuid
@@ -118,6 +135,10 @@ components:
       additionalProperties: false
       description: 目标工作项或非项目分类，workItemId 与 timeCategory 必须且只能填一个。
       properties:
+        categoryProjectId:
+          type: string
+          format: uuid
+          description: 仅与 timeCategory 一起使用，把分类记录关联到本人可写的项目。
         workItemId:
           type: string
           format: uuid
@@ -127,6 +148,10 @@ components:
       type: object
       additionalProperties: false
       properties:
+        categoryProjectId:
+          type: string
+          format: uuid
+          description: 仅与 timeCategory 一起使用，把分类记录关联到本人可写的项目。
         workItemId:
           type: string
           format: uuid
@@ -140,6 +165,13 @@ components:
             format: uuid
         timeCategory:
           $ref: "#/components/schemas/TimeCategory"
+        timeCategorySubjects:
+          type: array
+          minItems: 1
+          maxItems: 10
+          description: 仅 start 使用，批量开始可关联项目的分类；与 workItemIds、timeCategories 合计最多 10 项，同一分类只能出现一次。
+          items:
+            $ref: "#/components/schemas/TimeCategorySubject"
         timeCategories:
           type: array
           minItems: 1
@@ -182,6 +214,11 @@ components:
         - workItemNo
         - workItemTitle
       properties:
+        categoryProjectId:
+          type: string
+          format: uuid
+          nullable: true
+          description: 分类记录关联的项目；工作项记录为 null
         id:
           type: string
           format: uuid
@@ -413,6 +450,7 @@ components:
         - recentItems
         - runningSessions
         - resumeItems
+        - resumeCategorySubjects
         - preferences
       properties:
         preferences:
@@ -426,6 +464,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/RecentTimeTrackingItem"
+        resumeCategorySubjects:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimeCategorySubject"
         resumeCategories:
           type: array
           description: 与 resumeItems 同一批最近停止的非项目分类计时，按分类固定顺序排列。服务端总是返回。

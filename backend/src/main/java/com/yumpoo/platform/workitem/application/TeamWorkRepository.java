@@ -8,7 +8,7 @@ import java.util.UUID;
 
 public interface TeamWorkRepository {
     record TimeEntry(UUID userId, UUID workItemId, UUID projectId, String itemNo, String title, LocalDate date, long durationMs) {}
-    record CategoryEntry(UUID userId, String timeCategory, LocalDate date, long durationMs) {}
+    record CategoryEntry(UUID userId, String timeCategory, UUID projectId, LocalDate date, long durationMs) {}
     record Load(UUID userId, long todo, long inProgress, long overdue) {}
     record Task(UUID id, UUID projectId, String itemNo, String title, String statusName, String statusCategory, String statusColor,
             String priorityName, String priorityColor, LocalDate dueDate, boolean overdue) {}

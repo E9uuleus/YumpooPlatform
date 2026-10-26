@@ -80,12 +80,12 @@ class TimeSessionFillPlannerTest {
 
     private static Instant at(int seconds) { return BASE.plusSeconds(seconds); }
     private static TimeSessionFillEntry categoryEntry(TimeCategory category,int start,int stop) {
-        return new TimeSessionFillEntry(null,at(start),at(stop),category);
+        return new TimeSessionFillEntry(null,at(start),at(stop),category, null);
     }
     private static Session category(TimeCategory category,int start,int stop) {
-        return new Session(UUID.randomUUID(),COMPANY,null,null,USER,at(start),at(stop),"MANUAL",0,null,null,category);
+        return new Session(UUID.randomUUID(),COMPANY,null,null,USER,at(start),at(stop),"MANUAL",0,null,null,category, null);
     }
-    private static TimeSessionFillEntry entry(UUID item,int start,int stop) { return new TimeSessionFillEntry(item,at(start),at(stop),null); }
+    private static TimeSessionFillEntry entry(UUID item,int start,int stop) { return new TimeSessionFillEntry(item,at(start),at(stop),null, null); }
     private static Session session(UUID item,int start,Integer stop) {
         return new Session(UUID.randomUUID(),COMPANY,PROJECT,item,USER,at(start),stop==null ? null : at(stop),"MANUAL",0,null,null);
     }

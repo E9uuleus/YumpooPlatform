@@ -88,8 +88,8 @@ const chips = computed(() => {
 })
 const tones = computed(() => projectTones(context.value.projects, chips.value.map(chip => chip.id)))
 const todayMs = computed(() => new Map(todayDay.totals.value.map(total => [total.key, total.ms])))
-/** Non-project categories sit above the work items; a project chip narrows the list to work items only. */
-const categories = computed(() => project.value ? [] : matchCategories(query.value))
+/** Categories sit above the work items; with a project chip they are recorded against that project. */
+const categories = computed(() => matchCategories(query.value, project.value))
 const total = ref(0)
 
 const plan = computed(() => quickPlan({ blocks: targetDay.blocks.value, now: targetDay.now.value, workday: targetDay.workday.value,
