@@ -68,6 +68,9 @@ if(process.argv.includes('--rules')) {
   const file=path.join(temporary,'expressions.yml')
   try {
     fs.writeFileSync(file,YAML.stringify({groups:[{name:'dashboard-expressions',rules:expressions.map((expression,index)=>({record:`dashboard_expr_${index}`,expr:expression}))}]}))
+    // promtool runs as nobody; Linux mkdtemp directories are owner-only by default.
+    fs.chmodSync(temporary,0o755)
+    fs.chmodSync(file,0o644)
     const syntax=spawnSync('docker',['run','--rm','-v',`${temporary}:/expressions:ro`,'--entrypoint','promtool',image,'check','rules','/expressions/expressions.yml'],{stdio:'inherit'})
     assert.equal(syntax.status,0,'Dashboard PromQL syntax check failed')
   } finally {
