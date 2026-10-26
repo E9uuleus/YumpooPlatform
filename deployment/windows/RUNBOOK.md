@@ -529,6 +529,8 @@ gh attestation verify '<下载目录>\YumpooDesktop-Setup-X.Y.Z-x64.exe' -R E9uu
 **每周核对**：供应链工作流的发布演练会读取更新源上的 `latest.yml` 与 `release.json`，要求与最新已发布桌面 Release 的附件逐字节一致；不一致时检查最近一次 Desktop Release 运行和主机上的 `desktop/stable` 目录。
 ## 异机监控接入补充
 
+三端配置项、凭据存放、环境标识与常见调整见[异机监控配置指南](../monitoring/CONFIGURATION.md)。真实云主机连接信息和机器人地址只进入仓库外的受保护配置，不填写到源码、手册或 PR。
+
 独立监控栈、机器人配置、SSH 权限与离线部署步骤见[异机监控部署手册](../monitoring/README.md)。正常发布只有在 `host.json.monitoring.enabled=true` 时，才在前置检查通过后写入维护预告并等待 300 秒；通知失败仍等待并继续。未配置的旧主机保持原行为，回退操作不增加等待。
 
 升级监控相关固定引擎仍需使用 Prepare Release 草稿中的已验证 ZIP，在管理员维护通道运行 `Update-YumpooEngine.ps1`，并显式传入 `-EnableMonitoring -MonitoringEnvironment <environment>`。不要从普通发布包自动执行安装脚本，不直接替换正在工作的 SYSTEM 引擎。后续未传 `-EnableMonitoring` 时保留已有监控开关，显式 `-EnableMonitoring:$false` 可关闭发布接入。

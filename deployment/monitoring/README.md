@@ -2,6 +2,8 @@
 
 此栈独立于 Windows 业务服务、业务数据库及业务 Release。实现位于 `packages/monitor-hub`、`frontend/monitor-dashboard`；组件配置由本目录维护。六个容器的内存上限合计 1312 MiB，Prometheus 最多保留 30 天或 10 GB，事件与已结束投递保留 180 天。未解决告警和待投递消息不会因年龄自动删除。
 
+首次接入、配置项对照、换机器人或主机以及开关行为见[异机监控配置指南](CONFIGURATION.md)。本手册侧重部署命令、运行约束和验收。两份文档均只使用占位符与产品默认值；实际云主机连接信息、密码、私钥和机器人地址应保存在仓库外。
+
 ## 配置与凭据
 
 配置由管理员在仓库外生成。两个企业微信群分别添加「群机器人」，把 Webhook 放入受保护的 `channels.json`：
@@ -13,7 +15,7 @@
 }
 ```
 
-本地建议存放在用户配置目录的 `.codex/secrets/yumpoo-monitoring/`，仅当前用户与 SYSTEM 可读写。可以临时指向同一个机器人；限流按机器人地址计算，两个逻辑通道共用 15 条/分钟额度。
+本地建议存放在仓库外、仅当前用户与 SYSTEM 可读写的受保护目录。可以临时指向同一个机器人；限流按机器人地址计算，两个逻辑通道共用 15 条/分钟额度。
 
 ```powershell
 node tools/monitoring/configure.mjs <protected-output-directory> https://<site-host> <environment> <channels-json>
@@ -87,7 +89,7 @@ sudo MONITOR_BUILD=<full-commit> MONITOR_OFFLINE_DIR=<absolute-bundle-directory>
 
 ## GitHub 接入
 
-仓库 Secrets：`MONITOR_SSH_HOST`、`MONITOR_SSH_KEY`、`MONITOR_KNOWN_HOSTS`、`MONITOR_SOURCE_SECRET`。使用 GitHub 专用密钥与 `sources.github.secret`；不要复用 Windows 密钥。仓库变量 `MONITOR_ENABLED=true` 启用新入口。所有通知仅进入运维通道，GitHub 来源不能声明主机部署成功或建立维护窗口。
+仓库 Secrets：`MONITOR_SSH_HOST`、`MONITOR_SSH_KEY`、`MONITOR_KNOWN_HOSTS`、`MONITOR_SOURCE_SECRET`。使用 GitHub 专用密钥与 `sources.github.secret`；不要复用 Windows 密钥。仓库变量 `MONITOR_ENABLED=true` 启用新入口，`MONITOR_ENVIRONMENT` 与 Hub 及 Windows 的环境标识一致，未设置时兼容默认 `wecom-dev`。所有通知仅进入运维通道，GitHub 来源不能声明主机部署成功或建立维护窗口。
 
 每次调用短暂建立 SSH 隧道，HMAC 绑定原始 JSON、发送时间与随机 nonce。中心允许 5 分钟时钟偏差并拒绝 replay；重投用新 nonce 和相同事件 ID。投递最多重试三次，失败写入 Actions 摘要；未收到中心 ACK 的事件没有持久化保证。启用统一入口后不回退旧 Webhook，避免双发。
 
