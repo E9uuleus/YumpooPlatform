@@ -2,7 +2,7 @@
 
 本手册用于把当前 M1-13 构建部署到 Windows Server 2022 云服务器并验证企微登录与通讯录合并。本次约束如下：
 
-- 公网 IP：`1.15.24.215`。
+- 公网 IP：`<windows-public-ip>`。
 - 域名：`wecom-dev.yumpoo.com`。
 - 服务器只有 C 盘，程序、配置、数据、日志与临时文件均使用 C 盘。
 - 不注册 Windows 应用服务；运行模式标识为 `MANUAL_JAVA_CONSOLE`，Spring Boot 在受控 PowerShell 控制台中手工启动和停止。
@@ -327,7 +327,7 @@ default_workday_minutes = 480
 Resolve-DnsName wecom-dev.yumpoo.com -Type A
 ```
 
-必须解析到 `1.15.24.215`。云安全组和 Windows 防火墙仅公开 443，不公开 18173、8100、5433。
+必须解析到 `<windows-public-ip>`。云安全组和 Windows 防火墙仅公开 443，不公开 18173、8100、5433。
 
 ```powershell
 curl.exe -I https://wecom-dev.yumpoo.com/

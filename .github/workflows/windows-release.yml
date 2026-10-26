@@ -49,7 +49,7 @@ jobs:
         env:
           WECOM_RELEASE_WEBHOOK: ${{ secrets.WECOM_RELEASE_WEBHOOK }}
           MONITOR_ENABLED: ${{ vars.MONITOR_ENABLED }}
-          MONITOR_ENVIRONMENT: wecom-dev
+          MONITOR_ENVIRONMENT: ${{ vars.MONITOR_ENVIRONMENT || 'wecom-dev' }}
           MONITOR_SSH_HOST: ${{ secrets.MONITOR_SSH_HOST }}
           MONITOR_SSH_KEY: ${{ secrets.MONITOR_SSH_KEY }}
           MONITOR_KNOWN_HOSTS: ${{ secrets.MONITOR_KNOWN_HOSTS }}
@@ -93,7 +93,7 @@ jobs:
         env:
           WECOM_RELEASE_WEBHOOK: ${{ secrets.WECOM_RELEASE_WEBHOOK }}
           MONITOR_ENABLED: ${{ vars.MONITOR_ENABLED }}
-          MONITOR_ENVIRONMENT: wecom-dev
+          MONITOR_ENVIRONMENT: ${{ vars.MONITOR_ENVIRONMENT || 'wecom-dev' }}
           MONITOR_SSH_HOST: ${{ secrets.MONITOR_SSH_HOST }}
           MONITOR_SSH_KEY: ${{ secrets.MONITOR_SSH_KEY }}
           MONITOR_KNOWN_HOSTS: ${{ secrets.MONITOR_KNOWN_HOSTS }}
