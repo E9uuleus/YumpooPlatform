@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import YAML from 'yaml'
 import { prometheusConfig } from './configure.mjs'
+import { hostAlerts } from './expressions.mjs'
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..')
 const directory=path.join(root,'deployment/monitoring')
 const read=name=>YAML.parse(fs.readFileSync(path.join(directory,name),'utf8'), { merge: true })
@@ -28,7 +29,13 @@ assert.ok(prometheus.scrape_configs.find(s=>s.job_name==='external').static_conf
 for(const module of Object.values(read('blackbox.yml').modules))assert.equal(module.http.fail_if_not_ssl,true)
 const rules=read('rules.yml')
 assert.ok(rules.groups.flatMap(g=>g.rules).some(r=>r.alert==='ApplicationSamplesStale'))
-assert.ok(rules.groups.flatMap(g=>g.rules).every(r=>r.keep_firing_for==='60s'))
+const alerts=rules.groups.flatMap(group=>group.rules).filter(rule=>rule.alert)
+assert.ok(alerts.every(rule=>rule.keep_firing_for==='60s'))
+for(const expected of hostAlerts) {
+  const actual=alerts.find(rule=>rule.alert===expected.alert && rule.labels.severity===expected.severity)
+  assert.ok(actual,`Missing host alert: ${expected.alert}/${expected.severity}`)
+  assert.equal(actual.expr,`${expected.expr} ${expected.op} ${expected.value}`,`${expected.alert}/${expected.severity}: shared expression drift`)
+}
 const dashboard=JSON.parse(fs.readFileSync(path.join(directory,'grafana/dashboards/yumpoo.json'),'utf8'))
 assert.ok(dashboard.panels.every(p=>p.fieldConfig.defaults.custom.spanNulls===false),'Missing samples must not be interpolated')
 if(process.argv.includes('--rules')) {

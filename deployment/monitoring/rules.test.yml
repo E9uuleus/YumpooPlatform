@@ -1,6 +1,80 @@
 rule_files: [rules.yml]
 evaluation_interval: 30s
 tests:
+  - name: recovery partitions are excluded from disk alerts
+    interval: 30s
+    input_series:
+      - series: 'windows_logical_disk_free_bytes{volume="HarddiskVolume1"}'
+        values: '5+0x8'
+      - series: 'windows_logical_disk_size_bytes{volume="HarddiskVolume1"}'
+        values: '100+0x8'
+      - series: 'windows_logical_disk_free_bytes{volume="C:"}'
+        values: '50+0x8'
+      - series: 'windows_logical_disk_size_bytes{volume="C:"}'
+        values: '100+0x8'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: WindowsDiskLow
+        exp_alerts: []
+  - name: drive-letter disks escalate to warning and critical
+    interval: 30s
+    input_series:
+      - series: 'windows_logical_disk_free_bytes{volume="C:"}'
+        values: '5+0x8'
+      - series: 'windows_logical_disk_size_bytes{volume="C:"}'
+        values: '100+0x8'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: WindowsDiskLow
+        exp_alerts:
+          - exp_labels: { volume: 'C:', severity: warning, source_job: windows }
+            exp_annotations: { summary: 'Windows 磁盘可用空间不足 20%。' }
+          - exp_labels: { volume: 'C:', severity: critical, source_job: windows }
+            exp_annotations: { summary: 'Windows 磁盘可用空间不足 10%。' }
+  - name: missing service metrics alert only when the exporter is up
+    interval: 30s
+    input_series:
+      - series: 'up{job="windows"}'
+        values: '1+0x8'
+      - series: 'windows_service_state{service="YumpooServer",state="running"}'
+        values: '1+0x8'
+      - series: 'windows_service_state{service="postgresql-x64-17",state="running"}'
+        values: '1+0x8'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: WindowsServiceMissing
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: WindowsServiceMissing
+        exp_alerts:
+          - exp_labels: { state: running, windows_service: sshd, service: server, severity: critical, source_job: windows }
+            exp_annotations: { summary: '关键 Windows 服务指标缺失，无法确认运行状态；请检查 exporter 服务筛选与服务名。' }
+  - name: exporter outage does not duplicate missing-service alerts
+    interval: 30s
+    input_series:
+      - series: 'up{job="windows"}'
+        values: '0+0x8'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: WindowsServiceMissing
+        exp_alerts: []
+  - name: availability recording retains the worst probe per service
+    interval: 30s
+    input_series:
+      - series: 'probe_success{service="server",check="home"}'
+        values: '1 0 1'
+      - series: 'probe_success{service="server",check="health"}'
+        values: '1 1 1'
+      - series: 'probe_success{service="desktop",check="download"}'
+        values: '1 1 1'
+    promql_expr_test:
+      - expr: service:probe_success:min
+        eval_time: 30s
+        exp_samples:
+          - labels: 'service:probe_success:min{service="server"}'
+            value: 0
+          - labels: 'service:probe_success:min{service="desktop"}'
+            value: 1
   - name: windows exporter 0.32 CPU counters drive sustained warning and critical alerts
     interval: 30s
     input_series:
