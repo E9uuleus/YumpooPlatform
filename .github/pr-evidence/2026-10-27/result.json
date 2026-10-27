@@ -1,0 +1,49 @@
+{
+  "date": "2026-10-27",
+  "pr208": {
+    "myTime": {
+      "popoverWidth": 380,
+      "clientWidth": 378,
+      "scrollWidth": 378,
+      "rowWidths": [
+        350,
+        350,
+        350
+      ],
+      "longNamesEllipsis": true,
+      "darkTooltipFullText": true,
+      "dateStableWhenPointerEnters": true
+    },
+    "team": {
+      "clickDay": true,
+      "popoverWidth": 380,
+      "rowWidths": [
+        350,
+        350,
+        350
+      ],
+      "darkTooltipFullText": true
+    }
+  },
+  "pr210": {
+    "endFromSettings": true,
+    "banner": true,
+    "endedTag": true,
+    "sidebarRemoved": true,
+    "addAndEditDisabled": true,
+    "resumeFromCompanyFilteredList": true,
+    "editableAfterResume": true,
+    "timerStartHttp": 200,
+    "timerStoppedByEnd": true,
+    "runningSessionsAfterEnd": 0,
+    "timerCandidatesAfterEnd": 0,
+    "projectActivity": true,
+    "companyActivity": true,
+    "archiveRestoreKeepsEnded": true,
+    "ordinaryMemberVisible": true,
+    "ordinaryMemberReadonly": true,
+    "ordinaryMemberCannotResume": true,
+    "timeTotalPreserved": "6h45m"
+  },
+  "fixture": "Disposable PostgreSQL database; ordinary-member role fixture prepared separately after administrator interactions."
+}
