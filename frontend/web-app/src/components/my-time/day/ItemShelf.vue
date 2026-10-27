@@ -43,13 +43,14 @@ const candidates = computed<ShelfItem[]>(() => items.value
   .filter(item => filtering.value || !recorded.value.has(item.workItemId))
   .map(item => ({ key: item.workItemId, title: item.title, itemNo: item.itemNo, projectName: item.projectName,
     colorToken: item.contentColorToken ?? null, completed: item.completed })))
-/** Non-project categories stay at hand above the work items; project and assignee filters are about work items only. */
-const categories = computed<ShelfItem[]>(() => projects.value.size || mine.value ? [] : matchCategories(query.value)
+/** Categories stay at hand above the work items; with exactly one project filtered they are recorded against it. */
+const categoryProject = computed(() => projects.value.size === 1 ? [...projects.value.keys()][0]! : null)
+const categories = computed<ShelfItem[]>(() => mine.value ? [] : matchCategories(query.value, categoryProject.value)
   .filter(option => filtering.value || !recorded.value.has(option.key))
   .map(option => ({ key: option.key, title: option.label, itemNo: null, projectName: null, colorToken: option.colorToken })))
 interface ShelfSection { key: string; title: string; list: (ShelfItem & { ms?: number | undefined })[] }
 const sections = computed<ShelfSection[]>(() => {
-  const fixed = categories.value.length ? [{ key: 'fixed', title: '非项目工时', list: categories.value }] : []
+  const fixed = categories.value.length ? [{ key: 'fixed', title: '通用工时', list: categories.value }] : []
   return filtering.value
     ? [...fixed, { key: 'result', title: searching.value ? '搜索结果' : '筛选结果', list: candidates.value }]
     : [{ key: 'today', title: '今天已记录', list: props.totals }, ...fixed, { key: 'recent', title: '最近与我的', list: candidates.value }]

@@ -132,7 +132,7 @@ export const routes: RouteRecordRaw[] = [
       },
       { path: 'team', name: 'team-entry', redirect: { name: 'team', params: { view: 'timesheet' } } },
       {
-        path: 'team/:view(timesheet|overtime|workload)',
+        path: 'team/:view(timesheet|projects|overtime|workload)',
         name: 'team',
         component: () => import('../views/TeamReviewView.vue'),
         meta: { shellSection: 'team', requiredRoles: [AuthenticationRole.AppManager, AuthenticationRole.CompanyAdmin], onboardingTour: 'team' },

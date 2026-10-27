@@ -138,6 +138,7 @@ const contextItems = computed<ContextItem[]>(() => {
   }
   if (activeSection.value === 'team') return [
     { label: '成员工时', routeName: 'team', params: { view: 'timesheet' } },
+    { label: '项目工时', routeName: 'team', params: { view: 'projects' } },
     { label: '加班统计', routeName: 'team', params: { view: 'overtime' } },
     { label: '成员当前任务', routeName: 'team', params: { view: 'workload' } },
   ]

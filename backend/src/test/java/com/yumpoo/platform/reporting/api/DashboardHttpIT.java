@@ -211,7 +211,7 @@ class DashboardHttpIT {
 
         var own = ok(get("/api/v1/me/timesheet?from=2026-01-01&to=2026-01-07", member));
         assertThat(own.path("entries").get(0).path("durationMs").asLong()).isEqualTo(1800000);
-        assertThat(own.path("categoryEntries").toString()).contains("\"timeCategory\":\"MEETING\",\"date\":\"2026-01-05\",\"durationMs\":1800000")
+        assertThat(own.path("categoryEntries").toString()).contains("\"timeCategory\":\"MEETING\"", "\"date\":\"2026-01-05\",\"durationMs\":1800000")
                 .doesNotContain("BUSINESS_TRIP");
         var outside = ok(get("/api/v1/me/timesheet?from=2026-01-01&to=2026-01-07", outsider));
         assertThat(outside.path("entries").isEmpty()).isTrue();
