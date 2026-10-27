@@ -7,7 +7,7 @@ import { loadSurface } from './surface-load'
 import { applicationIcon } from './application-icon'
 import { validRailProjects, type DesktopPreferenceStore } from './desktop-preferences'
 import type { TimerPreferenceStore } from './timer-preferences'
-import { hitTest, placeRail, railShape, snapDock, type Rect } from './timer-geometry'
+import { hitTest, MAX_RAIL_PROJECTS, placeRail, railShape, snapDock, type Rect } from './timer-geometry'
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const SLIDE_MS = 300
@@ -44,6 +44,7 @@ export class RailController {
   private reframeTimer: ReturnType<typeof setTimeout> | undefined
   private stopped = false
   private installed = false
+  private visibleCount: number | undefined
 
   constructor(private readonly origin: string, private readonly preload: string, private readonly timerPrefs: TimerPreferenceStore,
     private readonly prefs: DesktopPreferenceStore, private readonly host: RailHost) {}
@@ -65,6 +66,12 @@ export class RailController {
       this.prefs.update({ railProjects: projects })
     })
     ipcMain.handle('yumpoo:rail:settings', event => { trusted(event); this.host.openSettings() })
+    ipcMain.handle('yumpoo:rail:visible-count', (event, count: unknown) => {
+      trusted(event)
+      if (typeof count !== 'number' || !Number.isInteger(count) || count < 0 || count > MAX_RAIL_PROJECTS) throw new Error('INVALID_RAIL_VISIBLE_COUNT')
+      this.visibleCount = count
+      this.sync()
+    })
     app.on('will-quit', () => this.clearTimers())
   }
 
@@ -98,6 +105,7 @@ export class RailController {
 
   /** Signing out or switching account reloads the page from scratch. */
   destroy(): void {
+    this.visibleCount = undefined
     const window = this.window
     if (window && !window.isDestroyed()) window.destroy()
   }
@@ -111,7 +119,8 @@ export class RailController {
 
   private place(area: Rect): Rect {
     const prefs = this.prefs.get(), timer = this.timerPrefs.get()
-    const placed = placeRail(timer.dockSide, timer.dockY, prefs.railSize, prefs.railProjects?.items.length ?? 0, this.host.timer(), area)
+    const count = prefs.railProjects?.items.length ?? 0
+    const placed = placeRail(timer.dockSide, timer.dockY, prefs.railSize, Math.min(this.visibleCount ?? count, count), this.host.timer(), area)
     this.rail = placed.rail
     return placed.bounds
   }

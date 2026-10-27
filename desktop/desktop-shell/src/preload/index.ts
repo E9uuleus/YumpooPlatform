@@ -309,6 +309,7 @@ const desktopRail: DesktopRailBridge = Object.freeze({
   },
   openProject: async (projectId: string, top: number) => { await ipcRenderer.invoke('yumpoo:rail:open', projectId, top) },
   setProjects: async (projects: RailProjects) => { await ipcRenderer.invoke('yumpoo:rail:projects', projects) },
+  setVisibleCount: async (count: number) => { await ipcRenderer.invoke('yumpoo:rail:visible-count', count) },
   openSettings: async () => { await ipcRenderer.invoke('yumpoo:rail:settings') },
 })
 

@@ -36,7 +36,7 @@ beforeEach(() => {
   api.listProjects.mockResolvedValue({ items: [{ id: 'p1' }, { id: 'p2' }] })
   Object.assign(window, { yumpooDesktop: { rail: {
     onState: (listener: (state: RailState) => void) => { emit = listener; return () => undefined },
-    getState: () => Promise.resolve(base), setProjects: vi.fn(), openProject: vi.fn(), openSettings: vi.fn(),
+    getState: () => Promise.resolve(base), setProjects: vi.fn(), setVisibleCount: vi.fn(), openProject: vi.fn(), openSettings: vi.fn(),
   } } })
 })
 afterEach(() => { delete (window as { yumpooDesktop?: unknown }).yumpooDesktop })
@@ -77,6 +77,7 @@ describe('项目侧边栏', () => {
     await flushPromises()
     expect(api.listProjects).toHaveBeenCalledWith({ lifecycle: 'ACTIVE', ended: false, actorAccesses: ['OWNER', 'MEMBER'], page: 0, size: 100 })
     expect(wrapper.findAll('.rail-project:not(.is-add)').map(tile => tile.text())).toEqual(['运'])
+    expect(window.yumpooDesktop!.rail!.setVisibleCount).toHaveBeenLastCalledWith(1)
     expect(window.yumpooDesktop!.rail!.setProjects).not.toHaveBeenCalled()
     tracker.current.value = { rowVersion: 1 }
     await flushPromises()
