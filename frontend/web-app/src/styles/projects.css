@@ -865,6 +865,68 @@
   color: var(--yp-action-primary);
 }
 
+.project-management-table--catalog .el-table__body-wrapper td.el-table__cell {
+  height: 60px;
+}
+
+.project-management-table--catalog .el-table__body tr:hover .project-name-cell__link {
+  color: var(--yp-action-primary);
+}
+
+.project-identity-cell {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--yp-space-3);
+  min-width: 0;
+}
+
+.project-identity-cell__mark {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--mark), color-mix(in srgb, var(--mark) 70%, var(--yp-bg-surface)));
+  color: var(--yp-status-blue-foreground);
+  font-family: var(--yp-font-heading);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.project-identity-cell__text {
+  display: grid;
+  min-width: 0;
+  line-height: 18px;
+}
+
+.project-identity-cell__text small {
+  display: flex;
+  gap: var(--yp-space-2);
+  overflow: hidden;
+  color: var(--yp-text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.project-identity-cell__text small span + span::before {
+  margin-right: var(--yp-space-2);
+  content: "·";
+}
+
+.project-role-chip {
+  display: inline-flex;
+  height: 24px;
+  align-items: center;
+  padding: 0 10px;
+  border: 1px solid var(--yp-border-subtle);
+  border-radius: var(--yp-radius-pill);
+  background: var(--yp-bg-sunken);
+  color: var(--yp-text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .project-name-cell__code,
 .project-section-description {
   color: var(--yp-text-muted);

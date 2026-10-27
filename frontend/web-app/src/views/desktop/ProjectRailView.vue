@@ -10,7 +10,7 @@ import { useDesktopSurfaceOpacity } from '../../composables/useDesktopSurfaceOpa
 import { projectColors } from '../../components/team/teamDashboardModel'
 import { orbDuration } from '../../components/timer/timeFormat'
 import TimerIcon from '../../components/timer/TimerIcon.vue'
-import { projectInitial } from '../../components/desktop/quickTime'
+import { railLabel } from '../../components/desktop/quickTime'
 import { plainRailProjects } from '../../components/desktop/railProjects'
 import { resumeSubjects } from '../../components/timer/timeCategories'
 
@@ -106,6 +106,7 @@ function drop(target: number) {
         :class="{ 'is-active': state.active === project.id, 'is-dragging': dragging === index }"
         :style="{ '--tone': tones.get(project.id) }"
         :title="project.name"
+        :data-len="[...railLabel(project)].length"
         :aria-label="`${project.name}：记录工时`"
         draggable="true"
         @click="open(project, $event)"
@@ -114,7 +115,7 @@ function drop(target: number) {
         @drop.prevent="drop(index)"
         @dragend="dragging = null"
       >
-        {{ projectInitial(project.name) }}
+        {{ railLabel(project) }}
       </button>
       <button
         type="button"
@@ -169,6 +170,9 @@ button:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:2px
   background:color-mix(in srgb,var(--tone) 17%,var(--yp-bg-raised));color:color-mix(in srgb,var(--tone) 62%,var(--yp-text-primary));
   box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--tone) 30%,transparent);font-size:calc(var(--rail-icon) * .4);font-weight:700;flex-shrink:0;
   transition:background .15s,opacity .15s}
+.rail-project{white-space:nowrap}
+.rail-project[data-len="2"]{font-size:calc(var(--rail-icon) * .36);letter-spacing:-.02em}
+.rail-project[data-len="3"]{font-size:clamp(10px,calc(var(--rail-icon) * .3),13px);letter-spacing:-.04em}
 .rail-project:hover{background:color-mix(in srgb,var(--tone) 28%,var(--yp-bg-raised))}
 /* The open project carries a short bar on the rail's screen-edge side instead of an outline. */
 .rail-project.is-active::before{content:"";position:absolute;top:50%;width:3px;height:16px;border-radius:2px;background:var(--yp-timer-accent);transform:translateY(-50%)}

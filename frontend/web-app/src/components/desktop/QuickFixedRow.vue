@@ -6,7 +6,7 @@ import { workItemLabelColorValue } from '../projects/workItemLabelColors'
 import type { TimeCategoryOption } from '../timer/timeCategories'
 import { shortDuration, type DateChoice } from './quickTime'
 
-/** One compact row for the non-project categories: a pill per category, opening the same record area as a work item row. */
+/** One compact row for the categories: a pill per category, opening the same record area as a work item row. */
 const props = defineProps<{
   categories: TimeCategoryOption[]
   /** The open row's key; the record area shows when it is one of these categories. */
@@ -47,9 +47,8 @@ const openRangeMode = computed({ get: () => !!open.value && rangeMode.value, set
       <div
         class="quick-fixed__row"
         role="group"
-        aria-label="非项目工时"
+        aria-label="通用工时"
       >
-        <span class="quick-fixed__label">非项目</span>
         <button
           v-for="category in categories"
           :key="category.key"
@@ -108,7 +107,6 @@ const openRangeMode = computed({ get: () => !!open.value && rangeMode.value, set
 .quick-fixed__row{display:flex;align-items:center;gap:6px;padding:6px;border-radius:9px;overflow-x:auto;scrollbar-width:none;transition:background .3s}
 .is-expanded .quick-fixed__row{background:var(--yp-timer-sunken)}
 .is-flashing .quick-fixed__row{background:color-mix(in srgb,var(--yp-timer-saved) 18%,transparent)}
-.quick-fixed__label{flex-shrink:0;margin-right:2px;color:var(--yp-text-muted);font-size:11px}
 .quick-fixed__pill{display:inline-flex;align-items:center;gap:4px;flex-shrink:0;height:26px;padding:0 9px 0 8px;border:1px solid var(--yp-timer-hairline);border-radius:999px;background:none;color:var(--yp-text-primary);font:12px var(--yp-font-family);white-space:nowrap;cursor:pointer;transition:background .15s,border-color .15s}
 .quick-fixed__pill svg{width:13px;height:13px;color:var(--pill-color)}
 .quick-fixed__pill:hover{background:var(--yp-timer-hover)}

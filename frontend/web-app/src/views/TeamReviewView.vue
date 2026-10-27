@@ -8,6 +8,7 @@ import { usePageOnboarding } from '../onboarding/useOnboarding'
 
 const VIEWS = {
   timesheet: { view: 'TIMESHEET', title: '成员工时' },
+  projects: { view: 'PROJECTS', title: '项目工时' },
   overtime: { view: 'OVERTIME', title: '加班统计' },
   workload: { view: 'WORKLOAD', title: '成员当前任务' },
 } as const

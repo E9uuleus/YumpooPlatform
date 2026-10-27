@@ -54,13 +54,13 @@ groups:
         labels: { severity: critical, source_job: windows }
         annotations: { summary: 'Windows 可用内存不足 10%。' }
       - alert: WindowsDiskLow
-        expr: windows_logical_disk_free_bytes / windows_logical_disk_size_bytes < 0.20
+        expr: windows_logical_disk_free_bytes{volume=~"[A-Z]:"} / windows_logical_disk_size_bytes{volume=~"[A-Z]:"} < 0.20
         for: 90s
         keep_firing_for: 60s
         labels: { severity: warning, source_job: windows }
         annotations: { summary: 'Windows 磁盘可用空间不足 20%。' }
       - alert: WindowsDiskLow
-        expr: windows_logical_disk_free_bytes / windows_logical_disk_size_bytes < 0.10
+        expr: windows_logical_disk_free_bytes{volume=~"[A-Z]:"} / windows_logical_disk_size_bytes{volume=~"[A-Z]:"} < 0.10
         for: 90s
         keep_firing_for: 60s
         labels: { severity: critical, source_job: windows }
@@ -77,6 +77,12 @@ groups:
         keep_firing_for: 60s
         labels: { severity: critical, source_job: windows, service: server }
         annotations: { summary: 'Windows 关键服务未运行。' }
+      - alert: WindowsServiceMissing
+        expr: (label_replace(absent(windows_service_state{service="YumpooServer",state="running"}), "windows_service", "YumpooServer", "", "") or label_replace(absent(windows_service_state{service="postgresql-x64-17",state="running"}), "windows_service", "postgresql-x64-17", "", "") or label_replace(absent(windows_service_state{service="sshd",state="running"}), "windows_service", "sshd", "", "")) and on() (up{job="windows"} == 1)
+        for: 90s
+        keep_firing_for: 60s
+        labels: { severity: critical, source_job: windows, service: server }
+        annotations: { summary: '关键 Windows 服务指标缺失，无法确认运行状态；请检查 exporter 服务筛选与服务名。' }
       - alert: UbuntuCpuHigh
         expr: 1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) > 0.90
         for: 5m
@@ -130,3 +136,8 @@ groups:
         keep_firing_for: 60s
         labels: { severity: critical, source_job: application, service: server }
         annotations: { summary: '应用内存采样显示数据库连续不可达。' }
+  - name: dashboard-recordings
+    interval: 30s
+    rules:
+      - record: service:probe_success:min
+        expr: min by (service) (probe_success)

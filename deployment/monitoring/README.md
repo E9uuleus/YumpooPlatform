@@ -63,6 +63,8 @@ sudo MONITOR_BUILD=<full-commit> MONITOR_OFFLINE_DIR=<absolute-bundle-directory>
 
 只升级通知服务、且双方已有相同摘要的五个基础监控镜像时，可使用 `node tools/monitoring/bundle.mjs <output-directory> --hub-only` 生成较小的增量包。安装仍核验全部镜像 ID；目标缺少任一锁定基础镜像时会失败，需要改用完整包。
 
+安装器会重启 Prometheus、Alertmanager 与 blackbox 以加载单文件挂载的新规则和配置，重启期间采样中断按未知处理。
+
 数据位于 `/var/lib/yumpoo-monitor/{hub,prometheus,alertmanager,grafana,discovery}`。不随代码升级删除数据卷。SQLite 使用 WAL 与 FULL 同步；复制数据库需要先停止 hub 或使用 SQLite 在线备份，不能只复制活动的主数据库文件。此功能不承担业务数据备份。
 
 ## Windows 接入
@@ -77,7 +79,7 @@ sudo MONITOR_BUILD=<full-commit> MONITOR_OFFLINE_DIR=<absolute-bundle-directory>
 
 下载官方 `windows_exporter-0.32.0-amd64.msi`，安装脚本核对固定 SHA-256，使用 `ADDLOCAL=DefaultFeature REMOVE=FirewallException` 安装主程序并移除防火墙例外，监听 127.0.0.1:9182。首次安装不能只传 `REMOVE`，否则可能返回成功但没有安装主程序。执行同包内的 `Install-YumpooMonitoring.ps1 -ExporterMsi <msi> -GatewayConfig <yumpoo-monitor.conf>`：等待采集服务运行，再配置只读 Nginx 网关、校验后 reload，注册隧道、事件转发和看门狗三个独立任务。不会停止业务服务。
 
-接入后核对 CPU、内存、磁盘和服务指标均有实际数据；0.32.0 的 CPU 累计时间指标为 `windows_cpu_time_seconds_total`，告警规则和看板须使用同一名称。
+接入后核对 CPU、内存、磁盘和服务指标均有实际数据；0.32.0 的 CPU 累计时间指标为 `windows_cpu_time_seconds_total`，告警规则和看板的主机表达式与阈值由 `tools/monitoring/check.mjs` 强制一致。
 
 重复运行安装器时，已安装的同一 MSI 产品会显式重装主功能与服务参数，并启动采集服务；仅重复传入 `ADDLOCAL` / `REMOVE` 会跳过上游的默认重装分支，却仍终止原进程。重复接入也必须以服务运行和网关返回指标为完成条件。
 
@@ -98,10 +100,27 @@ sudo MONITOR_BUILD=<full-commit> MONITOR_OFFLINE_DIR=<absolute-bundle-directory>
 - 黑盒探测与指标每 30 秒采样；访问持续失败 90 秒通知运维，持续 5 分钟通知公告群。恢复需要连续健康 60 秒。采样丢失或进程重启中断连续窗口，状态为未知，不补零、不算恢复。
 - 应用规则复用运维中心已提交的活动缓存，CPU/磁盘告警归主机 exporter；数据库不可达无法写入规则表时另使用内存失败次数。采样、I/O、规则评估分别导出时间，过期会告警。
 - 自动维护从实际进入维护开始，最长 30 分钟；只有带 `expected_maintenance` 的关联应用故障被抑制。超时、恢复失败立即解除静默，继续保留真实访问记录。
+- 维护公告时间使用北京时间；创建表单直接预览服务端将发送的公告。延期、取消和结束公告附带维护标题，延期还显示新的预计结束时间。
 - 服务端成功必须同时满足主机成功、健康与目标 tag/commit 一致；桌面成功还检查 `release.json` 与 `latest.yml` 的版本、文件名、大小和更新摘要一致，以及安装包 HTTP/长度。复核失败只通知运维，不改变主机状态、不自动回滚。回退公告说明实际版本。
-- SQLite 事务同时提交事件与消息。每个机器人每分钟最多尝试 15 条，检查 HTTP 和 `errcode=0`，UTF-8 正文不超过 4096 字节。指数退避最多 1 小时，12 次失败后进入 dead，管理页可重试未过期消息。服务恢复会终止旧故障消息的重试。
+- SQLite 事务同时提交事件与消息。每个机器人每分钟最多尝试 15 条，检查 HTTP 和 `errcode=0`，UTF-8 正文不超过 4096 字节。指数退避最多 1 小时，12 次失败后进入 dead，管理页可重试未过期消息。过期失败消息转为已过期，不计入积压告警；管理员可放弃失败消息并留审计。服务恢复会终止旧故障消息的重试。
 - 消息发送成功但 ACK 写盘前宕机仍可能重复，这是外部 Webhook 不提供幂等键时的至少一次投递边界。
 - 两台机器同时失联没有第三方观测者；Windows 看门狗本身不能消除该盲区。
+
+## 指标看板
+
+Grafana 默认首页为 Yumpoo 异机监控看板，分为「总览」「外网访问」「应用 YumpooServer」「Windows 业务主机」「监控链路与 Ubuntu」五个分区，共 39 个面板；监控链路分区默认折叠。发布维护、人工维护和严重告警三类注解用于对照状态与趋势。
+
+看板由 `node tools/monitoring/dashboard.mjs` 生成，禁止在 Grafana 中手改。主机告警表达式与阈值共享 `tools/monitoring/expressions.mjs`，由 `node tools/monitoring/check.mjs` 在 CI 中校验；`--rules` 还执行规则测试与全部面板、注解的 PromQL 语法检查。Windows 磁盘只统计盘符卷；关键服务指标缺失由 `WindowsServiceMissing` 单独告警。
+
+Hub 的 `/metrics` 在原有指标之外提供以下低基数指标，看板状态与独立状态页使用同一判定：
+
+| 指标 | 标签与含义 |
+| --- | --- |
+| `monitor_service_status` | 按 `service` 输出展示状态：0 正常、1 维护、2 未知、3 中断。 |
+| `monitor_service_observed_status` | 按 `service` 输出忽略维护的实际观测：0 正常、2 未知、3 中断；维护不会掩盖实际异常。 |
+| `monitor_maintenance_active` | 按 `service` 与 `kind` 输出当前是否处于维护窗口：0 否、1 是；`automatic` 为发布维护，`manual` 为人工维护，两类序列始终输出。 |
+
+记录规则 `service:probe_success:min` 按服务聚合外网探测结果，用于长时段可用率；采样缺失仍是未知，不补成成功。应用请求速率由 15 秒增量采样估算，Prometheus 每 30 秒抓取；应用面板标示的阈值为运维中心默认值，应用内调整后以应用为准。
 
 ## 验证与 24 小时观察
 

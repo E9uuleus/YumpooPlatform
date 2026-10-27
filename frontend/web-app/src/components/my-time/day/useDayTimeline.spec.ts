@@ -40,11 +40,11 @@ beforeEach(async () => {
 afterEach(() => wrapper.unmount())
 
 describe('非项目分类', () => {
-  it('补录分类只带 timeCategory，编辑与删除走本人记录接口', async () => {
+  it('补录分类携带 timeCategory 和关联项目，编辑与删除走本人记录接口', async () => {
     api.fillMyTimeSessions.mockResolvedValue({ createdCount: 1, changedCount: 0, deletedCount: 0, skippedDurationMs: 0 })
-    await timeline.create(TimeSessionFillMode.Gaps, ['category:MEETING', 'item'], [{ start: block.start, end: block.end! }])
+    await timeline.create(TimeSessionFillMode.Gaps, ['category:MEETING:project', 'item'], [{ start: block.start, end: block.end! }])
     expect(api.fillMyTimeSessions.mock.calls[0]![0].timeSessionFillCommand.entries).toEqual([
-      { timeCategory: 'MEETING', startedAt: new Date(block.start), stoppedAt: new Date(block.end!) },
+      { timeCategory: 'MEETING', categoryProjectId: 'project', startedAt: new Date(block.start), stoppedAt: new Date(block.end!) },
       { workItemId: 'item', startedAt: new Date(block.start), stoppedAt: new Date(block.end!) }])
     api.editMyTimeSession.mockResolvedValue({})
     api.deleteMyTimeSession.mockResolvedValue({})
@@ -55,7 +55,7 @@ describe('非项目分类', () => {
     expect(api.deleteMyTimeSession).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'record' }))
   })
 
-  it('改归属可以转到分类，分类记录显示为分类名与非项目工时', async () => {
+  it('改归属可以转到分类，未关联项目的分类记录只显示分类名', async () => {
     api.reassignMyTimeSession.mockResolvedValue({ createdCount: 1, changedCount: 0, deletedCount: 1, skippedDurationMs: 0 })
     expect(await timeline.reassign(block, 'category:LEARNING')).toBe(true)
     expect(api.reassignMyTimeSession).toHaveBeenCalledWith(expect.objectContaining({ timeSessionReassignCommand: { timeCategory: 'LEARNING' } }))
@@ -63,7 +63,7 @@ describe('非项目分类', () => {
       session: { id: 's', workItemId: null, projectId: null, timeCategory: 'BUSINESS_TRIP', startedAt: new Date(block.start),
         stoppedAt: new Date(block.end!), canEdit: true, etag: '"0"' } }] })
     await timeline.load()
-    expect(timeline.blocks.value[0]).toMatchObject({ title: '出差', projectName: '非项目工时', subjectKey: 'category:BUSINESS_TRIP', colorToken: 'RIVER' })
+    expect(timeline.blocks.value[0]).toMatchObject({ title: '出差', projectName: null, subjectKey: 'category:BUSINESS_TRIP', colorToken: 'RIVER' })
     expect(timeline.totals.value.map(total => total.key)).toEqual(['category:BUSINESS_TRIP'])
   })
 })
