@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { projectWritable } from './projectStatus'
 import './workItemCompactTable.css'
 import { useWorkItemEdits, type WorkItemPatchField, type WorkItemPatchValue } from './useWorkItemEdits'
 import { isWorkItemViewControl } from './workItemViewControls'
@@ -675,7 +676,7 @@ const priorityOptions = computed(() => [...(labelCatalog.value?.priorities ?? []
   .sort((left, right) => left.sortOrder - right.sortOrder))
 const activeMembers = computed(() => members.value.filter(item => item.membershipStatus === ProjectMembershipStatus.Active))
 const canCreate = computed(() => Boolean(project.value
-  && project.value.lifecycle !== ProjectLifecycle.Archived
+  && projectWritable(project.value)
   && activeContents.value.length
   && (project.value.actorAccess === ProjectActorAccess.Owner
     || project.value.actorAccess === ProjectActorAccess.Member)))
@@ -908,13 +909,14 @@ async function changeGrouping(field: GroupField | ''): Promise<void> {
   } finally { groupingSwitching.value = false }
 }
 const canPublishDiscussion = computed(() => Boolean(project.value
-  && project.value.lifecycle !== ProjectLifecycle.Archived
+  && projectWritable(project.value)
   && detail.value?.capabilities?.canDiscuss
   && (project.value.actorAccess === ProjectActorAccess.Owner
     || project.value.actorAccess === ProjectActorAccess.Member)))
 const discussionReadOnlyReason = computed(() => {
   if (detail.value?.archived) return '工作项已归档，恢复后可继续编辑和讨论。'
   if (project.value?.lifecycle === ProjectLifecycle.Archived) return 'Project 已归档，工作项讨论仅可查看。'
+  if (project.value?.endedAt) return '项目已结束，工作项讨论仅可查看。'
   if (!canPublishDiscussion.value) return '当前角色没有发布讨论的权限。'
   return undefined
 })

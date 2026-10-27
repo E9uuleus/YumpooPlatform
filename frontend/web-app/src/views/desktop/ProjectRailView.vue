@@ -42,7 +42,7 @@ onBeforeUnmount(() => offState?.())
 // With no recents yet (a fresh install or partition) nothing is saved, so the rail seeds once the main window records some.
 watch([state, scope, () => recents.items.value], ([value, owner]) => {
   if (!bridge || !value || !owner || value.projects?.owner === owner) return
-  const items = recents.items.value.filter(project => project.lifecycle === ProjectLifecycle.Active).slice(0, 6)
+  const items = recents.items.value.filter(project => project.lifecycle === ProjectLifecycle.Active && !project.endedAt).slice(0, 6)
     .map(project => ({ id: project.id, name: project.name.slice(0, 64) }))
   if (items.length) void bridge.setProjects({ owner, items }).catch(() => undefined)
 })

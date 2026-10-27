@@ -119,7 +119,7 @@ function loadTasks(): void {
 }
 loadTasks()
 void dashboardsApi.listDashboardProjects({ includeArchived: false, limit: 50 }).then(page => { projects.value = page.items }, quiet)
-void projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.Active, actorAccesses: MY_PROJECT_ACCESSES, page: 0, size: 1 }).then(page => { projectTotal.value = page.totalElements }, quiet)
+void projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.Active, ended: false, actorAccesses: MY_PROJECT_ACCESSES, page: 0, size: 1 }).then(page => { projectTotal.value = page.totalElements }, quiet)
 loadMonth()
 onBeforeUnmount(onTimeTrackingChanged(loadMonth))
 onBeforeUnmount(onWorkItemChanged(loadTasks))

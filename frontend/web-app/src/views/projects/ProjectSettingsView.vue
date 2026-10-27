@@ -19,6 +19,7 @@ import { onBeforeRouteLeave, useRoute } from 'vue-router'
 import { projectsApi } from '../../api/client'
 import { isProblemStatus, localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
+import { projectStatus } from '../../components/projects/projectStatus'
 import ProjectLifecycleActions from '../../components/projects/ProjectLifecycleActions.vue'
 import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHeader.vue'
 import ProjectConnectionsOverview from '../../components/projects/connect/ProjectConnectionsOverview.vue'
@@ -153,7 +154,7 @@ onMounted(load)
           <code title="用于工作项编号，不可修改">{{ project.code }}</code>
           <yp-status-tag
             domain="project-lifecycle"
-            :status="project.lifecycle"
+            :status="projectStatus(project)"
             effect="soft"
             size="small"
           />
@@ -169,6 +170,9 @@ onMounted(load)
           <dt>访问</dt><dd>{{ businessLabel(project.actorAccess) }}</dd>
           <dt>创建</dt><dd>{{ formatTime(project.createdAt) }}</dd>
           <dt>更新</dt><dd>{{ formatTime(project.updatedAt) }}</dd>
+          <template v-if="project.endedAt">
+            <dt>结束</dt><dd>{{ formatTime(project.endedAt) }}</dd>
+          </template>
           <template v-if="project.archivedAt">
             <dt>归档</dt><dd>{{ formatTime(project.archivedAt) }}</dd>
           </template>

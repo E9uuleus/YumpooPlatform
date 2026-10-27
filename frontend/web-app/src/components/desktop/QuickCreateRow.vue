@@ -7,7 +7,7 @@ import { MY_PROJECT_ACCESSES } from '../projects/projectScope'
 let projectList: Promise<ProjectSummary[]> | undefined
 let lastProjectId: string | null = null
 function loadProjects(): Promise<ProjectSummary[]> {
-  projectList ??= projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.Active, actorAccesses: MY_PROJECT_ACCESSES, page: 0, size: 100 })
+  projectList ??= projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.Active, ended: false, actorAccesses: MY_PROJECT_ACCESSES, page: 0, size: 100 })
     .then(page => page.items, reason => { projectList = undefined; throw reason })
   return projectList
 }

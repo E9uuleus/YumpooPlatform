@@ -25,7 +25,7 @@ const scope = computed(() => {
   return authentication ? `${authentication.company.id}:${authentication.user.id}` : undefined
 })
 const recents = useProjectRecents(() => scope.value)
-const defaults = computed<RailProject[]>(() => recents.items.value.filter(project => project.lifecycle === ProjectLifecycle.Active).slice(0, 6)
+const defaults = computed<RailProject[]>(() => recents.items.value.filter(project => project.lifecycle === ProjectLifecycle.Active && !project.endedAt).slice(0, 6)
   .map(project => ({ id: project.id, name: project.name.slice(0, 64) })))
 const projects = computed(() => preferences.value?.railProjects?.owner === scope.value ? preferences.value!.railProjects!.items : defaults.value)
 

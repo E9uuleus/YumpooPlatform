@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { vBrandLoading as vLoading } from '../../brand/loading'
 import { Plus } from '@element-plus/icons-vue'
-import { ProjectActorAccess, ProjectLifecycle, ProjectLifecycleFilter, type Project, type ProjectOwnerOption, type ProjectPage } from '@yumpoo/api-client'
+import { ProjectActorAccess, ProjectLifecycle, ProjectLifecycleFilter, type Project, type ProjectOwnerOption, type ProjectPage, type ProjectSummary } from '@yumpoo/api-client'
 import {
   ElButton, ElCheckbox, ElCheckboxGroup, ElIcon, ElInput,
   ElMessage, ElPagination,
@@ -12,6 +12,7 @@ import { useRouter } from 'vue-router'
 import { projectsApi } from '../../api/client'
 import { isProblemStatus, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
+import { projectStatus } from '../../components/projects/projectStatus'
 import ProjectCreateDialog from '../../components/projects/ProjectCreateDialog.vue'
 import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHeader.vue'
 import { projectColors } from '../../components/team/teamDashboardModel'
@@ -27,6 +28,12 @@ import { usePageOnboarding } from '../../onboarding/useOnboarding'
 import { formatDateOnly, formatTimestamp } from '../../design-system/dates'
 import { businessLabel } from '../../design-system/labels'
 import type { ActiveFilter } from '../../design-system/types'
+
+type StatusPreset = 'running' | 'ended'
+const statusOptions: { value: StatusPreset; label: string }[] = [{ value: 'running', label: '进行中' }, { value: 'ended', label: '已结束' }]
+const statusPreset = ref<StatusPreset>()
+const endedFilter = computed(() => statusPreset.value ? statusPreset.value === 'ended' : undefined)
+function selectStatus(value: StatusPreset): void { statusPreset.value = statusPreset.value === value ? undefined : value; refreshForFilters() }
 
 type ModifiedPreset = 'TODAY' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'LAST_90_DAYS'
 type ProjectCatalogView = 'recent' | 'content'
@@ -77,6 +84,7 @@ const modifiedOptions: Array<{ value: ModifiedPreset; label: string; days: numbe
 const accessOptions = MY_PROJECT_ACCESSES
 const scopedAccesses = computed(() => actorAccesses.value.length ? actorAccesses.value : MY_PROJECT_ACCESSES)
 const activeFilters = computed<ActiveFilter[]>(() => [
+  ...(statusPreset.value ? [{ key: 'status', label: '项目状态', valueLabel: statusOptions.find(item => item.value === statusPreset.value)?.label ?? '' }] : []),
   ...(modifiedPreset.value ? [{ key: 'modified', label: '最后修改时间', valueLabel: modifiedOptions.find(item => item.value === modifiedPreset.value)?.label ?? '' }] : []),
   ...(ownerUserIds.value.length ? [{ key: 'owners', label: '负责人', valueLabel: ownerUserIds.value.map(id => ownerOptions.value.find(item => item.userId === id)?.displayName ?? id).join('、') }] : []),
   ...(actorAccesses.value.length ? [{ key: 'accesses', label: '我的角色', valueLabel: actorAccesses.value.map(businessLabel).join('、') }] : []),
@@ -115,6 +123,7 @@ const recentProjectItems = computed(() => {
     if (!verifiedRecentIds.value.has(item.id)) return false
     if (normalizedQuery && !`${item.name} ${item.code}`.toLocaleLowerCase().includes(normalizedQuery)) return false
     if (item.lifecycle !== ProjectLifecycle.Active) return false
+    if (endedFilter.value !== undefined && Boolean(item.endedAt) !== endedFilter.value) return false
     if (ownerUserIds.value.length && !ownerUserIds.value.includes(item.ownerUserId)) return false
     if (!scopedAccesses.value.includes(item.actorAccess)) return false
     return since === undefined || new Date(item.updatedAt).getTime() >= since
@@ -131,6 +140,7 @@ async function load(): Promise<void> {
   try {
     result.value = await projectsApi.listProjects({
       ...(appliedQuery.value ? { query: appliedQuery.value } : {}),
+      ...(endedFilter.value === undefined ? {} : { ended: endedFilter.value }),
       ...(ownerUserIds.value.length ? { ownerUserIds: ownerUserIds.value } : {}),
       actorAccesses: scopedAccesses.value,
       ...(since ? { updatedSince: since } : {}),
@@ -155,12 +165,13 @@ async function loadReferenceData(): Promise<void> {
 function refreshForFilters(): void { page.value = 0; void load() }
 function selectModified(value: ModifiedPreset): void { modifiedPreset.value = modifiedPreset.value === value ? undefined : value; refreshForFilters() }
 function removeFilter(key: string): void {
+  if (key === 'status') statusPreset.value = undefined
   if (key === 'modified') modifiedPreset.value = undefined
   if (key === 'owners') ownerUserIds.value = []
   if (key === 'accesses') actorAccesses.value = []
   refreshForFilters()
 }
-function clearFilters(): void { modifiedPreset.value = undefined; ownerUserIds.value = []; actorAccesses.value = []; refreshForFilters() }
+function clearFilters(): void { statusPreset.value = undefined; modifiedPreset.value = undefined; ownerUserIds.value = []; actorAccesses.value = []; refreshForFilters() }
 function scheduleSearch(): void {
   if (searchTimer) clearTimeout(searchTimer)
   searchTimer = setTimeout(runSearchImmediately, 300)
@@ -311,6 +322,20 @@ onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTi
         <template #filters>
           <div class="project-filter-grid">
             <section class="project-filter-group">
+              <h3>项目状态</h3>
+              <button
+                v-for="option in statusOptions"
+                :key="option.value"
+                type="button"
+                class="project-filter-option"
+                :class="{ selected: statusPreset === option.value }"
+                :aria-pressed="statusPreset === option.value"
+                @click="selectStatus(option.value)"
+              >
+                {{ option.label }}
+              </button>
+            </section>
+            <section class="project-filter-group">
               <h3>最后修改时间</h3>
               <el-tooltip
                 v-for="option in modifiedOptions"
@@ -443,7 +468,7 @@ onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTi
                 <template #default="scope">
                   <yp-status-tag
                     domain="project-lifecycle"
-                    :status="scope.row.lifecycle"
+                    :status="projectStatus(scope.row as ProjectSummary)"
                     effect="soft"
                   />
                 </template>
@@ -474,7 +499,7 @@ onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTi
               >
                 <span class="project-mobile-row__header"><span class="project-mobile-row__identity"><strong>{{ item.name }}</strong></span><yp-status-tag
                   domain="project-lifecycle"
-                  :status="item.lifecycle"
+                  :status="projectStatus(item)"
                   size="small"
                   effect="soft"
                 /></span>
@@ -572,7 +597,7 @@ onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTi
               />
               <yp-status-tag
                 domain="project-lifecycle"
-                :status="item.lifecycle"
+                :status="projectStatus(item)"
                 effect="soft"
               />
               <time
