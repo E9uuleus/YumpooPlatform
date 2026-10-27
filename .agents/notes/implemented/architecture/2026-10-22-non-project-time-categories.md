@@ -17,6 +17,7 @@ Status: implemented
 - 分类记录的关联项目保存在会话与份额新增的 `category_project_id`；原 `project_id` 与 `work_item_id` 仍为 NULL，V81 的 CHECK 与按 `project_id` 的统计口径保持不变。
 - V82 只新增可空列与索引，旧版本会忽略新字段，支持快速回退，不登记回退例外。
 - 同一用户同一分类仍只能有一个运行计时，与关联项目无关；开始「会议@B」时先停止正在运行的「会议@A」。
+- 时间线上一种分类只占一个位置：补录的 PARALLEL / REPLACE 阻挡与同一请求内的冲突按分类判断，与关联项目无关（`TimeSubject.slot()`）；subject 仍含项目，用于合并、目标排除、去重与改归属。
 - 写入只允许关联本人可写的项目；分类仍属于个人，不加项目锁，不发领域事件。
 - 项目归档不停止关联分类计时，项目统计、工作项汇总与工作项表格不包含分类工时。
 - 不复用 `project_id`：复用会破坏 V81 的 CHECK，并迫使所有按项目统计的查询逐一排除分类；旧版本回退时也无法保持原有口径。
@@ -33,7 +34,7 @@ Status: implemented
   - 外键不变：MATCH SIMPLE 会跳过 NULL。
 - **记录归属（subject）**：
   - 应用层用 `TimeSubject`（`Item(workItemId)` 或 `Category(timeCategory, projectId)`）表示一条记录记在什么上。
-  - 补录合并、PARALLEL 阻挡、REPLACE 的目标排除、同项重叠校验、切换与开始的去重，都改为按 subject 比较，不再比较工作项 ID。
+  - 补录合并、REPLACE 的目标排除、切换与开始的去重都按 subject 比较；PARALLEL / REPLACE 阻挡与同项重叠校验按 slot 比较（工作项即自身，分类不区分项目）。
   - 份额计算本就与 subject 无关：分类与工作项按并发 1/N 分摊，份额行带上分类。
 
 ### 写入

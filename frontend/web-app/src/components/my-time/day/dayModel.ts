@@ -1,7 +1,7 @@
 import { TimeSessionFillMode, type MyTimeSession, type TimeCategory } from '@yumpoo/api-client'
 import { addDays } from '../../team/teamDashboardModel'
 import { companyDateTime, parseCompanyDateTime } from '../../timer/timeFormat'
-import { sessionKey, timeCategory, type SubjectKey } from '../../timer/timeCategories'
+import { sessionKey, subjectSlot, timeCategory, type SubjectKey } from '../../timer/timeCategories'
 
 export const MINUTE = 60_000
 export const HOUR = 60 * MINUTE
@@ -222,7 +222,10 @@ export function overlapEffect(range: Range, keys: SubjectKey[], blocks: DayBlock
   const overlapping = blocks.filter(block => overlaps(range, { start: block.start, end: blockEnd(block, now) }))
   const free = gaps(blocks, now, range)
   const others = overlapping.filter(block => !block.subjectKey || !keys.includes(block.subjectKey))
-  const parallelItems = [...new Set(others.map(block => block.title))]
+  const slots = new Set(keys.map(subjectSlot))
+  // Same-slot records (the category under another project) are skipped by PARALLEL, never run alongside.
+  const sameSlot = (block: DayBlock) => !!block.subjectKey && slots.has(subjectSlot(block.subjectKey))
+  const parallelItems = [...new Set(others.filter(block => !sameSlot(block)).map(block => block.title))]
   const replaceable = (block: DayBlock) => block.canEdit && block.end !== null
   return {
     overlapping,
@@ -231,7 +234,7 @@ export function overlapEffect(range: Range, keys: SubjectKey[], blocks: DayBlock
     gapsMs: length(free),
     parallelItems,
     trimmed: others.filter(replaceable),
-    kept: others.filter(block => !replaceable(block)),
+    kept: others.filter(block => !replaceable(block) && !sameSlot(block)),
   }
 }
 
@@ -240,14 +243,14 @@ export function defaultMode(effect: OverlapEffect): TimeSessionFillMode {
   return effect.fullyCovered ? TimeSessionFillMode.Parallel : TimeSessionFillMode.Gaps
 }
 
-/** Bounds a block may move or resize within: neighbours it did not overlap when the drag began, same-subject blocks, the day and now. */
+/** Bounds a block may move or resize within: neighbours it did not overlap when the drag began, same-slot blocks, the day and now. */
 export function freeInterval(block: DayBlock, blocks: DayBlock[], now: number, window: Range): Range {
   const own = { start: block.start, end: blockEnd(block, now) }
   let start = window.start, end = Math.min(window.end, now)
   for (const other of blocks) {
     if (other.id === block.id) continue
     const span = { start: other.start, end: blockEnd(other, now) }
-    const sameItem = !!block.subjectKey && other.subjectKey === block.subjectKey
+    const sameItem = !!block.subjectKey && !!other.subjectKey && subjectSlot(other.subjectKey) === subjectSlot(block.subjectKey)
     if (!sameItem && overlaps(own, span)) continue
     if (span.end <= own.start) start = Math.max(start, span.end)
     else if (span.start >= own.end) end = Math.min(end, span.start)

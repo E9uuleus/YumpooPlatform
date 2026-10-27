@@ -45,6 +45,12 @@ export function categoryProjectOf(key: SubjectKey): string | null {
   return key.startsWith(PREFIX) ? key.slice(PREFIX.length).split(':')[1] ?? null : null
 }
 
+/** The timeline slot a key occupies: its category whatever project it names, else the work item; a slot never overlaps itself. */
+export function subjectSlot(key: SubjectKey): string {
+  const category = categoryOf(key)
+  return category ? category.key : key
+}
+
 /** The key of a session's subject; null when the work item is not disclosed to the caller. */
 export function sessionKey(session: { workItemId: string | null; timeCategory?: TimeCategory | null; categoryProjectId?: string | null }): SubjectKey | null {
   return session.timeCategory ? categoryKey(session.timeCategory, session.categoryProjectId) : session.workItemId

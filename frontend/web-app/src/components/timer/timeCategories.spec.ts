@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { TimeCategory } from '@yumpoo/api-client'
-import { categoryKey, categoryOf, matchCategories, resumeSubjects, sessionKey, subjectFields, TIME_CATEGORIES, timerTitle } from './timeCategories'
+import { categoryKey, categoryOf, matchCategories, resumeSubjects, sessionKey, subjectFields, subjectSlot, TIME_CATEGORIES, timerTitle } from './timeCategories'
 
 describe('非项目分类', () => {
   it('按固定顺序列出四类，键与线上枚举一致', () => {
@@ -14,6 +14,8 @@ describe('非项目分类', () => {
     expect(categoryOf('3f0d6a2e-0000-4000-8000-000000000001')).toBeUndefined()
     expect(subjectFields('category:LEARNING')).toEqual({ timeCategory: TimeCategory.Learning })
     expect(subjectFields('w1')).toEqual({ workItemId: 'w1' })
+    expect(subjectSlot('category:MEETING:p1')).toBe(subjectSlot('category:MEETING'))
+    expect(subjectSlot('w1')).toBe('w1')
     expect(sessionKey({ workItemId: null, timeCategory: TimeCategory.Business })).toBe('category:BUSINESS')
     expect(sessionKey({ workItemId: 'w1', timeCategory: null })).toBe('w1')
     expect(sessionKey({ workItemId: null })).toBeNull()
