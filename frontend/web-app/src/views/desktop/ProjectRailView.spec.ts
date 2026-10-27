@@ -5,9 +5,11 @@ import type { RailState } from '@yumpoo/preload-contract'
 const api = vi.hoisted(() => ({ listProjects: vi.fn() }))
 vi.mock('../../api/client', () => ({ projectsApi: api }))
 const tracker = vi.hoisted(() => ({ running: { value: [] as unknown[] }, current: { value: undefined as unknown } }))
+const session = vi.hoisted(() => ({ authentication: { value: { company: { id: 'c' }, user: { id: 'u' } } } }))
 vi.mock('../../composables/useSession', async () => {
   const { ref } = await import('vue')
-  return { useSession: () => ({ authentication: ref({ company: { id: 'c' }, user: { id: 'u' } }) }) }
+  session.authentication = ref(session.authentication.value)
+  return { useSession: () => session }
 })
 vi.mock('../../composables/useTimeTracker', async () => {
   const { computed, ref } = await import('vue')
@@ -30,6 +32,7 @@ const base: RailState = { side: 'left', size: 'medium', mode: 'autohide', tucked
   projects: { owner: 'c:u', items: [{ id: 'p1', name: '研发' }, { id: 'p2', name: '运营' }] }, active: 'p2' } as RailState
 
 beforeEach(() => {
+  session.authentication.value = { company: { id: 'c' }, user: { id: 'u' } }
   api.listProjects.mockResolvedValue({ items: [{ id: 'p1' }, { id: 'p2' }] })
   Object.assign(window, { yumpooDesktop: { rail: {
     onState: (listener: (state: RailState) => void) => { emit = listener; return () => undefined },
@@ -78,14 +81,38 @@ describe('项目侧边栏', () => {
     tracker.current.value = { rowVersion: 1 }
     await flushPromises()
     expect(api.listProjects).toHaveBeenCalledTimes(1)
+    let resolve!: (result: { items: { id: string }[] }) => void
+    api.listProjects.mockReturnValueOnce(new Promise(success => { resolve = success }))
     window.dispatchEvent(new Event('focus'))
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
+    document.dispatchEvent(new Event('visibilitychange'))
     await flushPromises()
     expect(api.listProjects).toHaveBeenCalledTimes(2)
+    expect(wrapper.findAll('.rail-project:not(.is-add)').map(tile => tile.text())).toEqual(['运'])
+    resolve({ items: [{ id: 'p1' }, { id: 'p2' }] })
+    await flushPromises()
     expect(wrapper.findAll('.rail-project:not(.is-add)').map(tile => tile.text())).toEqual(['研', '运'])
     expect(window.yumpooDesktop!.rail!.setProjects).not.toHaveBeenCalled()
     wrapper.unmount()
     window.dispatchEvent(new Event('focus'))
     expect(api.listProjects).toHaveBeenCalledTimes(2)
+    visibility.mockRestore()
+  })
+
+  it('账号变化后旧请求不能覆盖新账号的可见项目', async () => {
+    let resolveOld!: (result: { items: { id: string }[] }) => void
+    api.listProjects.mockReturnValueOnce(new Promise(success => { resolveOld = success }))
+    const wrapper = mount(ProjectRailView)
+    await flushPromises()
+    api.listProjects.mockResolvedValueOnce({ items: [{ id: 'p2' }] })
+    session.authentication.value = { company: { id: 'c' }, user: { id: 'other' } }
+    emit!({ ...base, projects: { owner: 'c:other', items: base.projects!.items } })
+    await flushPromises()
+    expect(api.listProjects).toHaveBeenCalledTimes(2)
+    expect(wrapper.findAll('.rail-project:not(.is-add)').map(tile => tile.text())).toEqual(['运'])
+    resolveOld({ items: [{ id: 'p1' }] })
+    await flushPromises()
+    expect(wrapper.findAll('.rail-project:not(.is-add)').map(tile => tile.text())).toEqual(['运'])
   })
 
   it('拖拽仅调整可见项目，隐藏项保留原位置和简称', async () => {

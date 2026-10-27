@@ -38,11 +38,14 @@ const running = computed(() => tracker.running.value.length > 0)
 const resume = computed(() => resumeSubjects(tracker.current.value))
 const slotLabel = computed(() => running.value ? orbDuration(tracker.wallDuration.value) : resume.value.length ? '继续' : '计时')
 
+let availabilityRequest = 0
+let availabilityInFlight: Promise<void> | undefined
 const offState = bridge?.onState(value => { state.value = value })
 void bridge?.getState().then(value => { state.value ??= value }).catch(() => undefined)
 window.addEventListener('focus', readAvailableProjects)
 document.addEventListener('visibilitychange', refreshWhenVisible)
 onBeforeUnmount(() => {
+  availabilityRequest++
   offState?.()
   window.removeEventListener('focus', readAvailableProjects)
   document.removeEventListener('visibilitychange', refreshWhenVisible)
@@ -57,15 +60,21 @@ watch([state, scope, () => recents.items.value], ([value, owner]) => {
   if (items.length) void bridge.setProjects({ owner, items }).catch(() => undefined)
 })
 
-watch(scope, readAvailableProjects, { immediate: true })
-async function readAvailableProjects(): Promise<void> {
-  const owner = scope.value
+watch(scope, () => {
+  availabilityRequest++
+  availabilityInFlight = undefined
   available.value = undefined
-  if (!owner) return
-  try {
-    const result = await projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.Active, ended: false, actorAccesses: MY_PROJECT_ACCESSES, page: 0, size: 100 })
-    if (scope.value === owner) available.value = new Set(result.items.map(project => project.id))
-  } catch { /* Show the person's pins when availability cannot be read. */ }
+  void readAvailableProjects()
+}, { immediate: true })
+function readAvailableProjects(): Promise<void> {
+  if (availabilityInFlight) return availabilityInFlight
+  if (!scope.value) return Promise.resolve()
+  const request = ++availabilityRequest
+  availabilityInFlight = projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.Active, ended: false, actorAccesses: MY_PROJECT_ACCESSES, page: 0, size: 100 })
+    .then(result => { if (request === availabilityRequest) available.value = new Set(result.items.map(project => project.id)) })
+    .catch(() => undefined)
+    .finally(() => { if (request === availabilityRequest) availabilityInFlight = undefined })
+  return availabilityInFlight
 }
 function refreshWhenVisible() {
   if (document.visibilityState === 'visible') void readAvailableProjects()
