@@ -1960,20 +1960,40 @@ async function loadAllSortedWorkItems(): Promise<boolean> {
   return true
 }
 
+/** 逐组加载完整排序结果；任一组失败或加载中途被重置时返回 undefined。 */
+async function loadAllGroupedWorkItems(): Promise<ProjectWorkItemListItem[][] | undefined> {
+  const revision = loadRevision
+  const runs: ProjectWorkItemListItem[][] = []
+  for (const group of workItemGroups.value) {
+    if (!group.count) continue
+    const page = grouping.page(group.key)
+    do {
+      await grouping.load(group.key)
+      if (revision !== loadRevision || grouping.page(group.key) !== page) return undefined
+    } while (page.nextCursor && !page.error)
+    if (page.error || !page.loaded) return undefined
+    runs.push([...page.items])
+  }
+  return runs
+}
+
+// 分组时每组各自排序：组内依次排在本组首项之后，组与组之间的相对位置不变。
 async function saveSortedWorkItemOrder(): Promise<void> {
-  if (grouped.value) return
   if (savingSortOrder.value || !sortRules.value.length) return
-  if (tableLoading.value || tableSorting.value) {
+  if (tableLoading.value || tableSorting.value || (grouped.value && groupsLoading.value)) {
     ElMessage.info('排序结果仍在加载，请稍后再保存工作项顺序')
     return
   }
   savingSortOrder.value = true
   try {
-    if (!await loadAllSortedWorkItems()) {
+    const runs = grouped.value
+      ? await loadAllGroupedWorkItems()
+      : await loadAllSortedWorkItems() ? [[...tableItems.value]] : undefined
+    if (!runs) {
       ElMessage.error('无法加载完整排序结果，暂未保存工作项顺序')
       return
     }
-    const ordered = [...tableItems.value]
+    const ordered = runs.flat()
     if (ordered.some(item => !item.capabilities.canMoveInProjectOrder)) {
       ElMessage.warning('当前结果中包含不可调整顺序的工作项')
       return
@@ -1983,20 +2003,19 @@ async function saveSortedWorkItemOrder(): Promise<void> {
       error.value = localProblem('缺少 CSRF 凭据，请刷新后重试。')
       return
     }
-    for (let index = 1; index < ordered.length; index += 1) {
-      const item = tableItems.value.find(candidate => candidate.id === ordered[index]!.id) ?? ordered[index]!
-      const updated = await workItemsApi.moveProjectWorkItemOrder({
-        projectId: projectId.value,
-        workItemId: item.id,
-        xXSRFTOKEN: csrf,
-        ifMatch: item.etag,
-        idempotencyKey: globalThis.crypto.randomUUID(),
-        projectWorkItemOrderMoveRequest: {
-          previousVisibleWorkItemId: ordered[index - 1]!.id,
-          nextVisibleWorkItemId: null,
-        },
-      })
-      replaceLightItem(item.id, updated)
+    for (const run of runs) {
+      for (let index = 1; index < run.length; index += 1) {
+        const item = tableItems.value.find(candidate => candidate.id === run[index]!.id) ?? run[index]!
+        const updated = await workItemsApi.moveProjectWorkItemOrder({
+          projectId: projectId.value,
+          workItemId: item.id,
+          xXSRFTOKEN: csrf,
+          ifMatch: item.etag,
+          idempotencyKey: globalThis.crypto.randomUUID(),
+          projectWorkItemOrderMoveRequest: { previousVisibleWorkItemId: run[index - 1]!.id, nextVisibleWorkItemId: null },
+        })
+        replaceLightItem(item.id, updated, false)
+      }
     }
     sortRules.value = []
     await syncUrl()
@@ -2940,6 +2959,7 @@ onMounted(() => {
   watch(tableSentinel, (next, previous) => { if (previous) tableObserver?.unobserve(previous); if (next) tableObserver?.observe(next) }, { immediate: true })
 })
 onBeforeUnmount(() => {
+  loadRevision++
   columnFlip.cancel()
   groupObserver?.disconnect()
   activeController?.abort(); if (searchTimer) window.clearTimeout(searchTimer)
@@ -3438,9 +3458,9 @@ onBeforeUnmount(() => {
                 <template #default="scope">
                   <template v-if="isGroupDisplayRow(scope.row)">
                     <work-item-column-header v-if="scope.row.groupRowKind === 'columns'" :state="columnMenuState(columnByKey.get('title')!)"
-                      :saving="tableSorting" :allow-save="false"
+                      :saving="tableSorting || savingSortOrder"
                       @sort="applyColumnQuickSort('title')" @action="(action, anchor) => onColumnMenuAction('title', action, anchor)"
-                    @clear="clearColumnSort('title')" />
+                    @clear="clearColumnSort('title')" @save="saveSortedWorkItemOrder" />
                     <span class="monday-column-resize-handle monday-title-column-resize-handle" data-column-key="title" aria-hidden="true" />
                   </template>
                   <div v-else class="title-cell" :data-work-item-id="scope.row.id">
@@ -3555,9 +3575,9 @@ onBeforeUnmount(() => {
                 <template #default="scope">
                   <template v-if="isGroupDisplayRow(scope.row)">
                     <work-item-column-header v-if="scope.row.groupRowKind === 'columns'" :state="columnMenuState(column)"
-                      :collapsed="isColumnCollapsed(column.key)" :saving="tableSorting" :allow-save="false"
+                      :collapsed="isColumnCollapsed(column.key)" :saving="tableSorting || savingSortOrder"
                       @sort="applyColumnQuickSort(column.key)" @action="(action, anchor) => onColumnMenuAction(column.key, action, anchor)"
-                    @clear="clearColumnSort(column.key)" />
+                    @clear="clearColumnSort(column.key)" @save="saveSortedWorkItemOrder" />
                     <span v-if="!isColumnCollapsed(column.key)" class="monday-column-resize-handle" :data-column-key="column.key" aria-hidden="true" />
                   </template>
                   <span v-else-if="isColumnCollapsed(column.key)" class="work-item-collapsed-cell" aria-hidden="true" />
