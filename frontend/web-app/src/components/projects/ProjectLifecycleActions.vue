@@ -121,14 +121,14 @@ async function restore(): Promise<void> {
   display: grid;
   gap: var(--yp-space-4);
   margin-bottom: var(--yp-space-5);
-  padding: var(--yp-space-6);
-  border: 1px solid var(--yp-border-subtle);
-  border-radius: var(--yp-radius-md);
-  background: var(--yp-bg-surface);
+  padding: var(--yp-space-5) var(--yp-space-6);
+  border: 1px solid color-mix(in srgb, var(--yp-status-red) 28%, var(--yp-border-subtle));
+  border-radius: var(--yp-radius-xl);
+  background: color-mix(in srgb, var(--yp-status-red) 3%, var(--yp-bg-surface));
 }
 .lifecycle-actions h2,
 .lifecycle-actions p { margin: 0; }
-.lifecycle-actions h2 { font-size: 16px; font-weight: 600; }
+.lifecycle-actions h2 { color: var(--yp-status-red); font-size: var(--yp-type-card-title-size); font-weight: 600; }
 .lifecycle-actions p { margin-top: var(--yp-space-1); color: var(--yp-text-secondary); }
 .lifecycle-actions__buttons { display: flex; flex-wrap: wrap; gap: var(--yp-space-2); }
 </style>

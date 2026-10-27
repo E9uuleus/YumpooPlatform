@@ -92,12 +92,12 @@ describe('项目管理页', () => {
     await flushPromises()
     expect(api.listProjects).toHaveBeenCalledWith({ lifecycle: ProjectLifecycleFilter.Active, actorAccesses: [ProjectActorAccess.Owner, ProjectActorAccess.Member], page: 0, size: 20 })
     expect(wrapper.findAll('.project-management-table th').map(cell => cell.text())).toEqual([
-      '项目名称', '状态', '负责人', '创建时间', '最后修改时间', '我的角色',
+      '项目名称', '状态', '我的角色',
     ])
-    expect(wrapper.get('.project-name-cell').text()).toBe(summary.name)
+    expect(wrapper.get('.project-name-cell__link').text()).toBe(summary.name)
     expect(wrapper.find('.project-name-cell__code').exists()).toBe(false)
     expect(wrapper.find('.project-management-table .yp-assignee__name').exists()).toBe(false)
-    expect(wrapper.get('.project-management-table .yp-assignee').attributes('aria-label')).toBe(summary.ownerDisplayName)
+    expect(wrapper.get('.project-identity-cell__text small').text()).toContain(summary.ownerDisplayName)
     expect(wrapper.text()).toContain('2026-08-23')
     expect(wrapper.find('.project-board-group').exists()).toBe(false)
     expect(wrapper.findAll('[role="tab"]').map(tab => tab.text())).toEqual(['最近', '内容'])
