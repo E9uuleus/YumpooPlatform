@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onUpdated, ref, watch } from 'vue'
-import { ElAlert, ElButton, ElCheckbox, ElMessage, ElPopover } from 'element-plus'
+import { ElAlert, ElButton, ElCheckbox, ElMessage } from 'element-plus'
 import { Download } from '@element-plus/icons-vue'
 import type { TeamTimesheet } from '@yumpoo/api-client'
+import DayBreakdownPopover from './DayBreakdownPopover.vue'
 import TeamPeriodPicker from './TeamPeriodPicker.vue'
 import YpAssignee from '../yp/YpAssignee.vue'
-import '../projects/workItemAccentBar.css'
 import { formatTimestamp } from '../../design-system/dates'
 import { exportFileName, saveExportFile, XLSX_TYPE } from '../dashboard/exportFile'
-import { buildTimesheet, dayBreakdown, heatMix, hoursMinutes, restrictTimesheet, timesheetColors, shortHours, timesheetColumns, todayIn, weekday,
+import { buildTimesheet, dayBreakdown, heatMix, restrictTimesheet, timesheetColors, shortHours, timesheetColumns, todayIn, weekday,
   type Period, type TimesheetRow } from './teamDashboardModel'
 import { staggerIn, useTweenedNumber, type StaggerFrom } from './teamMotion'
 
@@ -73,7 +73,7 @@ function openDay(row: TimesheetRow, day: string, event: MouseEvent) {
 const isActive = (row: TimesheetRow, day: string) => active.value?.row.key === row.key && active.value.day === day
 function closeDayOnOutside(event: PointerEvent) {
   const target = event.target
-  if (target instanceof Element && (active.value?.anchor.contains(target) || target.closest('.team-day-popover'))) return
+  if (target instanceof Element && (active.value?.anchor.contains(target) || target.closest('.day-breakdown-popover'))) return
   active.value = undefined
 }
 function closeDayOnEscape(event: KeyboardEvent) { if (event.key === 'Escape') active.value = undefined }
@@ -306,39 +306,14 @@ async function exportExcel() {
         <template v-else>按公司时区（{{ timezone }}）切分自然日，跨日计时按实际时长拆分；运行中的计时统计到刷新时刻。点击工时数字查看当日工作项。</template>
       </p>
     </div>
-    <el-popover
+    <DayBreakdownPopover
       v-if="active"
       :key="`${active.row.key}:${active.day}`"
-      :visible="true"
-      virtual-triggering
-      :virtual-ref="active.anchor"
-      placement="bottom"
-      :width="360"
-      :persistent="false"
-      popper-class="team-day-popover"
-      transition="team-pop"
-    >
-      <header class="team-day__head">
-        <strong>{{ active.row.name }} · {{ active.day.slice(5) }} 周{{ weekday(active.day) }}</strong>
-        <span>{{ hoursMinutes(active.row.days[active.day] ?? 0) }}</span>
-      </header>
-      <section
-        v-for="(project, index) in breakdown"
-        :key="project.projectId"
-        class="team-day__project"
-        :style="{ '--team-project-color': colors.get(project.projectId), '--i': Math.min(index, 8) }"
-      >
-        <h4>{{ project.projectName }}<small>{{ hoursMinutes(project.totalMs) }}</small></h4>
-        <div
-          v-for="(item, row) in project.items"
-          :key="item.key"
-          class="team-day__item work-item-accent-bar"
-          :style="{ '--j': Math.min(row, 8) }"
-        >
-          <span class="team-day__text"><strong>{{ item.title }}</strong><small>{{ item.itemNo }}</small></span>
-          <span class="team-day__hours">{{ hoursMinutes(item.ms) }}</span>
-        </div>
-      </section>
-    </el-popover>
+      :anchor="active.anchor"
+      :title="`${active.row.name} · ${active.day.slice(5)} 周${weekday(active.day)}`"
+      :total-ms="active.row.days[active.day] ?? 0"
+      :projects="breakdown"
+      :colors="colors"
+    />
   </section>
 </template>

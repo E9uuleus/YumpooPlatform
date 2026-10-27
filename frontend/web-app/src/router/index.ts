@@ -79,7 +79,7 @@ export const routes: RouteRecordRaw[] = [
         alias: '/operations',
         component: () => import('../views/operations/OperationsLayout.vue'),
         redirect: { name: 'operations-overview' },
-        meta: { shellSection: 'operations', requiredRoles: [AuthenticationRole.AppManager] },
+        meta: { frame: 'fixed', shellSection: 'operations', requiredRoles: [AuthenticationRole.AppManager] },
         children: [
           { path: 'overview', name: 'operations-overview', component: () => import('../views/operations/OperationsOverviewView.vue') },
           { path: 'host', name: 'operations-host', component: () => import('../views/operations/OperationsHostView.vue') },
@@ -116,26 +116,26 @@ export const routes: RouteRecordRaw[] = [
         path: 'workspace/:workspaceSlug/dashboards/:dashboardId?',
         name: 'dashboards',
         component: () => import('../views/DashboardsView.vue'),
-        meta: { shellSection: 'work', onboardingTour: 'dashboards' },
+        meta: { frame: 'fixed', shellSection: 'work', onboardingTour: 'dashboards' },
       },
       {
         path: 'workspace/:workspaceSlug/my-time',
         name: 'my-time',
         component: () => import('../views/MyTimePageView.vue'),
-        meta: { shellSection: 'work', onboardingTour: 'my-time' },
+        meta: { frame: 'fixed', shellSection: 'work', onboardingTour: 'my-time' },
       },
       {
         path: 'workspace/:workspaceSlug/my-time/day/:date(\\d{4}-\\d{2}-\\d{2})',
         name: 'my-time-day',
         component: () => import('../views/MyTimeDayPageView.vue'),
-        meta: { shellSection: 'work', onboardingTour: 'my-day' },
+        meta: { frame: 'fixed', shellSection: 'work', onboardingTour: 'my-day' },
       },
       { path: 'team', name: 'team-entry', redirect: { name: 'team', params: { view: 'timesheet' } } },
       {
         path: 'team/:view(timesheet|projects|overtime|workload)',
         name: 'team',
         component: () => import('../views/TeamReviewView.vue'),
-        meta: { shellSection: 'team', requiredRoles: [AuthenticationRole.AppManager, AuthenticationRole.CompanyAdmin], onboardingTour: 'team' },
+        meta: { frame: 'fixed', shellSection: 'team', requiredRoles: [AuthenticationRole.AppManager, AuthenticationRole.CompanyAdmin], onboardingTour: 'team' },
       },
       {
         path: 'projects/archived',
@@ -161,6 +161,7 @@ export const routes: RouteRecordRaw[] = [
         component: IdentityAdminLayout,
         redirect: '/admin/company/overview',
         meta: {
+          frame: 'fixed',
           shellSection: 'company',
           requiredRoles: [
             AuthenticationRole.AppManager,
@@ -191,7 +192,7 @@ export const routes: RouteRecordRaw[] = [
         path: 'settings',
         name: 'settings',
         component: () => import('../views/settings/SettingsView.vue'),
-        meta: { shellSection: 'work' },
+        meta: { frame: 'fixed', shellSection: 'work' },
       },
       {
         path: 'inbox',
