@@ -2,6 +2,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RailState } from '@yumpoo/preload-contract'
 
+const api = vi.hoisted(() => ({ getProject: vi.fn() }))
+vi.mock('../../api/client', () => ({ projectsApi: api }))
 const tracker = vi.hoisted(() => ({ running: { value: [] as unknown[] } }))
 vi.mock('../../composables/useSession', async () => {
   const { ref } = await import('vue')
@@ -26,6 +28,7 @@ const base: RailState = { side: 'left', size: 'medium', mode: 'autohide', tucked
   projects: { owner: 'c:u', items: [{ id: 'p1', name: '研发' }, { id: 'p2', name: '运营' }] }, active: 'p2' } as RailState
 
 beforeEach(() => {
+  api.getProject.mockResolvedValue({ lifecycle: 'ACTIVE', endedAt: null })
   Object.assign(window, { yumpooDesktop: { rail: {
     onState: (listener: (state: RailState) => void) => { emit = listener; return () => undefined },
     getState: () => Promise.resolve(base), setProjects: vi.fn(), openProject: vi.fn(), openSettings: vi.fn(),

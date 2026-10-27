@@ -3,6 +3,8 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ProjectLifecycle } from '@yumpoo/api-client'
 import type { RailProject, RailState } from '@yumpoo/preload-contract'
 import { Plus } from '@element-plus/icons-vue'
+import { projectsApi } from '../../api/client'
+import { isProblemStatus, toApiProblem } from '../../api/problems'
 import { useSession } from '../../composables/useSession'
 import { useTimeTracker } from '../../composables/useTimeTracker'
 import { useProjectRecents } from '../../composables/useProjectRecents'
@@ -34,9 +36,10 @@ const running = computed(() => tracker.running.value.length > 0)
 const resume = computed(() => resumeSubjects(tracker.current.value))
 const slotLabel = computed(() => running.value ? orbDuration(tracker.wallDuration.value) : resume.value.length ? '继续' : '计时')
 
+let verification = 0
 const offState = bridge?.onState(value => { state.value = value })
 void bridge?.getState().then(value => { state.value ??= value }).catch(() => undefined)
-onBeforeUnmount(() => offState?.())
+onBeforeUnmount(() => { verification++; offState?.() })
 
 // Until the person arranges it, the rail starts from their most recent projects; another account's list is replaced the same way.
 // With no recents yet (a fresh install or partition) nothing is saved, so the rail seeds once the main window records some.
@@ -46,6 +49,29 @@ watch([state, scope, () => recents.items.value], ([value, owner]) => {
     .map(project => ({ id: project.id, name: project.name.slice(0, 64) }))
   if (items.length) void bridge.setProjects({ owner, items }).catch(() => undefined)
 })
+
+// Recheck persisted pins with the existing tracker refresh, including updates from other desktop surfaces.
+watch([scope, () => state.value?.projects?.items.map(project => project.id).join(','), tracker.current], () => { void refreshProjects() }, { immediate: true })
+async function refreshProjects(): Promise<void> {
+  const request = ++verification, owner = scope.value, configured = state.value?.projects
+  if (!bridge || !owner || configured?.owner !== owner) return
+  try {
+    const valid = await Promise.all(configured.items.map(async project => {
+      try {
+        const current = await projectsApi.getProject({ projectId: project.id })
+        return current.lifecycle === ProjectLifecycle.Active && !current.endedAt ? project.id : null
+      } catch (reason) {
+        if (isProblemStatus(await toApiProblem(reason), 404)) return null
+        throw reason
+      }
+    }))
+    if (request !== verification || scope.value !== owner) return
+    const current = state.value?.projects
+    if (current?.owner !== owner) return
+    const available = new Set(valid), items = current.items.filter(project => available.has(project.id))
+    if (items.length !== current.items.length) await bridge.setProjects({ owner, items: plainRailProjects(items) })
+  } catch { /* Keep the person's pins until their state can be verified. */ }
+}
 
 async function toggleTimer() {
   if (tracker.busy.value) return
