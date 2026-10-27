@@ -27,6 +27,12 @@ import {
  */
 export interface TimeSessionFillEntry {
     /**
+     * 仅与 timeCategory 一起使用，把分类记录关联到本人可写的项目。
+     * @type {string}
+     * @memberof TimeSessionFillEntry
+     */
+    categoryProjectId?: string;
+    /**
      *
      * @type {string}
      * @memberof TimeSessionFillEntry
@@ -73,6 +79,7 @@ export function TimeSessionFillEntryFromJSONTyped(json: any, ignoreDiscriminator
     }
     return {
 
+        ...(json['categoryProjectId'] == null ? {} : { 'categoryProjectId': json['categoryProjectId'] }),
         ...(json['workItemId'] == null ? {} : { 'workItemId': json['workItemId'] }),
         ...(json['timeCategory'] == null ? {} : { 'timeCategory': TimeCategoryFromJSON(json['timeCategory']) }),
         'startedAt': (new Date(json['startedAt'])),
@@ -91,6 +98,7 @@ export function TimeSessionFillEntryToJSONTyped(value?: TimeSessionFillEntry | n
 
     return {
 
+        'categoryProjectId': value['categoryProjectId'],
         'workItemId': value['workItemId'],
         'timeCategory': TimeCategoryToJSON(value['timeCategory']),
         'startedAt': value['startedAt'].toISOString(),

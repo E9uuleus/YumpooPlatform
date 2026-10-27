@@ -24,7 +24,9 @@ public class TimeTrackingService {
     /** Category fields are left out of JSON when absent, so request hashes of work-item-only bodies stay as they were. */
     public record Input(UUID workItemId, UUID sessionId, Instant startedAt, Instant stoppedAt, String reason, List<UUID> workItemIds,
             @JsonInclude(JsonInclude.Include.NON_NULL) TimeCategory timeCategory,
-            @JsonInclude(JsonInclude.Include.NON_NULL) List<TimeCategory> timeCategories) {}
+            @JsonInclude(JsonInclude.Include.NON_NULL) List<TimeCategory> timeCategories,
+            @JsonInclude(JsonInclude.Include.NON_NULL) UUID categoryProjectId,
+            @JsonInclude(JsonInclude.Include.NON_NULL) List<TimeCategorySubject> timeCategorySubjects) {}
     private final TimeTrackingRepository timers;
     private final TimeShareMaintainer shares;
     private final WorkItemRepository items;
@@ -112,8 +114,9 @@ public class TimeTrackingService {
         var views=running.stream().map(s -> new CurrentRunningTimer(view(s,actor,false,now,
                 s.timeCategory()!=null || titles.containsKey(s.workItemId()),names,allocated,null,null),
                 s.timeCategory()!=null ? null : titles.get(s.workItemId()))).toList();
+        var subjects=timers.resumeCategories(actor.companyId(),actor.userId());
         return CurrentTimeTracker.of(views,version,now,recentItems,resumeItems,
-                timers.resumeCategories(actor.companyId(),actor.userId()),preferences(actor));
+                subjects.stream().map(TimeCategorySubject::timeCategory).distinct().sorted().toList(),subjects,preferences(actor));
     }
 
     private TimeTrackingPreferences preferences(CurrentActor actor) {
@@ -200,15 +203,18 @@ public class TimeTrackingService {
         if(from==null || to==null || !to.isAfter(from) || Duration.between(from,to).compareTo(Duration.ofDays(7))>0)
             throw validation("to","INVALID_RANGE","结束时间须晚于开始时间，且查询范围不能超过 7 天");
         var rows=timers.mySessions(actor.companyId(),actor.userId(),from,to);
-        var projects=access.findVisible(actor,rows.stream().map(row -> row.session().projectId()).filter(Objects::nonNull).distinct().toList());
+        var projects=access.findVisible(actor,rows.stream().flatMap(row -> java.util.stream.Stream.of(row.session().projectId(),row.session().categoryProjectId())).filter(Objects::nonNull).distinct().toList());
         var projectSnapshots=projectTargets.findByIds(actor.companyId(),projects.keySet());
         Instant now=now();
         var names=users.findByUserIds(actor.companyId(),Set.of(actor.userId()));
         var allocated=timers.sessionShares(actor.companyId(),rows.stream().map(row -> row.session().id()).toList(),now);
         return new MyTimeSessionPage(rows.stream().map(row -> {
-            // Category records belong to the owner alone: always disclosed and writable, with no project or work item fields.
-            if(row.session().timeCategory()!=null)
-                return new MyTimeSession(view(row.session(),actor,true,now,true,names,allocated,null,null),null,null,null,null);
+            // Category records remain personal; a linked project name is disclosed only while visible.
+            if(row.session().timeCategory()!=null) {
+                UUID tagged=row.session().categoryProjectId();
+                return new MyTimeSession(view(row.session(),actor,true,now,true,names,allocated,null,null),
+                        tagged!=null && projectSnapshots.containsKey(tagged) ? projectSnapshots.get(tagged).name() : null,null,null,null);
+            }
             var project=projects.get(row.session().projectId());
             boolean disclose=project!=null;
             boolean writable=disclose && canWrite(project) && !row.archived() && !row.itemDeleted();
@@ -246,7 +252,7 @@ public class TimeTrackingService {
     }
 
     private StoredCommandResult reassign(CurrentActor actor,UUID sessionId,TimeSessionReassignCommand body,long expectedVersion) {
-        var target=TimeSubject.of(body.workItemId(),body.timeCategory());
+        var target=TimeSubject.of(body.workItemId(),body.timeCategory(),body.categoryProjectId());
         Session session=timers.find(actor.companyId(),sessionId).filter(s -> s.userId().equals(actor.userId()))
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
         requireVersion(session.rowVersion(),expectedVersion);
@@ -263,6 +269,7 @@ public class TimeTrackingService {
             Session removing,long expectedVersion) {
         Instant now=now();
         var merged=TimeSessionFillPlanner.mergeEntries(entries);
+        requireCategoryProjects(actor,merged.stream().map(TimeSessionFillEntry::subject).toList());
         Instant from=merged.stream().map(TimeSessionFillEntry::startedAt).min(Instant::compareTo).orElseThrow();
         Instant to=merged.stream().map(TimeSessionFillEntry::stoppedAt).max(Instant::compareTo).orElseThrow();
         // Only work items carry a project to guard; categories are the owner's own and take no project lock.
@@ -362,17 +369,22 @@ public class TimeTrackingService {
 
     private StoredCommandResult mutate(CurrentActor actor, String action, Input input, long expectedVersion) {
         boolean timerCommand=Set.of("start","switch","stop","stopAll").contains(action);
-        List<TimeSubject> subjects;
-        if(Set.of("stop","stopAll").contains(action)) subjects=List.of();
-        else if(action.equals("start") && (input.workItemIds()!=null || input.timeCategories()!=null)) {
+        List<TimeSubject> requestedSubjects;
+        if(Set.of("stop","stopAll").contains(action)) requestedSubjects=List.of();
+        else if(action.equals("start") && (input.workItemIds()!=null || input.timeCategories()!=null || input.timeCategorySubjects()!=null)) {
             var batch=new ArrayList<TimeSubject>();
             if(input.workItemIds()!=null) input.workItemIds().forEach(id -> batch.add(TimeSubject.of(id,null)));
             if(input.timeCategories()!=null) input.timeCategories().forEach(category -> batch.add(TimeSubject.of(null,category)));
+            if(input.timeCategorySubjects()!=null) input.timeCategorySubjects().forEach(s -> batch.add(TimeSubject.of(null,s.timeCategory(),s.projectId())));
             if(batch.isEmpty() || batch.size()>10)
                 throw validation("workItemIds","INVALID_SIZE","一次最多选择 10 项");
-            subjects=batch;
-        } else subjects=List.of(TimeSubject.of(input.workItemId(),input.timeCategory()));
-        subjects=subjects.stream().distinct().toList();
+            requestedSubjects=batch;
+        } else requestedSubjects=List.of(TimeSubject.of(input.workItemId(),input.timeCategory(),input.categoryProjectId()));
+        var subjects=requestedSubjects.stream().distinct().toList();
+        var categories=subjects.stream().map(TimeSubject::timeCategory).filter(Objects::nonNull).toList();
+        if(categories.size()!=categories.stream().distinct().count())
+            throw validation("timeCategorySubjects","DUPLICATE_CATEGORY","同一分类一次只能关联一个项目");
+        requireCategoryProjects(actor,subjects);
         var targets=subjects.stream().map(TimeSubject::workItemId).filter(Objects::nonNull).map(id -> locator(actor,id)).toList();
         var itemProjects=new HashMap<UUID,UUID>();
         targets.forEach(target -> itemProjects.put(target.workItemId(),target.projectId()));
@@ -403,7 +415,8 @@ public class TimeTrackingService {
                 case "switch" -> running.stream().filter(s -> !s.subject().equals(target)).toList();
                 case "stop" -> running.stream().filter(s -> s.id().equals(input.sessionId())).toList();
                 case "stopAll" -> running;
-                default -> List.<Session>of();
+                default -> running.stream().filter(s -> s.timeCategory()!=null && subjects.stream()
+                        .anyMatch(t -> t.timeCategory()==s.timeCategory() && !t.equals(s.subject()))).toList();
             };
             if(action.equals("stop") && stopping.isEmpty()) throw invalid("TIMER_CHANGED");
             if(stopping.stream().anyMatch(s -> s.projectId()!=null && !projects.contains(s.projectId()))) throw invalid("TIMER_CHANGED");
@@ -466,7 +479,7 @@ public class TimeTrackingService {
         Session session=timers.find(actor.companyId(),sessionId).filter(s -> s.userId().equals(actor.userId()))
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
         if(session.workItemId()!=null) return mutate(actor,action,new Input(session.workItemId(),sessionId,input.startedAt(),
-                input.stoppedAt(),input.reason(),null,null,null),expectedVersion);
+                input.stoppedAt(),input.reason(),null,null,null,null,null),expectedVersion);
         timers.stateVersion(actor.companyId(),actor.userId(),true);
         Session before=timers.find(actor.companyId(),sessionId).orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
         requireVersion(before.rowVersion(),expectedVersion);
@@ -576,7 +589,7 @@ public class TimeTrackingService {
         long[] share=allocated.getOrDefault(s.id(),new long[2]);
         return new TimeTrackingSession(s.id(),disclose ? s.projectId() : null,disclose ? s.workItemId() : null,
                 s.userId(),displayName,s.startedAt(),s.stoppedAt(),s.source(),Math.max(0,Duration.between(s.startedAt(),s.stoppedAt()==null ? now : s.stoppedAt()).toMillis()),
-                s.rowVersion(),StrongEtag.format(s.rowVersion()),writable && s.userId().equals(actor.userId()) && s.stoppedAt()!=null && s.deletedAt()==null,s.deletedAt()!=null,s.changeReason(),share[0],(int)share[1],itemNo,itemTitle,s.timeCategory());
+                s.rowVersion(),StrongEtag.format(s.rowVersion()),writable && s.userId().equals(actor.userId()) && s.stoppedAt()!=null && s.deletedAt()==null,s.deletedAt()!=null,s.changeReason(),share[0],(int)share[1],itemNo,itemTitle,s.timeCategory(),s.categoryProjectId());
     }
     private static String reason(Input input) {
         String reason=input.reason()==null || input.reason().isBlank() ? null : input.reason().strip();
@@ -587,6 +600,13 @@ public class TimeTrackingService {
     private static void requireRange(Instant start,Instant stop,Instant now) {
         if(start==null || stop==null || !stop.isAfter(start) || stop.isAfter(now))
             throw validation("stoppedAt","INVALID_RANGE","结束时间须晚于开始时间且不能在未来");
+    }
+    /** Categories may name a project only among the actor's writable ones; categories take no project lock. */
+    private void requireCategoryProjects(CurrentActor actor,Collection<TimeSubject> subjects) {
+        var wanted=subjects.stream().map(TimeSubject::categoryProjectId).filter(Objects::nonNull).collect(java.util.stream.Collectors.toSet());
+        if(wanted.isEmpty()) return;
+        var writable=access.findWritableProjects(actor).stream().map(ProjectAccessSnapshotQuery.WritableProject::projectId).collect(java.util.stream.Collectors.toSet());
+        if(!writable.containsAll(wanted)) throw validation("categoryProjectId","PROJECT_UNAVAILABLE","无法关联该项目");
     }
     private WorkItemModels.WorkItemLocator locator(CurrentActor actor, UUID id) {
         if(id==null) throw validation("workItemId","REQUIRED","请选择工作项");

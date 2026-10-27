@@ -200,6 +200,11 @@ describe('personal cross-project timer picker', () => {
     expect(wrapper.get('.orb-disc .timer-digits').text()).toContain('02:00')
     await wrapper.get('[aria-label="继续计时"]').trigger('click'); await flushPromises()
     expect(tracker.start).toHaveBeenCalledWith('a')
+    tracker.current.value = { session: null, runningSessions: [], resumeItems: [], recentItems: [],
+      resumeCategorySubjects: [{ timeCategory: 'MEETING', projectId: 'p' }], rowVersion: 3 } as never
+    await flushPromises()
+    await wrapper.get('[aria-label="继续计时"]').trigger('click'); await flushPromises()
+    expect(tracker.start).toHaveBeenCalledWith('category:MEETING:p')
   })
   it('opens the web capsule toward the side with more viewport room', async () => {
     const wrapper = await panel(false)

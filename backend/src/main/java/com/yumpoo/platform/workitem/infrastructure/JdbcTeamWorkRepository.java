@@ -62,17 +62,17 @@ public class JdbcTeamWorkRepository implements TeamWorkRepository {
     public List<CategoryEntry> categoryEntries(UUID companyId, List<UUID> userIds, LocalDate from, LocalDate to, ZoneId zone, Instant asOf) {
         var statement = jdbc.sql(DAYS + """
             sessions AS (
-              SELECT s.user_id,s.time_category,s.started_at,COALESCE(s.stopped_at,CAST(:asOf AS timestamptz)) AS ended_at,s.concurrency
+              SELECT s.user_id,s.time_category,s.category_project_id,s.started_at,COALESCE(s.stopped_at,CAST(:asOf AS timestamptz)) AS ended_at,s.concurrency
               FROM yumpoo.work_item_time_share s
               WHERE s.company_id=:company AND s.time_category IS NOT NULL
                 AND s.started_at < CAST(:rangeEnd AS timestamptz)
                 AND COALESCE(s.stopped_at,CAST(:asOf AS timestamptz)) > CAST(:rangeStart AS timestamptz)
             """ + (userIds.isEmpty() ? "" : " AND s.user_id IN (:users)") + """
             )
-            SELECT x.user_id,x.time_category,days.day,FLOOR(SUM(%1$s))::bigint AS duration_ms
+            SELECT x.user_id,x.time_category,x.category_project_id,days.day,FLOOR(SUM(%1$s))::bigint AS duration_ms
             FROM sessions x
             JOIN days ON x.started_at < days.day_end AND x.ended_at > days.day_start
-            GROUP BY x.user_id,x.time_category,days.day
+            GROUP BY x.user_id,x.time_category,x.category_project_id,days.day
             HAVING FLOOR(SUM(%1$s)) >= 1
             ORDER BY days.day,x.user_id,x.time_category
             """.formatted(OVERLAP))
@@ -81,7 +81,7 @@ public class JdbcTeamWorkRepository implements TeamWorkRepository {
                 .param("rangeStart", Timestamp.from(from.atStartOfDay(zone).toInstant()))
                 .param("rangeEnd", Timestamp.from(to.plusDays(1).atStartOfDay(zone).toInstant()));
         if (!userIds.isEmpty()) statement = statement.param("users", userIds);
-        return statement.query((rs, n) -> new CategoryEntry(rs.getObject("user_id", UUID.class), rs.getString("time_category"),
+        return statement.query((rs, n) -> new CategoryEntry(rs.getObject("user_id", UUID.class), rs.getString("time_category"), rs.getObject("category_project_id", UUID.class),
                 rs.getObject("day", LocalDate.class), rs.getLong("duration_ms"))).list();
     }
 

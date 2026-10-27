@@ -84,8 +84,10 @@ export type RailSize = 'small' | 'medium' | 'large'
 
 export interface RailProject {
   id: string
-  /** At most 64 characters; the rail shows its first character and the full name as a tooltip. */
+  /** At most 64 characters, shown as the tooltip. */
   name: string
+  /** 1–3 characters the person chose for the tile; without it the tile shows the name's first character. */
+  label?: string
 }
 
 /** The rail's projects belong to one person: `owner` is `${companyId}:${userId}`, the same scope as project recents. */

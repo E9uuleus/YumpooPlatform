@@ -18,7 +18,7 @@ public interface TimeTrackingRepository {
     List<RecentTimeTrackingItem> recentItems(UUID companyId, UUID userId);
     List<RecentTimeTrackingItem> resumeItems(UUID companyId, UUID userId);
     /** Categories stopped together with the user's latest stopped timer batch, in catalog order. */
-    List<TimeCategory> resumeCategories(UUID companyId, UUID userId);
+    List<TimeCategorySubject> resumeCategories(UUID companyId, UUID userId);
     List<UUID> visibleItemIds(UUID companyId, UUID projectId, Collection<UUID> ids);
     long stateVersion(UUID companyId, UUID userId, boolean lock);
     void advanceState(UUID companyId, UUID userId);

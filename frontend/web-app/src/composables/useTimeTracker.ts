@@ -5,7 +5,7 @@ import { readCsrfToken, type CurrentTimeTracker, type TimeTrackingPreferences, t
 import { timeTrackingApi } from '../api/client'
 import { timeProblemMessage } from './timeTrackingProblems'
 import { SHELL_SURFACE } from '../components/desktop/surfaces'
-import { categoryOf, sessionKey, subjectFields, type SubjectKey } from '../components/timer/timeCategories'
+import { categoryOf, categoryProjectOf, sessionKey, subjectFields, type SubjectKey } from '../components/timer/timeCategories'
 
 const current = shallowRef<CurrentTimeTracker>()
 const running = computed(() => current.value?.runningSessions ?? [])
@@ -249,8 +249,11 @@ async function startMany(keys: SubjectKey[]): Promise<boolean> {
     for (let index = 0; index < keys.length; index += 10) {
       const batch = keys.slice(index, index + 10)
       const workItemIds = batch.filter(key => !categoryOf(key))
-      const timeCategories = batch.flatMap(key => categoryOf(key)?.code ?? [])
-      await command('start', { ...(workItemIds.length ? { workItemIds } : {}), ...(timeCategories.length ? { timeCategories } : {}) })
+      const timeCategorySubjects = batch.flatMap(key => {
+        const category = categoryOf(key)
+        return category ? [{ timeCategory: category.code, projectId: categoryProjectOf(key) }] : []
+      })
+      await command('start', { ...(workItemIds.length ? { workItemIds } : {}), ...(timeCategorySubjects.length ? { timeCategorySubjects } : {}) })
     }
   })
   if (success) window.dispatchEvent(new Event('yumpoo:timer-started'))

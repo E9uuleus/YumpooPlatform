@@ -1,22 +1,22 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onUpdated, ref, watch } from 'vue'
-import { ElAlert, ElButton, ElCheckbox, ElIcon, ElMessage, ElPopover } from 'element-plus'
-import { ArrowLeft, ArrowRight, Calendar, Download } from '@element-plus/icons-vue'
+import { ElAlert, ElButton, ElCheckbox, ElMessage, ElPopover } from 'element-plus'
+import { Download } from '@element-plus/icons-vue'
 import type { TeamTimesheet } from '@yumpoo/api-client'
-import TimeCalendar from '../timer/TimeCalendar.vue'
+import TeamPeriodPicker from './TeamPeriodPicker.vue'
 import YpAssignee from '../yp/YpAssignee.vue'
-import YpSegmented from '../yp/YpSegmented.vue'
 import '../projects/workItemAccentBar.css'
 import { formatTimestamp } from '../../design-system/dates'
 import { exportFileName, saveExportFile, XLSX_TYPE } from '../dashboard/exportFile'
-import { buildTimesheet, dayBreakdown, hoursMinutes, periodFor, periodLabel, periodOptions, restrictTimesheet, timesheetColors, shiftPeriod, shortHours, timesheetColumns, todayIn, weekday,
-  type Period, type PeriodKind, type TimesheetRow } from './teamDashboardModel'
+import { buildTimesheet, dayBreakdown, heatMix, hoursMinutes, restrictTimesheet, timesheetColors, shortHours, timesheetColumns, todayIn, weekday,
+  type Period, type TimesheetRow } from './teamDashboardModel'
 import { staggerIn, useTweenedNumber, type StaggerFrom } from './teamMotion'
 
 const props = defineProps<{ sheet?: TeamTimesheet | undefined; loading: boolean; error: string; timezone: string; overtime?: boolean }>()
 const period = defineModel<Period>('period', { required: true })
 const emit = defineEmits<{ retry: [] }>()
-const hideEmpty = ref(false), exporting = ref(false), calendarOpen = ref(false)
+const hideEmpty = ref(false), exporting = ref(false)
+const picker = ref<InstanceType<typeof TeamPeriodPicker>>()
 const grid = ref<HTMLTableElement>(), sheetBox = ref<HTMLElement>(), selected = ref(new Set<string>()), sortTotal = ref<'desc' | 'asc'>()
 const active = ref<{ row: TimesheetRow; day: string; anchor: HTMLElement }>()
 const columns = computed(() => props.sheet ? timesheetColumns(props.sheet, props.overtime) : [])
@@ -40,11 +40,9 @@ const shownTotalMs = useTweenedNumber(() => model.value.totalMs), shownMembers =
 
 // Rows slide in from the side the user paged towards once the next sheet arrives.
 let enterFrom: StaggerFrom = 'up'
-function changeKind(kind: PeriodKind) { period.value = periodFor(kind, todayIn(props.timezone)) }
-function step(direction: -1 | 1) { enterFrom = direction < 0 ? 'left' : 'right'; period.value = shiftPeriod(period.value, direction) }
-function pickDay(day: string) { calendarOpen.value = false; period.value = periodFor(period.value.kind, day) }
+function setEnterDirection(direction: -1 | 1) { enterFrom = direction < 0 ? 'left' : 'right' }
 function heat(ms: number) {
-  const mix = ms >= 8 * 3_600_000 ? 52 : ms >= 4 * 3_600_000 ? 36 : ms >= 2 * 3_600_000 ? 24 : 14
+  const mix = heatMix(ms)
   return { background: `color-mix(in srgb, var(--yp-label-bright-blue) ${mix}%, transparent)` }
 }
 function toggleAll(checked: boolean) { selected.value = new Set(checked ? rows.value.map(row => row.userId) : []) }
@@ -97,7 +95,7 @@ watch(() => props.sheet, async () => {
 })
 onBeforeUnmount(stopListening)
 /** The dashboard hides this view with `v-show`, which would leave teleported popovers floating over the other view. */
-function closePopovers() { active.value = undefined; calendarOpen.value = false }
+function closePopovers() { active.value = undefined; picker.value?.close() }
 defineExpose({ closePopovers })
 
 async function exportExcel() {
@@ -126,59 +124,13 @@ async function exportExcel() {
         class="toolbar-divider"
         aria-hidden="true"
       />
-      <YpSegmented
-        :model-value="period.kind"
-        :options="periodOptions"
-        label="统计周期"
-        @update:model-value="changeKind"
-      />
-      <div
-        class="team-period"
+      <TeamPeriodPicker
+        ref="picker"
+        v-model:period="period"
         data-tour="team-period"
-      >
-        <el-button
-          :icon="ArrowLeft"
-          text
-          aria-label="上一周期"
-          @click="step(-1)"
-        />
-        <el-popover
-          v-model:visible="calendarOpen"
-          trigger="click"
-          placement="bottom"
-          :width="320"
-          popper-class="team-calendar-popover"
-          transition="team-pop"
-        >
-          <template #reference>
-            <button
-              type="button"
-              class="team-period__label"
-              aria-haspopup="dialog"
-              :aria-expanded="calendarOpen"
-            >
-              <el-icon aria-hidden="true">
-                <Calendar />
-              </el-icon><span class="team-period__text"><Transition name="team-label">
-                <span :key="periodLabel(period)">{{ periodLabel(period) }}</span>
-              </Transition></span>
-            </button>
-          </template>
-          <TimeCalendar
-            v-if="calendarOpen"
-            :model-value="period.from"
-            :timezone="timezone"
-            expanded
-            @update:model-value="pickDay"
-          />
-        </el-popover>
-        <el-button
-          :icon="ArrowRight"
-          text
-          aria-label="下一周期"
-          @click="step(1)"
-        />
-      </div>
+        :timezone="timezone"
+        @step="setEnterDirection"
+      />
       <div
         class="team-toolbar__end"
         data-tour="team-export"

@@ -27,6 +27,18 @@ import {
  */
 export interface TeamTimesheetCategoryEntry {
     /**
+     *
+     * @type {string}
+     * @memberof TeamTimesheetCategoryEntry
+     */
+    projectId?: string | null;
+    /**
+     *
+     * @type {string}
+     * @memberof TeamTimesheetCategoryEntry
+     */
+    projectName?: string | null;
+    /**
      * 不透明 UUID；客户端不得从值中推导业务语义。
      * @type {string}
      * @memberof TeamTimesheetCategoryEntry
@@ -75,6 +87,8 @@ export function TeamTimesheetCategoryEntryFromJSONTyped(json: any, ignoreDiscrim
     }
     return {
 
+        'projectId': json['projectId'] == null ? undefined : json['projectId'],
+        'projectName': json['projectName'] == null ? undefined : json['projectName'],
         'userId': json['userId'],
         'timeCategory': TimeCategoryFromJSON(json['timeCategory']),
         'date': (new Date(json['date'])),
@@ -93,6 +107,8 @@ export function TeamTimesheetCategoryEntryToJSONTyped(value?: TeamTimesheetCateg
 
     return {
 
+        'projectId': value['projectId'],
+        'projectName': value['projectName'],
         'userId': value['userId'],
         'timeCategory': TimeCategoryToJSON(value['timeCategory']),
         'date': value['date'].toISOString().substring(0,10),
