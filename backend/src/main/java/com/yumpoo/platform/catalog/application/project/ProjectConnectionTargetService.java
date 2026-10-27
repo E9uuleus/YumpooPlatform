@@ -47,6 +47,6 @@ public class ProjectConnectionTargetService {
     @Transactional(propagation = Propagation.MANDATORY)
     public Target lockAsConnectionTarget(UUID companyId, UUID projectId) {
         ProjectApplicationSnapshot project = lifecycle.lockForNewFact(companyId, projectId);
-        return new Target(project.projectId(), project.code(), project.name(), project.lifecycle());
+        return new Target(project.projectId(), project.code(), project.name(), project.lifecycle(), false, project.endedAt() != null);
     }
 }
