@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElAlert, ElButton, ElIcon, ElPopover } from 'element-plus'
+import { ElAlert, ElButton, ElIcon } from 'element-plus'
 import { ArrowLeft, ArrowRight, Calendar } from '@element-plus/icons-vue'
 import type { TeamTimesheet } from '@yumpoo/api-client'
 import { myWorkApi } from '../../api/client'
 import { problemMessage, toApiProblem } from '../../api/problems'
 import { useSession } from '../../composables/useSession'
 import { onTimeTrackingChanged, useTimeTracker } from '../../composables/useTimeTracker'
-import '../projects/workItemAccentBar.css'
 import { buildTimesheet, dayBreakdown, hoursMinutes, shortHours, timesheetColors, todayIn, toApiDate, weekday } from '../team/teamDashboardModel'
+import DayBreakdownPopover from '../team/DayBreakdownPopover.vue'
 import { useTweenedNumber } from '../team/teamMotion'
 import { dayTargetMs, daySegments, monthGrid, monthLabel, monthProjects, monthStats, runningExtraMs, shiftMonth, weekdayLabels,
   type CalendarCell } from './myTimeModel'
@@ -80,7 +80,7 @@ function previewDay(cell: CalendarCell, event: MouseEvent | FocusEvent) {
   const show = () => { active.value = days.value[cell.date] ? { date: cell.date, anchor } : undefined }
   if (event.type !== 'mouseenter' || !active.value || active.value.date === cell.date) { show(); return }
   // 移向已打开的明细时会擦过其他日期格：停留片刻才切换，指针已进入明细则保持当前日期。
-  switchTimer = setTimeout(() => { if (!document.querySelector('.my-time-day-popover:hover')) show() }, 160)
+  switchTimer = setTimeout(() => { if (!document.querySelector('.day-breakdown-popover:hover')) show() }, 160)
 }
 function openDay(date: string) {
   active.value = undefined
@@ -88,7 +88,7 @@ function openDay(date: string) {
 }
 function closeDayOnOutside(event: PointerEvent) {
   const target = event.target
-  if (target instanceof Element && (active.value?.anchor.contains(target) || target.closest('.my-time-day-popover'))) return
+  if (target instanceof Element && (active.value?.anchor.contains(target) || target.closest('.day-breakdown-popover'))) return
   active.value = undefined
 }
 function closeDayOnEscape(event: KeyboardEvent) { if (event.key === 'Escape') active.value = undefined }
@@ -274,54 +274,25 @@ defineExpose({ refresh: load, loading, ready })
         </li>
       </ul>
     </div>
-    <el-popover
+    <DayBreakdownPopover
       v-if="active"
       :key="active.date"
-      :visible="true"
-      virtual-triggering
-      :virtual-ref="active.anchor"
-      placement="bottom"
-      :offset="4"
-      :show-arrow="false"
-      :width="340"
-      :persistent="false"
-      popper-class="my-time-day-popover"
-      transition="my-time-pop"
+      :anchor="active.anchor"
+      :title="dayLabel(active.date)"
+      :total-ms="days[active.date] ?? 0"
+      :projects="breakdown"
+      :colors="colors"
+      empty-text="计时进行中，停止后显示工作项明细。"
     >
-      <header class="my-time-day__head">
-        <strong>{{ dayLabel(active.date) }}</strong>
-        <span>{{ hoursMinutes(days[active.date] ?? 0) }}</span>
+      <template #action>
         <el-button
           text
           @click="openDay(active.date)"
         >
           时间线
         </el-button>
-      </header>
-      <p
-        v-if="!breakdown.length"
-        class="my-time-day__empty"
-      >
-        计时进行中，停止后显示工作项明细。
-      </p>
-      <section
-        v-for="(project, index) in breakdown"
-        :key="project.projectId"
-        class="my-time-day__project"
-        :style="{ '--my-time-project': colors.get(project.projectId), '--i': Math.min(index, 8) }"
-      >
-        <h4>{{ project.projectName }}<small>{{ hoursMinutes(project.totalMs) }}</small></h4>
-        <div
-          v-for="(item, order) in project.items"
-          :key="item.key"
-          class="my-time-day__item work-item-accent-bar"
-          :style="{ '--work-item-accent': colors.get(project.projectId), '--j': Math.min(order, 8) }"
-        >
-          <span class="my-time-day__text"><strong>{{ item.title }}</strong><small>{{ item.itemNo }}</small></span>
-          <span class="my-time-day__hours">{{ hoursMinutes(item.ms) }}</span>
-        </div>
-      </section>
-    </el-popover>
+      </template>
+    </DayBreakdownPopover>
   </section>
 </template>
 
