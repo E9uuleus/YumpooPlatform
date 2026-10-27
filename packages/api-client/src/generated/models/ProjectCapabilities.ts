@@ -73,6 +73,18 @@ export interface ProjectCapabilities {
      * @memberof ProjectCapabilities
      */
     readonly canCancelDeletion?: boolean;
+    /**
+     *
+     * @type {boolean}
+     * @memberof ProjectCapabilities
+     */
+    readonly canEnd?: boolean;
+    /**
+     *
+     * @type {boolean}
+     * @memberof ProjectCapabilities
+     */
+    readonly canResume?: boolean;
 }
 
 /**
@@ -108,6 +120,8 @@ export function ProjectCapabilitiesFromJSONTyped(json: any, ignoreDiscriminator:
         'canOverrideArchive': json['canOverrideArchive'],
         'canScheduleDeletion': json['canScheduleDeletion'] == null ? undefined : json['canScheduleDeletion'],
         'canCancelDeletion': json['canCancelDeletion'] == null ? undefined : json['canCancelDeletion'],
+        'canEnd': json['canEnd'] == null ? undefined : json['canEnd'],
+        'canResume': json['canResume'] == null ? undefined : json['canResume'],
     };
 }
 
@@ -115,7 +129,7 @@ export function ProjectCapabilitiesToJSON(json: any): ProjectCapabilities {
     return ProjectCapabilitiesToJSONTyped(json, false);
 }
 
-export function ProjectCapabilitiesToJSONTyped(value?: Omit<ProjectCapabilities, 'canUpdateSettings'|'canManageMembers'|'canReassignOwner'|'canArchive'|'canRestore'|'canMoveWorkspace'|'canOverrideArchive'|'canScheduleDeletion'|'canCancelDeletion'> | null, ignoreDiscriminator: boolean = false): any {
+export function ProjectCapabilitiesToJSONTyped(value?: Omit<ProjectCapabilities, 'canUpdateSettings'|'canManageMembers'|'canReassignOwner'|'canArchive'|'canRestore'|'canMoveWorkspace'|'canOverrideArchive'|'canScheduleDeletion'|'canCancelDeletion'|'canEnd'|'canResume'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }

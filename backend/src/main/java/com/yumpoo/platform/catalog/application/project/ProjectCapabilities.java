@@ -9,15 +9,17 @@ public record ProjectCapabilities(
         boolean canMoveWorkspace,
         boolean canOverrideArchive,
         boolean canScheduleDeletion,
-        boolean canCancelDeletion
+        boolean canCancelDeletion,
+        boolean canEnd,
+        boolean canResume
 ) {
     public ProjectCapabilities(boolean update,boolean members,boolean owner,boolean archive,boolean restore,
                                boolean move,boolean override) {
-        this(update,members,owner,archive,restore,move,override,false,false);
+        this(update,members,owner,archive,restore,move,override,false,false,false,false);
     }
     public ProjectCapabilities(boolean canUpdateSettings,
                                boolean canManageMembers, boolean canReassignOwner) {
         this(canUpdateSettings, canManageMembers, canReassignOwner,
-                false, false, false, false, false, false);
+                false, false, false, false, false, false, false, false);
     }
 }

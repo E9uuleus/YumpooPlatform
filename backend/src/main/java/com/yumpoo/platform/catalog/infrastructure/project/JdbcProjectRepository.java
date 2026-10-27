@@ -33,7 +33,7 @@ public class JdbcProjectRepository implements ProjectRepository {
             id, company_id, workspace_id, project_code, name, description,
             lifecycle, owner_user_id, row_version, created_at,
             created_by_user_id, updated_at, updated_by_user_id, archived_at,
-            deletion_requested_at, deletion_requested_by, purge_after, purge_started_at
+            deletion_requested_at, deletion_requested_by, purge_after, purge_started_at, ended_at
             """;
 
     private static final String INSERT = """
@@ -126,7 +126,7 @@ public class JdbcProjectRepository implements ProjectRepository {
                     row_version = row_version + 1, updated_at = :updatedAt,
                     updated_by_user_id = :updatedByUserId
                 WHERE company_id = :companyId AND id = :id
-                  AND lifecycle <> 'ARCHIVED' AND row_version = :expectedVersion
+                  AND lifecycle <> 'ARCHIVED' AND ended_at IS NULL AND row_version = :expectedVersion
                 RETURNING %s
                 """.formatted(COLUMNS))
                 .param("ownerUserId", project.ownerUserId())
@@ -142,7 +142,7 @@ public class JdbcProjectRepository implements ProjectRepository {
                 UPDATE yumpoo.project SET name=:name, description=:description,
                     row_version=row_version+1, updated_at=:updatedAt,
                     updated_by_user_id=:updatedByUserId
-                WHERE company_id=:companyId AND id=:id AND lifecycle <> 'ARCHIVED'
+                WHERE company_id=:companyId AND id=:id AND lifecycle <> 'ARCHIVED' AND ended_at IS NULL
                   AND row_version=:expectedVersion
                 RETURNING %s
                 """.formatted(COLUMNS))
@@ -155,6 +155,26 @@ public class JdbcProjectRepository implements ProjectRepository {
         return statement.query(JdbcProjectRepository::map).optional();
     }
 
+
+    @Override
+    public Optional<Project> changeEnded(Project project, long expectedVersion) {
+        JdbcClient.StatementSpec statement = jdbcClient.sql("""
+                UPDATE yumpoo.project SET ended_at=:endedAt,
+                    row_version=row_version+1, updated_at=:updatedAt,
+                    updated_by_user_id=:updatedByUserId
+                WHERE company_id=:companyId AND id=:id AND lifecycle='ACTIVE'
+                  AND (ended_at IS NULL)=:ending AND row_version=:expectedVersion
+                RETURNING %s
+                """.formatted(COLUMNS))
+                .param("ending", project.ended())
+                .param("updatedAt", OffsetDateTime.ofInstant(project.updatedAt(), ZoneOffset.UTC))
+                .param("updatedByUserId", project.updatedByUserId())
+                .param("companyId", project.companyId()).param("id", project.id())
+                .param("expectedVersion", expectedVersion);
+        statement = nullable(statement, "endedAt", project.endedAt() == null ? null
+                : OffsetDateTime.ofInstant(project.endedAt(), ZoneOffset.UTC), Types.TIMESTAMP_WITH_TIMEZONE);
+        return statement.query(JdbcProjectRepository::map).optional();
+    }
 
     @Override
     public Optional<Project> archive(Project project, long expectedVersion) {
@@ -224,7 +244,8 @@ public class JdbcProjectRepository implements ProjectRepository {
                 + "AND (:allAccesses OR (" + actorAccess + ") IN (:actorAccesses)) "
                 + "AND (:allUpdatedSince OR p.updated_at >= :updatedSince) "
                 + "AND ((:active AND p.lifecycle='ACTIVE') "
-                + "OR (:archived AND p.lifecycle='ARCHIVED')) ";
+                + "OR (:archived AND p.lifecycle='ARCHIVED')) "
+                + "AND (:allEnded OR (p.ended_at IS NOT NULL) = :ended) ";
         JdbcClient.StatementSpec items = visible(jdbcClient.sql("SELECT p.*, w.code AS workspace_code, "
                 + "w.name AS workspace_name, CASE WHEN p.owner_user_id=:actorUserId THEN 'OWNER' "
                 + "WHEN m.id IS NOT NULL THEN 'MEMBER' ELSE 'COMPANY_ADMIN_READ_ONLY' END actor_access "
@@ -286,7 +307,7 @@ public class JdbcProjectRepository implements ProjectRepository {
                 rs.getObject("updated_by_user_id", UUID.class),
                 nullableInstant(rs, "archived_at"), nullableInstant(rs, "deletion_requested_at"),
                 rs.getObject("deletion_requested_by", UUID.class), nullableInstant(rs, "purge_after"),
-                nullableInstant(rs, "purge_started_at"));
+                nullableInstant(rs, "purge_started_at"), nullableInstant(rs, "ended_at"));
     }
 
     private static ProjectQueryRow mapQueryRow(ResultSet rs, int row) throws SQLException {
@@ -317,7 +338,8 @@ public class JdbcProjectRepository implements ProjectRepository {
                     case COMPANY_ADMIN -> "COMPANY_ADMIN_READ_ONLY";
                 }).toList();
         Instant updatedSince = criteria.updatedSince() == null ? Instant.EPOCH : criteria.updatedSince();
-        return statement.param("allQuery", criteria.query() == null)
+        return statement.param("allEnded", criteria.ended() == null).param("ended", Boolean.TRUE.equals(criteria.ended()))
+                .param("allQuery", criteria.query() == null)
                 .param("query", "%" + normalizedQuery + "%")
                 .param("allOwners", criteria.ownerUserIds().isEmpty())
                 .param("ownerUserIds", ownerUserIds)

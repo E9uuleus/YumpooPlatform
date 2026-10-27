@@ -19,6 +19,8 @@ public interface ProjectRepository {
     Optional<Project> lockByIdForShare(UUID companyId, UUID projectId);
     Optional<Project> reassignOwner(Project project, long expectedVersion);
     Optional<Project> updateDetails(Project project, long expectedVersion);
+    Optional<Project> changeEnded(Project project, long expectedVersion);
+
     Optional<Project> archive(Project project, long expectedVersion);
     Optional<Project> reopen(Project project, long expectedVersion);
     long countCurrentByWorkspace(UUID companyId, UUID workspaceId);

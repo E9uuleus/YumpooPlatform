@@ -95,6 +95,15 @@ class ProjectTest {
                 .isInstanceOf(IllegalStateException.class);
     }
 
+    @Test
+    void endedProjectKeepsItsEndTimestampAcrossArchiveAndRestore() {
+        Project ended = create(null).end(OWNER_ID, NOW.plusSeconds(10));
+        Project restored = ended.archive(OWNER_ID, NOW.plusSeconds(20)).reopen(OWNER_ID, NOW.plusSeconds(30));
+        assertThat(restored.endedAt()).isEqualTo(ended.endedAt());
+        assertThatThrownBy(() -> ended.end(OWNER_ID, NOW.plusSeconds(20)))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
     private static Project create(String description) {
         return Project.create(UUID.randomUUID(), COMPANY_ID, WORKSPACE_ID, "M2_04",
                 " M2-04 Project ", description, OWNER_ID, OWNER_ID, NOW);

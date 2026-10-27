@@ -1601,7 +1601,7 @@ public class WorkItemService {
     }
 
     private static boolean canEdit(ProjectAccessSnapshot project, Content content) {
-        return project.lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED
+        return project.contentWritable()
                 && content != null
                 && project.actorAccess() != ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY;
     }

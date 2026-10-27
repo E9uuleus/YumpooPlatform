@@ -3812,6 +3812,11 @@ paths:
           in: query
           schema:
             $ref: "#/components/schemas/ProjectLifecycleFilter"
+        - name: ended
+          in: query
+          description: 省略时不按结束状态筛选；true 只返回已结束，false 只返回未结束。
+          schema:
+            type: boolean
         - name: page
           in: query
           schema:
@@ -4004,6 +4009,68 @@ paths:
       operationId: restoreProject
       summary: 负责人或 CompanyAdmin 恢复 ARCHIVED Project
       description: 锁内重验 Owner、ACTIVE membership、用户状态和 ACTIVE Workspace。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          $ref: "#/components/responses/ProjectChanged"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /projects/{projectId}/end:
+    post:
+      tags:
+        - Projects
+      operationId: endProject
+      summary: 负责人或 CompanyAdmin 结束进行中的 Project
+      description: 结束后内容只读，成员仍可见并计入统计；停止项目内运行中的计时。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          $ref: "#/components/responses/ProjectChanged"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /projects/{projectId}/resume:
+    post:
+      tags:
+        - Projects
+      operationId: resumeProject
+      summary: 负责人或 CompanyAdmin 重新打开已结束的 Project
+      description: 重新打开后项目内容恢复可写。
       security:
         - sessionCookie: []
       parameters:
@@ -13182,6 +13249,12 @@ components:
         canCancelDeletion:
           type: boolean
           readOnly: true
+        canEnd:
+          type: boolean
+          readOnly: true
+        canResume:
+          type: boolean
+          readOnly: true
     ProjectDeletion:
       type: object
       additionalProperties: false
@@ -13260,6 +13333,12 @@ components:
         - ownerUserId
         - rowVersion
       properties:
+        endedAt:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+          description: 项目结束时间；为 null 时项目未结束。已结束项目 lifecycle 仍为 ACTIVE。
         id:
           $ref: "#/components/schemas/Uuid"
         workspaceId:
@@ -13320,6 +13399,12 @@ components:
         - createdAt
         - updatedAt
       properties:
+        endedAt:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+          description: 项目结束时间；为 null 时项目未结束。已结束项目 lifecycle 仍为 ACTIVE。
         id:
           $ref: "#/components/schemas/Uuid"
         workspaceId:
@@ -13437,6 +13522,12 @@ components:
             - updatedAt
             - archivedAt
           properties:
+            endedAt:
+              type: string
+              format: date-time
+              nullable: true
+              readOnly: true
+              description: 项目结束时间；为 null 时项目未结束。已结束项目 lifecycle 仍为 ACTIVE。
             workspaceCode:
               type: string
               minLength: 2

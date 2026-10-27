@@ -235,7 +235,7 @@ public class WorkItemLabelService {
     }
 
     private static boolean canManage(ProjectAccessSnapshot project) {
-        return project.lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED
+        return project.contentWritable()
                 && project.actorAccess() != ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY;
     }
 

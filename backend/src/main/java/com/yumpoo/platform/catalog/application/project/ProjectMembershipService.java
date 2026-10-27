@@ -230,7 +230,7 @@ public class ProjectMembershipService {
     private Project lockWritableProject(UUID companyId, UUID projectId) {
         Project project = projectRepository.lockById(companyId, projectId)
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-        if (project.lifecycle() == ProjectLifecycle.ARCHIVED) {
+        if (project.lifecycle() == ProjectLifecycle.ARCHIVED || project.ended()) {
             throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
         }
         return project;
@@ -263,7 +263,7 @@ public class ProjectMembershipService {
     private static ProjectApplicationSnapshot project(Project project) {
         return new ProjectApplicationSnapshot(project.id(), project.companyId(), project.workspaceId(), project.code(),
                 project.name(), project.description(), project.lifecycle().name(),
-                project.ownerUserId(), project.rowVersion());
+                project.ownerUserId(), project.rowVersion(), project.endedAt());
     }
 
     private static int pages(long total, int size) { return (int) ((total + size - 1) / size); }

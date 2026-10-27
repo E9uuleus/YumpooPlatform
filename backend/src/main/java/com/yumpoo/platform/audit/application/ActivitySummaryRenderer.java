@@ -13,7 +13,9 @@ public class ActivitySummaryRenderer {
             case "PROJECT_UPDATED" -> "更新了项目信息";
             case "PROJECT_ACTIVATED" -> "激活了项目";
             case "PROJECT_ARCHIVED" -> "归档了项目";
-            case "PROJECT_REOPENED" -> "重新开启了项目";
+            case "PROJECT_REOPENED" -> "恢复了项目";
+            case "PROJECT_ENDED" -> "结束了项目";
+            case "PROJECT_RESUMED" -> "重新打开了项目";
             case "PROJECT_MOVED_TO_WORKSPACE" -> "移动了项目所属工作区";
             case "PROJECT_TEMPLATE_APPLIED" -> "应用了项目模板";
             case "PROJECT_MEMBER_ADDED" -> "添加了项目成员：" + person;
