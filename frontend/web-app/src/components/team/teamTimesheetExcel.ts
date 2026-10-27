@@ -5,8 +5,9 @@ import { hours, weekday, type TimesheetRow } from './teamDashboardModel'
 export interface TimesheetWorkbookInput { rows: TimesheetRow[]; days: string[]; timezone: string; scopeLabel: string; memberScopeLabel: string; exportedAt: string; title: string; nonWorkdays: Set<string> }
 
 // ExcelJS takes ARGB strings; these mirror the light-theme brand and table tokens.
-const BRAND = 'FF0073EA', WHITE = 'FFFFFFFF', WEEKEND = 'FFE6E9EF', TOTAL = 'FFF6F7FB', BORDER = 'FFD0D4E4'
-const HOURS_FORMAT = '0.00'
+export const BRAND = 'FF0073EA', WHITE = 'FFFFFFFF', TOTAL = 'FFF6F7FB', BORDER = 'FFD0D4E4'
+export const HOURS_FORMAT = '0.00'
+const WEEKEND = 'FFE6E9EF'
 
 /** Summary sheet mirrors the on-screen matrix; detail sheet lists one row per member, day and work item. */
 export async function buildTimesheetWorkbook(input: TimesheetWorkbookInput): Promise<Blob> {

@@ -1,8 +1,26 @@
 import { describe, expect, it } from 'vitest'
-import { CalendarDayType, type TeamTimesheet } from '@yumpoo/api-client'
-import { buildTimesheet, dayBreakdown, hoursMinutes, periodFor, periodLabel, projectColors, rangeDays, restrictTimesheet, shiftPeriod, shortHours, timesheetColors, timesheetColumns, toApiDate } from './teamDashboardModel'
+import { CalendarDayType, TimeCategory, type TeamTimesheet } from '@yumpoo/api-client'
+import { buildProjectHours, buildTimesheet, dayBreakdown, hoursMinutes, periodFor, periodLabel, projectColors, rangeDays, restrictTimesheet, shiftPeriod, shortHours, timesheetColors, timesheetColumns, toApiDate } from './teamDashboardModel'
 
 describe('team dashboard periods', () => {
+  it('汇总项目内两位成员和关联分类，未关联分类排在最后', () => {
+    const day = toApiDate('2026-10-05')
+    const sheet: TeamTimesheet = { from: day, to: day, timezone: 'Asia/Shanghai', asOf: new Date(), days: [],
+      members: [{ userId: 'u1', displayName: '李四', active: true }, { userId: 'u2', displayName: '王五', active: true }],
+      workItems: [{ id: 'w1', projectId: 'p', projectName: '交付', itemNo: 'DEL-1', title: '任务' }],
+      entries: [{ userId: 'u1', workItemId: 'w1', date: day, durationMs: 3_600_000 },
+        { userId: 'u2', workItemId: 'w1', date: day, durationMs: 1_800_000 }],
+      categoryEntries: [{ userId: 'u1', timeCategory: TimeCategory.Meeting, projectId: 'p', projectName: '交付', date: day, durationMs: 1_800_000 },
+        { userId: 'u2', timeCategory: TimeCategory.Learning, projectId: null, projectName: null, date: day, durationMs: 10_800_000 }],
+    }
+    const model = buildProjectHours(sheet)
+    expect(model.rows.map(row => row.name)).toEqual(['交付', '未关联项目'])
+    expect(model.rows[0]!.totalMs).toBe(7_200_000)
+    expect(model.rows[0]!.children.map(child => child.key)).toEqual(['user:u1', 'user:u2', 'category:MEETING'])
+    expect(model.rows[0]!.days).toEqual({ '2026-10-05': 7_200_000 })
+    expect(model.totalMs).toBe(18_000_000)
+    expect(model.dayTotals).toEqual({ '2026-10-05': 18_000_000 })
+  })
   it('restricts member, item and daily totals to Saturday and Sunday', () => {
     const sheet: TeamTimesheet = {
       from: toApiDate('2026-10-05'), to: toApiDate('2026-10-11'), timezone: 'Asia/Shanghai', asOf: new Date(), days: [],
