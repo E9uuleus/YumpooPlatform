@@ -1,10 +1,10 @@
-import { flushPromises, mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RailState } from '@yumpoo/preload-contract'
 
-const api = vi.hoisted(() => ({ getProject: vi.fn() }))
+const api = vi.hoisted(() => ({ listProjects: vi.fn() }))
 vi.mock('../../api/client', () => ({ projectsApi: api }))
-const tracker = vi.hoisted(() => ({ running: { value: [] as unknown[] } }))
+const tracker = vi.hoisted(() => ({ running: { value: [] as unknown[] }, current: { value: undefined as unknown } }))
 vi.mock('../../composables/useSession', async () => {
   const { ref } = await import('vue')
   return { useSession: () => ({ authentication: ref({ company: { id: 'c' }, user: { id: 'u' } }) }) }
@@ -13,7 +13,9 @@ vi.mock('../../composables/useTimeTracker', async () => {
   const { computed, ref } = await import('vue')
   const running = ref<unknown[]>([])
   tracker.running = running
-  return { useTimeTracker: () => ({ running: computed(() => running.value), current: ref(undefined), busy: ref(false), wallDuration: ref(0),
+  const current = ref<unknown>()
+  tracker.current = current
+  return { useTimeTracker: () => ({ running: computed(() => running.value), current, busy: ref(false), wallDuration: ref(0),
     stopAll: vi.fn(), startMany: vi.fn() }) }
 })
 vi.mock('../../composables/useProjectRecents', async () => {
@@ -28,13 +30,14 @@ const base: RailState = { side: 'left', size: 'medium', mode: 'autohide', tucked
   projects: { owner: 'c:u', items: [{ id: 'p1', name: '研发' }, { id: 'p2', name: '运营' }] }, active: 'p2' } as RailState
 
 beforeEach(() => {
-  api.getProject.mockResolvedValue({ lifecycle: 'ACTIVE', endedAt: null })
+  api.listProjects.mockResolvedValue({ items: [{ id: 'p1' }, { id: 'p2' }] })
   Object.assign(window, { yumpooDesktop: { rail: {
     onState: (listener: (state: RailState) => void) => { emit = listener; return () => undefined },
     getState: () => Promise.resolve(base), setProjects: vi.fn(), openProject: vi.fn(), openSettings: vi.fn(),
   } } })
 })
 afterEach(() => { delete (window as { yumpooDesktop?: unknown }).yumpooDesktop })
+enableAutoUnmount(afterEach)
 
 describe('项目侧边栏', () => {
   it('自动隐藏收起时整条滑出，只在屏幕边缘留把手；展开后把手隐去', async () => {
@@ -63,5 +66,59 @@ describe('项目侧边栏', () => {
     expect((tiles[0]!.element as HTMLElement).style.getPropertyValue('--tone')).toMatch(/^var\(--yp-label-/)
     expect(tiles[1]!.classes()).toContain('is-active')
     tracker.running.value = []
+  })
+
+  it('已结束项目只隐藏不改写固定项，计时轮询不刷新，重新聚焦后恢复显示', async () => {
+    api.listProjects.mockResolvedValueOnce({ items: [{ id: 'p2' }] })
+    const wrapper = mount(ProjectRailView)
+    await flushPromises()
+    expect(api.listProjects).toHaveBeenCalledWith({ lifecycle: 'ACTIVE', ended: false, actorAccesses: ['OWNER', 'MEMBER'], page: 0, size: 100 })
+    expect(wrapper.findAll('.rail-project:not(.is-add)').map(tile => tile.text())).toEqual(['运'])
+    expect(window.yumpooDesktop!.rail!.setProjects).not.toHaveBeenCalled()
+    tracker.current.value = { rowVersion: 1 }
+    await flushPromises()
+    expect(api.listProjects).toHaveBeenCalledTimes(1)
+    window.dispatchEvent(new Event('focus'))
+    await flushPromises()
+    expect(api.listProjects).toHaveBeenCalledTimes(2)
+    expect(wrapper.findAll('.rail-project:not(.is-add)').map(tile => tile.text())).toEqual(['研', '运'])
+    expect(window.yumpooDesktop!.rail!.setProjects).not.toHaveBeenCalled()
+    wrapper.unmount()
+    window.dispatchEvent(new Event('focus'))
+    expect(api.listProjects).toHaveBeenCalledTimes(2)
+  })
+
+  it('拖拽仅调整可见项目，隐藏项保留原位置和简称', async () => {
+    api.listProjects.mockResolvedValue({ items: [{ id: 'p1' }, { id: 'p3' }] })
+    const wrapper = mount(ProjectRailView)
+    await flushPromises()
+    const items = [{ id: 'p1', name: '研发', label: 'RD' }, { id: 'p2', name: '运营', label: '运' }, { id: 'p3', name: '设计', label: 'UX' }]
+    emit!({ ...base, projects: { owner: 'c:u', items } })
+    await flushPromises()
+    const tiles = wrapper.findAll('.rail-project:not(.is-add)')
+    await tiles[0]!.trigger('dragstart')
+    await tiles[1]!.trigger('drop')
+    expect(window.yumpooDesktop!.rail!.setProjects).toHaveBeenCalledExactlyOnceWith({ owner: 'c:u', items: [items[2], items[1], items[0]] })
+  })
+
+  it('读取未完成或失败时显示全部固定项，仅重新可见时刷新', async () => {
+    let reject!: (reason: Error) => void
+    api.listProjects.mockReturnValueOnce(new Promise((_, failure) => { reject = failure }))
+    const wrapper = mount(ProjectRailView)
+    await flushPromises()
+    expect(wrapper.findAll('.rail-project:not(.is-add)')).toHaveLength(2)
+    reject(new Error('offline'))
+    await flushPromises()
+    expect(wrapper.findAll('.rail-project:not(.is-add)')).toHaveLength(2)
+    const visibility = vi.spyOn(document, 'visibilityState', 'get')
+    visibility.mockReturnValue('hidden')
+    document.dispatchEvent(new Event('visibilitychange'))
+    expect(api.listProjects).toHaveBeenCalledTimes(1)
+    visibility.mockReturnValue('visible')
+    document.dispatchEvent(new Event('visibilitychange'))
+    await flushPromises()
+    expect(api.listProjects).toHaveBeenCalledTimes(2)
+    expect(window.yumpooDesktop!.rail!.setProjects).not.toHaveBeenCalled()
+    visibility.mockRestore()
   })
 })

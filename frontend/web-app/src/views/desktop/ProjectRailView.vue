@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { ProjectLifecycle } from '@yumpoo/api-client'
+import { ProjectLifecycle, ProjectLifecycleFilter } from '@yumpoo/api-client'
 import type { RailProject, RailState } from '@yumpoo/preload-contract'
 import { Plus } from '@element-plus/icons-vue'
 import { projectsApi } from '../../api/client'
-import { isProblemStatus, toApiProblem } from '../../api/problems'
 import { useSession } from '../../composables/useSession'
 import { useTimeTracker } from '../../composables/useTimeTracker'
 import { useProjectRecents } from '../../composables/useProjectRecents'
@@ -15,6 +14,7 @@ import TimerIcon from '../../components/timer/TimerIcon.vue'
 import { railLabel } from '../../components/desktop/quickTime'
 import { plainRailProjects } from '../../components/desktop/railProjects'
 import { resumeSubjects } from '../../components/timer/timeCategories'
+import { MY_PROJECT_ACCESSES } from '../../components/projects/projectScope'
 
 // Mirrors RAIL_ICONS and the 10px padding, 8px gaps and 14px time label that timer-geometry.ts sizes the window by.
 const ICONS = { small: 30, medium: 34, large: 40 } as const
@@ -30,16 +30,23 @@ const scope = computed(() => {
 })
 const recents = useProjectRecents(() => scope.value)
 const projects = computed(() => state.value?.projects && state.value.projects.owner === scope.value ? state.value.projects.items : [])
-const tones = computed(() => projectColors(projects.value.map(project => project.id)))
+const available = ref<Set<string>>()
+const visibleProjects = computed(() => available.value ? projects.value.filter(project => available.value!.has(project.id)) : projects.value)
+const tones = computed(() => projectColors(visibleProjects.value.map(project => project.id)))
 const icon = computed(() => ICONS[state.value?.size ?? 'medium'])
 const running = computed(() => tracker.running.value.length > 0)
 const resume = computed(() => resumeSubjects(tracker.current.value))
 const slotLabel = computed(() => running.value ? orbDuration(tracker.wallDuration.value) : resume.value.length ? '继续' : '计时')
 
-let verification = 0
 const offState = bridge?.onState(value => { state.value = value })
 void bridge?.getState().then(value => { state.value ??= value }).catch(() => undefined)
-onBeforeUnmount(() => { verification++; offState?.() })
+window.addEventListener('focus', readAvailableProjects)
+document.addEventListener('visibilitychange', refreshWhenVisible)
+onBeforeUnmount(() => {
+  offState?.()
+  window.removeEventListener('focus', readAvailableProjects)
+  document.removeEventListener('visibilitychange', refreshWhenVisible)
+})
 
 // Until the person arranges it, the rail starts from their most recent projects; another account's list is replaced the same way.
 // With no recents yet (a fresh install or partition) nothing is saved, so the rail seeds once the main window records some.
@@ -50,27 +57,18 @@ watch([state, scope, () => recents.items.value], ([value, owner]) => {
   if (items.length) void bridge.setProjects({ owner, items }).catch(() => undefined)
 })
 
-// Recheck persisted pins with the existing tracker refresh, including updates from other desktop surfaces.
-watch([scope, () => state.value?.projects?.items.map(project => project.id).join(','), tracker.current], () => { void refreshProjects() }, { immediate: true })
-async function refreshProjects(): Promise<void> {
-  const request = ++verification, owner = scope.value, configured = state.value?.projects
-  if (!bridge || !owner || configured?.owner !== owner) return
+watch(scope, readAvailableProjects, { immediate: true })
+async function readAvailableProjects(): Promise<void> {
+  const owner = scope.value
+  available.value = undefined
+  if (!owner) return
   try {
-    const valid = await Promise.all(configured.items.map(async project => {
-      try {
-        const current = await projectsApi.getProject({ projectId: project.id })
-        return current.lifecycle === ProjectLifecycle.Active && !current.endedAt ? project.id : null
-      } catch (reason) {
-        if (isProblemStatus(await toApiProblem(reason), 404)) return null
-        throw reason
-      }
-    }))
-    if (request !== verification || scope.value !== owner) return
-    const current = state.value?.projects
-    if (current?.owner !== owner) return
-    const available = new Set(valid), items = current.items.filter(project => available.has(project.id))
-    if (items.length !== current.items.length) await bridge.setProjects({ owner, items: plainRailProjects(items) })
-  } catch { /* Keep the person's pins until their state can be verified. */ }
+    const result = await projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.Active, ended: false, actorAccesses: MY_PROJECT_ACCESSES, page: 0, size: 100 })
+    if (scope.value === owner) available.value = new Set(result.items.map(project => project.id))
+  } catch { /* Show the person's pins when availability cannot be read. */ }
+}
+function refreshWhenVisible() {
+  if (document.visibilityState === 'visible') void readAvailableProjects()
 }
 
 async function toggleTimer() {
@@ -85,9 +83,12 @@ function drop(target: number) {
   const from = dragging.value
   dragging.value = null
   if (from === null || from === target || !scope.value) return
-  const items = [...projects.value]
-  const [moved] = items.splice(from, 1)
-  items.splice(target, 0, moved!)
+  const ordered = [...visibleProjects.value]
+  const [moved] = ordered.splice(from, 1)
+  ordered.splice(target, 0, moved!)
+  const visibleIds = new Set(visibleProjects.value.map(project => project.id))
+  let next = 0
+  const items = projects.value.map(project => visibleIds.has(project.id) ? ordered[next++]! : project)
   void bridge?.setProjects({ owner: scope.value, items: plainRailProjects(items) })
 }
 </script>
@@ -125,7 +126,7 @@ function drop(target: number) {
         <span class="rail-sep" />
       </template>
       <button
-        v-for="(project, index) in projects"
+        v-for="(project, index) in visibleProjects"
         :key="project.id"
         type="button"
         class="rail-project"
