@@ -20,6 +20,9 @@ public sealed interface TimeSubject extends Comparable<TimeSubject> {
 
     default UUID categoryProjectId() { return this instanceof Category category ? category.projectId() : null; }
 
+    /** The timeline slot a record occupies: its work item, or its category whatever project it names; a slot never overlaps itself. */
+    default String slot() { return this instanceof Category category ? "category:"+category.category().name() : key(); }
+
     @Override default int compareTo(TimeSubject other) { return key().compareTo(other.key()); }
 
     static TimeSubject of(UUID workItemId, TimeCategory category) { return of(workItemId,category,null); }

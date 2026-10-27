@@ -269,6 +269,8 @@ public class TimeTrackingService {
             Session removing,long expectedVersion) {
         Instant now=now();
         var merged=TimeSessionFillPlanner.mergeEntries(entries);
+        if(TimeSessionFillPlanner.slotsOverlap(merged))
+            throw validation("entries","CATEGORY_OVERLAP","同一分类在同一时段只能关联一个项目");
         requireCategoryProjects(actor,merged.stream().map(TimeSessionFillEntry::subject).toList());
         Instant from=merged.stream().map(TimeSessionFillEntry::startedAt).min(Instant::compareTo).orElseThrow();
         Instant to=merged.stream().map(TimeSessionFillEntry::stoppedAt).max(Instant::compareTo).orElseThrow();
