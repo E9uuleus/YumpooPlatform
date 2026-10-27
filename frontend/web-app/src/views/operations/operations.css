@@ -11,8 +11,6 @@
 
 .operations-page {
   color: var(--yp-text-primary);
-  max-width: 1800px;
-  margin: 0 auto;
 }
 
 .operations-page .ops-segmented {

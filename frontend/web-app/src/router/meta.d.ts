@@ -5,6 +5,8 @@ import type { ShellSection } from './shell-navigation'
 
 declare module 'vue-router' {
   interface RouteMeta {
+    /** `fixed`: the shell fills the viewport and the page scrolls its own body, so the rail, context menu and page header stay put. */
+    frame?: 'fixed'
     onboardingTour?: TourId
     /** Reachable without a session; the guard and session redirects leave it alone. */
     public?: boolean

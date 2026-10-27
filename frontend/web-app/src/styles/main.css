@@ -853,3 +853,41 @@ code {
   }
 }
 html.timer-surface,html.timer-surface body,html.timer-surface #app{min-width:0;min-height:100%;margin:0;background:transparent;overflow:hidden}
+
+/* Fixed frame (route meta `frame: 'fixed'`): the shell fills the viewport and each page scrolls its own body. */
+html:has(.app-shell--fixed),
+html:has(.app-shell--fixed) body {
+  overflow: hidden;
+}
+
+.app-shell.app-shell--fixed {
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-shell .app-main.app-main--fixed {
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.app-shell--workspace.app-shell--context-open .app-main.app-main--fixed {
+  padding-left: 260px;
+}
+
+.app-shell--context-open:not(.app-shell--workspace) .app-main.app-main--fixed {
+  padding-left: 232px;
+}
+
+@media (max-width: 1279px) {
+  .app-shell--context-open:not(.app-shell--workspace) .app-main.app-main--fixed {
+    padding-left: 0;
+  }
+}
+
+@media (max-width: 959.98px) {
+  .app-shell.app-shell--context-open .app-main.app-main--fixed {
+    padding: 0;
+  }
+}

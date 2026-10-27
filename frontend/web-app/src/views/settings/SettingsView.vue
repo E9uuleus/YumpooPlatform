@@ -9,6 +9,7 @@ import { useProjectRecents } from '../../composables/useProjectRecents'
 import WindowSettingsCard from '../../components/settings/WindowSettingsCard.vue'
 import GeneralSettingsCard from '../../components/settings/GeneralSettingsCard.vue'
 import AppearanceSettingsCard from '../../components/settings/AppearanceSettingsCard.vue'
+import YpModulePage from '../../components/yp/YpModulePage.vue'
 import { plainRailProjects } from '../../components/desktop/railProjects'
 
 // Shells before 1.1.0 and browsers have no preferences bridge: the page then offers appearance only.
@@ -77,36 +78,39 @@ onBeforeUnmount(() => { offChange?.(); window.removeEventListener('focus', focus
 </script>
 
 <template>
-  <section class="settings-page">
-    <h1>偏好设置</h1>
-    <div class="settings-page__cards">
-      <template v-if="preferences && timer">
-        <WindowSettingsCard
-          :preferences="preferences"
-          :timer="timer"
-          :pinned="pinned"
-          :projects="projects"
-          :defaults="defaults"
-          :busy="busy"
-          @change="change"
-          @timer="changeTimer"
-          @pin="pin"
-          @shortcut="shortcut"
-          @projects="saveProjects"
-        />
-        <GeneralSettingsCard
-          :preferences="preferences"
-          :busy="busy"
-          @change="change"
-        />
-      </template>
-      <AppearanceSettingsCard :desktop="!!bridge" />
+  <yp-module-page
+    module="settings"
+    title="偏好设置"
+  >
+    <div class="settings-page">
+      <div class="settings-page__cards">
+        <template v-if="preferences && timer">
+          <WindowSettingsCard
+            :preferences="preferences"
+            :timer="timer"
+            :pinned="pinned"
+            :projects="projects"
+            :defaults="defaults"
+            :busy="busy"
+            @change="change"
+            @timer="changeTimer"
+            @pin="pin"
+            @shortcut="shortcut"
+            @projects="saveProjects"
+          />
+          <GeneralSettingsCard
+            :preferences="preferences"
+            :busy="busy"
+            @change="change"
+          />
+        </template>
+        <AppearanceSettingsCard :desktop="!!bridge" />
+      </div>
     </div>
-  </section>
+  </yp-module-page>
 </template>
 
 <style scoped>
-.settings-page{box-sizing:border-box;max-width:760px;margin:0 auto;padding:24px 24px 48px;color:var(--yp-text-primary);font-size:13px}
-.settings-page h1{margin:0 0 16px;font-size:20px;font-weight:600}
+.settings-page{box-sizing:border-box;max-width:760px;margin:0 auto;color:var(--yp-text-primary);font-size:13px}
 .settings-page__cards{display:flex;flex-direction:column;gap:12px}
 </style>

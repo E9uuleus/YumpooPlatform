@@ -87,7 +87,7 @@ const releaseLabel = computed(() => releaseVersion.value
   : '')
 const activeSection = computed<ShellSection>(() => route.meta.shellSection ?? 'work')
 const myTimeActive = computed(() => route.name === 'my-time' || route.name === 'my-time-day')
-const dashboardFrame = computed(() => route.name === 'dashboards' || route.name === 'my-time' || route.name === 'my-time-day' || route.name === 'team')
+const fixedFrame = computed(() => route.meta.frame === 'fixed')
 const isWorkspaceSection = computed(() => activeSection.value === 'work')
 const hasContextNavigation = computed(() => activeSection.value !== 'home')
 const projectRecentScope = computed(() => {
@@ -310,7 +310,7 @@ onBeforeUnmount(() => {
     :class="{
       'app-shell--context-open': contextNavigationOpen && hasContextNavigation,
       'app-shell--workspace': isWorkspaceSection,
-      'app-shell--dashboard': dashboardFrame,
+      'app-shell--fixed': fixedFrame,
     }"
   >
     <aside
@@ -867,7 +867,7 @@ onBeforeUnmount(() => {
 
     <main
       class="app-main"
-      :class="{ 'app-main--dashboard': dashboardFrame }"
+      :class="{ 'app-main--fixed': fixedFrame }"
     >
       <desktop-update-banner />
       <inline-problem
