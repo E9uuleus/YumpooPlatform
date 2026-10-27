@@ -8,6 +8,8 @@ import { Store } from '../src/store.ts'
 import { Hub } from '../src/hub.ts'
 import { DeliveryWorker, boundedText, enqueue } from '../src/delivery.ts'
 import { createServers } from '../src/server.ts'
+import { formatBeijing, maintenanceAnnouncement, maintenanceChange } from '../src/messages.ts'
+import { renderMetrics } from '../src/metrics.ts'
 import { sign } from '../src/security.ts'
 import type { Config, ReleaseEvent } from '../src/model.ts'
 const base = 1800000000000
@@ -104,19 +106,108 @@ test('machine and admin listeners separate privileges; signed ingress rejects re
     assert.equal((await ingress.inject({method:'POST',url:'/internal/v1/events',payload:body,headers})).statusCode,400)
     const login = await ui.inject({method:'POST',url:'/api/v1/login',payload:{username:'admin',password:'test-password'}})
     const cookie = String(login.headers['set-cookie']).split(';')[0]!
-    assert.equal((await ui.inject({method:'POST',url:'/api/v1/admin/preview',headers:{cookie},payload:{text:'test'}})).statusCode,403)
-    assert.equal((await ui.inject({method:'POST',url:'/api/v1/admin/preview',headers:{cookie,'x-csrf-token':login.json().csrf},payload:{text:'test'}})).statusCode,200)
-    const adminHeaders = {cookie,'x-csrf-token':login.json().csrf}
     const now = Date.now()
-    const maintenance = await ui.inject({method:'POST',url:'/api/v1/admin/maintenance',headers:adminHeaders,payload:{title:'测试维护',service:'server',starts:now,ends:now+600000}})
+    const payload = {title:'测试*维护*',service:'server',starts:now,ends:now+600000}
+    assert.equal((await ui.inject({method:'POST',url:'/api/v1/admin/preview',headers:{cookie},payload})).statusCode,403)
+    const adminHeaders = {cookie,'x-csrf-token':login.json().csrf}
+    const preview = await ui.inject({method:'POST',url:'/api/v1/admin/preview',headers:adminHeaders,payload})
+    assert.equal(preview.statusCode,200)
+    for (const invalid of [{...payload,ends:now-1},{...payload,starts:'invalid'},{...payload,title:''},{...payload,service:'missing'},{...payload,ends:now+86400001}]) {
+      const previewError = await ui.inject({method:'POST',url:'/api/v1/admin/preview',headers:adminHeaders,payload:invalid})
+      const createError = await ui.inject({method:'POST',url:'/api/v1/admin/maintenance',headers:adminHeaders,payload:invalid})
+      assert.equal(previewError.statusCode,400)
+      assert.equal(createError.statusCode,400)
+      assert.deepEqual(previewError.json(),createError.json())
+    }
+    const maintenance = await ui.inject({method:'POST',url:'/api/v1/admin/maintenance',headers:adminHeaders,payload})
     assert.equal(maintenance.statusCode,200)
+    const content = store.get<{content:string}>('SELECT content FROM deliveries WHERE dedupe=?',`${maintenance.json().id}:created`)!.content
+    assert.equal(content,preview.json().text)
+    assert.match(content,/服务：Yumpoo/u)
+    assert.match(content,/（北京时间）/u)
+    assert.doesNotMatch(content,/T\d{2}:\d{2}:\d{2}/u)
     const url = `/api/v1/admin/maintenance/${maintenance.json().id}`
     assert.equal((await ui.inject({method:'POST',url,headers:adminHeaders,payload:{action:'end'}})).statusCode,409)
     assert.equal((await ui.inject({method:'POST',url,headers:adminHeaders,payload:{action:'postpone',ends:now+900000}})).statusCode,200)
+    assert.ok(store.all<{content:string}>("SELECT content FROM deliveries WHERE dedupe LIKE '%:postpone:%'").some(row=>row.content===maintenanceChange('postpone',payload.title,now+900000)))
     assert.equal((await ui.inject({method:'POST',url,headers:adminHeaders,payload:{action:'cancel'}})).statusCode,200)
+    assert.ok(store.all<{content:string}>("SELECT content FROM deliveries WHERE dedupe LIKE '%:cancel:%'").some(row=>row.content==='维护安排「测试维护」已取消。'))
     assert.equal((await ui.inject({method:'POST',url,headers:adminHeaders,payload:{action:'postpone',ends:now+900000}})).statusCode,409)
     for(let index=0;index<9;index++) assert.equal((await ui.inject({method:'POST',url:'/api/v1/login',payload:{username:'admin',password:'test-password'}})).statusCode,200)
     assert.equal((await ui.inject({method:'POST',url:'/api/v1/login',payload:{username:'admin',password:'test-password'}})).statusCode,429)
+  } finally { await ui.close(); await ingress.close(); store.close() }
+})
+
+test('maintenance messages use Beijing time and include the title in every change', () => {
+  const starts = Date.UTC(2026,9,25,8,0)
+  assert.equal(formatBeijing(starts),'2026-10-25 16:00')
+  assert.equal(formatBeijing(Date.UTC(2026,9,25,16,0)),'2026-10-26 00:00')
+  assert.equal(maintenanceAnnouncement('*升级*','协作平台',starts,starts+3600000),
+    '计划维护：升级\n服务：协作平台\n开始：2026-10-25 16:00（北京时间）\n结束：2026-10-25 17:00（北京时间）')
+  assert.equal(maintenanceChange('postpone','*升级*',starts+3600000),'维护安排「升级」已延期，预计结束：2026-10-25 17:00（北京时间）。')
+  assert.equal(maintenanceChange('cancel','升级'),'维护安排「升级」已取消。')
+  assert.equal(maintenanceChange('end','升级'),'维护安排「升级」已结束，服务恢复。')
+})
+
+test('metrics share status-page states and expose stable maintenance series at window boundaries', async () => {
+  const { hub, store } = setup()
+  hub.config.services.push({id:'desktop',name:'桌面端',checks:['download']})
+  const now = Date.now()
+  hub.observe({service:'server',state:'healthy',at:now},now)
+  store.run("INSERT INTO maintenance VALUES(?,?,?,?,?,'active',0)",'manual','server','维护',now,now+600000)
+  store.run("INSERT INTO maintenance VALUES(?,?,?,?,?,'active',1)",'future','server','未来维护',now+600000,now+900000)
+  const { ui, ingress } = await createServers(hub,()=>true,()=>true)
+  try {
+    const response = await ingress.inject({url:'/metrics'})
+    assert.equal(response.statusCode,200)
+    const text = response.body
+    assert.match(text,/^monitor_delivery_pending 0\nmonitor_delivery_dead 0\nmonitor_discovery_success 1\nmonitor_process_timestamp_seconds \d+(\.\d+)?\n/u)
+    assert.match(text,/monitor_service_status\{service="server"\} 1\n/u)
+    assert.match(text,/monitor_service_observed_status\{service="server"\} 0\n/u)
+    assert.match(text,/monitor_maintenance_active\{service="server",kind="manual"\} 1\n/u)
+    assert.match(text,/monitor_maintenance_active\{service="server",kind="automatic"\} 0\n/u)
+    assert.match(text,/monitor_service_status\{service="desktop"\} 2\n/u)
+    for (const kind of ['manual','automatic']) assert.ok(text.includes(`monitor_maintenance_active{service="desktop",kind="${kind}"} 0\n`))
+    const later = renderMetrics(hub,true,now+600000)
+    assert.ok(later.includes('monitor_maintenance_active{service="server",kind="manual"} 0\n'))
+    assert.ok(later.includes('monitor_maintenance_active{service="server",kind="automatic"} 1\n'))
+    assert.ok(later.includes('monitor_service_observed_status{service="server"} 2\n'))
+  } finally { await ui.close(); await ingress.close(); store.close() }
+})
+
+test('expired dead deliveries no longer count as a notification backlog', async () => {
+  const { hub, store } = setup()
+  try {
+    enqueue(store,'expired-failure','announcements','过期公告',base,null,base+1000)
+    store.run("UPDATE deliveries SET state='dead'")
+    assert.ok(renderMetrics(hub,false,base).includes('monitor_delivery_dead 1\n'))
+    await new DeliveryWorker(store,{},(async()=>{throw new Error('must not send')}) as typeof fetch).tick(base+1000)
+    assert.equal(store.get<{state:string}>('SELECT state FROM deliveries')?.state,'expired')
+    assert.ok(renderMetrics(hub,false,base+1000).includes('monitor_delivery_dead 0\n'))
+  } finally { store.close() }
+})
+
+test('admin can discard only dead deliveries, with CSRF protection and an audit record', async () => {
+  const { hub, store } = setup(); const { ui, ingress } = await createServers(hub,()=>true)
+  try {
+    const now=Date.now()
+    enqueue(store,'dead','operations','失败消息',now,null,now+60000)
+    store.run("UPDATE deliveries SET state='dead' WHERE dedupe='dead'")
+    enqueue(store,'pending','operations','待发送消息',now)
+    const deadId=store.get<{id:number}>("SELECT id FROM deliveries WHERE dedupe='dead'")!.id
+    const pendingId=store.get<{id:number}>("SELECT id FROM deliveries WHERE dedupe='pending'")!.id
+    const login=await ui.inject({method:'POST',url:'/api/v1/login',payload:{username:'admin',password:'test-password'}})
+    const cookie=String(login.headers['set-cookie']).split(';')[0]!
+    const headers={cookie,'x-csrf-token':login.json().csrf}
+    const url=`/api/v1/admin/deliveries/${deadId}/discard`
+    assert.equal((await ui.inject({method:'POST',url,headers:{cookie}})).statusCode,403)
+    assert.equal((await ui.inject({method:'POST',url,headers})).statusCode,200)
+    assert.equal(store.get<{state:string}>('SELECT state FROM deliveries WHERE id=?',deadId)?.state,'abandoned')
+    assert.equal((await ui.inject({method:'POST',url,headers})).statusCode,409)
+    assert.equal((await ui.inject({method:'POST',url:`/api/v1/admin/deliveries/${pendingId}/discard`,headers})).statusCode,409)
+    assert.equal(store.all("SELECT * FROM audit WHERE action='delivery.discard'").length,1)
+    const overview=(await ui.inject({url:'/api/v1/admin/overview',headers})).json()
+    assert.equal(overview.deliveries.find((delivery:{id:number})=>delivery.id===deadId).expires,now+60000)
   } finally { await ui.close(); await ingress.close(); store.close() }
 })
 

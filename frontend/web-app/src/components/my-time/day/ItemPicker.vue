@@ -93,9 +93,8 @@ defineExpose({ focus: () => input.value?.focus() })
       v-if="categories.length"
       class="item-picker__categories"
       role="group"
-      aria-label="非项目工时"
+      aria-label="通用工时"
     >
-      <span>非项目</span>
       <button
         v-for="category in categories"
         :key="category.key"
@@ -218,7 +217,6 @@ defineExpose({ focus: () => input.value?.focus() })
 <style scoped>
 .item-picker{display:flex;flex-direction:column;min-height:0}
 .item-picker__categories{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin:10px 2px 0}
-.item-picker__categories>span{margin-right:2px;color:var(--yp-text-muted);font-size:11px}
 .item-picker__category{display:inline-flex;align-items:center;gap:4px;height:26px;padding:0 9px;border:1px solid var(--yp-border-subtle);border-radius:var(--yp-radius-pill);background:var(--yp-bg-surface);color:var(--yp-text-primary);font:12px var(--yp-font-family);cursor:pointer;transition:background var(--yp-motion-fast) ease-out,border-color var(--yp-motion-fast) ease-out}
 .item-picker__category svg{width:13px;height:13px;color:var(--category-color)}
 .item-picker__category:hover{background:var(--yp-bg-hover)}

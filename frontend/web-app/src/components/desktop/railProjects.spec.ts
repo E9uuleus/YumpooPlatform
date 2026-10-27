@@ -14,5 +14,6 @@ describe('侧边栏项目 IPC 数据', () => {
     expect(sameRailProjects(items, items.slice(1))).toBe(false)
     expect(sameRailProjects(items, [...items].reverse())).toBe(false)
     expect(sameRailProjects(items, [{ id: 'a', name: '更名' }, items[1]!])).toBe(false)
+    expect(sameRailProjects(items, [{ ...items[0]!, label: '研发' }, items[1]!])).toBe(false)
   })
 })

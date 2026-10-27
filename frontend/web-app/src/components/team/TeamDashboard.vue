@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { ElAlert, ElButton } from 'element-plus'
 import TeamTimesheet from './TeamTimesheet.vue'
+import TeamProjectHours from './TeamProjectHours.vue'
 import TeamWorkload from './TeamWorkload.vue'
 import { type TeamView } from './teamDashboardModel'
 import { useTeamDashboard } from './useTeamDashboard'
@@ -34,7 +35,7 @@ defineExpose({ refresh: team.refresh, loading, ready })
       </el-button>
     </el-alert>
     <TeamTimesheet
-      v-show="props.view !== 'WORKLOAD'"
+      v-show="props.view === 'TIMESHEET' || props.view === 'OVERTIME'"
       ref="timesheetView"
       v-model:period="period"
       :sheet="timesheet"
@@ -42,6 +43,15 @@ defineExpose({ refresh: team.refresh, loading, ready })
       :error="timesheetError"
       :timezone="timezone"
       :overtime="props.view === 'OVERTIME'"
+      @retry="team.loadTimesheet()"
+    />
+    <TeamProjectHours
+      v-if="props.view === 'PROJECTS'"
+      v-model:period="period"
+      :sheet="timesheet"
+      :loading="timesheetLoading"
+      :error="timesheetError"
+      :timezone="timezone"
       @retry="team.loadTimesheet()"
     />
     <TeamWorkload

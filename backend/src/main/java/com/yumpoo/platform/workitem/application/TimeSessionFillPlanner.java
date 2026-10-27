@@ -22,14 +22,23 @@ public final class TimeSessionFillPlanner {
         return merged;
     }
 
+    /** True when two merged entries share a slot, i.e. the same category under different projects, and overlap in time. */
+    static boolean slotsOverlap(List<TimeSessionFillEntry> merged) {
+        var sorted=merged.stream().sorted(Comparator.comparing(TimeSessionFillEntry::startedAt)).toList();
+        for(int i=0;i<sorted.size();i++)
+            for(int j=i+1;j<sorted.size() && sorted.get(j).startedAt().isBefore(sorted.get(i).stoppedAt());j++)
+                if(sorted.get(i).subject().slot().equals(sorted.get(j).subject().slot())) return true;
+        return false;
+    }
+
     public static Plan plan(TimeSessionFillMode mode,List<TimeSessionFillEntry> entries,List<Session> sessions,Set<UUID> editableIds) {
         var merged=mergeEntries(entries);
+        var targetSubjects=merged.stream().map(TimeSessionFillEntry::subject).collect(java.util.stream.Collectors.toSet());
         var effective=sessions.stream().filter(s -> s.deletedAt()==null && (s.stoppedAt()==null || s.stoppedAt().isAfter(s.startedAt()))).toList();
         var created=new ArrayList<TimeSessionFillEntry>();
         var changed=new ArrayList<Change>();
         var deleted=new ArrayList<Session>();
         if(mode==TimeSessionFillMode.REPLACE) {
-            var targetSubjects=merged.stream().map(TimeSessionFillEntry::subject).collect(java.util.stream.Collectors.toSet());
             var replaced=union(merged.stream().map(entry -> new Range(entry.startedAt(),entry.stoppedAt())).toList());
             for(Session session:effective) {
                 if(targetSubjects.contains(session.subject()) || !editableIds.contains(session.id())) continue;
@@ -48,7 +57,8 @@ public final class TimeSessionFillPlanner {
         }
         long skipped=0;
         for(var entry:merged) {
-            var blocked=effective.stream().filter(s -> mode==TimeSessionFillMode.GAPS || s.subject().equals(entry.subject()))
+            var blocked=effective.stream().filter(s -> mode==TimeSessionFillMode.GAPS || s.subject().slot().equals(entry.subject().slot()))
+                    .filter(s -> mode!=TimeSessionFillMode.REPLACE || targetSubjects.contains(s.subject()) || !editableIds.contains(s.id()))
                     .map(s -> new Range(s.startedAt(),s.stoppedAt())).toList();
             var gaps=subtract(new Range(entry.startedAt(),entry.stoppedAt()),blocked);
             long added=0;

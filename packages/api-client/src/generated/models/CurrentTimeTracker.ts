@@ -47,6 +47,13 @@ import {
     RecentTimeTrackingItemToJSON,
     RecentTimeTrackingItemToJSONTyped,
 } from './RecentTimeTrackingItem';
+import type { TimeCategorySubject } from './TimeCategorySubject';
+import {
+    TimeCategorySubjectFromJSON,
+    TimeCategorySubjectFromJSONTyped,
+    TimeCategorySubjectToJSON,
+    TimeCategorySubjectToJSONTyped,
+} from './TimeCategorySubject';
 
 /**
  *
@@ -72,6 +79,12 @@ export interface CurrentTimeTracker {
      * @memberof CurrentTimeTracker
      */
     resumeItems: Array<RecentTimeTrackingItem>;
+    /**
+     *
+     * @type {Array<TimeCategorySubject>}
+     * @memberof CurrentTimeTracker
+     */
+    resumeCategorySubjects: Array<TimeCategorySubject>;
     /**
      * 与 resumeItems 同一批最近停止的非项目分类计时，按分类固定顺序排列。服务端总是返回。
      * @type {Array<TimeCategory>}
@@ -123,6 +136,7 @@ export function instanceOfCurrentTimeTracker(value: object): value is CurrentTim
     if (!('preferences' in value) || value['preferences'] === undefined) return false;
     if (!('runningSessions' in value) || value['runningSessions'] === undefined) return false;
     if (!('resumeItems' in value) || value['resumeItems'] === undefined) return false;
+    if (!('resumeCategorySubjects' in value) || value['resumeCategorySubjects'] === undefined) return false;
     if (!('recentItems' in value) || value['recentItems'] === undefined) return false;
     if (!('session' in value) || value['session'] === undefined) return false;
     if (!('workItemTitle' in value) || value['workItemTitle'] === undefined) return false;
@@ -145,6 +159,7 @@ export function CurrentTimeTrackerFromJSONTyped(json: any, ignoreDiscriminator: 
         'preferences': TimeTrackingPreferencesFromJSON(json['preferences']),
         'runningSessions': ((json['runningSessions'] as Array<any>).map(CurrentRunningTimerFromJSON)),
         'resumeItems': ((json['resumeItems'] as Array<any>).map(RecentTimeTrackingItemFromJSON)),
+        'resumeCategorySubjects': ((json['resumeCategorySubjects'] as Array<any>).map(TimeCategorySubjectFromJSON)),
         ...(json['resumeCategories'] == null ? {} : { 'resumeCategories': ((json['resumeCategories'] as Array<any>).map(TimeCategoryFromJSON)) }),
         'recentItems': ((json['recentItems'] as Array<any>).map(RecentTimeTrackingItemFromJSON)),
         'session': TimeTrackingSessionFromJSON(json['session']),
@@ -169,6 +184,7 @@ export function CurrentTimeTrackerToJSONTyped(value?: CurrentTimeTracker | null,
         'preferences': TimeTrackingPreferencesToJSON(value['preferences']),
         'runningSessions': ((value['runningSessions'] as Array<any>).map(CurrentRunningTimerToJSON)),
         'resumeItems': ((value['resumeItems'] as Array<any>).map(RecentTimeTrackingItemToJSON)),
+        'resumeCategorySubjects': ((value['resumeCategorySubjects'] as Array<any>).map(TimeCategorySubjectToJSON)),
         'resumeCategories': value['resumeCategories'] == null ? undefined : ((value['resumeCategories'] as Array<any>).map(TimeCategoryToJSON)),
         'recentItems': ((value['recentItems'] as Array<any>).map(RecentTimeTrackingItemToJSON)),
         'session': TimeTrackingSessionToJSON(value['session']),

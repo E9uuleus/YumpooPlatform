@@ -110,3 +110,8 @@ export function rangeRecordable(range: Range, blocks: DayBlock[], now: number): 
 export function projectInitial(name: string): string {
   return name.trim().charAt(0).toUpperCase()
 }
+
+/** The rail tile text: the person's label, else the name's first character. */
+export function railLabel(project: { name: string; label?: string | undefined }): string {
+  return project.label || projectInitial(project.name)
+}

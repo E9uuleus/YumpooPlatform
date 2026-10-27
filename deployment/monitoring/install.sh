@@ -33,7 +33,9 @@ fi
 "${compose[@]}" run --rm --no-deps --entrypoint promtool prometheus check config /etc/prometheus/prometheus.yml
 "${compose[@]}" run --rm --no-deps --entrypoint amtool alertmanager check-config /etc/alertmanager.yml
 "${compose[@]}" up -d --no-build --pull never --wait --wait-timeout 120
+# 单文件挂载需要重启才能加载替换后的规则与配置。
+"${compose[@]}" restart prometheus alertmanager blackbox
 curl --fail --silent http://127.0.0.1:8788/healthz
-curl --fail --silent http://127.0.0.1:9090/-/ready
-curl --fail --silent http://127.0.0.1:9093/-/ready
+curl --fail --silent --retry 20 --retry-delay 3 --retry-connrefused http://127.0.0.1:9090/-/ready
+curl --fail --silent --retry 20 --retry-delay 3 --retry-connrefused http://127.0.0.1:9093/-/ready
 curl --fail --silent http://127.0.0.1:3000/api/health

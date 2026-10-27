@@ -6,9 +6,18 @@ import { Hub, type Alert } from './hub.js'
 import { parseEvent, type Config } from './model.js'
 import { authenticateSource, equal, newToken, verifyPassword } from './security.js'
 import { enqueue, safeText } from './delivery.js'
+import { maintenanceAnnouncement, maintenanceChange } from './messages.js'
+import { renderMetrics } from './metrics.js'
+
+interface MaintenanceBody { title?: string; service?: string; starts?: number; ends?: number }
 
 export async function createServers(hub: Hub, fresh: (alert: Alert) => boolean, discovery: () => boolean = () => false, monitoringReady: () => boolean = () => false) {
   const config: Config = hub.config
+  function validateMaintenance(body: MaintenanceBody | null | undefined, now: number): body is Required<MaintenanceBody> {
+    return !!body && typeof body.title === 'string' && !!body.title.trim() && body.title.length <= 120 && config.services.some(service => service.id === body.service)
+      && Number.isSafeInteger(body.starts) && Number.isSafeInteger(body.ends) && body.starts! >= now - 60_000 && body.ends! > body.starts! && body.ends! - body.starts! <= 86400_000
+  }
+  const maintenanceError = '维护时间需在未来且不超过 24 小时'
   const ui = Fastify({ bodyLimit: 16_384, logger: false, requestTimeout: 10_000 })
   const ingress = Fastify({ bodyLimit: 131_072, logger: false, requestTimeout: 10_000 })
   await ui.register(rateLimit, { global: true, max: 300, timeWindow: 60_000 })
@@ -50,7 +59,7 @@ export async function createServers(hub: Hub, fresh: (alert: Alert) => boolean, 
   ui.get('/api/v1/admin/overview', async () => ({
     ...hub.status(),
     channels: (['operations','announcements'] as const).map(channel => ({ channel, configured: Boolean(config.channels[channel]), counts: hub.store.all('SELECT state,count(*) count FROM deliveries WHERE channel=? GROUP BY state', channel) })),
-    deliveries: hub.store.all('SELECT id,channel,content,state,attempts,created,sent,error FROM deliveries ORDER BY id DESC LIMIT 200'),
+    deliveries: hub.store.all('SELECT id,channel,content,state,attempts,created,sent,expires,error FROM deliveries ORDER BY id DESC LIMIT 200'),
     alerts: hub.store.all("SELECT id,state,last_notice,body FROM alerts WHERE state!='resolved' ORDER BY last_notice DESC LIMIT 100"),
     audit: hub.store.all('SELECT * FROM audit ORDER BY id DESC LIMIT 100'),
   }))
@@ -60,23 +69,28 @@ export async function createServers(hub: Hub, fresh: (alert: Alert) => boolean, 
     hub.store.audit('delivery.retry', req.params.id, Date.now())
     return { ok: true }
   })
-  ui.post<{ Body: { title?: string; service?: string; starts?: number; ends?: number } }>('/api/v1/admin/maintenance', async (req, reply) => {
+  ui.post<{ Params: { id: string } }>('/api/v1/admin/deliveries/:id/discard', async (req, reply) => {
+    const result = hub.store.run("UPDATE deliveries SET state='abandoned' WHERE id=? AND state='dead'", Number(req.params.id))
+    if (!result.changes) return reply.code(409).send({ error: '仅可放弃投递失败的消息' })
+    hub.store.audit('delivery.discard', req.params.id, Date.now())
+    return { ok: true }
+  })
+  ui.post<{ Body: MaintenanceBody }>('/api/v1/admin/maintenance', async (req, reply) => {
     const b = req.body; const now = Date.now()
-    if (!b || typeof b.title !== 'string' || !b.title.trim() || b.title.length > 120 || !config.services.some(s => s.id === b.service)
-      || !Number.isSafeInteger(b.starts) || !Number.isSafeInteger(b.ends) || b.starts! < now - 60_000 || b.ends! <= b.starts! || b.ends! - b.starts! > 86400_000) return reply.code(400).send({ error: '维护时间需在未来且不超过 24 小时' })
+    if (!validateMaintenance(b, now)) return reply.code(400).send({ error: maintenanceError })
     const id = randomUUID()
     hub.store.transaction(() => {
       hub.store.run("INSERT INTO maintenance VALUES(?,?,?,?,?,'active',0)", id, b.service!, safeText(b.title!), b.starts!, b.ends!)
       hub.store.audit('maintenance.create', id, now)
-      enqueue(hub.store, `${id}:created`, 'announcements', `计划维护：${safeText(b.title!)}\n开始：${new Date(b.starts!).toISOString()}\n结束：${new Date(b.ends!).toISOString()}`, now, null, b.ends!)
+      enqueue(hub.store, `${id}:created`, 'announcements', maintenanceAnnouncement(b.title, config.services.find(s => s.id === b.service)!.name, b.starts, b.ends), now, null, b.ends)
     })
     return { id }
   })
   ui.post<{ Params: { id: string }; Body: { action?: string; ends?: number } }>('/api/v1/admin/maintenance/:id', async (req, reply) => {
-    const row = hub.store.get<{ automatic: number; service: string; starts: number; state: string }>('SELECT * FROM maintenance WHERE id=?', req.params.id)
+    const row = hub.store.get<{ automatic: number; service: string; title: string; starts: number; state: string }>('SELECT * FROM maintenance WHERE id=?', req.params.id)
     if (!row || row.automatic || row.state !== 'active') return reply.code(409).send({ error: '自动或已结束的维护不可修改' })
     const action = req.body?.action; const now = Date.now()
-    if (!['postpone','cancel','end'].includes(action ?? '')) return reply.code(400).send({ error: '无效操作' })
+    if (action !== 'postpone' && action !== 'cancel' && action !== 'end') return reply.code(400).send({ error: '无效操作' })
     if (action === 'end') {
       const observed = hub.status(now).services.find(s => s.id === row.service)
       const sample = hub.store.get<{ recovery_since: number | null }>('SELECT recovery_since FROM observations WHERE service=?', row.service)
@@ -88,19 +102,19 @@ export async function createServers(hub: Hub, fresh: (alert: Alert) => boolean, 
       else hub.store.run('UPDATE maintenance SET state=? WHERE id=?', action === 'end' ? 'ended' : 'cancelled', req.params.id)
       hub.store.run("UPDATE deliveries SET state='superseded' WHERE dedupe=? AND state IN ('pending','dead')", `${req.params.id}:created`)
       hub.store.audit(`maintenance.${action}`, req.params.id, now)
-      enqueue(hub.store, `${req.params.id}:${action}:${now}`, 'announcements', `维护安排${action === 'postpone' ? '已延期' : action === 'end' ? '已结束，服务恢复' : '已取消'}。`, now)
+      enqueue(hub.store, `${req.params.id}:${action}:${now}`, 'announcements', maintenanceChange(action, row.title, req.body.ends), now)
     })
     return { ok: true }
   })
-  ui.post<{ Body: { text?: string } }>('/api/v1/admin/preview', async req => ({ text: safeText(String(req.body?.text ?? '')).slice(0, 1000) }))
+  ui.post<{ Body: MaintenanceBody }>('/api/v1/admin/preview', async (req, reply) => {
+    const body = req.body
+    if (!validateMaintenance(body, Date.now())) return reply.code(400).send({ error: maintenanceError })
+    return { text: maintenanceAnnouncement(body.title, config.services.find(s => s.id === body.service)!.name, body.starts, body.ends) }
+  })
   ingress.removeContentTypeParser('application/json')
   ingress.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => done(null, body))
   ingress.get('/healthz', async () => ({ status: 'UP', monitoring: monitoringReady() ? 'UP' : 'UNKNOWN' }))
-  ingress.get('/metrics', async (_req, reply) => {
-    const pending = hub.store.get<{ n: number }>("SELECT count(*) n FROM deliveries WHERE state='pending'")!.n
-    const dead = hub.store.get<{ n: number }>("SELECT count(*) n FROM deliveries WHERE state='dead'")!.n
-    return reply.type('text/plain').send(`monitor_delivery_pending ${pending}\nmonitor_delivery_dead ${dead}\nmonitor_discovery_success ${discovery() ? 1 : 0}\nmonitor_process_timestamp_seconds ${Date.now()/1000}\n`)
-  })
+  ingress.get('/metrics', async (_req, reply) => reply.type('text/plain').send(renderMetrics(hub, discovery())))
   ingress.post('/internal/v1/events', async (req, reply) => {
     try {
       const body = String(req.body)
