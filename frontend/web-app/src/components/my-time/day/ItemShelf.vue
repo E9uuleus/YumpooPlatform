@@ -4,9 +4,13 @@ import { ElButton, ElCheckbox, ElIcon, ElInput, ElPopover } from 'element-plus'
 import { FolderOpened, Plus, Search, User } from '@element-plus/icons-vue'
 import { ListTimerCandidatesScopeEnum } from '@yumpoo/api-client'
 import { useTimerCandidates } from '../../../composables/useTimerCandidates'
+import { useInfiniteSentinel } from '../../../composables/useInfiniteSentinel'
+import { useHideCompleted } from '../../../composables/useHideCompleted'
+import HideCompletedSwitch from '../../timer/HideCompletedSwitch.vue'
 import '../../projects/workItemAccentBar.css'
 import { workItemLabelColorValue } from '../../projects/workItemLabelColors'
 import YpSegmented from '../../yp/YpSegmented.vue'
+import { categoryOf, matchCategories } from '../../timer/timeCategories'
 import { durationLabel, HOUR, MIN_BLOCK_MS, MINUTE, parseDuration, type ItemTotal } from './dayModel'
 import { draggedItem, SHELF_DRAG_TYPE, type ShelfItem } from './shelfDrag'
 
@@ -14,35 +18,45 @@ const props = defineProps<{ totals: ItemTotal[]; busy: boolean }>()
 const emit = defineEmits<{ place: [item: ShelfItem, durationMs: number]; preview: [item: ShelfItem | null, durationMs: number] }>()
 
 const presets = [30 * MINUTE, HOUR, 2 * HOUR, 4 * HOUR]
-const { query, scope, items, loading, problem, nextOffset, searching, load } = useTimerCandidates(ref(true))
+const mine = ref(false)
+const projects = ref(new Map<string, string>())
+const { query, scope, items, projectCounts, hiddenCount, loading, problem, nextOffset, searching, load } = useTimerCandidates(ref(true), {
+  projects: computed(() => [...projects.value.keys()]), assignedToMe: mine,
+})
+const { hideCompleted } = useHideCompleted()
+const list = ref<HTMLElement>()
+const sentinel = ref<HTMLElement>()
+useInfiniteSentinel(list, sentinel, () => items.value.length,
+  () => nextOffset.value !== null && !loading.value && !problem.value, () => load(true))
 const scopes = computed(() => [
   { value: ListTimerCandidatesScopeEnum.Personal, label: '最近与我的', disabled: searching.value },
   { value: ListTimerCandidatesScopeEnum.All, label: '全部', disabled: searching.value },
 ])
-const mine = ref(false)
-const projects = ref(new Map<string, string>())
 const projectOptions = computed(() => {
-  const options = new Map<string, { id: string; name: string; count: number }>()
-  for (const [id, name] of projects.value) options.set(id, { id, name, count: 0 })
-  for (const item of items.value) {
-    const option = options.get(item.projectId) ?? { id: item.projectId, name: item.projectName, count: 0 }
-    option.name = item.projectName
-    option.count++
-    options.set(item.projectId, option)
-  }
-  return [...options.values()].sort((a, b) => b.count - a.count)
+  const options = projectCounts.value.map(item => ({ id: item.projectId, name: item.projectName, count: item.count }))
+  for (const [id, name] of projects.value) if (!options.some(option => option.id === id)) options.push({ id, name, count: 0 })
+  return options
 })
 const filtering = computed(() => searching.value || scope.value !== ListTimerCandidatesScopeEnum.Personal || mine.value || projects.value.size > 0)
-const recorded = computed(() => new Set(props.totals.map(item => item.workItemId)))
+const recorded = computed(() => new Set(props.totals.map(item => item.key)))
 const candidates = computed<ShelfItem[]>(() => items.value
-  .filter(item => (filtering.value || !recorded.value.has(item.workItemId)) && (!mine.value || item.assignedToMe)
-    && (!projects.value.size || projects.value.has(item.projectId)))
-  .map(item => ({ workItemId: item.workItemId, title: item.title, itemNo: item.itemNo, projectName: item.projectName,
-    colorToken: item.contentColorToken ?? null })))
+  .filter(item => filtering.value || !recorded.value.has(item.workItemId))
+  .map(item => ({ key: item.workItemId, title: item.title, itemNo: item.itemNo, projectName: item.projectName,
+    colorToken: item.contentColorToken ?? null, completed: item.completed })))
+/** Categories stay at hand above the work items; with exactly one project filtered they are recorded against it. */
+const categoryProject = computed(() => projects.value.size === 1 ? [...projects.value.keys()][0]! : null)
+const categories = computed<ShelfItem[]>(() => mine.value ? [] : matchCategories(query.value, categoryProject.value)
+  .filter(option => filtering.value || !recorded.value.has(option.key))
+  .map(option => ({ key: option.key, title: option.label, itemNo: null, projectName: null, colorToken: option.colorToken })))
 interface ShelfSection { key: string; title: string; list: (ShelfItem & { ms?: number | undefined })[] }
-const sections = computed<ShelfSection[]>(() => filtering.value
-  ? [{ key: 'result', title: searching.value ? '搜索结果' : '筛选结果', list: candidates.value }]
-  : [{ key: 'today', title: '今天已记录', list: props.totals }, { key: 'recent', title: '最近与我的', list: candidates.value }])
+const sections = computed<ShelfSection[]>(() => {
+  const fixed = categories.value.length ? [{ key: 'fixed', title: '通用工时', list: categories.value }] : []
+  return filtering.value
+    ? [...fixed, { key: 'result', title: searching.value ? '搜索结果' : '筛选结果', list: candidates.value }]
+    : [{ key: 'today', title: '今天已记录', list: props.totals }, ...fixed, { key: 'recent', title: '最近与我的', list: candidates.value }]
+})
+const listsWorkItems = (key: string) => key === 'result' || key === 'recent'
+const iconOf = (item: ShelfItem) => categoryOf(item.key)?.icon
 function toggleProject(id: string, name: string) {
   const next = new Map(projects.value)
   if (!next.delete(id)) next.set(id, name)
@@ -68,12 +82,12 @@ const customMs = computed(() => {
 })
 
 function open(item: ShelfItem, visible: boolean) {
-  if (visible) { openFor.value = item.workItemId; custom.value = '' }
-  else if (openFor.value === item.workItemId) { openFor.value = undefined; emit('preview', null, 0) }
+  if (visible) { openFor.value = item.key; custom.value = '' }
+  else if (openFor.value === item.key) { openFor.value = undefined; emit('preview', null, 0) }
 }
 function place(item: ShelfItem, durationMs: number | null) {
   if (!durationMs || props.busy) return
-  popovers.get(item.workItemId)?.hide()
+  popovers.get(item.key)?.hide()
   emit('preview', null, 0)
   emit('place', item, durationMs)
 }
@@ -83,8 +97,8 @@ const dragging = ref<string>()
 function dragStart(item: ShelfItem, event: DragEvent) {
   if (props.busy) { event.preventDefault(); return }
   draggedItem.value = item
-  dragging.value = item.workItemId
-  event.dataTransfer?.setData(SHELF_DRAG_TYPE, item.workItemId)
+  dragging.value = item.key
+  event.dataTransfer?.setData(SHELF_DRAG_TYPE, item.key)
   event.dataTransfer?.setData('text/plain', item.title)
   if (event.dataTransfer) event.dataTransfer.effectAllowed = 'copy'
 }
@@ -96,6 +110,7 @@ const color = (item: ShelfItem) => ({ '--work-item-accent': workItemLabelColorVa
   <aside
     class="item-shelf"
     aria-label="工作项"
+    data-tour="day-shelf"
   >
     <header class="item-shelf__head">
       <div class="item-shelf__heading">
@@ -105,10 +120,10 @@ const color = (item: ShelfItem) => ({ '--work-item-accent': workItemLabelColorVa
       <el-input
         v-model="query"
         :prefix-icon="Search"
-        placeholder="搜索工作项或项目"
+        placeholder="搜索工作项、项目或分类"
         maxlength="200"
         clearable
-        aria-label="搜索工作项"
+        aria-label="搜索工作项或分类"
       />
       <div
         class="item-shelf__filters"
@@ -175,7 +190,7 @@ const color = (item: ShelfItem) => ({ '--work-item-accent': workItemLabelColorVa
               v-if="!projectOptions.length"
               class="item-shelf__empty"
             >
-              当前列表中没有项目
+              没有可记录的项目
             </p>
           </div>
         </el-popover>
@@ -189,13 +204,22 @@ const color = (item: ShelfItem) => ({ '--work-item-accent': workItemLabelColorVa
         </button>
       </div>
     </header>
-    <div class="item-shelf__body">
+    <div
+      ref="list"
+      class="item-shelf__body"
+    >
       <section
         v-for="section in sections"
         :key="section.key"
         class="item-shelf__section"
       >
-        <h3>{{ section.title }}<small v-if="section.list.length">{{ section.list.length }}</small></h3>
+        <div class="item-shelf__section-head">
+          <h3>{{ section.title }}<small v-if="section.list.length">{{ section.list.length }}</small></h3>
+          <HideCompletedSwitch
+            v-if="listsWorkItems(section.key)"
+            :hidden-count="hiddenCount"
+          />
+        </div>
         <p
           v-if="section.key === 'today' && !totals.length"
           class="item-shelf__empty"
@@ -205,9 +229,10 @@ const color = (item: ShelfItem) => ({ '--work-item-accent': workItemLabelColorVa
         <ul v-else>
           <li
             v-for="item in section.list"
-            :key="item.workItemId"
+            :key="item.key"
             class="item-shelf__row work-item-accent-bar"
-            :class="{ 'is-open': openFor === item.workItemId, 'is-draggable': canDrag && !busy, 'is-dragging': dragging === item.workItemId }"
+            :class="{ 'is-open': openFor === item.key, 'is-draggable': canDrag && !busy, 'is-dragging': dragging === item.key,
+                      'is-completed': hideCompleted && item.completed, 'is-category': !!iconOf(item) }"
             :style="color(item)"
             :draggable="canDrag && !busy"
             :title="canDrag ? '拖到空白处补录，拖到已有卡片按其时段添加并行工作项' : undefined"
@@ -219,16 +244,25 @@ const color = (item: ShelfItem) => ({ '--work-item-accent': workItemLabelColorVa
               class="item-shelf__grip"
               aria-hidden="true"
             />
+            <el-icon
+              v-if="iconOf(item)"
+              class="item-shelf__icon"
+              aria-hidden="true"
+            ><component :is="iconOf(item)" /></el-icon>
             <span class="item-shelf__text">
               <strong>{{ item.title }}</strong>
               <small v-if="item.projectName">{{ item.projectName }}</small>
             </span>
             <span
+              v-if="hideCompleted && item.completed"
+              class="item-shelf__done"
+            >已完成</span>
+            <span
               v-if="item.ms !== undefined"
               class="item-shelf__ms"
             >{{ durationLabel(item.ms) }}</span>
             <el-popover
-              :ref="popover => register(item.workItemId, popover)"
+              :ref="popover => register(item.key, popover)"
               trigger="click"
               :persistent="false"
               placement="right-start"
@@ -245,7 +279,7 @@ const color = (item: ShelfItem) => ({ '--work-item-accent': workItemLabelColorVa
                   class="item-shelf__add"
                   :icon="Plus"
                   :aria-label="`按时长补录 ${item.title}`"
-                  :aria-expanded="openFor === item.workItemId"
+                  :aria-expanded="openFor === item.key"
                 />
               </template>
               <div class="shelf-duration">
@@ -275,15 +309,15 @@ const color = (item: ShelfItem) => ({ '--work-item-accent': workItemLabelColorVa
             </el-popover>
           </li>
         </ul>
-        <template v-if="section.key !== 'today'">
+        <template v-if="listsWorkItems(section.key)">
           <p
-            v-if="loading"
+            v-if="loading && !items.length"
             class="item-shelf__empty"
           >
             正在加载…
           </p>
           <p
-            v-else-if="problem"
+            v-else-if="problem && !items.length"
             class="item-shelf__empty"
             role="alert"
           >
@@ -301,14 +335,31 @@ const color = (item: ShelfItem) => ({ '--work-item-accent': workItemLabelColorVa
           >
             {{ filtering ? '没有匹配的工作项' : '输入关键字搜索全部工作项' }}
           </p>
-          <el-button
-            v-if="!loading && !problem && nextOffset !== null"
-            text
-            size="small"
-            @click="load(true)"
+          <p
+            v-if="loading && items.length"
+            class="item-shelf__status"
           >
-            加载更多
-          </el-button>
+            正在加载更多工作项…
+          </p>
+          <p
+            v-else-if="problem && items.length"
+            class="item-shelf__status"
+            role="alert"
+          >
+            加载更多失败<el-button
+              text
+              size="small"
+              @click="load(true)"
+            >
+              重试
+            </el-button>
+          </p>
+          <div
+            v-if="nextOffset !== null"
+            :ref="el => sentinel = (el as HTMLElement | null) ?? undefined"
+            class="item-shelf-sentinel"
+            aria-hidden="true"
+          />
         </template>
       </section>
     </div>
@@ -328,13 +379,18 @@ const color = (item: ShelfItem) => ({ '--work-item-accent': workItemLabelColorVa
 .item-shelf__clear{margin-left:auto;padding:4px 8px;border:0;border-radius:var(--yp-radius-sm);background:transparent;color:var(--yp-action-primary);font:13px var(--yp-font-family);cursor:pointer}
 .item-shelf__clear:hover{background:var(--yp-bg-hover)}
 .item-shelf__body{display:flex;flex-direction:column;gap:16px;min-height:0;overflow:auto;padding:12px 14px 14px;overscroll-behavior:contain}
-.item-shelf__section h3{display:flex;align-items:center;gap:6px;margin:0 0 8px;color:var(--yp-text-secondary);font-size:13px;font-weight:600}
+.item-shelf__section-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 8px}
+.item-shelf__section h3{display:flex;align-items:center;gap:6px;margin:0;color:var(--yp-text-secondary);font-size:13px;font-weight:600}
 .item-shelf__section h3 small{color:var(--yp-text-muted);font:500 12px var(--yp-font-mono)}
 .item-shelf__section ul{display:grid;gap:6px;margin:0;padding:0;list-style:none}
 .item-shelf__empty{margin:0;color:var(--yp-text-muted);font-size:13px;line-height:20px}
+.item-shelf__status{margin:6px 0;color:var(--yp-text-muted);font-size:12px;text-align:center}
+.item-shelf-sentinel{height:1px}
 .item-shelf__row{display:flex;align-items:center;gap:8px;min-height:52px;padding:6px 6px 6px 16px;border:1px solid var(--yp-monday-grid-border);border-radius:var(--yp-radius-sm);background:var(--yp-bg-surface);box-shadow:var(--yp-shadow-card);transition:box-shadow var(--yp-motion-fast) ease-out,border-color var(--yp-motion-fast) ease-out,opacity var(--yp-motion-fast) ease-out}
 .item-shelf__row.work-item-accent-bar::before{top:-1px;bottom:-1px;left:-1px}
 .item-shelf__row:hover,.item-shelf__row.is-open{border-color:color-mix(in srgb,var(--work-item-accent) 45%,var(--yp-monday-grid-border));box-shadow:var(--yp-shadow-hover)}
+.item-shelf__row.is-category{min-height:40px}
+.item-shelf__icon{flex:none;color:var(--work-item-accent);font-size:16px}
 .item-shelf__row.is-draggable{cursor:grab}
 .item-shelf__row.is-draggable:active{cursor:grabbing}
 .item-shelf__row.is-dragging{border-style:dashed;box-shadow:none;opacity:.45}
@@ -343,6 +399,9 @@ const color = (item: ShelfItem) => ({ '--work-item-accent': workItemLabelColorVa
 .item-shelf__text{display:grid;flex:1;min-width:0;gap:2px}
 .item-shelf__text strong{overflow:hidden;color:var(--yp-text-primary);font-size:14px;font-weight:500;line-height:20px;white-space:nowrap;text-overflow:ellipsis}
 .item-shelf__text small{overflow:hidden;color:var(--yp-text-secondary);font-size:13px;line-height:18px;white-space:nowrap;text-overflow:ellipsis}
+.item-shelf__row.is-completed .item-shelf__text{opacity:.5}
+.item-shelf__row.is-completed .item-shelf__text strong{text-decoration:line-through}
+.item-shelf__done{flex:none;padding:1px 6px;border-radius:var(--yp-radius-pill);background:var(--yp-bg-hover);color:var(--yp-text-muted);font-size:12px;line-height:16px}
 .item-shelf__ms{flex:none;color:var(--yp-text-primary);font:600 13px var(--yp-font-mono);font-variant-numeric:tabular-nums}
 .item-shelf__add{flex:none;opacity:.55}
 .item-shelf__row:hover .item-shelf__add,.item-shelf__row.is-open .item-shelf__add,.item-shelf__add:focus-visible{opacity:1}

@@ -18,9 +18,7 @@ Status: implemented
 
 `YumpooServerApplicationIT.registeredOutboxSubscriptionsMatchCurrentContractsAndExcludeRetiredVersions` 从实际应用上下文枚举全部 `OutboxEventConsumer` 的订阅，每个类型与版本必须存在于当前 catalog，且不得出现在退役清单。该运行时回归补足类型字面量扫描的版本边界，防止有效类型继续订阅已退役的旧版本。
 
-产品删除令 M2-03、M2-07、M2-24 的实现片段检查失效，沿用类别重构先例纳入 [historical-assets](../../../../tools/ci/historical-assets.mjs)。M2-03/07 要求历史 PASS；M2-24 保留原报告 VERIFIED、V45 和全部成功检查的语义，其专属规则由历史检查模块提供给通用报告校验器。三个旧完整命令及其 :assets 入口统一只校验历史记录，输出明确指向 ci:static 与 ci:backend 的当前回归入口。历史报告与非空验收矩阵只证明当时验收，当前行为继续由契约、迁移、后端全量回归和前端测试负责。历史 evidence 不修改；未受影响的当前资产门禁保留。
 
-统一项目模型同样将 M2-01/04/06 的模板、创建与激活片段检查转入历史校验。M2-01 保留报告 PASS 与非空 verifiedRequirements，M2-04/06 保留 PASS 与非空 verifiedSlices；不得把不同验收字段互相替代。归档、恢复与 blocker 协议等未失效的 M2-08 继续校验当前实现。
 
 ## Alternatives considered
 
@@ -36,4 +34,4 @@ Status: implemented
 
 退役与 schema、样例删除必须同一变更交付，并提供可追溯的实施决定。以后仍要恢复同名同版本事件时，不能修改或撤回旧退役条目，应先评审新版本契约及生产与消费迁移责任。类型级源码禁令仅适用于全部版本退役。OpenAPI 删除仍独立遵循精确 SHA-256 例外，事件退役不会放宽 HTTP 兼容检查。
 
-测试覆盖已登记退役、未登记缺失、冻结事件禁止退役、当前目录与遗留文件拒绝、退役记录改写/删除/重排，以及 Note 正常归档不改清单、归档错位或缺失、生产者/订阅/常量重现、扫描范围和根目录缺失。历史验收测试继续拒绝错误状态、失败检查与空矩阵，并实际执行六个旧命令确认仅校验历史记录。当前生产者、Activity 订阅和冻结事件盘点继续参加完整 CI。
+测试覆盖已登记退役、未登记缺失、冻结事件禁止退役、当前目录与遗留文件拒绝、退役记录改写/删除/重排，以及 Note 正常归档不改清单、归档错位或缺失、生产者/订阅/常量重现、扫描范围和根目录缺失。里程碑脚本与历史 evidence 校验已退役，历史记录由 Git 保留。当前生产者、Activity 订阅和冻结事件盘点继续参加完整 CI。

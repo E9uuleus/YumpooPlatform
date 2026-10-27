@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 270" role="img" aria-label="交付流水线：feature 分支经 PR 合入 dev，dev 经晋升 PR 合入 main，main 生成草稿 Release，Publish 后自动部署；hotfix 合入 main 后经 backmerge 回到 dev">
+  <defs>
+    <marker id="dp-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path class="dg-arrow" d="M0 0 10 5 0 10z"/>
+    </marker>
+  </defs>
+  <rect class="dg-node" x="10" y="40" width="96" height="44" rx="10"/>
+  <text class="dg-label" x="58" y="67" text-anchor="middle">feature/*</text>
+  <rect class="dg-node" x="128" y="40" width="104" height="44" rx="10"/>
+  <text class="dg-label" x="180" y="60" text-anchor="middle">PR</text>
+  <text class="dg-muted" x="180" y="76" text-anchor="middle">CI + 审查</text>
+  <rect class="dg-node dg-node--accent" x="254" y="40" width="80" height="44" rx="10"/>
+  <text class="dg-label" x="294" y="67" text-anchor="middle">dev</text>
+  <rect class="dg-node" x="356" y="40" width="100" height="44" rx="10"/>
+  <text class="dg-label" x="406" y="67" text-anchor="middle">晋升 PR</text>
+  <rect class="dg-node dg-node--accent" x="478" y="40" width="80" height="44" rx="10"/>
+  <text class="dg-label" x="518" y="67" text-anchor="middle">main</text>
+  <rect class="dg-node" x="580" y="40" width="170" height="44" rx="10"/>
+  <text class="dg-label" x="665" y="60" text-anchor="middle">草稿 Release</text>
+  <text class="dg-muted" x="665" y="76" text-anchor="middle">Prepare Release 生成</text>
+
+  <rect class="dg-node dg-node--accent" x="580" y="130" width="170" height="44" rx="10"/>
+  <text class="dg-label" x="665" y="150" text-anchor="middle">Publish</text>
+  <text class="dg-muted" x="665" y="166" text-anchor="middle">即上线决定</text>
+  <rect class="dg-node" x="356" y="130" width="200" height="44" rx="10"/>
+  <text class="dg-label" x="456" y="150" text-anchor="middle">自动部署</text>
+  <text class="dg-muted" x="456" y="166" text-anchor="middle">维护 → 备份 → 切换 → 验证 → 开放</text>
+
+  <rect class="dg-node" x="356" y="210" width="100" height="44" rx="10"/>
+  <text class="dg-label" x="406" y="237" text-anchor="middle">hotfix/*</text>
+  <rect class="dg-node" x="128" y="210" width="140" height="44" rx="10"/>
+  <text class="dg-label" x="198" y="237" text-anchor="middle">backmerge/*</text>
+
+  <path class="dg-edge" d="M106 62 L 128 62" marker-end="url(#dp-arrow)"/>
+  <path class="dg-edge" d="M232 62 L 254 62" marker-end="url(#dp-arrow)"/>
+  <path class="dg-edge" d="M334 62 L 356 62" marker-end="url(#dp-arrow)"/>
+  <path class="dg-edge" d="M456 62 L 478 62" marker-end="url(#dp-arrow)"/>
+  <path class="dg-edge" d="M558 62 L 580 62" marker-end="url(#dp-arrow)"/>
+  <path class="dg-edge" d="M665 84 L 665 130" marker-end="url(#dp-arrow)"/>
+  <path class="dg-edge" d="M580 152 L 556 152" marker-end="url(#dp-arrow)"/>
+  <path class="dg-edge dg-edge--muted" d="M406 210 C 406 120, 500 110, 510 84" marker-end="url(#dp-arrow)"/>
+  <path class="dg-edge dg-edge--muted" d="M356 232 L 268 232" marker-end="url(#dp-arrow)"/>
+  <path class="dg-edge dg-edge--muted" d="M198 210 C 198 140, 280 120, 290 84" marker-end="url(#dp-arrow)"/>
+  <text class="dg-muted" x="470" y="200">失败自动回滚</text>
+</svg>

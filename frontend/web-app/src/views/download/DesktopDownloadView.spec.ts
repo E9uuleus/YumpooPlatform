@@ -64,7 +64,7 @@ describe('desktop download page', () => {
       expect(details.exists()).toBe(true)
       expect(details.attributes('open')).toBeUndefined()
       expect(details.find('summary').text()).toBe('安装说明与隐私')
-      for (const fact of ['不需要管理员权限', '%LOCALAPPDATA%\\Programs\\YumpooDesktop', '不设置开机自启', 'redirector.gvt1.com', 'DPAPI', '不能关闭', '只保留计时器与提醒偏好']) {
+      for (const fact of ['不需要管理员权限', '%LOCALAPPDATA%\\Programs\\YumpooDesktop', '默认不开机自启', 'redirector.gvt1.com', 'DPAPI', '可在偏好设置中关闭自动下载', '只保留计时器、提醒与桌面偏好']) {
         expect(details.text()).toContain(fact)
       }
     }

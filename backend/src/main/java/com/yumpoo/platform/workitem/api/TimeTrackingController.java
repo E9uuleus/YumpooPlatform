@@ -32,9 +32,12 @@ public class TimeTrackingController {
     @GetMapping("/me/time-tracker/candidates")
     ResponseEntity<TimerCandidatePage> candidates(@RequestParam(required=false) String q,
             @RequestParam(defaultValue="PERSONAL") String scope, @RequestParam(defaultValue="0") int offset,
-            @RequestParam(defaultValue="25") int limit) {
+            @RequestParam(defaultValue="25") int limit,
+            @RequestParam(name="projectId", required=false) List<UUID> projectIds,
+            @RequestParam(defaultValue="false") boolean assignedToMe,
+            @RequestParam(defaultValue="false") boolean excludeCompleted) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(service.candidates(actors.requiredActive(), q, scope, offset, limit));
+                .body(service.candidates(actors.requiredActive(), q, scope, offset, limit, projectIds, assignedToMe, excludeCompleted));
     }
     @GetMapping("/projects/{projectId}/time-tracking-summaries")
     ResponseEntity<SummaryPage> summaries(@PathVariable UUID projectId,@RequestParam List<UUID> workItemId) {
@@ -64,10 +67,22 @@ public class TimeTrackingController {
         var actor=actors.requiredActive();
         if(body.workItemId()!=null) service.history(actor,body.workItemId(),null,false);
         long expected=matches.parseForVisibleResource(true,match);
-        var result=service.reassign(actor,sessionId,body.workItemId(),expected,keys.parseRequired(key),
+        var result=service.reassign(actor,sessionId,body,expected,keys.parseRequired(key),
                 hasher.hash("timeTracking:reassign",Map.of("sessionId",sessionId.toString(),"ifMatch",match==null ? "" : match),json.valueToTree(body)));
         return ResponseEntity.status(result.httpStatus()).contentType(MediaType.APPLICATION_JSON)
                 .cacheControl(CacheControl.noStore()).body(result.responseJson());
+    }
+    @PatchMapping("/me/time-sessions/{sessionId}")
+    ResponseEntity<String> editOwn(@PathVariable UUID sessionId,@RequestBody Input body,
+            @RequestHeader(name=IfMatchParser.HEADER_NAME,required=false) String match,
+            @RequestHeader(name=IdempotencyKeyParser.HEADER_NAME,required=false) String key) {
+        return ownSession("edit",sessionId,new Input(null,sessionId,body.startedAt(),body.stoppedAt(),body.reason(),null,null,null,null,null),match,key);
+    }
+    @DeleteMapping("/me/time-sessions/{sessionId}")
+    ResponseEntity<String> deleteOwn(@PathVariable UUID sessionId,@RequestBody Input body,
+            @RequestHeader(name=IfMatchParser.HEADER_NAME,required=false) String match,
+            @RequestHeader(name=IdempotencyKeyParser.HEADER_NAME,required=false) String key) {
+        return ownSession("delete",sessionId,new Input(null,sessionId,null,null,body.reason(),null,null,null,null,null),match,key);
     }
     @PostMapping("/me/time-tracker/start")
     ResponseEntity<String> start(@RequestBody Input body,
@@ -90,7 +105,7 @@ public class TimeTrackingController {
     @PostMapping("/me/time-tracker/stop-all")
     ResponseEntity<String> stopAll(@RequestHeader(name=IfMatchParser.HEADER_NAME,required=false) String match,
             @RequestHeader(name=IdempotencyKeyParser.HEADER_NAME,required=false) String key) {
-        return command("stopAll",new Input(null,null,null,null,null,null),match,key);
+        return command("stopAll",new Input(null,null,null,null,null,null,null,null,null,null),match,key);
     }
     @PutMapping("/me/time-tracker/preferences")
     ResponseEntity<String> preferences(@RequestBody TimeTrackingPreferencesCommand body,
@@ -106,19 +121,27 @@ public class TimeTrackingController {
     @PostMapping("/work-items/{workItemId}/time-sessions")
     ResponseEntity<String> create(@PathVariable UUID workItemId,@RequestBody Input body,
             @RequestHeader(name=IdempotencyKeyParser.HEADER_NAME,required=false) String key) {
-        return command("create",new Input(workItemId,null,body.startedAt(),body.stoppedAt(),body.reason(),null),null,key);
+        return command("create",new Input(workItemId,null,body.startedAt(),body.stoppedAt(),body.reason(),null,null,null,null,null),null,key);
     }
     @PatchMapping("/work-items/{workItemId}/time-sessions/{sessionId}")
     ResponseEntity<String> edit(@PathVariable UUID workItemId,@PathVariable UUID sessionId,@RequestBody Input body,
             @RequestHeader(name=IfMatchParser.HEADER_NAME,required=false) String match,
             @RequestHeader(name=IdempotencyKeyParser.HEADER_NAME,required=false) String key) {
-        return command("edit",new Input(workItemId,sessionId,body.startedAt(),body.stoppedAt(),body.reason(),null),match,key);
+        return command("edit",new Input(workItemId,sessionId,body.startedAt(),body.stoppedAt(),body.reason(),null,null,null,null,null),match,key);
     }
     @DeleteMapping("/work-items/{workItemId}/time-sessions/{sessionId}")
     ResponseEntity<String> delete(@PathVariable UUID workItemId,@PathVariable UUID sessionId,@RequestBody Input body,
             @RequestHeader(name=IfMatchParser.HEADER_NAME,required=false) String match,
             @RequestHeader(name=IdempotencyKeyParser.HEADER_NAME,required=false) String key) {
-        return command("delete",new Input(workItemId,sessionId,null,null,body.reason(),null),match,key);
+        return command("delete",new Input(workItemId,sessionId,null,null,body.reason(),null,null,null,null,null),match,key);
+    }
+    private ResponseEntity<String> ownSession(String action,UUID sessionId,Input input,String match,String key) {
+        var actor=actors.requiredActive();
+        long expected=matches.parseForVisibleResource(true,match);
+        var result=service.ownSession(actor,action,sessionId,input,expected,keys.parseRequired(key),
+                hasher.hash("timeTracking:"+action+"Own",Map.of("sessionId",sessionId.toString(),"ifMatch",match==null ? "" : match),json.valueToTree(input)));
+        return ResponseEntity.status(result.httpStatus()).contentType(MediaType.APPLICATION_JSON)
+                .cacheControl(CacheControl.noStore()).eTag(result.etag()).body(result.responseJson());
     }
     private ResponseEntity<String> command(String action,Input input,String match,String key) {
         var actor=actors.requiredActive();

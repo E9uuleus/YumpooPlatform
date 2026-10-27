@@ -1,0 +1,539 @@
+components:
+  schemas:
+    MyTimeSession:
+      type: object
+      additionalProperties: false
+      required:
+        - session
+        - projectName
+        - itemNo
+        - title
+        - contentColorToken
+      properties:
+        session:
+          $ref: "#/components/schemas/TimeTrackingSession"
+        projectName:
+          type: string
+          nullable: true
+        itemNo:
+          type: string
+          nullable: true
+        title:
+          type: string
+          nullable: true
+        contentColorToken:
+          type: string
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/WorkItemLabelColorToken"
+    MyTimeSessionPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - serverNow
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/MyTimeSession"
+        serverNow:
+          type: string
+          format: date-time
+    TimeCategory:
+      type: string
+      description: 固定工时分类：出差、学习、商务、会议；可选关联一个项目，但不关联工作项。
+      enum:
+        - BUSINESS_TRIP
+        - LEARNING
+        - BUSINESS
+        - MEETING
+    TimeCategorySubject:
+      type: object
+      additionalProperties: false
+      required:
+        - timeCategory
+      properties:
+        timeCategory:
+          $ref: "#/components/schemas/TimeCategory"
+        projectId:
+          type: string
+          format: uuid
+          nullable: true
+          description: 关联的项目；为 null 时不关联项目。
+    TimeSessionFillMode:
+      type: string
+      enum:
+        - PARALLEL
+        - REPLACE
+        - GAPS
+    TimeSessionFillEntry:
+      type: object
+      additionalProperties: false
+      description: workItemId 与 timeCategory 必须且只能填一个。
+      required:
+        - startedAt
+        - stoppedAt
+      properties:
+        categoryProjectId:
+          type: string
+          format: uuid
+          description: 仅与 timeCategory 一起使用，把分类记录关联到本人可写的项目。
+        workItemId:
+          type: string
+          format: uuid
+        timeCategory:
+          $ref: "#/components/schemas/TimeCategory"
+        startedAt:
+          type: string
+          format: date-time
+        stoppedAt:
+          type: string
+          format: date-time
+    TimeSessionFillCommand:
+      type: object
+      additionalProperties: false
+      required:
+        - mode
+        - entries
+      properties:
+        mode:
+          $ref: "#/components/schemas/TimeSessionFillMode"
+        entries:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/TimeSessionFillEntry"
+    TimeSessionFillResult:
+      type: object
+      additionalProperties: false
+      required:
+        - createdCount
+        - changedCount
+        - deletedCount
+        - skippedDurationMs
+      properties:
+        createdCount:
+          type: integer
+          format: int32
+          minimum: 0
+        changedCount:
+          type: integer
+          format: int32
+          minimum: 0
+        deletedCount:
+          type: integer
+          format: int32
+          minimum: 0
+        skippedDurationMs:
+          type: integer
+          format: int64
+          minimum: 0
+    TimeSessionReassignCommand:
+      type: object
+      additionalProperties: false
+      description: 目标工作项或非项目分类，workItemId 与 timeCategory 必须且只能填一个。
+      properties:
+        categoryProjectId:
+          type: string
+          format: uuid
+          description: 仅与 timeCategory 一起使用，把分类记录关联到本人可写的项目。
+        workItemId:
+          type: string
+          format: uuid
+        timeCategory:
+          $ref: "#/components/schemas/TimeCategory"
+    TimeTrackingCommand:
+      type: object
+      additionalProperties: false
+      properties:
+        categoryProjectId:
+          type: string
+          format: uuid
+          description: 仅与 timeCategory 一起使用，把分类记录关联到本人可写的项目。
+        workItemId:
+          type: string
+          format: uuid
+        workItemIds:
+          type: array
+          minItems: 1
+          maxItems: 10
+          description: 仅 start 使用，批量并行开始的工作项；与 timeCategories 合计最多 10 项。
+          items:
+            type: string
+            format: uuid
+        timeCategory:
+          $ref: "#/components/schemas/TimeCategory"
+        timeCategorySubjects:
+          type: array
+          minItems: 1
+          maxItems: 10
+          description: 仅 start 使用，批量开始可关联项目的分类；与 workItemIds、timeCategories 合计最多 10 项，同一分类只能出现一次。
+          items:
+            $ref: "#/components/schemas/TimeCategorySubject"
+        timeCategories:
+          type: array
+          minItems: 1
+          maxItems: 10
+          description: 仅 start 使用，批量并行开始的非项目分类；与 workItemIds 合计最多 10 项。
+          items:
+            $ref: "#/components/schemas/TimeCategory"
+        sessionId:
+          type: string
+          format: uuid
+        startedAt:
+          type: string
+          format: date-time
+        stoppedAt:
+          type: string
+          format: date-time
+        reason:
+          type: string
+          maxLength: 500
+    TimeTrackingSession:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - projectId
+        - workItemId
+        - userId
+        - displayName
+        - startedAt
+        - stoppedAt
+        - source
+        - durationMs
+        - rowVersion
+        - etag
+        - canEdit
+        - deleted
+        - changeReason
+        - allocatedDurationMs
+        - parallelItemCount
+        - workItemNo
+        - workItemTitle
+      properties:
+        categoryProjectId:
+          type: string
+          format: uuid
+          nullable: true
+          description: 分类记录关联的项目；工作项记录为 null
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+          nullable: true
+          description: 为 null 时，要么项目对调用者不可见，要么这是非项目分类记录（timeCategory 有值）。
+        workItemId:
+          type: string
+          format: uuid
+          nullable: true
+          description: 为 null 时，要么工作项对调用者不可见，要么这是非项目分类记录（timeCategory 有值）。
+        timeCategory:
+          type: string
+          nullable: true
+          description: 非项目分类记录的分类；工作项记录为 null。服务端总是返回。
+          allOf:
+            - $ref: "#/components/schemas/TimeCategory"
+        userId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+        stoppedAt:
+          type: string
+          format: date-time
+          nullable: true
+        source:
+          type: string
+          enum:
+            - TIMER
+            - MANUAL
+        durationMs:
+          type: integer
+          format: int64
+          minimum: 0
+        rowVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        etag:
+          type: string
+        canEdit:
+          type: boolean
+        deleted:
+          type: boolean
+        changeReason:
+          type: string
+          nullable: true
+        allocatedDurationMs:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 按并行均摊后的计入时长
+        parallelItemCount:
+          type: integer
+          format: int32
+          minimum: 0
+          description: 该记录期间本人同时计时的其他工作项与非项目分类数
+        workItemNo:
+          type: string
+          nullable: true
+          description: 记录属于子项时的工作项编号。
+        workItemTitle:
+          type: string
+          nullable: true
+          description: 记录属于子项时的工作项标题。
+    TimerCandidatePage:
+      type: object
+      required:
+        - items
+        - nextOffset
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/TimerCandidate"
+        nextOffset:
+          type: integer
+          nullable: true
+        projects:
+          type: array
+          description: 仅首段（offset=0）返回。按当前范围、搜索词、assignedToMe 和 excludeCompleted 统计，不受 projectId 限制；只含计数大于 0 的项目，按计数降序、项目名升序。
+          items:
+            $ref: "#/components/schemas/TimerCandidateProjectCount"
+        hiddenCompletedCount:
+          type: integer
+          minimum: 0
+          description: 仅首段返回。excludeCompleted 为 true 时被排除的已完成候选数（受 projectId 限制）；为 false 时为 0。
+    TimerCandidateProjectCount:
+      type: object
+      additionalProperties: false
+      required:
+        - projectId
+        - projectName
+        - count
+      properties:
+        projectId:
+          $ref: "#/components/schemas/Uuid"
+        projectName:
+          type: string
+        count:
+          type: integer
+          minimum: 1
+    TimerCandidate:
+      type: object
+      required:
+        - workItemId
+        - projectId
+        - projectName
+        - itemNo
+        - title
+        - contentName
+        - statusCategory
+        - completed
+        - assignedToMe
+        - lastTrackedAt
+        - ownDurationMs
+      properties:
+        workItemId:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        projectName:
+          type: string
+        itemNo:
+          type: string
+        title:
+          type: string
+        contentName:
+          type: string
+        contentCode:
+          type: string
+          description: 稳定的工作项类别代码，用于类别图标映射。
+        contentColorToken:
+          $ref: "#/components/schemas/WorkItemLabelColorToken"
+        statusCategory:
+          type: string
+        statusCode:
+          type: string
+          description: 工作项当前的项目状态代码。
+        statusName:
+          type: string
+          description: 项目配置的实际状态名称，不是状态分类名称。
+        statusColorToken:
+          $ref: "#/components/schemas/WorkItemLabelColorToken"
+        completed:
+          type: boolean
+          description: 按本人对该项目的完成定义计算；未设置定义时 DONE 与 CANCELED 两类状态视为完成。
+        assignedToMe:
+          type: boolean
+        lastTrackedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: 本人在该项最近一条计时或补录记录的开始时间。
+        ownDurationMs:
+          type: integer
+          format: int64
+          minimum: 0
+    RecentTimeTrackingItem:
+      type: object
+      additionalProperties: false
+      required:
+        - workItemId
+        - projectId
+        - title
+      properties:
+        workItemId:
+          $ref: "#/components/schemas/Uuid"
+        projectId:
+          $ref: "#/components/schemas/Uuid"
+        title:
+          type: string
+    CurrentRunningTimer:
+      type: object
+      additionalProperties: false
+      required:
+        - session
+        - workItemTitle
+      properties:
+        session:
+          $ref: "#/components/schemas/TimeTrackingSession"
+        workItemTitle:
+          type: string
+          nullable: true
+    TimeTrackingPreferences:
+      type: object
+      additionalProperties: false
+      required:
+        - timerEnabled
+        - workdayStartMinute
+        - workdayEndMinute
+      properties:
+        timerEnabled:
+          type: boolean
+          description: 是否使用计时器；默认 true。
+        workdayStartMinute:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 1439
+          description: 上班时间，公司时区当天第几分钟；默认 540（09:00）。
+        workdayEndMinute:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 1440
+          description: 下班时间，须晚于上班时间；默认 1080（18:00）。
+        hideCompleted:
+          type: boolean
+          description: 在工作项表格淡化、在计时与补录选择列表隐藏已完成项；默认 false。请求省略时保留原值，响应总是返回。
+    CurrentTimeTracker:
+      type: object
+      additionalProperties: false
+      required:
+        - session
+        - workItemTitle
+        - rowVersion
+        - etag
+        - serverNow
+        - recentItems
+        - runningSessions
+        - resumeItems
+        - resumeCategorySubjects
+        - preferences
+      properties:
+        preferences:
+          $ref: "#/components/schemas/TimeTrackingPreferences"
+        runningSessions:
+          type: array
+          description: 按 startedAt 降序排列的本人运行计时。
+          items:
+            $ref: "#/components/schemas/CurrentRunningTimer"
+        resumeItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecentTimeTrackingItem"
+        resumeCategorySubjects:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimeCategorySubject"
+        resumeCategories:
+          type: array
+          description: 与 resumeItems 同一批最近停止的非项目分类计时，按分类固定顺序排列。服务端总是返回。
+          items:
+            $ref: "#/components/schemas/TimeCategory"
+        recentItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecentTimeTrackingItem"
+        session:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/TimeTrackingSession"
+        workItemTitle:
+          type: string
+          nullable: true
+        rowVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        etag:
+          type: string
+        serverNow:
+          type: string
+          format: date-time
+    TimeTrackingSummaryPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - serverNow
+        - revision
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimeTrackingSummary"
+        serverNow:
+          type: string
+          format: date-time
+        revision:
+          type: integer
+          format: int64
+          minimum: 0
+    TimeTrackingSessionPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - nextCursor
+        - summary
+        - serverNow
+        - canCreate
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimeTrackingSession"
+        nextCursor:
+          type: string
+          nullable: true
+        summary:
+          $ref: "#/components/schemas/TimeTrackingSummary"
+        serverNow:
+          type: string
+          format: date-time
+        canCreate:
+          type: boolean

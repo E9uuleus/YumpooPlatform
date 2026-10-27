@@ -1,0 +1,119 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/verification/packaged-http-report.schema.json",
+  "title": "PACKAGED_HTTP external HTTP verification report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "milestone",
+    "status",
+    "gitSha",
+    "startedAt",
+    "completedAt",
+    "mode",
+    "provider",
+    "springProfiles",
+    "flywayVersion",
+    "checks"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "milestone": {
+      "const": "PACKAGED_HTTP"
+    },
+    "status": {
+      "const": "PASS"
+    },
+    "gitSha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "startedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "mode": {
+      "const": "EXTERNAL_HTTP"
+    },
+    "provider": {
+      "const": "CONTROLLED"
+    },
+    "springProfiles": {
+      "const": [
+        "local",
+        "m1-13-e2e"
+      ]
+    },
+    "flywayVersion": {
+      "type": "string",
+      "pattern": "^(?:1[4-9]|[2-9][0-9]|[1-9][0-9]{2,})$"
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "portsAvailable",
+        "freshPostgres",
+        "packagedJarReady",
+        "cleanMigrations",
+        "noProjectFacts",
+        "fixtureViaServices",
+        "spaPreview",
+        "controlledLogin",
+        "roleBoundary",
+        "logoutInvalidation",
+        "accountDisableInvalidation",
+        "disabledReloginRejected",
+        "secretsRedacted"
+      ],
+      "properties": {
+        "portsAvailable": {
+          "const": true
+        },
+        "freshPostgres": {
+          "const": true
+        },
+        "packagedJarReady": {
+          "const": true
+        },
+        "cleanMigrations": {
+          "const": true
+        },
+        "noProjectFacts": {
+          "const": true
+        },
+        "fixtureViaServices": {
+          "const": true
+        },
+        "spaPreview": {
+          "const": true
+        },
+        "controlledLogin": {
+          "const": true
+        },
+        "roleBoundary": {
+          "const": true
+        },
+        "logoutInvalidation": {
+          "const": true
+        },
+        "accountDisableInvalidation": {
+          "const": true
+        },
+        "disabledReloginRejected": {
+          "const": true
+        },
+        "secretsRedacted": {
+          "const": true
+        }
+      }
+    }
+  }
+}

@@ -218,11 +218,56 @@ code {
   background: var(--yp-bg-hover);
 }
 
-.client-badge {
-  padding: var(--yp-space-1) var(--yp-space-2);
-  color: var(--yp-text-muted);
-  font-size: var(--yp-type-caption-size);
-  white-space: nowrap;
+.app-topbar__actions {
+  gap: var(--yp-space-2);
+}
+
+.app-topbar__tools {
+  display: flex;
+  align-items: center;
+  gap: var(--yp-space-1);
+}
+
+.app-topbar__tool-wrap {
+  display: inline-flex;
+}
+
+.app-topbar__tool {
+  display: inline-grid;
+  width: var(--yp-control-height-small);
+  height: var(--yp-control-height-small);
+  padding: 0;
+  border: 0;
+  border-radius: var(--yp-radius-md);
+  background: transparent;
+  color: var(--yp-text-secondary);
+  cursor: pointer;
+  place-items: center;
+  transition: background-color var(--yp-motion-fast) var(--yp-ease-standard), color var(--yp-motion-fast) var(--yp-ease-standard);
+}
+
+.app-topbar__tool:hover:not(:disabled),
+.app-topbar__tool.is-active,
+.app-topbar__tool[aria-expanded="true"] {
+  background: var(--yp-bg-hover);
+  color: var(--yp-text-primary);
+}
+
+.app-topbar__tool:disabled {
+  color: var(--yp-text-disabled);
+  cursor: default;
+}
+
+.app-topbar__divider {
+  width: 1px;
+  height: 20px;
+  margin: 0 var(--yp-space-1);
+  background: var(--yp-border-subtle);
+}
+
+.app-topbar__actions .user-menu-trigger {
+  padding-inline: var(--yp-space-1) var(--yp-space-2);
+  border-radius: var(--yp-radius-pill);
 }
 
 .app-shell::after {
@@ -616,6 +661,33 @@ code {
   margin-top: var(--yp-space-4);
 }
 
+.login-card .login-action--secondary {
+  margin-top: var(--yp-space-2);
+  margin-left: 0;
+}
+
+.login-card .login-remember {
+  display: flex;
+  margin-top: var(--yp-space-3);
+}
+
+.login-help {
+  display: flex;
+  justify-content: center;
+  gap: var(--yp-space-4);
+  margin-top: var(--yp-space-4);
+  font-size: var(--yp-type-caption-size);
+}
+
+.login-help a {
+  color: var(--yp-text-secondary);
+  text-decoration: none;
+}
+
+.login-help a:hover {
+  color: var(--yp-link);
+}
+
 .status-page,
 .result-page {
   display: grid;
@@ -735,8 +807,6 @@ code {
 
 @media (max-width: 640px) {
   .app-topbar__label,
-  .client-badge,
-  .app-topbar__actions .yp-theme-trigger,
   .user-menu-trigger .yp-assignee__name {
     display: none;
   }

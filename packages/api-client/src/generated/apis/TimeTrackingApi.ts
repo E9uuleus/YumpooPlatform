@@ -61,8 +61,24 @@ export interface CreateTimeSessionRequest {
     timeTrackingCommand: TimeTrackingCommand;
 }
 
+export interface DeleteMyTimeSessionRequest {
+    sessionId: string;
+    xXSRFTOKEN: string;
+    idempotencyKey: string;
+    ifMatch: string;
+    timeTrackingCommand: TimeTrackingCommand;
+}
+
 export interface DeleteTimeSessionRequest {
     workItemId: string;
+    sessionId: string;
+    xXSRFTOKEN: string;
+    idempotencyKey: string;
+    ifMatch: string;
+    timeTrackingCommand: TimeTrackingCommand;
+}
+
+export interface EditMyTimeSessionRequest {
     sessionId: string;
     xXSRFTOKEN: string;
     idempotencyKey: string;
@@ -106,6 +122,9 @@ export interface ListTimerCandidatesRequest {
     scope?: ListTimerCandidatesScopeEnum;
     offset?: number;
     limit?: number;
+    projectId?: Array<string>;
+    assignedToMe?: boolean;
+    excludeCompleted?: boolean;
 }
 
 export interface ReassignMyTimeSessionRequest {
@@ -225,6 +244,88 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
+     * 适用于工作项记录与非项目分类记录；他人的记录返回 404。要求该记录最近读取的 If-Match，运行中或已删除的记录返回 409 SESSION_NOT_EDITABLE。
+     * 删除本人一条已结束的计时记录
+     */
+    async deleteMyTimeSessionRaw(requestParameters: DeleteMyTimeSessionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TimeTrackingSession>> {
+        if (requestParameters['sessionId'] == null) {
+            throw new runtime.RequiredError(
+                'sessionId',
+                'Required parameter "sessionId" was null or undefined when calling deleteMyTimeSession().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling deleteMyTimeSession().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling deleteMyTimeSession().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling deleteMyTimeSession().'
+            );
+        }
+
+        if (requestParameters['timeTrackingCommand'] == null) {
+            throw new runtime.RequiredError(
+                'timeTrackingCommand',
+                'Required parameter "timeTrackingCommand" was null or undefined when calling deleteMyTimeSession().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/me/time-sessions/{sessionId}`;
+        urlPath = urlPath.replace(`{${"sessionId"}}`, encodeURIComponent(String(requestParameters['sessionId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'DELETE',
+            headers: headerParameters,
+            query: queryParameters,
+            body: TimeTrackingCommandToJSON(requestParameters['timeTrackingCommand']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => TimeTrackingSessionFromJSON(jsonValue));
+    }
+
+    /**
+     * 适用于工作项记录与非项目分类记录；他人的记录返回 404。要求该记录最近读取的 If-Match，运行中或已删除的记录返回 409 SESSION_NOT_EDITABLE。
+     * 删除本人一条已结束的计时记录
+     */
+    async deleteMyTimeSession(requestParameters: DeleteMyTimeSessionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TimeTrackingSession> {
+        const response = await this.deleteMyTimeSessionRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
      * deleteTimeSession
      */
     async deleteTimeSessionRaw(requestParameters: DeleteTimeSessionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TimeTrackingSession>> {
@@ -309,6 +410,88 @@ export class TimeTrackingApi extends runtime.BaseAPI {
      */
     async deleteTimeSession(requestParameters: DeleteTimeSessionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TimeTrackingSession> {
         const response = await this.deleteTimeSessionRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 适用于工作项记录与非项目分类记录；他人的记录返回 404。要求该记录最近读取的 If-Match。运行中或已删除的记录返回 409 SESSION_NOT_EDITABLE；与同一工作项或分类的其他记录重叠返回 422 TIME_OVERLAP。
+     * 修改本人一条已结束的计时记录的时段
+     */
+    async editMyTimeSessionRaw(requestParameters: EditMyTimeSessionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TimeTrackingSession>> {
+        if (requestParameters['sessionId'] == null) {
+            throw new runtime.RequiredError(
+                'sessionId',
+                'Required parameter "sessionId" was null or undefined when calling editMyTimeSession().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling editMyTimeSession().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling editMyTimeSession().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling editMyTimeSession().'
+            );
+        }
+
+        if (requestParameters['timeTrackingCommand'] == null) {
+            throw new runtime.RequiredError(
+                'timeTrackingCommand',
+                'Required parameter "timeTrackingCommand" was null or undefined when calling editMyTimeSession().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/me/time-sessions/{sessionId}`;
+        urlPath = urlPath.replace(`{${"sessionId"}}`, encodeURIComponent(String(requestParameters['sessionId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'PATCH',
+            headers: headerParameters,
+            query: queryParameters,
+            body: TimeTrackingCommandToJSON(requestParameters['timeTrackingCommand']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => TimeTrackingSessionFromJSON(jsonValue));
+    }
+
+    /**
+     * 适用于工作项记录与非项目分类记录；他人的记录返回 404。要求该记录最近读取的 If-Match。运行中或已删除的记录返回 409 SESSION_NOT_EDITABLE；与同一工作项或分类的其他记录重叠返回 422 TIME_OVERLAP。
+     * 修改本人一条已结束的计时记录的时段
+     */
+    async editMyTimeSession(requestParameters: EditMyTimeSessionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TimeTrackingSession> {
+        const response = await this.editMyTimeSessionRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -401,7 +584,7 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
-     * 条目区间必须已结束，同一工作项的条目先求并集。PARALLEL 只补本项空白；REPLACE 裁剪本人可编辑的其他工作项记录后补本项空白；GAPS 只补本人没有任何记录的时段。补录不推进计时器状态版本。
+     * 条目区间必须已结束，每条指定一个工作项或一个非项目分类，同一工作项或分类的条目先求并集。PARALLEL 只补本项空白；REPLACE 裁剪本人可编辑的其他工作项与分类记录后补本项空白；GAPS 只补本人没有任何记录的时段。非项目分类不校验项目成员身份，只发安全审计、不发领域事件。补录不推进计时器状态版本。
      * 按并行、替换或空白模式补录本人工时
      */
     async fillMyTimeSessionsRaw(requestParameters: FillMyTimeSessionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TimeSessionFillResult>> {
@@ -455,7 +638,7 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
-     * 条目区间必须已结束，同一工作项的条目先求并集。PARALLEL 只补本项空白；REPLACE 裁剪本人可编辑的其他工作项记录后补本项空白；GAPS 只补本人没有任何记录的时段。补录不推进计时器状态版本。
+     * 条目区间必须已结束，每条指定一个工作项或一个非项目分类，同一工作项或分类的条目先求并集。PARALLEL 只补本项空白；REPLACE 裁剪本人可编辑的其他工作项与分类记录后补本项空白；GAPS 只补本人没有任何记录的时段。非项目分类不校验项目成员身份，只发安全审计、不发领域事件。补录不推进计时器状态版本。
      * 按并行、替换或空白模式补录本人工时
      */
     async fillMyTimeSessions(requestParameters: FillMyTimeSessionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TimeSessionFillResult> {
@@ -541,7 +724,7 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
-     * 返回与 [from, to) 相交的本人未删除记录，按开始时间排序。to 必须晚于 from，且区间不超过 7 天，否则返回 INVALID_RANGE。不可见项目的标题、编号、名称和颜色不披露。
+     * 返回与 [from, to) 相交的本人未删除记录，按开始时间排序。to 必须晚于 from，且区间不超过 7 天，否则返回 INVALID_RANGE。不可见项目的标题、编号、名称和颜色不披露。非项目分类记录的 session.timeCategory 有值，项目与工作项字段均为 null，且总是可编辑。
      * 查询本人时间段内的计时记录
      */
     async listMyTimeSessionsRaw(requestParameters: ListMyTimeSessionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<MyTimeSessionPage>> {
@@ -585,7 +768,7 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
-     * 返回与 [from, to) 相交的本人未删除记录，按开始时间排序。to 必须晚于 from，且区间不超过 7 天，否则返回 INVALID_RANGE。不可见项目的标题、编号、名称和颜色不披露。
+     * 返回与 [from, to) 相交的本人未删除记录，按开始时间排序。to 必须晚于 from，且区间不超过 7 天，否则返回 INVALID_RANGE。不可见项目的标题、编号、名称和颜色不披露。非项目分类记录的 session.timeCategory 有值，项目与工作项字段均为 null，且总是可编辑。
      * 查询本人时间段内的计时记录
      */
     async listMyTimeSessions(requestParameters: ListMyTimeSessionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<MyTimeSessionPage> {
@@ -639,7 +822,7 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
-     * 在当前公司有效成员且未归档的项目中查询。PERSONAL 包含分配给本人和本人最近计时或手动补录过的工作项；ALL 包含全部可计时工作项。按最近计时、本人分配、更新时间排序，每项只出现一次，查询名称、编号或项目名。启动时仍重新验证写权限。
+     * 在当前公司有效成员且未归档的项目中查询。PERSONAL 包含分配给本人和本人最近计时或手动补录过的工作项；ALL 包含全部可计时工作项。按最近计时、本人分配、更新时间排序，每项只出现一次，查询名称、编号或项目名。启动时仍重新验证写权限。projectId、assignedToMe、excludeCompleted 在服务端分页之前生效；首段响应附带不受 projectId 限制的项目计数。
      * 跨项目查找本人可计时的工作项
      */
     async listTimerCandidatesRaw(requestParameters: ListTimerCandidatesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TimerCandidatePage>> {
@@ -661,6 +844,18 @@ export class TimeTrackingApi extends runtime.BaseAPI {
             queryParameters['limit'] = requestParameters['limit'];
         }
 
+        if (requestParameters['projectId'] != null) {
+            queryParameters['projectId'] = requestParameters['projectId'];
+        }
+
+        if (requestParameters['assignedToMe'] != null) {
+            queryParameters['assignedToMe'] = requestParameters['assignedToMe'];
+        }
+
+        if (requestParameters['excludeCompleted'] != null) {
+            queryParameters['excludeCompleted'] = requestParameters['excludeCompleted'];
+        }
+
         const headerParameters: runtime.HTTPHeaders = {};
 
 
@@ -677,7 +872,7 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
-     * 在当前公司有效成员且未归档的项目中查询。PERSONAL 包含分配给本人和本人最近计时或手动补录过的工作项；ALL 包含全部可计时工作项。按最近计时、本人分配、更新时间排序，每项只出现一次，查询名称、编号或项目名。启动时仍重新验证写权限。
+     * 在当前公司有效成员且未归档的项目中查询。PERSONAL 包含分配给本人和本人最近计时或手动补录过的工作项；ALL 包含全部可计时工作项。按最近计时、本人分配、更新时间排序，每项只出现一次，查询名称、编号或项目名。启动时仍重新验证写权限。projectId、assignedToMe、excludeCompleted 在服务端分页之前生效；首段响应附带不受 projectId 限制的项目计数。
      * 跨项目查找本人可计时的工作项
      */
     async listTimerCandidates(requestParameters: ListTimerCandidatesRequest = {}, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TimerCandidatePage> {
@@ -686,8 +881,8 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
-     * 要求该记录最近读取的 If-Match。同一事务内软删除原记录，并按 PARALLEL 方式在目标工作项补同一时段（只跳过目标项自身已有的部分），沿用 deleted 与 added 事件。运行中、已删除、所属工作项或项目已归档的记录返回 409 SESSION_NOT_EDITABLE；目标与原工作项相同返回 422 UNCHANGED。
-     * 把本人一条已结束的计时记录整体改归属到其他工作项
+     * 要求该记录最近读取的 If-Match。同一事务内软删除原记录，并按 PARALLEL 方式在目标工作项或分类补同一时段（只跳过目标自身已有的部分），工作项一侧沿用 deleted 与 added 事件。运行中、已删除、所属工作项或项目已归档的记录返回 409 SESSION_NOT_EDITABLE；目标与原归属相同返回 422 UNCHANGED。
+     * 把本人一条已结束的计时记录整体改归属到其他工作项或非项目分类
      */
     async reassignMyTimeSessionRaw(requestParameters: ReassignMyTimeSessionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TimeSessionFillResult>> {
         if (requestParameters['sessionId'] == null) {
@@ -759,8 +954,8 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
-     * 要求该记录最近读取的 If-Match。同一事务内软删除原记录，并按 PARALLEL 方式在目标工作项补同一时段（只跳过目标项自身已有的部分），沿用 deleted 与 added 事件。运行中、已删除、所属工作项或项目已归档的记录返回 409 SESSION_NOT_EDITABLE；目标与原工作项相同返回 422 UNCHANGED。
-     * 把本人一条已结束的计时记录整体改归属到其他工作项
+     * 要求该记录最近读取的 If-Match。同一事务内软删除原记录，并按 PARALLEL 方式在目标工作项或分类补同一时段（只跳过目标自身已有的部分），工作项一侧沿用 deleted 与 added 事件。运行中、已删除、所属工作项或项目已归档的记录返回 409 SESSION_NOT_EDITABLE；目标与原归属相同返回 422 UNCHANGED。
+     * 把本人一条已结束的计时记录整体改归属到其他工作项或非项目分类
      */
     async reassignMyTimeSession(requestParameters: ReassignMyTimeSessionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TimeSessionFillResult> {
         const response = await this.reassignMyTimeSessionRaw(requestParameters, initOverrides);

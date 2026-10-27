@@ -3,6 +3,7 @@ import type { BrowserWindow, IpcMain, IpcMainInvokeEvent } from 'electron'
 
 export const AUTH_IS_ENABLED_CHANNEL = 'yumpoo:auth:is-enabled'
 export const AUTH_START_CHANNEL = 'yumpoo:auth:start'
+export const AUTH_CANCEL_CHANNEL = 'yumpoo:auth:cancel'
 export const AUTH_CLEAR_CHANNEL = 'yumpoo:auth:clear'
 export const AUTH_STATUS_CHANNEL = 'yumpoo:auth:status'
 
@@ -52,12 +53,17 @@ export function installAuthIpc(options: AuthIpcOptions): void {
     assertTrusted(event)
     return options.controller.isEnabled()
   })
-  options.ipcMain.handle(AUTH_START_CHANNEL, async (event) => {
+  options.ipcMain.handle(AUTH_START_CHANNEL, async (event, start: unknown) => {
     assertTrusted(event)
-    await options.controller.start()
+    // Older web builds send no options; only an explicit false opts out of the 7-day sign-in.
+    await options.controller.start({ remember: (start as { remember?: unknown } | undefined)?.remember !== false })
   })
   options.ipcMain.handle(AUTH_CLEAR_CHANNEL, async (event) => {
     assertTrusted(event)
     await options.clearSession()
+  })
+  options.ipcMain.handle(AUTH_CANCEL_CHANNEL, (event) => {
+    assertTrusted(event)
+    options.controller.cancel()
   })
 }

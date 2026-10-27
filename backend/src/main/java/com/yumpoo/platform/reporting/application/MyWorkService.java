@@ -20,7 +20,7 @@ import java.util.Map;
 import java.util.UUID;
 import static com.yumpoo.platform.reporting.application.TeamDashboardModels.*;
 
-/** The actor's own time and open work, limited to projects with an active membership; archived projects are excluded. */
+/** The actor's own time and open work, limited to projects with an active membership; archived projects are excluded. Non-project category time needs no membership. */
 @Service
 public class MyWorkService {
     private static final int MAX_DAYS = 93, MAX_PROJECTS = 100;
@@ -44,10 +44,11 @@ public class MyWorkService {
         Map<UUID, TimesheetWorkItem> items = new LinkedHashMap<>();
         entries.forEach(e -> items.putIfAbsent(e.workItemId(),
                 new TimesheetWorkItem(e.workItemId(), e.projectId(), scope.get(e.projectId()).name(), e.itemNo(), e.title())));
+        var categories = work.ownCategoryEntries(actor, from, to, zone, asOf);
         var self = users.findByUserIds(actor.companyId(), List.of(actor.userId())).get(actor.userId());
         return new Timesheet(from, to, zone.getId(), asOf, List.of(new Member(actor.userId(), self.displayName(), self.activeAndEnabled())),
                 List.copyOf(items.values()), entries.stream().map(e -> new TimesheetEntry(e.userId(), e.workItemId(), e.date(), e.durationMs())).toList(),
-                CalendarDay.of(calendar.days(from, to)));
+                Timesheet.categories(categories, scope.entrySet().stream().collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().name()))), CalendarDay.of(calendar.days(from, to)));
     }
 
     public TaskPage currentTasks(CurrentActor actor, int offset, int limit) {

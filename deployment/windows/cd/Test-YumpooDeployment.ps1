@@ -375,6 +375,7 @@ try {
     }
     $engineEntries = @{
         'windows/cd/YumpooDeployment.psm1' = 'new module'; 'windows/cd/Invoke-YumpooDeploy.ps1' = 'new deploy'; 'windows/cd/Start-YumpooNginx.ps1' = 'new nginx'
+        'windows/cd/Invoke-YumpooMonitorRelay.ps1' = 'new relay'; 'windows/cd/Invoke-YumpooMonitorTunnel.ps1' = 'new tunnel'; 'windows/cd/Invoke-YumpooMonitorWatchdog.ps1' = 'new watchdog'
         'windows/release-metadata.json' = ('{"schemaVersion":1,"sourceCommit":"' + ('e' * 40) + '","migrations":[]}')
     }
     & $writeZip $newPackage $engineEntries
@@ -432,7 +433,10 @@ try {
             $bytes = [Text.Encoding]::UTF8.GetBytes("$($names[$fileIndex]) of $Version")
             if ($fileIndex -eq 0) { $bytes = [byte[]]($bytes + (New-Object byte[] (2MB))) }
             if ($names[$fileIndex] -ceq 'latest.yml') { $bytes = [Text.Encoding]::UTF8.GetBytes("version: $Version`n") }
-            if ($names[$fileIndex] -ceq 'release.json') { $bytes = [Text.Encoding]::UTF8.GetBytes((@{ schemaVersion = 1; version = $Version; sourceCommit = $Commit } | ConvertTo-Json)) }
+            if ($names[$fileIndex] -ceq 'release.json') {
+                $notes = @([regex]::Unescape('\u9996\u4e2a\u5b89\u88c5\u7248\uff1a\u6309\u7528\u6237\u5b89\u88c5\uff0c\u652f\u6301\u81ea\u52a8\u66f4\u65b0\u3001\u8bca\u65ad\u4e0e\u4fee\u590d\u548c\u5b89\u5168\u6a21\u5f0f\u3002'))
+                $bytes = [Text.Encoding]::UTF8.GetBytes((@{ schemaVersion = 1; version = $Version; sourceCommit = $Commit; notes = $notes } | ConvertTo-Json))
+            }
             for ($index = 0; $index * 2MB -lt $bytes.Length; $index++) {
                 $length = [Math]::Min(2MB, $bytes.Length - $index * 2MB)
                 $part = New-Object byte[] $length
@@ -515,8 +519,17 @@ try {
     try { $null = Publish-YumpooDesktopFeed $disabled $first.request $firstFiles '1.1.0' } catch { $rejected = $_.Exception.Message -like '*disabled*' }
     Assert-Test ($rejected -and -not (Test-Path -LiteralPath $feedDirectory)) 'a disabled feed writes nothing'
     Assert-Test ((Publish-YumpooDesktopFeed $desktopSettings $first.request $firstFiles '1.1.0') -ceq 'complete') 'the first version is published'
-    Assert-Test ((Get-ChildItem -LiteralPath $feedDirectory -File).Count -eq 5 -and (Get-Content -LiteralPath (Join-Path $feedDirectory 'release.json') -Raw | ConvertFrom-Json).version -ceq '1.1.0') 'every feed file of the version is in place'
+    Assert-Test ((Get-ChildItem -LiteralPath $feedDirectory -File).Count -eq 5 -and (Get-Content -LiteralPath (Join-Path $feedDirectory 'release.json') -Raw -Encoding UTF8 | ConvertFrom-Json).version -ceq '1.1.0') 'every feed file of the version is in place'
     Assert-Test ((Publish-YumpooDesktopFeed $desktopSettings $first.request $firstFiles '1.1.0') -ceq 'already_current') 'republishing the live version is a no-op'
+    $nonUtf8Result = & (Get-Module YumpooDeployment) {
+        param($Settings, $Request, $Files)
+        $previousDefaults = $script:PSDefaultParameterValues
+        $script:PSDefaultParameterValues = @{ 'Get-Content:Encoding' = 'BigEndianUnicode' }
+        try { Publish-YumpooDesktopFeed $Settings $Request $Files '1.1.0' }
+        finally { $script:PSDefaultParameterValues = $previousDefaults }
+    } $desktopSettings $first.request $firstFiles
+    Assert-Test ($nonUtf8Result -ceq 'already_current') 'UTF-8 feed metadata with Chinese notes ignores the host default encoding'
+    Assert-Test ((Get-FileHash -LiteralPath (Join-Path $feedDirectory 'release.json')).Hash -ceq (Get-FileHash -LiteralPath $firstFiles['release.json']).Hash) 'reading existing feed metadata never rewrites the verified Release bytes'
     $older = & $newDesktopUpload '1.0.9'
     $olderFiles = Copy-YumpooDesktopUpload $older.source $older.work $older.request
     $rejected = $false
@@ -546,13 +559,13 @@ try {
         Assert-Test $rejected 'neither an intermediate version nor the old release.json version may replace an already exposed latest.yml'
     }
     Assert-Test ((Publish-YumpooDesktopFeed $interruptedSettings $next.request $nextFiles '1.2.0') -ceq 'complete') 'retrying the exposed version repairs a stale release.json'
-    Assert-Test ((Get-Content -LiteralPath (Join-Path $interruptedDirectory 'release.json') -Raw | ConvertFrom-Json).version -ceq '1.2.0') 'the download-page pointer catches up to the exposed update'
+    Assert-Test ((Get-Content -LiteralPath (Join-Path $interruptedDirectory 'release.json') -Raw -Encoding UTF8 | ConvertFrom-Json).version -ceq '1.2.0') 'the download-page pointer catches up to the exposed update'
     Remove-Item -LiteralPath (Join-Path $interruptedDirectory 'release.json')
     $rejected = $false
     try { $null = Publish-YumpooDesktopFeed $interruptedSettings $between.request $betweenFiles '1.1.1' } catch { $rejected = $_.Exception.Message -like '*downgrade*' }
     Assert-Test $rejected 'the first publication is protected even if release.json has never been written'
     Assert-Test ((Publish-YumpooDesktopFeed $interruptedSettings $next.request $nextFiles '1.2.0') -ceq 'complete') 'retrying the same verified version completes an interrupted publication'
-    Assert-Test ((Get-Content -LiteralPath (Join-Path $interruptedDirectory 'release.json') -Raw | ConvertFrom-Json).version -ceq '1.2.0') 'the retry repairs the download-page pointer'
+    Assert-Test ((Get-Content -LiteralPath (Join-Path $interruptedDirectory 'release.json') -Raw -Encoding UTF8 | ConvertFrom-Json).version -ceq '1.2.0') 'the retry repairs the download-page pointer'
     Assert-Test ((Publish-YumpooDesktopFeed $interruptedSettings $next.request $nextFiles '1.2.0') -ceq 'already_current') 'a completed retry is idempotent'
     # An existing release.json is not sufficient for a no-op: missing feed files must be restored as well.
     Remove-Item -LiteralPath (Join-Path $interruptedDirectory 'latest.yml')

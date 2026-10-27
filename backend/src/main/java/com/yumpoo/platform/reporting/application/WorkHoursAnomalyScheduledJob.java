@@ -61,6 +61,7 @@ public class WorkHoursAnomalyScheduledJob implements ScheduledJob {
     private void checkDay(UUID companyId, List<UUID> projectIds, LocalDate day, ZoneId zone, Instant now, int threshold) {
         Map<UUID, Long> totals = new LinkedHashMap<>();
         work.timeEntriesForScheduler(companyId, projectIds, day, day, zone, now).forEach(e -> totals.merge(e.userId(), e.durationMs(), Long::sum));
+        work.categoryEntriesForScheduler(companyId, day, day, zone, now).forEach(e -> totals.merge(e.userId(), e.durationMs(), Long::sum));
         totals.forEach((userId, total) -> {
             if (total <= threshold * 60_000L) return;
             repository.recordAlert(companyId, userId, day, total, threshold, now).ifPresent(alertId -> events.append(new EventDraft(

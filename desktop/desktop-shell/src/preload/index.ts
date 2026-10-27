@@ -2,13 +2,24 @@ import type {
   DesktopAuthErrorCode,
   DesktopAuthPhase,
   DesktopAuthStatus,
+  DesktopAuthStartOptions,
   DesktopBridge,
+  DesktopPreferencesBridge,
+  DesktopPreferencesChange,
+  DesktopPreferencesState,
+  DesktopQuickBridge,
+  DesktopRailBridge,
+  QuickPanelContext,
+  RailProjects,
+  RailState,
   DesktopExportFile,
   DesktopFilesBridge,
   DesktopInboxBridge,
   DesktopInboxState,
   DesktopInboxPreferences,
   DesktopTimerBridge,
+  DesktopAppearance,
+  DesktopExitPhase,
   DesktopTimerState,
   DesktopTimerCommand,
   DesktopUpdateBridge,
@@ -72,8 +83,11 @@ function sanitizeStatus(value: unknown): DesktopAuthStatus | undefined {
 const desktopAuth = Object.freeze({
   isEnabled: async (): Promise<boolean> =>
     Boolean(await ipcRenderer.invoke('yumpoo:auth:is-enabled')),
-  start: async (): Promise<void> => {
-    await ipcRenderer.invoke('yumpoo:auth:start')
+  start: async (options?: DesktopAuthStartOptions): Promise<void> => {
+    await ipcRenderer.invoke('yumpoo:auth:start', { remember: options?.remember !== false })
+  },
+  cancel: async (): Promise<void> => {
+    await ipcRenderer.invoke('yumpoo:auth:cancel')
   },
   clear: async (): Promise<void> => {
     await ipcRenderer.invoke('yumpoo:auth:clear')
@@ -161,6 +175,14 @@ const desktopTimer: DesktopTimerBridge = Object.freeze({
     return () => ipcRenderer.removeListener('yumpoo:timer:exit-request', wrapped)
   },
   acknowledgeExit: async (id: string) => { await ipcRenderer.invoke('yumpoo:timer:exit-received', id) },
+  reportExitPhase: async (id: string, phase: DesktopExitPhase) => ipcRenderer.invoke('yumpoo:timer:exit-phase', id, phase),
+  publishAppearance: async (appearance: DesktopAppearance) => { await ipcRenderer.invoke('yumpoo:timer:appearance', appearance) },
+  onExitCancelled: (listener: (id: string) => void) => {
+    if (typeof listener !== 'function') throw new TypeError('Timer listener must be a function')
+    const wrapped = (_event: unknown, value: unknown) => { if (typeof value === 'string') listener(value) }
+    ipcRenderer.on('yumpoo:timer:exit-cancelled', wrapped)
+    return () => ipcRenderer.removeListener('yumpoo:timer:exit-cancelled', wrapped)
+  },
   completeExit: async (id: string, allow: boolean) => { await ipcRenderer.invoke('yumpoo:timer:exit-complete', id, allow) },
   openWorkItem: async (project: string, item: string) => { await ipcRenderer.invoke('yumpoo:timer:open-item', project, item) },
 })
@@ -191,7 +213,7 @@ const desktopFiles: DesktopFilesBridge = Object.freeze({
   },
 })
 
-const UPDATE_PHASES = new Set<DesktopUpdatePhase>(['disabled', 'idle', 'checking', 'downloading', 'verifying', 'ready', 'error'])
+const UPDATE_PHASES = new Set<DesktopUpdatePhase>(['disabled', 'idle', 'checking', 'available', 'downloading', 'verifying', 'ready', 'error'])
 const shortText = (value: unknown) => typeof value === 'string' && value.length > 0 && value.length <= 64
 
 function sanitizeUpdateState(value: unknown): DesktopUpdateState | undefined {
@@ -206,6 +228,7 @@ function sanitizeUpdateState(value: unknown): DesktopUpdateState | undefined {
     ...(shortText(state.version) ? { version: state.version as string } : {}),
     ...(typeof state.percent === 'number' && state.percent >= 0 && state.percent <= 100 ? { percent: state.percent } : {}),
     ...(shortText(state.error) ? { error: state.error as string } : {}),
+    ...(typeof state.checkedAt === 'number' && Number.isFinite(state.checkedAt) && state.checkedAt > 0 ? { checkedAt: state.checkedAt } : {}),
   })
 }
 
@@ -217,6 +240,7 @@ const desktopUpdate: DesktopUpdateBridge = Object.freeze({
   },
   check: async () => { await ipcRenderer.invoke('yumpoo:update:check') },
   restart: async () => { await ipcRenderer.invoke('yumpoo:update:restart') },
+  download: async () => { await ipcRenderer.invoke('yumpoo:update:download') },
   onState: (listener: (state: DesktopUpdateState) => void) => {
     if (typeof listener !== 'function') throw new TypeError('Update listener must be a function')
     const wrapped = (_event: unknown, value: unknown) => {
@@ -228,6 +252,66 @@ const desktopUpdate: DesktopUpdateBridge = Object.freeze({
   },
 })
 
+const desktopPreferences: DesktopPreferencesBridge = Object.freeze({
+  get: async () => ipcRenderer.invoke('yumpoo:preferences:get'),
+  set: async (change: DesktopPreferencesChange) => ipcRenderer.invoke('yumpoo:preferences:set', change),
+  setShortcut: async (accelerator: string | null) => (await ipcRenderer.invoke('yumpoo:preferences:shortcut', accelerator)) === true,
+  onChange: (listener: (state: DesktopPreferencesState) => void) => {
+    if (typeof listener !== 'function') throw new TypeError('Preferences listener must be a function')
+    const wrapped = (_event: unknown, value: DesktopPreferencesState) => { if (value && typeof value === 'object' && typeof value.railEnabled === 'boolean') listener(value) }
+    ipcRenderer.on('yumpoo:preferences:changed', wrapped)
+    return () => ipcRenderer.removeListener('yumpoo:preferences:changed', wrapped)
+  },
+})
+
+const QUICK_ORIGINS = new Set(['top', 'bottom', 'left', 'right'])
+
+const desktopQuick: DesktopQuickBridge = Object.freeze({
+  setPinned: async (pinned: boolean) => {
+    if (typeof pinned !== 'boolean') throw new TypeError('Quick panel pinned must be a boolean')
+    await ipcRenderer.invoke('yumpoo:quick:pin', pinned)
+  },
+  resize: async (active: boolean) => {
+    if (typeof active !== 'boolean') throw new TypeError('Quick panel resize must be a boolean')
+    await ipcRenderer.invoke('yumpoo:quick:resize', active)
+  },
+  onPinned: (listener: (pinned: boolean) => void) => {
+    if (typeof listener !== 'function') throw new TypeError('Quick panel listener must be a function')
+    const wrapped = (_event: unknown, value: unknown) => { if (typeof value === 'boolean') listener(value) }
+    ipcRenderer.on('yumpoo:quick:pinned', wrapped)
+    return () => ipcRenderer.removeListener('yumpoo:quick:pinned', wrapped)
+  },
+  onOpen: (listener: (context: QuickPanelContext) => void) => {
+    if (typeof listener !== 'function') throw new TypeError('Quick panel listener must be a function')
+    const wrapped = (_event: unknown, value: QuickPanelContext) => {
+      if (value && (value.projectId === null || typeof value.projectId === 'string') && Array.isArray(value.projects) && QUICK_ORIGINS.has(value.origin)) listener(value)
+    }
+    ipcRenderer.on('yumpoo:quick:open', wrapped)
+    return () => ipcRenderer.removeListener('yumpoo:quick:open', wrapped)
+  },
+  onClosing: (listener: () => void) => {
+    if (typeof listener !== 'function') throw new TypeError('Quick panel listener must be a function')
+    const wrapped = () => listener()
+    ipcRenderer.on('yumpoo:quick:closing', wrapped)
+    return () => ipcRenderer.removeListener('yumpoo:quick:closing', wrapped)
+  },
+  close: async () => { await ipcRenderer.invoke('yumpoo:quick:close') },
+  openMain: async (path?: string) => { await ipcRenderer.invoke('yumpoo:quick:open-main', path) },
+})
+
+const desktopRail: DesktopRailBridge = Object.freeze({
+  getState: async () => ipcRenderer.invoke('yumpoo:rail:get-state'),
+  onState: (listener: (state: RailState) => void) => {
+    if (typeof listener !== 'function') throw new TypeError('Rail listener must be a function')
+    const wrapped = (_event: unknown, value: RailState) => { if (value && (value.side === 'left' || value.side === 'right')) listener(value) }
+    ipcRenderer.on('yumpoo:rail:state', wrapped)
+    return () => ipcRenderer.removeListener('yumpoo:rail:state', wrapped)
+  },
+  openProject: async (projectId: string, top: number) => { await ipcRenderer.invoke('yumpoo:rail:open', projectId, top) },
+  setProjects: async (projects: RailProjects) => { await ipcRenderer.invoke('yumpoo:rail:projects', projects) },
+  openSettings: async () => { await ipcRenderer.invoke('yumpoo:rail:settings') },
+})
+
 const desktopBridge: DesktopBridge = Object.freeze({
   client: 'electron',
   auth: desktopAuth,
@@ -235,6 +319,9 @@ const desktopBridge: DesktopBridge = Object.freeze({
   inbox: desktopInbox,
   files: desktopFiles,
   update: desktopUpdate,
+  preferences: desktopPreferences,
+  quick: desktopQuick,
+  rail: desktopRail,
 })
 
 contextBridge.exposeInMainWorld('yumpooDesktop', desktopBridge)

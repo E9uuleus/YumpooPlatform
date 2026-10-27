@@ -1,17 +1,23 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { TimerMenuAction, TimerMenuState } from '@yumpoo/preload-contract'
-import { Bell } from '@element-plus/icons-vue'
-import { formatDuration } from '../../composables/useTimeTracker'
+import { Bell, Refresh, Setting } from '@element-plus/icons-vue'
+import { formatDuration } from './duration'
 import brandLogo from '../../assets/brand/logo.svg'
 import TimerIcon from './TimerIcon.vue'
+import { menuUpdate } from './menuUpdate'
 
-const desktop = window.yumpooDesktop?.timer
-const inbox = window.yumpooDesktop?.inbox
+const props = withDefaults(defineProps<{ initialState?: TimerMenuState | undefined }>(), { initialState: undefined })
+const local = window.yumpooMenu
+const desktop = local ? { onMenuState: local.onState, runMenuAction: local.runAction } : window.yumpooDesktop?.timer
+const inbox = local ?? window.yumpooDesktop?.inbox
+/** Shells before 1.1.0 have no settings bridge and reject the `preferences` action. */
+const hasPreferences = !!local || !!window.yumpooDesktop?.preferences
 const toasts = ref(true)
 const preferencesReady = ref(false)
 const savingPreferences = ref(false)
-const state = ref<TimerMenuState>()
+const state = ref<TimerMenuState | undefined>(props.initialState)
+const u = computed(() => state.value?.update ? menuUpdate(state.value.update) : undefined)
 const now = ref(Date.now())
 const root = ref<HTMLElement>()
 let tick: ReturnType<typeof setInterval> | undefined
@@ -20,7 +26,7 @@ const signedIn = computed(() => !!state.value?.signedIn)
 const running = computed(() => state.value?.running ?? null)
 const duration = computed(() => running.value ? Math.max(0, now.value + (state.value?.clockOffsetMs ?? 0) - Date.parse(running.value.startedAt)) : 0)
 const saved = computed(() => !!state.value && !running.value && state.value.savedAt > 0 && now.value - state.value.savedAt < 2600)
-const connection = computed(() => !signedIn.value ? '未登录' : state.value?.ready ? '已连接' : '等待连接')
+const connection = computed(() => state.value?.starting ? '启动中' : !signedIn.value ? '未登录' : state.value?.ready ? '已连接' : '等待连接')
 const title = computed(() => !signedIn.value ? '尚未登录' : running.value?.title ?? state.value?.recent?.title ?? '尚未选择工作')
 const subtitle = computed(() => {
   if (!signedIn.value) return '打开主界面完成登录'
@@ -31,7 +37,7 @@ const subtitle = computed(() => {
 })
 const ringIcon = computed(() => !signedIn.value ? 'window' : saved.value ? 'check' : running.value ? 'clock' : state.value?.recent ? 'pause' : 'clock')
 /** Older shells omit the flag; only an explicit false hides the timer entries. */
-const timerOn = computed(() => state.value?.timerEnabled !== false)
+const timerOn = computed(() => !state.value?.starting && state.value?.timerEnabled !== false)
 const canToggle = computed(() => signedIn.value && !!state.value?.enabled && (!!running.value || !!state.value?.recent))
 const display = computed(() => !state.value?.visible ? 'hidden' : state.value.display)
 const displays: Array<{ value: 'orb' | 'dock' | 'hidden'; label: string; icon: 'orb' | 'dock' | 'hidden'; action: TimerMenuAction }> = [
@@ -40,7 +46,7 @@ const displays: Array<{ value: 'orb' | 'dock' | 'hidden'; label: string; icon: '
   { value: 'hidden', label: '隐藏', icon: 'hidden', action: 'hide' },
 ]
 
-function run(action: TimerMenuAction) { void desktop?.runMenuAction?.(action) }
+function run(action: TimerMenuAction) { void desktop?.runMenuAction?.(action).catch(() => undefined) }
 async function refreshInboxPreferences() {
   if (!inbox) return
   try { toasts.value = (await inbox.getPreferences()).toasts; preferencesReady.value = true } catch { preferencesReady.value = false }
@@ -65,6 +71,19 @@ function keydown(event: KeyboardEvent) {
   event.preventDefault()
   list[(next + list.length) % list.length]?.focus()
 }
+const media = local ? window.matchMedia?.('(prefers-color-scheme: dark)') : undefined
+function applyAppearance() {
+  if (!local) return
+  const appearance = state.value?.appearance ?? { theme: 'system', density: 'comfortable' }
+  const theme = appearance.theme === 'system' ? (media?.matches ? 'dark' : 'light') : appearance.theme
+  const html = document.documentElement
+  html.dataset.theme = theme
+  html.dataset.density = appearance.density
+  html.classList.toggle('dark', theme !== 'light')
+  html.style.colorScheme = theme === 'light' ? 'light' : 'dark'
+}
+watch(() => state.value?.appearance, applyAppearance, { immediate: true })
+media?.addEventListener('change', applyAppearance)
 const off = desktop?.onMenuState?.(value => {
   const opening = !state.value
   state.value = value
@@ -75,7 +94,7 @@ onMounted(() => {
   tick = setInterval(() => { now.value = Date.now() }, 1000)
   window.addEventListener('focus', focusPanel)
 })
-onBeforeUnmount(() => { clearInterval(tick); off?.(); window.removeEventListener('focus', focusPanel) })
+onBeforeUnmount(() => { media?.removeEventListener('change', applyAppearance); clearInterval(tick); off?.(); window.removeEventListener('focus', focusPanel) })
 </script>
 
 <template>
@@ -157,6 +176,15 @@ onBeforeUnmount(() => { clearInterval(tick); off?.(); window.removeEventListener
         >
           <TimerIcon name="window" /><span>打开主界面</span>
         </button>
+        <button
+          v-if="hasPreferences"
+          class="menu-item"
+          role="menuitem"
+          data-menu-item
+          @click="run('preferences')"
+        >
+          <Setting /><span>偏好设置…</span>
+        </button>
         <div
           v-if="state?.inbox"
           class="menu-inbox"
@@ -227,6 +255,26 @@ onBeforeUnmount(() => { clearInterval(tick); off?.(); window.removeEventListener
       </div>
       <div class="menu-foot">
         <button
+          v-if="state?.diagnostics"
+          class="menu-item"
+          role="menuitem"
+          data-menu-item
+          @click="run('diagnostics')"
+        >
+          <TimerIcon name="settings" /><span>诊断与修复…</span>
+        </button>
+        <button
+          v-if="u"
+          class="menu-item"
+          role="menuitem"
+          data-menu-item
+          :disabled="!u.action"
+          :class="{ 'is-accent': u.accent }"
+          @click="u.action && run(u.action)"
+        >
+          <Refresh :class="{ 'is-spinning': u.busy }" /><span>{{ u.label }}</span><span class="menu-meta">{{ u.detail }}</span>
+        </button>
+        <button
           class="menu-item is-exit"
           role="menuitem"
           data-menu-item
@@ -272,7 +320,7 @@ button:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:-2p
 .status-toggle svg{width:14px;height:14px}
 .status-toggle:not(:disabled):active{transform:scale(.92)}
 .status-toggle:focus-visible{outline-offset:2px}
-.menu-list{display:flex;flex-direction:column;gap:1px;padding:5px 0;border-top:1px solid var(--yp-timer-hairline);flex:1}
+.menu-list{display:flex;flex-direction:column;gap:1px;min-height:0;overflow-y:auto;padding:5px 0;border-top:1px solid var(--yp-timer-hairline);flex:1}
 .menu-item{display:flex;align-items:center;gap:10px;width:100%;height:36px;padding:0 10px;border-radius:8px;text-align:left;color:var(--yp-text-primary);transition:background .12s ease}
 .menu-item svg{width:16px;height:16px;color:var(--yp-text-secondary)}
 .menu-item:not(:disabled):hover,.menu-item:focus-visible{background:var(--yp-timer-hover)}
@@ -293,6 +341,10 @@ button:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:-2p
 .menu-switch span{position:absolute;left:2px;top:2px;width:13px;height:13px;border-radius:50%;background:#fff;box-shadow:0 1px 2px color-mix(in srgb,#0b1220 30%,transparent);transition:transform .18s var(--yp-timer-ease)}
 .menu-switch.is-on{background:var(--yp-timer-accent)}.menu-switch.is-on span{transform:translateX(13px)}
 .menu-foot{padding-top:5px;border-top:1px solid var(--yp-timer-hairline);flex-shrink:0}
+.menu-meta{margin-left:auto;color:var(--yp-text-secondary);font-size:12px;font-variant-numeric:tabular-nums}
+.menu-item.is-accent{color:var(--yp-timer-accent)}
+.is-spinning{animation:menu-spin 1s linear infinite}
+@keyframes menu-spin{to{transform:rotate(360deg)}}
 .is-exit:hover svg,.is-exit:focus-visible svg{color:var(--yp-status-red)}
 @keyframes menu-in{from{opacity:0;transform:translateY(4px) scale(.98)}to{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}

@@ -1,7 +1,7 @@
 {
   "name": "@yumpoo/desktop-shell",
   "productName": "Yumpoo Desktop",
-  "version": "1.0.1",
+  "version": "1.1.3",
   "description": "Yumpoo Desktop",
   "author": "Yumpoo",
   "private": true,
@@ -15,7 +15,7 @@
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.diagnostics.json",
     "test": "vitest run",
-    "build": "pnpm run typecheck && node scripts/build.cjs",
+    "build": "pnpm run typecheck && node scripts/build.cjs && pnpm --filter @yumpoo/web-app build:desktop-menu && node scripts/menu-licenses.cjs",
     "package:win": "pnpm run build && electron-builder --config electron-builder.config.cjs --win nsis --x64 --publish never"
   },
   "devDependencies": {

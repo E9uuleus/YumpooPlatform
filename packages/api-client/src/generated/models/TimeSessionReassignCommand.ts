@@ -12,25 +12,46 @@
  */
 
 import { mapValues } from '../runtime';
+import type { TimeCategory } from './TimeCategory';
+import {
+    TimeCategoryFromJSON,
+    TimeCategoryFromJSONTyped,
+    TimeCategoryToJSON,
+    TimeCategoryToJSONTyped,
+} from './TimeCategory';
+
 /**
- *
+ * 目标工作项或非项目分类，workItemId 与 timeCategory 必须且只能填一个。
  * @export
  * @interface TimeSessionReassignCommand
  */
 export interface TimeSessionReassignCommand {
     /**
+     * 仅与 timeCategory 一起使用，把分类记录关联到本人可写的项目。
+     * @type {string}
+     * @memberof TimeSessionReassignCommand
+     */
+    categoryProjectId?: string;
+    /**
      *
      * @type {string}
      * @memberof TimeSessionReassignCommand
      */
-    workItemId: string;
+    workItemId?: string;
+    /**
+     *
+     * @type {TimeCategory}
+     * @memberof TimeSessionReassignCommand
+     */
+    timeCategory?: TimeCategory;
 }
+
+
 
 /**
  * Check if a given object implements the TimeSessionReassignCommand interface.
  */
 export function instanceOfTimeSessionReassignCommand(value: object): value is TimeSessionReassignCommand {
-    if (!('workItemId' in value) || value['workItemId'] === undefined) return false;
     return true;
 }
 
@@ -44,7 +65,9 @@ export function TimeSessionReassignCommandFromJSONTyped(json: any, ignoreDiscrim
     }
     return {
 
-        'workItemId': json['workItemId'],
+        ...(json['categoryProjectId'] == null ? {} : { 'categoryProjectId': json['categoryProjectId'] }),
+        ...(json['workItemId'] == null ? {} : { 'workItemId': json['workItemId'] }),
+        ...(json['timeCategory'] == null ? {} : { 'timeCategory': TimeCategoryFromJSON(json['timeCategory']) }),
     };
 }
 
@@ -59,6 +82,8 @@ export function TimeSessionReassignCommandToJSONTyped(value?: TimeSessionReassig
 
     return {
 
+        'categoryProjectId': value['categoryProjectId'],
         'workItemId': value['workItemId'],
+        'timeCategory': TimeCategoryToJSON(value['timeCategory']),
     };
 }

@@ -12,18 +12,38 @@
  */
 
 import { mapValues } from '../runtime';
+import type { TimeCategory } from './TimeCategory';
+import {
+    TimeCategoryFromJSON,
+    TimeCategoryFromJSONTyped,
+    TimeCategoryToJSON,
+    TimeCategoryToJSONTyped,
+} from './TimeCategory';
+
 /**
- *
+ * workItemId 与 timeCategory 必须且只能填一个。
  * @export
  * @interface TimeSessionFillEntry
  */
 export interface TimeSessionFillEntry {
     /**
+     * 仅与 timeCategory 一起使用，把分类记录关联到本人可写的项目。
+     * @type {string}
+     * @memberof TimeSessionFillEntry
+     */
+    categoryProjectId?: string;
+    /**
      *
      * @type {string}
      * @memberof TimeSessionFillEntry
      */
-    workItemId: string;
+    workItemId?: string;
+    /**
+     *
+     * @type {TimeCategory}
+     * @memberof TimeSessionFillEntry
+     */
+    timeCategory?: TimeCategory;
     /**
      *
      * @type {Date}
@@ -38,11 +58,12 @@ export interface TimeSessionFillEntry {
     stoppedAt: Date;
 }
 
+
+
 /**
  * Check if a given object implements the TimeSessionFillEntry interface.
  */
 export function instanceOfTimeSessionFillEntry(value: object): value is TimeSessionFillEntry {
-    if (!('workItemId' in value) || value['workItemId'] === undefined) return false;
     if (!('startedAt' in value) || value['startedAt'] === undefined) return false;
     if (!('stoppedAt' in value) || value['stoppedAt'] === undefined) return false;
     return true;
@@ -58,7 +79,9 @@ export function TimeSessionFillEntryFromJSONTyped(json: any, ignoreDiscriminator
     }
     return {
 
-        'workItemId': json['workItemId'],
+        ...(json['categoryProjectId'] == null ? {} : { 'categoryProjectId': json['categoryProjectId'] }),
+        ...(json['workItemId'] == null ? {} : { 'workItemId': json['workItemId'] }),
+        ...(json['timeCategory'] == null ? {} : { 'timeCategory': TimeCategoryFromJSON(json['timeCategory']) }),
         'startedAt': (new Date(json['startedAt'])),
         'stoppedAt': (new Date(json['stoppedAt'])),
     };
@@ -75,7 +98,9 @@ export function TimeSessionFillEntryToJSONTyped(value?: TimeSessionFillEntry | n
 
     return {
 
+        'categoryProjectId': value['categoryProjectId'],
         'workItemId': value['workItemId'],
+        'timeCategory': TimeCategoryToJSON(value['timeCategory']),
         'startedAt': value['startedAt'].toISOString(),
         'stoppedAt': value['stoppedAt'].toISOString(),
     };

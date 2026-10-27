@@ -5,12 +5,16 @@ import type { TimerOrbChange, TimerOrbLayout, TimerPreferences, TimerPreferences
 import { ListTimerCandidatesScopeEnum, type TimerCandidate } from '@yumpoo/api-client'
 import { formatTrackingDuration, useTimeTracker } from '../../composables/useTimeTracker'
 import { useTimerCandidates } from '../../composables/useTimerCandidates'
+import { useInfiniteSentinel } from '../../composables/useInfiniteSentinel'
+import { useHideCompleted } from '../../composables/useHideCompleted'
+import HideCompletedSwitch from './HideCompletedSwitch.vue'
 import TimerIcon from './TimerIcon.vue'
 import TimerDigits from './TimerDigits.vue'
 import TimerDock from './TimerDock.vue'
 import TimerOrb from './TimerOrb.vue'
 import TimerSettings from './TimerSettings.vue'
 import WorkItemGlyph from './WorkItemGlyph.vue'
+import { categoryOf, resumeSubjects, sessionKey, timerTitle } from './timeCategories'
 
 const CAPSULE_WIDTH = 216
 const props = withDefaults(defineProps<{ initialExpanded?: boolean; floating?: boolean; orbLayout?: TimerOrbLayout }>(), { initialExpanded: true, floating: false, orbLayout: () => ({ size: 64, side: null, detailWidth: 0 }) })
@@ -41,15 +45,26 @@ const selected = ref(0)
 const runningSessions = tracker.running
 const running = computed(() => runningSessions.value[0]?.session)
 const resumeItems = computed(() => tracker.current.value?.resumeItems ?? [])
-const resume = computed(() => resumeItems.value.length > 1 ? resumeItems.value[0] : tracker.current.value?.recentItems[0])
+const resumeKeys = computed(() => resumeSubjects(tracker.current.value))
+/** A group of categories alone resumes through its first category, which `begin` takes like a work item id. */
+const resume = computed(() => {
+  const category = resumeItems.value.length ? undefined : categoryOf(resumeKeys.value[0])
+  if (category) return { workItemId: resumeKeys.value[0]!, projectId: '', title: category.label }
+  return resumeKeys.value.length > 1 ? resumeItems.value[0] : tracker.current.value?.recentItems[0]
+})
 const needsCandidates = computed(() => expanded.value || !!running.value || !!resume.value)
-const { query, scope, items, loading, problem, nextOffset, searching, load } = useTimerCandidates(needsCandidates)
+const { query, scope, items, hiddenCount, loading, problem, nextOffset, searching, load } = useTimerCandidates(needsCandidates)
+const sentinel = ref<HTMLElement>()
+useInfiniteSentinel(results, sentinel, () => items.value.length,
+  () => nextOffset.value !== null && !loading.value && !problem.value, () => load(true))
 const title = computed(() => running.value
-  ? `${runningSessions.value[0]!.workItemTitle ?? '不可见工作项'}${runningSessions.value.length > 1 ? ` 等 ${runningSessions.value.length} 项` : ''}`
-  : resume.value ? `${resume.value.title}${resumeItems.value.length > 1 ? ` 等 ${resumeItems.value.length} 项` : ''}` : undefined)
-const candidates = computed(() => items.value.filter(item => !tracker.isRunning(item.workItemId) && (running.value || !saved.value || item.workItemId !== resume.value?.workItemId)))
+  ? `${timerTitle(runningSessions.value[0]!)}${runningSessions.value.length > 1 ? ` 等 ${runningSessions.value.length} 项` : ''}`
+  : resume.value ? `${resume.value.title}${resumeKeys.value.length > 1 ? ` 等 ${resumeKeys.value.length} 项` : ''}` : undefined)
+const { hideCompleted } = useHideCompleted()
+const visible = items
+const candidates = computed(() => visible.value.filter(item => !tracker.isRunning(item.workItemId) && (running.value || !saved.value || item.workItemId !== resume.value?.workItemId)))
 const focusedItem = ref<TimerCandidate>()
-const focusedId = computed(() => running.value ? running.value.workItemId : resume.value?.workItemId)
+const focusedId = computed(() => running.value ? sessionKey(running.value) : resume.value?.workItemId)
 const currentItem = computed(() => items.value.find(item => item.workItemId === focusedId.value)
   ?? (focusedItem.value?.workItemId === focusedId.value ? focusedItem.value : undefined))
 const error = computed(() => notice.value || tracker.problem.value || (expanded.value ? problem.value : ''))
@@ -193,8 +208,8 @@ async function begin(id: string) {
 }
 async function pause() { notice.value = ''; await tracker.stopAll() }
 async function continueWork() {
-  if (resumeItems.value.length > 1) {
-    if (await tracker.startMany(resumeItems.value.map(item => item.workItemId))) await changeMode(false)
+  if (resumeKeys.value.length > 1) {
+    if (await tracker.startMany(resumeKeys.value)) await changeMode(false)
   } else if (resume.value) await begin(resume.value.workItemId)
 }
 function allocatedDuration(ms: number) {
@@ -458,19 +473,19 @@ function keydown(event: KeyboardEvent) {
               :key="timer.session.id"
               class="running-row"
             >
-              <span class="running-copy"><strong>{{ timer.workItemTitle ?? '不可见工作项' }}</strong><small>计入 {{ formatTrackingDuration(allocatedDuration(timer.session.allocatedDurationMs)) }}</small></span>
+              <span class="running-copy"><strong>{{ timerTitle(timer) }}</strong><small>计入 {{ formatTrackingDuration(allocatedDuration(timer.session.allocatedDurationMs)) }}</small></span>
               <button
-                v-if="runningSessions.length > 1 && timer.session.workItemId"
+                v-if="runningSessions.length > 1 && sessionKey(timer.session)"
                 class="text-button"
                 :disabled="tracker.busy.value"
-                @click="tracker.switchTo(timer.session.workItemId)"
+                @click="tracker.switchTo(sessionKey(timer.session)!)"
               >
                 只计时此项
               </button>
               <button
                 class="icon-button"
                 :disabled="tracker.busy.value"
-                :aria-label="`暂停 ${timer.workItemTitle ?? '不可见工作项'}`"
+                :aria-label="`暂停 ${timerTitle(timer)}`"
                 @click="tracker.stop(timer.session.id)"
               >
                 <TimerIcon name="pause" />
@@ -548,24 +563,27 @@ function keydown(event: KeyboardEvent) {
             aria-hidden="true"
           >Ctrl K</kbd>
         </div>
-        <div
-          v-if="!searching"
-          class="picker-scope"
-        >
-          <button
-            :class="{ 'is-active': scope === ListTimerCandidatesScopeEnum.Personal }"
-            :aria-pressed="scope === ListTimerCandidatesScopeEnum.Personal"
-            @click="scope = ListTimerCandidatesScopeEnum.Personal"
+        <div class="picker-toolbar">
+          <div
+            v-if="!searching"
+            class="picker-scope"
           >
-            最近与我的
-          </button>
-          <button
-            :class="{ 'is-active': scope === ListTimerCandidatesScopeEnum.All }"
-            :aria-pressed="scope === ListTimerCandidatesScopeEnum.All"
-            @click="scope = ListTimerCandidatesScopeEnum.All"
-          >
-            全部
-          </button>
+            <button
+              :class="{ 'is-active': scope === ListTimerCandidatesScopeEnum.Personal }"
+              :aria-pressed="scope === ListTimerCandidatesScopeEnum.Personal"
+              @click="scope = ListTimerCandidatesScopeEnum.Personal"
+            >
+              最近与我的
+            </button>
+            <button
+              :class="{ 'is-active': scope === ListTimerCandidatesScopeEnum.All }"
+              :aria-pressed="scope === ListTimerCandidatesScopeEnum.All"
+              @click="scope = ListTimerCandidatesScopeEnum.All"
+            >
+              全部
+            </button>
+          </div>
+          <HideCompletedSwitch :hidden-count="hiddenCount" />
         </div>
         <div
           ref="results"
@@ -582,7 +600,7 @@ function keydown(event: KeyboardEvent) {
               :id="`timer-option-${item.workItemId}`"
               :key="item.workItemId"
               class="candidate"
-              :class="{ 'is-selected': selected === index }"
+              :class="{ 'is-selected': selected === index, 'is-completed': hideCompleted && item.completed }"
               role="option"
               :aria-selected="selected === index"
               :disabled="tracker.busy.value || loading"
@@ -596,6 +614,10 @@ function keydown(event: KeyboardEvent) {
                 :color-token="item.contentColorToken"
               />
               <span class="candidate-copy"><strong>{{ item.title }}</strong><span class="candidate-context">{{ item.projectName }}</span></span>
+              <span
+                v-if="hideCompleted && item.completed"
+                class="candidate-done"
+              >已完成</span>
               <TimerIcon
                 name="play"
                 class="candidate-action"
@@ -603,7 +625,7 @@ function keydown(event: KeyboardEvent) {
             </button>
           </div>
           <div
-            v-if="loading"
+            v-if="loading && !items.length"
             class="empty-state"
             role="status"
           >
@@ -624,13 +646,30 @@ function keydown(event: KeyboardEvent) {
               查看全部
             </button>
           </div>
-          <button
-            v-if="nextOffset !== null && !loading"
-            class="load-more"
-            @click="load(true)"
+          <p
+            v-if="loading && items.length"
+            class="picker-status"
           >
-            加载更多
-          </button>
+            正在加载更多工作项…
+          </p>
+          <p
+            v-else-if="problem && items.length"
+            class="picker-status"
+            role="alert"
+          >
+            加载更多失败 <button
+              class="text-button"
+              @click="load(true)"
+            >
+              重试
+            </button>
+          </p>
+          <div
+            v-if="nextOffset !== null"
+            ref="sentinel"
+            class="picker-sentinel"
+            aria-hidden="true"
+          />
         </div>
       </template>
     </template>
@@ -682,7 +721,9 @@ button:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:2px
 .picker-search input{width:100%;min-width:0;height:100%;background:transparent;border:0;outline:none;color:var(--yp-text-primary);font-size:12.5px}
 .picker-search input::placeholder{color:var(--yp-text-muted)}
 .picker-search kbd{flex-shrink:0;padding:1px 6px;border-radius:5px;font:500 10px/16px var(--yp-font-family);color:var(--yp-text-muted);background:var(--yp-timer-sunken);box-shadow:inset 0 0 0 1px var(--yp-timer-hairline)}
-.picker-scope{display:flex;align-self:flex-start;margin:8px 12px 4px;padding:2px;border-radius:9px;background:var(--yp-timer-sunken);box-shadow:inset 0 0 0 1px var(--yp-timer-hairline);flex-shrink:0}
+.picker-toolbar{display:flex;align-items:center;gap:8px;margin:8px 12px 4px;flex-shrink:0}
+.picker-toolbar>.hide-completed{margin-left:auto}
+.picker-scope{display:flex;padding:2px;border-radius:9px;background:var(--yp-timer-sunken);box-shadow:inset 0 0 0 1px var(--yp-timer-hairline);flex-shrink:0}
 .picker-scope button{border:0;border-radius:7px;background:transparent;padding:4px 12px;font-size:11.5px;color:var(--yp-text-secondary)}
 .picker-scope button.is-active{background:var(--yp-timer-chip);color:var(--yp-text-primary);font-weight:600;box-shadow:var(--yp-timer-shadow-soft)}
 .picker-results{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:4px 8px 10px}
@@ -693,12 +734,16 @@ button:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:2px
 .candidate-copy{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
 .candidate-copy strong{font-size:12.5px;font-weight:600;line-height:18px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
 .candidate-context{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px;line-height:15px;color:var(--yp-text-muted)}
+.candidate.is-completed .candidate-copy{opacity:.5}
+.candidate.is-completed .candidate-copy strong{text-decoration:line-through}
+.candidate-done{flex-shrink:0;padding:1px 6px;border-radius:999px;background:var(--yp-timer-sunken);color:var(--yp-text-muted);font-size:11px;line-height:15px}
 .candidate-action{width:24px;height:24px;padding:6px;box-sizing:border-box;border-radius:50%;flex-shrink:0;color:#fff;background:var(--yp-timer-accent);opacity:0;transform:scale(.8);transition:opacity .18s,transform .18s}
 .candidate:hover .candidate-action,.candidate.is-selected .candidate-action,.candidate:focus-visible .candidate-action{opacity:1;transform:none}
 .empty-state{min-height:135px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:14px;color:var(--yp-text-muted);font-size:12px;text-align:center}
 .empty-state>svg{width:24px;height:24px;opacity:.6}
 .text-button{color:var(--yp-timer-accent);border:0;background:transparent;padding:3px;font-size:12px}
-.load-more{display:block;width:100%;padding:10px;background:transparent;border:0;color:var(--yp-timer-accent);font-size:12px}
+.picker-status{margin:6px 0;color:var(--yp-text-muted);font-size:12px;text-align:center}
+.picker-sentinel{height:1px}
 .panel-problem{margin:0 12px 10px;padding:7px 10px;font-size:11px;color:var(--yp-status-red);background:color-mix(in srgb,var(--yp-status-red) 8%,var(--yp-bg-raised));border-radius:8px}
 .panel-problem.is-waiting{color:var(--yp-text-secondary);background:var(--yp-timer-sunken)}
 .saved-feedback{display:flex;align-items:center;gap:7px;color:var(--yp-timer-saved);font-size:13px;font-weight:600}

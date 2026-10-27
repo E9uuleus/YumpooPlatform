@@ -130,7 +130,8 @@ class SessionSecurityModelTest {
                 absoluteExpiry,
                 revokedAt,
                 reason,
-                absoluteExpiry.plusSeconds(86_400)
+                absoluteExpiry.plusSeconds(86_400),
+                false
         );
     }
 
@@ -153,7 +154,8 @@ class SessionSecurityModelTest {
                 ISSUED_AT.plusSeconds(120),
                 null,
                 null,
-                ISSUED_AT.plusSeconds(120 + 86_400)
+                ISSUED_AT.plusSeconds(120 + 86_400),
+                false
         );
     }
 

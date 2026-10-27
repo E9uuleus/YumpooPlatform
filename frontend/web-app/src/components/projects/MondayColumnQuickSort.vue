@@ -273,13 +273,13 @@ const tooltipText = computed(() => props.direction === 'ASC'
 
 .clear-button-wrapper {
   right: 100%;
-  margin-right: 6px;
+  padding-right: 6px;
   transform: translate(16px, -50%) scale(0.85);
 }
 
 .save-button-wrapper {
   left: 100%;
-  margin-left: 6px;
+  padding-left: 6px;
   transform: translate(-16px, -50%) scale(0.85);
 }
 

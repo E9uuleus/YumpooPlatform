@@ -12,7 +12,7 @@ export interface DiagnosticsActionDependencies {
   resetStartupState(): void
   openExternal(url: string): Promise<void>
   confirm(window: BrowserWindow, message: string, detail: string, confirmLabel: string): Promise<boolean>
-  removePreferences(): void
+  removePreferences(): Promise<void>
   signOut(): Promise<void>
   registerProtocol(): boolean
   /** Resolves to an error message, empty on success (Electron's shell.openPath contract). */
@@ -51,10 +51,10 @@ export function createDiagnosticsActions(dependencies: DiagnosticsActionDependen
       return { completed: true, message: '已在浏览器中打开 Web 版。' }
     },
     'reset-preferences': async window => {
-      if (!await dependencies.confirm(window, '重置本机偏好？', '计时窗的显示方式、位置和桌面通知开关将恢复默认值，登录状态不受影响。', '重置')) {
+      if (!await dependencies.confirm(window, '重置本机偏好？', '计时窗的显示方式、位置、桌面通知开关和界面本机偏好（如主题、密度）将恢复默认值，登录状态不受影响。', '重置')) {
         return { completed: false }
       }
-      dependencies.removePreferences()
+      await dependencies.removePreferences()
       return { completed: true, message: '已重置。重新启动后生效。' }
     },
     'sign-out': async window => {

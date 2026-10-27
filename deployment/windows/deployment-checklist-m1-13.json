@@ -7,7 +7,7 @@
     "architecture": "x64",
     "storageVolume": "C:",
     "publicHost": "wecom-dev.yumpoo.com",
-    "publicIp": "1.15.24.215",
+    "publicIp": "<windows-public-ip>",
     "publicPort": 443,
     "frontendAddress": "127.0.0.1",
     "frontendPort": 18173,

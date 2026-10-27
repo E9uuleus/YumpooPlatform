@@ -10,9 +10,15 @@ import static com.yumpoo.platform.workitem.application.TimeTrackingModels.*;
 
 public interface TimeTrackingRepository {
     List<TimerCandidate> candidates(UUID companyId, UUID userId, Collection<UUID> projectIds,
-            Collection<UUID> matchingProjectIds, String query, boolean personal, int offset, int limit, Instant now);
+            Collection<UUID> filterProjectIds, Collection<UUID> matchingProjectIds, String query, boolean personal,
+            boolean assignedToMe, boolean excludeCompleted, int offset, int limit, Instant now);
+    record CandidateProjectCount(UUID projectId, long visible, long hidden) {}
+    List<CandidateProjectCount> candidateProjectCounts(UUID companyId, UUID userId, Collection<UUID> projectIds,
+            Collection<UUID> matchingProjectIds, String query, boolean personal, boolean assignedToMe, boolean excludeCompleted, Instant now);
     List<RecentTimeTrackingItem> recentItems(UUID companyId, UUID userId);
     List<RecentTimeTrackingItem> resumeItems(UUID companyId, UUID userId);
+    /** Categories stopped together with the user's latest stopped timer batch, in catalog order. */
+    List<TimeCategorySubject> resumeCategories(UUID companyId, UUID userId);
     List<UUID> visibleItemIds(UUID companyId, UUID projectId, Collection<UUID> ids);
     long stateVersion(UUID companyId, UUID userId, boolean lock);
     void advanceState(UUID companyId, UUID userId);
@@ -23,7 +29,7 @@ public interface TimeTrackingRepository {
     Optional<Session> find(UUID companyId, UUID sessionId);
     List<Session> history(UUID companyId, UUID workItemId, boolean includeChildren, Instant before, UUID beforeId, int limit);
     List<MySessionRow> mySessions(UUID companyId, UUID userId, Instant from, Instant to);
-    boolean sameItemOverlaps(UUID companyId, UUID userId, UUID workItemId, Instant start, Instant stop, UUID excludedId);
+    boolean sameSubjectOverlaps(UUID companyId, UUID userId, TimeSubject subject, Instant start, Instant stop, UUID excludedId);
     void save(Session session);
     void advanceProjects(UUID companyId, Collection<UUID> projectIds);
     void touchProjects(UUID companyId, Collection<UUID> projectIds);

@@ -11,7 +11,8 @@ vi.mock('../../composables/useTimeTracker', async () => {
   const current = ref<import('@yumpoo/api-client').CurrentTimeTracker>()
   const running = computed(() => current.value?.runningSessions ?? [])
   const tracker = { current, running, isRunning: (id: string) => running.value.some(timer => timer.session.workItemId === id), now: ref(Date.now()),
-    busy: ref(false), problem: ref(''), connected: ref(true), savedAt: ref(0), wallDuration: ref(120000), start: vi.fn(), startMany: vi.fn(), switchTo: vi.fn(), stop: vi.fn(), stopAll: vi.fn() }
+    busy: ref(false), problem: ref(''), connected: ref(true), savedAt: ref(0), wallDuration: ref(120000), start: vi.fn(), startMany: vi.fn(), switchTo: vi.fn(), stop: vi.fn(), stopAll: vi.fn(),
+    preferences: ref({ timerEnabled: true, workdayStartMinute: 540, workdayEndMinute: 1080, hideCompleted: false }), setPreferences: vi.fn() }
   return { useTimeTracker: () => tracker, formatDuration: () => '0:02:00', formatTrackingDuration: () => '2m 0s', onTimeTrackingChanged: () => () => undefined }
 })
 import { useTimeTracker } from '../../composables/useTimeTracker'
@@ -24,7 +25,7 @@ function runningState(id = 's', workItemTitle = '工作a') {
 }
 function item(id: string, projectName = '项目甲'): TimerCandidate {
   return { workItemId: id, projectId: `${id}-project`, projectName, itemNo: `TASK-${id}`, title: `工作${id}`,
-    contentName: '任务', contentCode: 'TASKS', contentColorToken: WorkItemLabelColorToken.BrightBlue, statusCategory: 'TODO', assignedToMe: true, lastTrackedAt: null, ownDurationMs: 0 }
+    contentName: '任务', contentCode: 'TASKS', contentColorToken: WorkItemLabelColorToken.BrightBlue, statusCategory: 'TODO', completed: false, assignedToMe: true, lastTrackedAt: null, ownDurationMs: 0 }
 }
 async function panel(initialExpanded = true, attachTo?: HTMLElement) {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/timer', component: { template: '<div />' } }] })
@@ -199,6 +200,11 @@ describe('personal cross-project timer picker', () => {
     expect(wrapper.get('.orb-disc .timer-digits').text()).toContain('02:00')
     await wrapper.get('[aria-label="继续计时"]').trigger('click'); await flushPromises()
     expect(tracker.start).toHaveBeenCalledWith('a')
+    tracker.current.value = { session: null, runningSessions: [], resumeItems: [], recentItems: [],
+      resumeCategorySubjects: [{ timeCategory: 'MEETING', projectId: 'p' }], rowVersion: 3 } as never
+    await flushPromises()
+    await wrapper.get('[aria-label="继续计时"]').trigger('click'); await flushPromises()
+    expect(tracker.start).toHaveBeenCalledWith('category:MEETING:p')
   })
   it('opens the web capsule toward the side with more viewport room', async () => {
     const wrapper = await panel(false)
@@ -299,10 +305,19 @@ describe('personal cross-project timer picker', () => {
   it('deduplicates repeated pages and never repeats the running work item', async () => {
     tracker.current.value = runningState('session', '正在做')
     api.listTimerCandidates.mockResolvedValueOnce({ items: [item('a'), item('b')], nextOffset: 2 })
-    const wrapper = await panel()
-    expect(wrapper.findAll('[role="option"]')).toHaveLength(1)
     api.listTimerCandidates.mockResolvedValueOnce({ items: [item('b'), item('c')], nextOffset: null })
-    await wrapper.get('.load-more').trigger('click'); await flushPromises()
+    const wrapper = await panel()
+    expect(wrapper.findAll('button').some(button => button.text() === '加载更多')).toBe(false)
+    expect(wrapper.findAll('[role="option"]')).toHaveLength(2)
+  })
+  it('shows append failure and retries at the same offset without clearing existing items', async () => {
+    api.listTimerCandidates.mockResolvedValueOnce({ items: [item('a')], nextOffset: 25 }).mockRejectedValueOnce(new Error('offline'))
+    const wrapper = await panel()
+    expect(wrapper.text()).toContain('加载更多失败')
+    expect(wrapper.findAll('[role="option"]')).toHaveLength(1)
+    api.listTimerCandidates.mockResolvedValueOnce({ items: [item('b')], nextOffset: null })
+    await wrapper.get('.picker-status button').trigger('click'); await flushPromises()
+    expect(api.listTimerCandidates).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 25 }), expect.anything())
     expect(wrapper.findAll('[role="option"]')).toHaveLength(2)
   })
   it('keeps failed starts reviewable and does not close or clear the query', async () => {

@@ -11,6 +11,7 @@ export interface UpdateIpcOptions {
   readonly allowedOrigin: string
   getState(): DesktopUpdateState
   check(): void
+  download(): void
   /** Starts the normal quit (with its timer confirmation); the verified update installs on the way out. */
   restart(): void
 }
@@ -27,6 +28,11 @@ export function installUpdateIpc(options: UpdateIpcOptions): void {
   options.ipcMain.handle('yumpoo:update:check', event => {
     trusted(event)
     options.check()
+  })
+  options.ipcMain.handle('yumpoo:update:download', event => {
+    trusted(event)
+    if (options.getState().phase !== 'available') throw new Error('UPDATE_NOT_AVAILABLE')
+    options.download()
   })
   options.ipcMain.handle('yumpoo:update:restart', event => {
     trusted(event)

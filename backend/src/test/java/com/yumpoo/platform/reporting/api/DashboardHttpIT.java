@@ -192,6 +192,41 @@ class DashboardHttpIT {
     }
 
     @Test
+    void nonProjectCategoryTimeJoinsOwnAndUnfilteredTeamTimesheets() throws Exception {
+        ActorFixture admin, outsider;
+        try (var ignored = RequestCorrelationContext.open(RequestCorrelation.root("team-categories-" + UUID.randomUUID()))) {
+            var adminUser = provisioner.provision("team-category-admin", "Category Admin");
+            maintenanceUseCase.execute(new MaintenanceRoleCommand(companyQuery.current().companyId(), adminUser.userId(),
+                    MaintenanceRoleMode.BOOTSTRAP, "non-project category fixture"));
+            admin = actor(adminUser.userId());
+            outsider = actor(provisioner.provision("team-category-outsider", "No Projects").userId());
+        }
+        var item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member, workItemBody(tasksId, "并行工作"), null, UUID.randomUUID()));
+        var start = java.time.LocalDate.of(2026, 1, 5).atTime(10, 0).atZone(companyQuery.current().timezone()).toInstant();
+        String range = "\"startedAt\":\"" + start + "\",\"stoppedAt\":\"" + start.plusSeconds(3600) + "\"";
+        ok(mutate("POST", "/api/v1/me/time-sessions/fill", member, "{\"mode\":\"PARALLEL\",\"entries\":[{\"workItemId\":\""
+                + item.path("id").asText() + "\"," + range + "},{\"timeCategory\":\"MEETING\"," + range + "}]}", null, UUID.randomUUID()));
+        ok(mutate("POST", "/api/v1/me/time-sessions/fill", outsider, "{\"mode\":\"GAPS\",\"entries\":[{\"timeCategory\":\"BUSINESS_TRIP\","
+                + range + "}]}", null, UUID.randomUUID()));
+
+        var own = ok(get("/api/v1/me/timesheet?from=2026-01-01&to=2026-01-07", member));
+        assertThat(own.path("entries").get(0).path("durationMs").asLong()).isEqualTo(1800000);
+        assertThat(own.path("categoryEntries").toString()).contains("\"timeCategory\":\"MEETING\"", "\"date\":\"2026-01-05\",\"durationMs\":1800000")
+                .doesNotContain("BUSINESS_TRIP");
+        var outside = ok(get("/api/v1/me/timesheet?from=2026-01-01&to=2026-01-07", outsider));
+        assertThat(outside.path("entries").isEmpty()).isTrue();
+        assertThat(outside.path("categoryEntries").get(0).path("durationMs").asLong()).isEqualTo(3600000);
+
+        String base = "/api/v1/company/team-dashboard/timesheet/query", sheetBody = "{\"from\":\"2026-01-01\",\"to\":\"2026-01-07\",\"projectIds\":[],\"userIds\":[]}";
+        var sheet = ok(mutate("POST", base, admin, sheetBody, null, null));
+        assertThat(sheet.path("categoryEntries").size()).isEqualTo(2);
+        assertThat(sheet.path("members").toString()).contains(outsider.userId().toString());
+        var filtered = ok(mutate("POST", base, admin, sheetBody.replace("\"projectIds\":[]", "\"projectIds\":[\"" + PROJECT_ID + "\"]"), null, null));
+        assertThat(filtered.path("categoryEntries").isEmpty()).isTrue();
+        assertThat(filtered.path("entries").size()).isEqualTo(1);
+    }
+
+    @Test
     void privateDashboardsPersistAndRequireOwnerAndVersion() throws Exception {
         var body = dashboardBody();
         UUID key = UUID.randomUUID();

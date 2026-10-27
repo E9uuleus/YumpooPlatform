@@ -111,7 +111,7 @@ public final class WebAuthenticationService {
         return new WebLoginAuthorization(authorizationUri, nonce, expiresAt);
     }
 
-    public IssuedSession complete(String authorizationCode, String state, String nonce) {
+    public IssuedSession complete(String authorizationCode, String state, String nonce, boolean rememberMe) {
         OAuthAttemptToken stateToken;
         OAuthAttemptToken nonceToken;
         try {
@@ -167,7 +167,7 @@ public final class WebAuthenticationService {
             throw mapped;
         }
         try {
-            return completionService.complete(identity.memberId());
+            return completionService.complete(identity.memberId(), rememberMe);
         } catch (ApplicationException exception) {
             recordRejected("CALLBACK", exception);
             throw exception;

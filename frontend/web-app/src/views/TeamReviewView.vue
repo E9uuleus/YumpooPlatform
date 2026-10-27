@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { Refresh } from '@element-plus/icons-vue'
 import { ElButton, ElTooltip } from 'element-plus'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import TeamDashboard from '../components/team/TeamDashboard.vue'
+import { usePageOnboarding } from '../onboarding/useOnboarding'
 
 const VIEWS = {
   timesheet: { view: 'TIMESHEET', title: '成员工时' },
+  projects: { view: 'PROJECTS', title: '项目工时' },
   overtime: { view: 'OVERTIME', title: '加班统计' },
   workload: { view: 'WORKLOAD', title: '成员当前任务' },
 } as const
@@ -14,6 +16,9 @@ const VIEWS = {
 const route = useRoute()
 const current = computed(() => VIEWS[route.params.view as keyof typeof VIEWS])
 const team = ref<InstanceType<typeof TeamDashboard>>()
+const onboardingReady = computed(() => Boolean(team.value?.ready))
+const onboarding = usePageOnboarding(() => onboardingReady.value)
+watch(onboardingReady, ready => { if (ready) void onboarding.ready() }, { flush: 'post' })
 </script>
 
 <template>

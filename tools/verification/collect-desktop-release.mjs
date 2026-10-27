@@ -16,7 +16,7 @@ function gitHead(root) {
   return commit
 }
 
-// Collects the desktop release artifact from the tested M0-15 output into out/desktop: the exact installer the
+// Collects the desktop release artifact from the tested desktop output into out/desktop: the exact installer the
 // installer smoke ran, its blockmap and latest.yml, plus an SBOM and a manifest. CI attests and uploads this directory;
 // the desktop draft takes these bytes and nothing else.
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -102,7 +102,7 @@ export function describeFiles(directory, names) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  const sourceRoot = path.resolve(process.env.YUMPOO_M015_OUTPUT_ROOT ?? path.join(desktopRoot, 'out', 'm0-18-windows', 'm0-15'))
+  const sourceRoot = path.resolve(process.env.YUMPOO_DESKTOP_OUTPUT_ROOT ?? path.join(desktopRoot, 'out', 'release'))
   const outputRoot = path.join(repositoryRoot, 'out', 'desktop')
   const manifest = collectDesktopRelease({
     sourceRoot,

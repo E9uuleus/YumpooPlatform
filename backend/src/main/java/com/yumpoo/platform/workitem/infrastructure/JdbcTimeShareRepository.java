@@ -28,7 +28,7 @@ public class JdbcTimeShareRepository implements TimeShareRepository {
     }
 
     public Set<UUID> projects(UUID companyId,UUID userId,Instant from,Instant to) {
-        var query=jdbc.sql("SELECT DISTINCT project_id FROM yumpoo.work_item_time_share WHERE company_id=:c AND user_id=:u AND started_at>=:from"+(to==null ? "" : " AND started_at<:to"))
+        var query=jdbc.sql("SELECT DISTINCT project_id FROM yumpoo.work_item_time_share WHERE company_id=:c AND user_id=:u AND project_id IS NOT NULL AND started_at>=:from"+(to==null ? "" : " AND started_at<:to"))
                 .param("c",companyId).param("u",userId).param("from",Timestamp.from(from));
         if(to!=null) query.param("to",Timestamp.from(to));
         return new HashSet<>(query.query(UUID.class).list());
@@ -46,8 +46,9 @@ public class JdbcTimeShareRepository implements TimeShareRepository {
         return query.query(JdbcTimeTrackingRepository::map).list();
     }
     public void insert(List<Share> shares) {
-        for(Share s:shares) jdbc.sql("INSERT INTO yumpoo.work_item_time_share(session_id,started_at,stopped_at,company_id,user_id,project_id,work_item_id,concurrency) VALUES (:id,:start,:stop,:c,:u,:p,:w,:n)")
+        for(Share s:shares) jdbc.sql("INSERT INTO yumpoo.work_item_time_share(session_id,started_at,stopped_at,company_id,user_id,project_id,work_item_id,concurrency,time_category,category_project_id) VALUES (:id,:start,:stop,:c,:u,:p,:w,:n,:category,:cp)")
                 .param("id",s.sessionId()).param("start",Timestamp.from(s.startedAt())).param("stop",s.stoppedAt()==null ? null : Timestamp.from(s.stoppedAt()))
-                .param("c",s.companyId()).param("u",s.userId()).param("p",s.projectId()).param("w",s.workItemId()).param("n",s.concurrency()).update();
+                .param("c",s.companyId()).param("u",s.userId()).param("p",s.projectId()).param("w",s.workItemId()).param("n",s.concurrency())
+                .param("category",s.timeCategory()==null ? null : s.timeCategory().name()).param("cp",s.categoryProjectId()).update();
     }
 }

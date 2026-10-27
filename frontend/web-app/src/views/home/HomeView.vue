@@ -16,8 +16,10 @@ import { useInbox } from '../../composables/useInbox'
 import { operationsAlertSummaryContext } from '../../components/operations/operationsContext'
 import { useSession } from '../../composables/useSession'
 import { formatDuration, onTimeTrackingChanged, useTimeTracker } from '../../composables/useTimeTracker'
+import { onWorkItemChanged } from '../../composables/workItemChanges'
 import { usePageOnboarding } from '../../onboarding/useOnboarding'
 import { daypart, greeting, heroDate, hubProjects, sortTasks, type HubProject, type TaskFilter } from './homeModel'
+import { timerTitle } from '../../components/timer/timeCategories'
 
 interface JumpCard { key: string; label: string; meta: string; icon: Component; tone: JumpTone; open: () => void }
 
@@ -35,7 +37,10 @@ const tasks = ref<TeamMemberTask[]>([]), projects = ref<DashboardProject[]>([]),
 const filter = ref<TaskFilter>('ALL')
 const running = computed(() => tracker.running.value.length > 0)
 const startedAt = computed(() => running.value ? new Date(Math.min(...tracker.running.value.map(timer => timer.session.startedAt.getTime()))) : undefined)
-const runningTitle = computed(() => `${tracker.running.value[0]?.workItemTitle ?? '工作项'}${tracker.running.value.length > 1 ? ` 等 ${tracker.running.value.length} 项` : ''}`)
+const runningTitle = computed(() => {
+  const first = tracker.running.value[0]
+  return `${first ? timerTitle(first, '工作项') : '工作项'}${tracker.running.value.length > 1 ? ` 等 ${tracker.running.value.length} 项` : ''}`
+})
 
 const counts = computed(() => ({
   inProgress: tasks.value.filter(task => task.statusCategory === TeamMemberTaskStatusCategoryEnum.InProgress).length,
@@ -67,7 +72,7 @@ const jumps = computed<JumpCard[]>(() => [
   { key: 'projects', label: '管理项目', meta: projectTotal.value === undefined ? '全部项目目录' : `${projectTotal.value} 个进行中项目`,
     icon: FolderOpened, tone: 'blue', open: () => openWorkspace('workspace') },
   session.isCompanyAdmin.value
-    ? { key: 'team', label: '团队视图', meta: '成员工时、加班与当前任务', icon: DataLine, tone: 'purple', open: () => void router.push({ name: 'team', params: { view: 'timesheet' } }) }
+    ? { key: 'team', label: '团队视图', meta: '成员与项目工时、加班与当前任务', icon: DataLine, tone: 'purple', open: () => void router.push({ name: 'team', params: { view: 'timesheet' } }) }
     : { key: 'dashboards', label: '仪表板', meta: '个人看板与统计', icon: DataAnalysis, tone: 'purple', open: () => openWorkspace('dashboards') },
   { key: 'inbox', label: '收件箱', meta: inbox.unread.value ? `${inbox.unread.value} 条未读` : '没有未读消息', icon: Message, tone: 'red',
     open: () => void router.push({ name: 'inbox' }) },
@@ -109,11 +114,15 @@ function loadMonth(): void {
   void myWorkApi.getMyTimesheet({ from: toApiDate(`${month.value}-01`), to: toApiDate(addDays(`${shiftMonth(month.value, 1)}-01`, -1)) })
     .then(sheet => { monthSheet.value = sheet }, quiet)
 }
-void myWorkApi.listMyCurrentTasks({ offset: 0, limit: 100 }).then(page => { tasks.value = page.items }, quiet)
+function loadTasks(): void {
+  void myWorkApi.listMyCurrentTasks({ offset: 0, limit: 100 }).then(page => { tasks.value = page.items }, quiet)
+}
+loadTasks()
 void dashboardsApi.listDashboardProjects({ includeArchived: false, limit: 50 }).then(page => { projects.value = page.items }, quiet)
 void projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.Active, actorAccesses: MY_PROJECT_ACCESSES, page: 0, size: 1 }).then(page => { projectTotal.value = page.totalElements }, quiet)
 loadMonth()
 onBeforeUnmount(onTimeTrackingChanged(loadMonth))
+onBeforeUnmount(onWorkItemChanged(loadTasks))
 onMounted(() => { void onboarding.ready() })
 </script>
 

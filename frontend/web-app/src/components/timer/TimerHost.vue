@@ -3,11 +3,14 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElButton, ElDialog } from 'element-plus'
 import type { DesktopTimerState, TimerOrbLayout } from '@yumpoo/preload-contract'
+import { useAppearance } from '../../composables/useAppearance'
 import { useSession } from '../../composables/useSession'
-import { activateTimeTracker, timerExitPrompt, chooseTimerExit, confirmTimerExit, formatDuration, timerClockOffset, useTimeTracker } from '../../composables/useTimeTracker'
+import { activateTimeTracker, timerExitPrompt, timerExitPhase, cancelTimerExit, chooseTimerExit, confirmTimerExit, formatDuration, timerClockOffset, useTimeTracker } from '../../composables/useTimeTracker'
 import { logoutGuard } from '../../composables/logoutGuard'
 import TimerPanel from './TimerPanel.vue'
 import TimerIcon from './TimerIcon.vue'
+import { isPanelSurface, SHELL_SURFACE } from '../desktop/surfaces'
+import { resumeSubjects, timerTitle } from './timeCategories'
 
 const route = useRoute()
 const session = useSession()
@@ -26,9 +29,10 @@ let openRevision = 0
 let disposed = false
 let themeObserver: MutationObserver | undefined
 let endDrag: (() => void) | undefined
-const standalone = computed(() => route.path === '/timer')
+const desktopPage = isPanelSurface(window.location.pathname)
+const standalone = computed(() => route.path === SHELL_SURFACE.timer || desktopPage)
 const authenticated = computed(() => session.phase.value === 'authenticated')
-if (desktop) void desktop.getWindowState().then(state => { if (!disposed) surface.value = state.surface }).catch(() => undefined)
+if (desktop && !desktopPage) void desktop.getWindowState().then(state => { if (!disposed) surface.value = state.surface }).catch(() => undefined)
 watch([authenticated, () => session.authentication.value?.user.id], ([active]) => {
   activateTimeTracker(active)
   if (!active) { inline.value = false; pipWindow?.close() }
@@ -38,13 +42,15 @@ const desktopState = computed(() => {
   const current = tracker.current.value
   const running = tracker.running.value[0]
   const count = tracker.running.value.length
-  const recent = current?.resumeItems[0] ?? current?.recentItems[0]
-  const resumeCount = current?.resumeItems.length ?? 0
+  // Desktop shells only take a work item as the item to resume; a group of categories alone has none to offer there.
+  const categoryOnly = !current?.resumeItems.length && !!current?.resumeCategorySubjects?.length
+  const recent = categoryOnly ? undefined : current?.resumeItems[0] ?? current?.recentItems[0]
+  const resumeCount = resumeSubjects(current).length
   return { accountId: authenticated.value ? session.authentication.value?.user.id ?? null : null,
     rowVersion: current?.rowVersion ?? 0, connected: tracker.connected.value, busy: tracker.busy.value,
     savedAt: tracker.savedAt.value,
     running: running ? { sessionId: running.session.id, workItemId: running.session.workItemId,
-      title: `${running.workItemTitle ?? '不可见工作项'}${count > 1 ? ` 等 ${count} 项` : ''}`,
+      title: `${timerTitle(running)}${count > 1 ? ` 等 ${count} 项` : ''}`,
       startedAt: new Date(Math.min(...tracker.running.value.map(timer => timer.session.startedAt.getTime()))).toISOString() } : null,
     recent: recent ? { workItemId: recent.workItemId, title: `${recent.title}${resumeCount > 1 ? ` 等 ${resumeCount} 项` : ''}` } : null,
     clockOffsetMs: Math.round(timerClockOffset()),
@@ -61,15 +67,43 @@ watch(() => tracker.running.value.length > 0, running => {
   if (running && !desktop) window.addEventListener('beforeunload', beforeUnload)
 }, { immediate: true })
 logoutGuard.check = confirmTimerExit
+const appearance = useAppearance()
+watch([surface, appearance.themeMode, appearance.densityMode], ([owner, theme, density]) => {
+  if (owner === 'main') void desktop?.publishAppearance?.({ theme, density }).catch(() => undefined)
+}, { immediate: true })
+let exitRequest: string | undefined
+const reportExitPhase = () => {
+  const id = exitRequest
+  if (!id) return
+  void desktop?.reportExitPhase?.(id, timerExitPhase.value).then(accepted => {
+    if (!accepted && exitRequest === id) { exitRequest = undefined; cancelTimerExit() }
+  }).catch(() => { if (exitRequest === id) { exitRequest = undefined; cancelTimerExit() } })
+}
+watch(timerExitPhase, reportExitPhase, { flush: 'sync' })
+const offExitCancelled = desktop?.onExitCancelled?.(id => {
+  if (exitRequest === id) { exitRequest = undefined; cancelTimerExit() }
+})
 const offExit = desktop?.onExitRequest(async requestId => {
-  await desktop.acknowledgeExit(requestId)
-  const allow = !authenticated.value || await confirmTimerExit()
-  await desktop.completeExit(requestId, allow)
+  if (exitRequest) return
+  exitRequest = requestId
+  try {
+    await desktop.acknowledgeExit(requestId)
+    if (exitRequest !== requestId) return
+    const confirmation = authenticated.value ? confirmTimerExit() : Promise.resolve(true)
+    reportExitPhase()
+    const allow = await confirmation
+    if (exitRequest === requestId) await desktop.completeExit(requestId, allow)
+  } catch {
+    if (exitRequest === requestId) {
+      cancelTimerExit()
+      await desktop.completeExit(requestId, false).catch(() => undefined)
+    }
+  } finally { if (exitRequest === requestId) exitRequest = undefined }
 })
 const offCommand = desktop?.onCommand(async command => {
   const resume = tracker.current.value?.resumeItems ?? []
   const success = authenticated.value && (command.action === 'stop' ? await tracker.stopAll()
-    : resume.some(item => item.workItemId === command.workItemId) ? await tracker.startMany(resume.map(item => item.workItemId)) : await tracker.start(command.workItemId))
+    : resume.some(item => item.workItemId === command.workItemId) ? await tracker.startMany(resumeSubjects(tracker.current.value)) : await tracker.start(command.workItemId))
   await desktop.completeCommand(command.requestId, success).catch(() => undefined)
 })
 const openFromToolbar = () => { if (tracker.timerEnabled.value) void open() }
@@ -77,7 +111,7 @@ const openFromToolbar = () => { if (tracker.timerEnabled.value) void open() }
 watch(() => tracker.timerEnabled.value, enabled => {
   if (enabled || tracker.running.value.length) return
   hide()
-  if (desktop) void desktop.hide().catch(() => undefined)
+  if (desktop && !desktopPage) void desktop.hide().catch(() => undefined)
 })
 const started = () => {
   if (standalone.value) return
@@ -98,7 +132,8 @@ onBeforeUnmount(() => {
   window.removeEventListener('yumpoo:open-timer', openFromToolbar)
   window.removeEventListener('yumpoo:timer-started', started)
   window.removeEventListener('resize', constrainPosition)
-  offExit?.(); offCommand?.(); endDrag?.(); themeObserver?.disconnect()
+  if (exitRequest) { exitRequest = undefined; cancelTimerExit() }
+  offExitCancelled?.(); offExit?.(); offCommand?.(); endDrag?.(); themeObserver?.disconnect()
   window.removeEventListener('beforeunload', beforeUnload)
   pipWindow?.close(); activateTimeTracker(false); delete logoutGuard.check
 })
@@ -218,6 +253,7 @@ function drag(event: PointerEvent) {
     v-if="authenticated && !standalone && !inline && !pipTarget && (tracker.timerEnabled.value || tracker.running.value.length)"
     class="global-timer-entry"
     :class="{ 'is-running': tracker.running.value.length }"
+    data-tour="timer-launcher"
     aria-label="查找工作与计时"
     @click="open"
   >

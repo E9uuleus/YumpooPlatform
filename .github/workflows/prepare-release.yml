@@ -30,6 +30,8 @@ jobs:
       actions: read
       attestations: read
       contents: write
+      # Reads the PR behind each commit for its release notes.
+      pull-requests: read
     steps:
       # Only push runs on main of this repository reach here, so checking out their commit runs reviewed code.
       - name: Checkout the main commit being released
@@ -49,4 +51,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOURCE_COMMIT: ${{ github.event.workflow_run.head_sha || inputs.commit }}
           WECOM_RELEASE_WEBHOOK: ${{ secrets.WECOM_RELEASE_WEBHOOK }}
+          MONITOR_ENABLED: ${{ vars.MONITOR_ENABLED }}
+          MONITOR_ENVIRONMENT: ${{ vars.MONITOR_ENVIRONMENT }}
+          MONITOR_SSH_HOST: ${{ secrets.MONITOR_SSH_HOST }}
+          MONITOR_SSH_KEY: ${{ secrets.MONITOR_SSH_KEY }}
+          MONITOR_KNOWN_HOSTS: ${{ secrets.MONITOR_KNOWN_HOSTS }}
+          MONITOR_SOURCE_SECRET: ${{ secrets.MONITOR_SOURCE_SECRET }}
         run: node tools/release/prepare-release.mjs

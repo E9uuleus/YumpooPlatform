@@ -4,10 +4,12 @@
 
 - 编码约定：当前代码文件统一使用 UTF-8 编码，注意中文显示一致性，新增文件保持一致。
 - 目录约定：`docs/` 文档和版本化原型导出物；`docs/`目录永远不被跟踪，也不加入提交、推送。
+- 文档中心：改动用户可见的界面、流程或架构时，在同一 PR 同步更新 frontend/web-app/src/docs-site/content/ 对应页面与 onboarding/tours.ts；文档全部公开，不写主机、目录、账号与密钥。
 ## Git 分支与交付
 
 - 分支模型：`dev` 是集成分支（默认分支），`main` 是已发布线。子功能开发必须基于最新的 `dev` 创建独立分支，例如 `feature/<功能名>` 或 `fix/<功能名>`；已有对应任务分支时继续使用，不为阶段切换重复建分支。线上紧急修复从 `main` 创建 `hotfix/<名称>`。
 - 变更集成必须通过 PR：功能与修复 PR 指向 `dev` 并用 squash 合并；`dev` 晋升到 `main` 与 `hotfix/*` 合入 `main` 用合并提交。禁止直接推送 `dev` 或 `main`；合并前必须通过代码审查和 CI，指向 `main` 的 PR 还须通过 `Main Promotion Policy`。
+- PR 正文必须有「## 发布说明」段，每行 `- 类别｜范围：描述`，类别为 新增/改进/修复/安全/运维，范围为 Web/桌面/服务端；面向使用者书写，不写步骤编号、提交前缀、SHA 或 PR 号；没有可见或运维影响时只写 `- 无`。Release 描述和桌面下载页由它生成，`Release Notes Policy` 检查格式；Dependabot、`backmerge/*` 与 dev 晋升 PR 豁免。规则见[PR 发布说明](.agents/notes/implemented/process/2026-10-20-release-notes-from-pull-requests.md)。
 - 发布：`server-vYYYY.MM.DD.N` 标签只由 Prepare Release 在 `main` 推送 CI 成功后随草稿生成，在草稿上点击 Publish 即为上线决定。禁止手工创建或移动 `server-v*` 标签、手工新建 Release 或替换附件；热修复发布后必须用合并提交合并自动生成的 `backmerge/*` PR。规则见 [main 发布线](.agents/notes/implemented/process/2026-10-15-main-release-line.md)。
 - 部署引擎（`deployment/windows/cd`）的改动需管理员在主机运行 `Update-YumpooEngine.ps1` 才生效；`host.json` 新增字段必须有向后兼容的默认值，引擎永不执行发布包内的脚本。发布流程变化时同步更新 `deployment/windows/RUNBOOK.md`、`.github/CI.md` 与发布帮助文档。
 - 任务明确包含相应交付阶段时持续完成，不把早期阶段当成全部完成。
@@ -39,6 +41,7 @@ contracts/examples/              Golden contract examples
 
 frontend/web-app/                Vue 3 and Vite web application
 frontend/web-app/src/            Web UI, routing, authentication, and API integration
+frontend/web-app/src/docs-site/  Public /docs documentation site: content and renderer
 
 desktop/desktop-shell/            Electron desktop application shell
 desktop/desktop-shell/src/main/   Electron main-process runtime and security policies
@@ -53,7 +56,6 @@ packages/preload-contract/       Typed Electron preload IPC contract
 
 deployment/windows/              Windows deployment scripts, runbooks, and checklists
 docs/                            Product, architecture, delivery, and operations documentation
-evidence/                        Milestone acceptance evidence and verification records
 
 tools/                           Workspace validation and automation utilities
 tools/architecture/              Workspace boundary and architecture checks

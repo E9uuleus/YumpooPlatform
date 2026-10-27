@@ -14,6 +14,7 @@ import { isProblemStatus, toApiProblem, type ApiProblem } from '../../api/proble
 import InlineProblem from '../../components/InlineProblem.vue'
 import ProjectCreateDialog from '../../components/projects/ProjectCreateDialog.vue'
 import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHeader.vue'
+import { projectColors } from '../../components/team/teamDashboardModel'
 import { MY_PROJECT_ACCESSES } from '../../components/projects/projectScope'
 import YpAssignee from '../../components/yp/YpAssignee.vue'
 import YpEmptyState from '../../components/yp/YpEmptyState.vue'
@@ -33,6 +34,7 @@ type ProjectCatalogView = 'recent' | 'content'
 const router = useRouter()
 const session = useSession()
 const result = ref<ProjectPage>()
+const colors = computed(() => projectColors((result.value?.items ?? []).map(item => item.id)))
 const ownerOptions = ref<ProjectOwnerOption[]>([])
 const referenceReady = ref(false)
 const activeView = ref<ProjectCatalogView>('content')
@@ -402,53 +404,41 @@ onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTi
         >
           <div class="table-scroll project-desktop-table">
             <el-table
-              class="project-management-table"
+              class="project-management-table project-management-table--catalog"
               :data="result?.items ?? []"
               @row-click="openProjectFromTable"
             >
               <el-table-column
                 fixed="left"
                 label="项目名称"
-                min-width="260"
+                min-width="360"
               >
                 <template #default="scope">
-                  <div class="project-name-cell">
-                    <svg
-                      class="project-name-cell__icon"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 16 16"
-                      fill="none"
+                  <div class="project-identity-cell">
+                    <span
+                      class="project-identity-cell__mark"
+                      :style="{ '--mark': colors.get(scope.row.id) }"
                       aria-hidden="true"
-                    >
-                      <rect
-                        x="2"
-                        y="2.5"
-                        width="12"
-                        height="11"
-                        rx="2"
-                        stroke="currentColor"
-                        stroke-width="1.3"
-                      />
-                      <path
-                        d="M2 6.5h12M6.5 6.5v7"
-                        stroke="currentColor"
-                        stroke-width="1.3"
-                      />
-                    </svg>
-                    <button
-                      class="project-name-cell__link"
-                      type="button"
-                      @click.stop="openProjectFromTable(scope.row)"
-                    >
-                      {{ scope.row.name }}
-                    </button>
+                    >{{ scope.row.name.slice(0, 1) }}</span>
+                    <span class="project-identity-cell__text">
+                      <button
+                        class="project-name-cell__link"
+                        type="button"
+                        @click.stop="openProjectFromTable(scope.row)"
+                      >{{ scope.row.name }}</button>
+                      <small>
+                        <span>负责人 {{ scope.row.ownerDisplayName }}</span>
+                        <span :title="formatTimestamp(scope.row.createdAt, companyTimezone)">创建 {{ formatDateOnly(scope.row.createdAt, companyTimezone) }}</span>
+                        <span :title="formatTimestamp(scope.row.updatedAt, companyTimezone)">修改 {{ formatDateOnly(scope.row.updatedAt, companyTimezone) }}</span>
+                      </small>
+                    </span>
                   </div>
                 </template>
               </el-table-column>
               <el-table-column
                 label="状态"
-                width="110"
+                width="120"
+                align="center"
               >
                 <template #default="scope">
                   <yp-status-tag
@@ -459,40 +449,12 @@ onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTi
                 </template>
               </el-table-column>
               <el-table-column
-                label="负责人"
-                width="80"
-              >
-                <template #default="scope">
-                  <yp-assignee
-                    :user-id="scope.row.ownerUserId"
-                    :display-name="scope.row.ownerDisplayName"
-                    size="table"
-                    :show-name="false"
-                  />
-                </template>
-              </el-table-column>
-              <el-table-column
-                label="创建时间"
-                width="120"
-              >
-                <template #default="scope">
-                  <span :title="formatTimestamp(scope.row.createdAt, companyTimezone)">{{ formatDateOnly(scope.row.createdAt, companyTimezone) }}</span>
-                </template>
-              </el-table-column>
-              <el-table-column
-                label="最后修改时间"
-                width="120"
-              >
-                <template #default="scope">
-                  <span :title="formatTimestamp(scope.row.updatedAt, companyTimezone)">{{ formatDateOnly(scope.row.updatedAt, companyTimezone) }}</span>
-                </template>
-              </el-table-column>
-              <el-table-column
                 label="我的角色"
-                width="110"
+                width="120"
+                align="center"
               >
                 <template #default="scope">
-                  {{ businessLabel(scope.row.actorAccess) }}
+                  <span class="project-role-chip">{{ businessLabel(scope.row.actorAccess) }}</span>
                 </template>
               </el-table-column>
             </el-table>

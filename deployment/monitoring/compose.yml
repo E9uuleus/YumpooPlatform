@@ -1,0 +1,86 @@
+name: yumpoo-monitor
+x-runtime: &runtime
+  restart: unless-stopped
+  network_mode: host
+  read_only: true
+  security_opt: [no-new-privileges:true]
+  cap_drop: [ALL]
+  logging:
+    driver: json-file
+    options: { max-size: 10m, max-file: '3' }
+services:
+  hub:
+    <<: *runtime
+    image: yumpoo-monitor-hub:${MONITOR_BUILD:?Set the reviewed source commit}
+    build:
+      context: ../..
+      dockerfile: deployment/monitoring/Dockerfile
+    user: '10001:10001'
+    mem_limit: 192m
+    environment: { NODE_OPTIONS: --max-old-space-size=128, MONITOR_CONFIG: /etc/yumpoo-monitor/secrets.json }
+    volumes:
+      - /etc/yumpoo-monitor:/etc/yumpoo-monitor:ro
+      - /var/lib/yumpoo-monitor/hub:/data
+      - /var/lib/yumpoo-monitor/discovery:/discovery
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:8788/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  prometheus:
+    <<: *runtime
+    image: prom/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2
+    user: '65534:65534'
+    mem_limit: 512m
+    command: [--config.file=/etc/prometheus/prometheus.yml, --web.listen-address=127.0.0.1:9090, --storage.tsdb.path=/prometheus, --storage.tsdb.retention.time=30d, --storage.tsdb.retention.size=10GB, --query.max-concurrency=4, --query.max-samples=1000000]
+    volumes:
+      - /etc/yumpoo-monitor/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./rules.yml:/etc/prometheus/rules.yml:ro
+      - /var/lib/yumpoo-monitor/prometheus:/prometheus
+      - /var/lib/yumpoo-monitor/discovery:/discovery:ro
+  blackbox:
+    <<: *runtime
+    image: prom/blackbox-exporter:v0.29.1@sha256:ea1c7aa3ef3f307cd03e85f34abb604478ccb90b567fc690da0cd9776da76b13
+    mem_limit: 64m
+    command: [--config.file=/etc/blackbox.yml, --web.listen-address=127.0.0.1:9115]
+    volumes: [./blackbox.yml:/etc/blackbox.yml:ro]
+  alertmanager:
+    <<: *runtime
+    image: prom/alertmanager:v0.34.1@sha256:e9733bafb1bdef9b00e25a21f8f99dc26a22224bf16641ad754d1649f4c3357a
+    user: '65534:65534'
+    mem_limit: 96m
+    command: [--config.file=/etc/alertmanager.yml, --storage.path=/alertmanager, --web.listen-address=127.0.0.1:9093, --cluster.listen-address=]
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager.yml:ro
+      - /etc/yumpoo-monitor/alert-token:/run/secrets/alert-token:ro
+      - /var/lib/yumpoo-monitor/alertmanager:/alertmanager
+  grafana:
+    <<: *runtime
+    image: grafana/grafana:13.2.4@sha256:dbbc38ea21103cefb50396340cd88afec779c7e070b0a7bf5a75b4ce46651d3f
+    user: '472:472'
+    mem_limit: 384m
+    tmpfs: [/tmp:size=32m]
+    environment:
+      GF_SERVER_HTTP_ADDR: 127.0.0.1
+      GF_SERVER_HTTP_PORT: '3000'
+      GF_AUTH_ANONYMOUS_ENABLED: 'false'
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_SECURITY_ADMIN_USER: monitor-admin
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana-password
+      GF_ANALYTICS_REPORTING_ENABLED: 'false'
+      GF_ANALYTICS_CHECK_FOR_UPDATES: 'false'
+      GF_PLUGINS_PREINSTALL_DISABLED: 'true'
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/yumpoo.json
+    volumes:
+      - /etc/yumpoo-monitor/grafana-password:/run/secrets/grafana-password:ro
+      - /var/lib/yumpoo-monitor/grafana:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+  node-exporter:
+    <<: *runtime
+    image: prom/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
+    user: '65534:65534'
+    pid: host
+    mem_limit: 64m
+    command: [--web.listen-address=127.0.0.1:9100, --path.rootfs=/host, --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|run)($$|/)]
+    volumes: ['/:/host:ro,rslave']

@@ -32,7 +32,7 @@ Status: implemented
 
 - 关闭：`RunAsNode`、`EnableNodeOptionsEnvironmentVariable`、`EnableNodeCliInspectArguments`、`GrantFileProtocolExtraPrivileges`；
 - 开启：`EnableEmbeddedAsarIntegrityValidation`、`OnlyLoadAppFromAsar`，篡改过的 asar 无法启动；
-- 开启 `EnableCookieEncryption`，作为纵深防御。业务窗口使用不带 `persist:` 前缀的内存分区，会话 cookie 不落盘，每次启动时从 safeStorage 加密的凭据存储重新注入；如果以后改用持久分区，cookie 也不会以明文写入磁盘。
+- 开启 `EnableCookieEncryption`，作为纵深防御。业务窗口使用持久分区 `persist:yumpoo-authenticated`，主进程以 `cache: false` 建立，不在磁盘留业务响应；登录 cookie 不带过期时间，不写入磁盘，每次启动从 safeStorage 加密的凭据存储重新注入，不勾选「7 天内免登录」时不保存凭据，见[会话保持 Note](../security/2026-10-19-session-remember-and-desktop-guards.md)。
 
 **分发配置**：
 
@@ -76,7 +76,7 @@ Status: implemented
 
 - 重试（保持当前模式重启）、以正常模式重启（清零失败计数）；
 - 用浏览器打开 Web 版、打开日志文件夹、重新注册 `yumpoo:` 协议；
-- 退出登录并清除本机凭据、重置本机偏好，这两项先弹窗确认；
+- 退出登录并清除本机凭据、重置本机偏好（重置同时清空业务分区的 localStorage），这两项先弹窗确认；
 - 导出诊断包：用户选择保存位置，内容为报告、轮转日志和最近 5 个崩溃转储，用不依赖第三方库的仅存储 ZIP 写出。
 
 重启时不重放 `yumpoo:` 回调、`--self-check` 和 `--diagnostics` 参数。
@@ -110,7 +110,7 @@ Status: implemented
 
 **应用内更新**（DESK-3）：
 
-- [UpdateController](../../../../desktop/desktop-shell/src/main/update-controller.ts) 驱动 electron-updater 的 NSIS 更新：`autoDownload=true`、`autoInstallOnAppQuit=false`、`allowDowngrade=false`、关闭 web installer；
+- [UpdateController](../../../../desktop/desktop-shell/src/main/update-controller.ts) 驱动 electron-updater 的 NSIS 更新：`autoDownload` 取偏好「自动下载更新」（默认 true；关闭时进入 `available`，经 `yumpoo:update:download` 手动下载）、`autoInstallOnAppQuit=false`、`allowDowngrade=false`、关闭 web installer；
 - 检查时机：启动后 30 秒首次检查，之后每 4 小时一次，加最多 30 分钟抖动；系统唤醒时，若距上次检查超过 15 分钟，再检查一次；
 - `update-downloaded` 之后从更新源取 `.sig.json`（30 秒超时，超时即取消请求，按取不到授权处理并回到可重试状态，避免一直卡在 `verifying` 拦住之后的检查），按上面的规则核验。通过才进入 `ready`；不通过就删除已下载的文件并记录原因码，永不安装。同时删除 electron-updater 写入缓存根目录的 `current.blockmap`：它描述的是刚下载、却没有安装的版本，留着会让之后的每次差分下载都校验失败；
 - electron-updater 的代码签名钩子在没有 `publisherName` 时会被跳过（已读源码确认），所以本期不依赖它；
@@ -122,17 +122,19 @@ Status: implemented
 
 - `DesktopBridge.update` 提供 `getState / check / restart / onState`，只接受主窗口主框架的调用。Web 只在桥接存在且状态为 `ready` 时显示「重启以更新」横幅；
 - 托盘提示和托盘原生菜单在更新就绪时显示版本与「重启以更新到 X」；诊断窗显示更新状态；
+- 托盘右键菜单显示版本与更新状态，可以检查、下载和重启更新；检查与下载时保持菜单打开，旧壳缺少更新状态时隐藏该入口。
 - 发往本 origin 的请求由 `onBeforeSendHeaders` 加上 `X-Client-Type: ELECTRON`、`X-Client-Version`、`X-Client-Protocol-Version: 1`，为服务端最低版本闸门做准备。其他来源的请求不会带这些头。
 
 **卸载边界**：
 
 - 更新（NSIS 以 `--updated` 运行旧卸载器）保留全部数据；
-- 真正卸载时删除 `yumpoo:` 协议键，并删除 userData 中除 `timer-preferences.json` 和 `inbox-preferences.json` 以外的全部内容：`auth\` 中的加密凭据存储（唯一落盘的会话）以及 Chromium 的缓存、本地存储等运行数据；同时删除 `%LOCALAPPDATA%\yumpoo-desktop-updater`。安装器会把自身复制到这里作为差分更新的基准（约 100 MB），electron-updater 的下载缓存也放在这里。
+- 真正卸载先删除安全模式快捷方式；遇到文件被读者占用等删除错误时，每 250 毫秒重试一次、最多 40 次。持续失败则以错误中止，保留安装文件、登记项、协议与用户数据，让用户释放占用后重试；不把残留留给重启，也不让验证脚本代为删除。安装冒烟用真实的 Windows 文件共享锁覆盖短暂占用后成功、持续占用后保留安装以及释放后重试成功。
+- 真正卸载时删除 `yumpoo:` 协议键、`HKCU\Software\Microsoft\Windows\CurrentVersion\Run` 与 `StartupApproved\Run` 的 `com.yumpoo.desktop` 值，并删除 userData 中除 `timer-preferences.json`、`inbox-preferences.json` 和 `desktop-preferences.json` 以外的全部内容：`auth\` 中的加密凭据存储（唯一落盘的会话）以及 Chromium 的缓存、本地存储等运行数据；同时删除 `%LOCALAPPDATA%\yumpoo-desktop-updater`。安装器会把自身复制到这里作为差分更新的基准（约 100 MB），electron-updater 的下载缓存也放在这里。
 
 **安装自检与门禁**：
 
 - 打包版支持 `--self-check=<绝对路径>`：不联网，检查是否打包、分发配置、协议注册，并在隐藏窗口中离线渲染诊断页（等到页面状态变为 `ready`）；报告 safeStorage 可用性，把 JSON 报告写到指定文件后退出。报告写文件而不走 stdout，因为 GUI 子系统 exe 的标准输出不可靠；
-- [打包校验](../../../../tools/verification/package-m0-15-win.mjs)在 `win-unpacked` 上检查图标、版本资源、fuse 状态、`resources` 白名单和 asar 白名单，生成原有 schema 的 M0-15 manifest，另写一份 `desktop-installer.json`，记录安装包名称、大小和 SHA-256；
+- [打包校验](../../../../tools/verification/package-desktop-win.mjs)在 `win-unpacked` 上检查图标、版本资源、fuse 状态、`resources` 白名单和 asar 白名单，生成 `desktop-artifact-manifest.json`（DESKTOP manifest），另写一份 `desktop-installer.json`，记录安装包名称、大小和 SHA-256；
 - [安装冒烟](../../../../tools/verification/verify-desktop-installer.mjs)在 Windows 门禁中依次执行：静默安装、核对快捷方式（含安全模式快捷方式的目标和参数）和协议键、自检（含诊断页离线渲染）、预置会话与偏好数据、同版本覆盖安装、静默卸载，并断言上面的卸载边界；再以 `/D=` 指定的自定义目录重复安装，核对 exe 位置、`InstallLocation` 与协议键命令路径，要求不带 `/D=` 的同版本覆盖安装沿用该目录、卸载后目录被删除。每次安装都要求 `QuietUninstallString` 带 `/S`。它会改动当前用户的配置，所以只在 `CI=true` 或 `YUMPOO_DESKTOP_INSTALLER_SMOKE=1` 时运行，并先把已有的 userData、更新缓存目录和协议键移到临时备份目录（更新端到端验证同样如此），结束后恢复。备份与运行处于同一个 try 内，中途失败也会恢复已移开的部分；任何一项恢复失败时保留备份目录并让冒烟失败，报错中给出目录位置。NSIS 卸载程序会从 %TEMP% 重新启动自身，所以由 Windows PowerShell 临时编译[进程树助手](../../../../tools/verification/windows-process-tree.cs)：挂起创建根进程、加入 Job Object 后才恢复执行，直到内核报告该 Job 没有活动进程，再返回根进程退出码。Job 禁止子进程脱离，且关闭最后一个句柄会终止全部成员，因此外层超时结束助手时也会结束分离的子孙进程。收尾卸载失败或超时时仍不恢复配置，保留备份并报出路径，由人确认卸载结束后手动恢复。Windows 门禁覆盖快速原生启动器、真实分离子孙进程、参数传递、退出码及超时终止行为。
 
 **更新端到端验证**（DESK-3）：
@@ -164,7 +166,7 @@ Status: implemented
 - `host.json` 的 `desktopFeed` 默认关闭，由管理员用 `Update-YumpooEngine.ps1 -EnableDesktopFeed` 启用；Nginx 用 `root` 把 `/desktop/` 映射到 `desktopFeed.root`，`latest.yml`、`release.json` 不缓存，带版本号的文件长期缓存；
 - 每周发布演练要求更新源上的 `latest.yml`、`release.json` 与最新已发布桌面 Release 的附件逐字节一致。
 
-**下载页**（DESK-4）：Web 新增匿名路由 `/download`，读取更新源的 `release.json`，展示版本、大小、SHA-256、改动摘要和 SmartScreen 首装指引；路由守卫和会话跳转都不处理它。浏览器账户菜单和升级页链接到这里。桌面壳仍拒绝附件以外的下载，所以在壳内只提示改用浏览器打开。
+**下载页**（DESK-4）：Web 新增匿名路由 `/download`，读取更新源的 `release.json`，展示版本、大小、SHA-256、改动摘要和 SmartScreen 首装指引；改动摘要取范围为「桌面」的 [PR 发布说明](2026-10-20-release-notes-from-pull-requests.md)，不含运维条目；路由守卫和会话跳转都不处理它。浏览器账户菜单和升级页链接到这里。桌面壳仍拒绝附件以外的下载，所以在壳内只提示改用浏览器打开。
 
 ## Alternatives considered
 
@@ -172,7 +174,7 @@ Status: implemented
 - **按机器安装**：每次安装和更新都要管理员权限并弹 UAC，30 人规模的自动更新会被打断。辅助安装器默认会提供「为所有用户」选项，所以用 `customInstallMode` 把它隐藏。
 - **继续用 oneClick 安装器**：零点击、更新天然静默，但员工看不到安装位置、须知与隐私说明，也不能选目录和桌面快捷方式。强制按用户的辅助安装器同样不需要管理员权限，更新同样静默，代价只是首次安装多点几次「下一步」。
 - **用 MUI 目录页的 leave 回调检查写入权限**：electron-builder 自己的目录页不开放 leave 钩子，且它要到安装进度页的 pre 回调才追加 `yumpoo-desktop` 子目录；在目录页之后的附加选项页里先补上子目录再检查，测的就是实际安装位置。
-- **安装器提供开机自启选项**：员工没有这个需求，开机即加载远程页面会占用内存；用户自己启动即可。
+- **安装器提供开机自启选项**：安装器本身仍不提供；开机自启改为应用内默认关闭的「登录时启动」，理由与取舍见[桌面快捷工时与偏好设置](../product/2026-10-19-desktop-quick-time-and-preferences.md)。
 - **MSIX / Squirrel.Windows**：MSIX 必须签名才能安装，当前没有 Authenticode 证书；Squirrel 已不再积极维护，electron-updater 也不支持它。
 - **用环境变量或首次启动向导配置 origin**：每台机器都要手工配置，且可以被改成任意站点；把配置打进 asar 后受 asar 完整性校验保护。
 - **只删除 `auth\` 目录**：已经足以退出登录，但会留下缓存、本地存储和崩溃转储等数据；卸载应当清理到只剩偏好文件。
@@ -211,7 +213,7 @@ Status: implemented
 - 开启 cookie 加密是单向的：以后关闭这个 fuse，已有的持久 cookie 库会失效。当前业务会话不依赖持久 cookie，因此不受影响。
 - 安装冒烟让 Windows 门禁多出一次安装和卸载，时间要计入 `Windows Delivery` 的超时预算。
 - 诊断页只在自检中离线渲染过；安全模式和崩溃循环的真实启动、断网和证书错误下诊断窗的弹出，靠单元测试与实机核验覆盖，Windows 门禁不模拟这些场景。
-- 卸载会删除日志、崩溃转储和启动计数，只保留两个偏好文件，与 DESK-1 的卸载边界一致。
+- 卸载会删除日志、崩溃转储和启动计数，只保留计时器、提醒与桌面偏好文件，与 DESK-1 的卸载边界一致。
 - 生产安装包从 DESK-4 起检查 `https://wecom-dev.yumpoo.com/desktop/stable/`。更新源上线前检查只会得到 404，客户端记为错误并照常重试，不影响使用。
 - 桌面发布要同时等服务器的部署锁：长时间的服务器部署或待恢复状态会延后桌面发布。
 - 签名私钥泄露时，攻击者在同时控制分发主机的前提下可以推送更新。缓解措施：Environment 只允许 dev ref、离线备用钥匙、轮换预案（用备用钥匙签一个过渡版本，在其中换掉公钥）。

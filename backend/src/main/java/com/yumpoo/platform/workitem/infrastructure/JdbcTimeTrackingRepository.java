@@ -1,5 +1,7 @@
 package com.yumpoo.platform.workitem.infrastructure;
 
+import com.yumpoo.platform.workitem.application.TimeCategory;
+import com.yumpoo.platform.workitem.application.TimeSubject;
 import com.yumpoo.platform.workitem.application.TimeTrackingRepository;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -16,10 +18,49 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
     public JdbcTimeTrackingRepository(JdbcClient jdbc) { this.jdbc = jdbc; }
 
     public List<TimerCandidate> candidates(UUID companyId, UUID userId, Collection<UUID> projectIds,
-            Collection<UUID> matchingProjectIds, String query, boolean personal, int offset, int limit, Instant now) {
+            Collection<UUID> filterProjectIds, Collection<UUID> matchingProjectIds, String query, boolean personal,
+            boolean assignedToMe, boolean excludeCompleted, int offset, int limit, Instant now) {
+        if(projectIds.isEmpty() || filterProjectIds.isEmpty()) return List.of();
+        var statement=jdbc.sql(candidateBase(!matchingProjectIds.isEmpty()) + """
+            SELECT * FROM base
+            WHERE project_id IN (:filterProjects) AND (:assigned=false OR assigned) AND (:exclude=false OR NOT completed)
+            ORDER BY last_tracked_at DESC NULLS LAST, assigned DESC, updated_at DESC, id
+            LIMIT :limit OFFSET :offset
+            """).param("company",companyId).param("user",userId).param("projects",projectIds)
+                .param("filterProjects",filterProjectIds).param("assigned",assignedToMe).param("exclude",excludeCompleted)
+                .param("personal",personal).param("empty",query.isEmpty())
+                .param("query","%"+query.replace("\\","\\\\").replace("%","\\%").replace("_","\\_")+"%")
+                .param("now",Timestamp.from(now)).param("limit",limit).param("offset",offset);
+        if(!matchingProjectIds.isEmpty()) statement.param("matchingProjects",matchingProjectIds);
+        return statement.query((rs,n) -> new TimerCandidate(rs.getObject("id",UUID.class),
+                rs.getObject("project_id",UUID.class), "", rs.getString("item_no"), rs.getString("title"),
+                rs.getString("content_name"), rs.getString("content_code"), rs.getString("content_color_token"),
+                rs.getString("status_category"), rs.getString("status_code"), rs.getString("status_name"),
+                rs.getString("status_color_token"), rs.getBoolean("completed"), rs.getBoolean("assigned"),
+                instant(rs,"last_tracked_at"), rs.getLong("duration"))).list();
+    }
+
+    public List<CandidateProjectCount> candidateProjectCounts(UUID companyId, UUID userId, Collection<UUID> projectIds,
+            Collection<UUID> matchingProjectIds, String query, boolean personal, boolean assignedToMe, boolean excludeCompleted, Instant now) {
         if(projectIds.isEmpty()) return List.of();
-        String projectMatch=matchingProjectIds.isEmpty() ? "" : " OR w.project_id IN (:matchingProjects)";
-        var statement=jdbc.sql("""
+        var statement=jdbc.sql(candidateBase(!matchingProjectIds.isEmpty()) + """
+            SELECT project_id,
+              COUNT(*) FILTER (WHERE NOT (:exclude AND completed)) AS visible,
+              COUNT(*) FILTER (WHERE :exclude AND completed) AS hidden
+            FROM base WHERE (:assigned=false OR assigned) GROUP BY project_id
+            """).param("company",companyId).param("user",userId).param("projects",projectIds)
+                .param("assigned",assignedToMe).param("exclude",excludeCompleted)
+                .param("personal",personal).param("empty",query.isEmpty())
+                .param("query","%"+query.replace("\\","\\\\").replace("%","\\%").replace("_","\\_")+"%")
+                .param("now",Timestamp.from(now));
+        if(!matchingProjectIds.isEmpty()) statement.param("matchingProjects",matchingProjectIds);
+        return statement.query((rs,n) -> new CandidateProjectCount(rs.getObject("project_id",UUID.class),
+                rs.getLong("visible"),rs.getLong("hidden"))).list();
+    }
+
+    private String candidateBase(boolean matchingProjects) {
+        String projectMatch=matchingProjects ? " OR w.project_id IN (:matchingProjects)" : "";
+        return """
             WITH last_tracked AS (
               SELECT work_item_id, MAX(started_at) AS last_tracked_at
               FROM yumpoo.work_item_time_session
@@ -30,29 +71,23 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
               WHERE sh.company_id=:company AND sh.user_id=:user AND sh.project_id IN (:projects)
               GROUP BY sh.work_item_id), own AS (
               SELECT t.work_item_id,t.last_tracked_at,COALESCE(a.duration,0) AS duration
-              FROM last_tracked t LEFT JOIN allocated a ON a.work_item_id=t.work_item_id)
-            SELECT w.id, w.project_id, w.item_no, w.title, c.name AS content_name, c.code AS content_code,
-              c.color_token AS content_color_token, w.status_category,
+              FROM last_tracked t LEFT JOIN allocated a ON a.work_item_id=t.work_item_id), base AS (
+            SELECT w.id, w.project_id, w.item_no, w.title, w.updated_at, c.name AS content_name, c.code AS content_code,
+              c.color_token AS content_color_token, w.status_category, w.status_code,
+              COALESCE(label.display_name,w.status_code) AS status_name, COALESCE(label.color_token,'GRAY') AS status_color_token,
+              COALESCE(s.completed_status_codes @> jsonb_build_array(w.status_code), w.status_category IN ('DONE','CANCELED')) AS completed,
               EXISTS (SELECT 1 FROM yumpoo.work_item_assignee a WHERE a.work_item_id=w.id AND a.user_id=:user) AS assigned, own.last_tracked_at, COALESCE(own.duration,0) AS duration
             FROM yumpoo.work_item w JOIN yumpoo.content c ON c.id=w.content_id AND c.company_id=w.company_id
             LEFT JOIN own ON own.work_item_id=w.id
+            LEFT JOIN yumpoo.project_work_item_status_label label
+              ON label.company_id=w.company_id AND label.project_id=w.project_id AND label.status_code=w.status_code
+            LEFT JOIN yumpoo.work_item_table_settings s ON s.company_id=w.company_id AND s.project_id=w.project_id AND s.user_id=:user
             WHERE w.company_id=:company AND w.project_id IN (:projects) AND w.deleted_at IS NULL AND NOT w.archived
               AND (:personal=false OR EXISTS (SELECT 1 FROM yumpoo.work_item_assignee a WHERE a.work_item_id=w.id AND a.user_id=:user) OR own.last_tracked_at IS NOT NULL)
               AND (:empty OR lower(w.title) LIKE :query ESCAPE '\\' OR lower(w.item_no) LIKE :query ESCAPE '\\'
             """.formatted(TimeShareSql.allocated("sh",":now")) + projectMatch + """
-              )
-            ORDER BY own.last_tracked_at DESC NULLS LAST, assigned DESC, w.updated_at DESC, w.id
-            LIMIT :limit OFFSET :offset
-            """).param("company",companyId).param("user",userId).param("projects",projectIds)
-                .param("personal",personal).param("empty",query.isEmpty())
-                .param("query","%"+query.replace("\\","\\\\").replace("%","\\%").replace("_","\\_")+"%")
-                .param("now",Timestamp.from(now)).param("limit",limit).param("offset",offset);
-        if(!matchingProjectIds.isEmpty()) statement.param("matchingProjects",matchingProjectIds);
-        return statement.query((rs,n) -> new TimerCandidate(rs.getObject("id",UUID.class),
-                rs.getObject("project_id",UUID.class), "", rs.getString("item_no"), rs.getString("title"),
-                rs.getString("content_name"), rs.getString("content_code"), rs.getString("content_color_token"),
-                rs.getString("status_category"), rs.getBoolean("assigned"),
-                instant(rs,"last_tracked_at"), rs.getLong("duration"))).list();
+              ))
+            """;
     }
 
     public List<RecentTimeTrackingItem> recentItems(UUID companyId, UUID userId) {
@@ -83,6 +118,16 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
             """).param("c",companyId).param("u",userId)
                 .query((rs,n) -> new RecentTimeTrackingItem(rs.getObject("work_item_id",UUID.class),rs.getObject("project_id",UUID.class),rs.getString("title"))).list();
     }
+    public List<TimeCategorySubject> resumeCategories(UUID companyId, UUID userId) {
+        return jdbc.sql("""
+            SELECT DISTINCT time_category,category_project_id FROM yumpoo.work_item_time_session
+            WHERE company_id=:c AND user_id=:u AND deleted_at IS NULL AND source='TIMER' AND time_category IS NOT NULL
+              AND stopped_at=(SELECT MAX(stopped_at) FROM yumpoo.work_item_time_session
+                WHERE company_id=:c AND user_id=:u AND deleted_at IS NULL AND source='TIMER')
+            """).param("c",companyId).param("u",userId)
+                .query((rs,n) -> new TimeCategorySubject(TimeCategory.valueOf(rs.getString("time_category")), rs.getObject("category_project_id",UUID.class)))
+                .list().stream().sorted(Comparator.comparing(TimeCategorySubject::timeCategory)).toList();
+    }
     public long stateVersion(UUID companyId, UUID userId, boolean lock) {
         if (lock) jdbc.sql("INSERT INTO yumpoo.work_item_timer_state(company_id,user_id) VALUES (:c,:u) ON CONFLICT DO NOTHING")
                 .param("c", companyId).param("u", userId).update();
@@ -94,15 +139,15 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
                 .param("c", companyId).param("u", userId).update();
     }
     public Optional<TimeTrackingPreferences> preferences(UUID companyId, UUID userId) {
-        return jdbc.sql("SELECT timer_enabled,workday_start_minute,workday_end_minute FROM yumpoo.work_item_timer_state WHERE company_id=:c AND user_id=:u")
+        return jdbc.sql("SELECT timer_enabled,workday_start_minute,workday_end_minute,hide_completed FROM yumpoo.work_item_timer_state WHERE company_id=:c AND user_id=:u")
                 .param("c", companyId).param("u", userId)
-                .query((rs,n) -> new TimeTrackingPreferences(rs.getBoolean("timer_enabled"),rs.getInt("workday_start_minute"),rs.getInt("workday_end_minute")))
+                .query((rs,n) -> new TimeTrackingPreferences(rs.getBoolean("timer_enabled"),rs.getInt("workday_start_minute"),rs.getInt("workday_end_minute"), rs.getBoolean("hide_completed")))
                 .optional();
     }
     public void savePreferences(UUID companyId, UUID userId, TimeTrackingPreferences p) {
-        jdbc.sql("UPDATE yumpoo.work_item_timer_state SET timer_enabled=:enabled,workday_start_minute=:start,workday_end_minute=:end WHERE company_id=:c AND user_id=:u")
+        jdbc.sql("UPDATE yumpoo.work_item_timer_state SET timer_enabled=:enabled,workday_start_minute=:start,workday_end_minute=:end,hide_completed=:hide WHERE company_id=:c AND user_id=:u")
                 .param("c", companyId).param("u", userId).param("enabled", p.timerEnabled())
-                .param("start", p.workdayStartMinute()).param("end", p.workdayEndMinute()).update();
+                .param("start", p.workdayStartMinute()).param("end", p.workdayEndMinute()).param("hide", p.hideCompleted()).update();
     }
     public List<Session> running(UUID companyId, UUID userId) {
         return jdbc.sql("SELECT * FROM yumpoo.work_item_time_session WHERE company_id=:c AND user_id=:u AND stopped_at IS NULL AND deleted_at IS NULL ORDER BY started_at DESC,id DESC")
@@ -124,17 +169,21 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
         if (before != null) query.param("before", Timestamp.from(before)).param("beforeId", beforeId);
         return query.query(JdbcTimeTrackingRepository::map).list();
     }
-    public boolean sameItemOverlaps(UUID companyId, UUID userId, UUID workItemId, Instant start, Instant stop, UUID excludedId) {
-        return jdbc.sql("SELECT EXISTS(SELECT 1 FROM yumpoo.work_item_time_session WHERE company_id=:c AND user_id=:u AND work_item_id=:w AND deleted_at IS NULL AND id<>:excluded AND started_at<:stop AND (stopped_at IS NULL OR stopped_at>:start))")
-                .param("c", companyId).param("u", userId).param("w",workItemId).param("excluded", excludedId)
-                .param("start", Timestamp.from(start)).param("stop", Timestamp.from(stop)).query(Boolean.class).single();
+    public boolean sameSubjectOverlaps(UUID companyId, UUID userId, TimeSubject subject, Instant start, Instant stop, UUID excludedId) {
+        String match=subject.workItemId()!=null ? "work_item_id=:w" : "time_category=:category";
+        var query=jdbc.sql("SELECT EXISTS(SELECT 1 FROM yumpoo.work_item_time_session WHERE company_id=:c AND user_id=:u AND "+match+" AND deleted_at IS NULL AND id<>:excluded AND started_at<:stop AND (stopped_at IS NULL OR stopped_at>:start))")
+                .param("c", companyId).param("u", userId).param("excluded", excludedId)
+                .param("start", Timestamp.from(start)).param("stop", Timestamp.from(stop));
+        if(subject.workItemId()!=null) query.param("w",subject.workItemId());
+        else query.param("category",subject.timeCategory().name());
+        return query.query(Boolean.class).single();
     }
     public List<MySessionRow> mySessions(UUID companyId,UUID userId,Instant from,Instant to) {
         return jdbc.sql("""
             SELECT s.*,w.item_no,w.title,w.archived,w.deleted_at AS item_deleted_at,c.color_token
             FROM yumpoo.work_item_time_session s
-            JOIN yumpoo.work_item w ON w.company_id=s.company_id AND w.id=s.work_item_id
-            JOIN yumpoo.content c ON c.company_id=w.company_id AND c.id=w.content_id
+            LEFT JOIN yumpoo.work_item w ON w.company_id=s.company_id AND w.id=s.work_item_id
+            LEFT JOIN yumpoo.content c ON c.company_id=w.company_id AND c.id=w.content_id
             WHERE s.company_id=:c AND s.user_id=:u AND s.deleted_at IS NULL
               AND s.started_at<:to AND (s.stopped_at IS NULL OR s.stopped_at>:from)
             ORDER BY s.started_at,s.id
@@ -144,14 +193,14 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
     }
     public void save(Session s) {
         jdbc.sql("""
-            INSERT INTO yumpoo.work_item_time_session(id,company_id,project_id,work_item_id,user_id,started_at,stopped_at,source,row_version,deleted_at,change_reason)
-            VALUES (:id,:c,:p,:w,:u,:start,:stop,:source,:v,:deleted,:reason)
+            INSERT INTO yumpoo.work_item_time_session(id,company_id,project_id,work_item_id,user_id,started_at,stopped_at,source,row_version,deleted_at,change_reason,time_category,category_project_id)
+            VALUES (:id,:c,:p,:w,:u,:start,:stop,:source,:v,:deleted,:reason,:category,:cp)
             ON CONFLICT (id) DO UPDATE SET started_at=EXCLUDED.started_at,stopped_at=EXCLUDED.stopped_at,
                 row_version=EXCLUDED.row_version,deleted_at=EXCLUDED.deleted_at,change_reason=EXCLUDED.change_reason
             """).param("id", s.id()).param("c", s.companyId()).param("p", s.projectId()).param("w", s.workItemId())
                 .param("u", s.userId()).param("start", Timestamp.from(s.startedAt())).param("stop", timestamp(s.stoppedAt()))
                 .param("source", s.source()).param("v", s.rowVersion()).param("deleted", timestamp(s.deletedAt()))
-                .param("reason", s.changeReason()).update();
+                .param("reason", s.changeReason()).param("category", s.timeCategory()==null ? null : s.timeCategory().name()).param("cp",s.categoryProjectId()).update();
     }
     public void advanceProjects(UUID companyId, Collection<UUID> ids) {
         ids.stream().distinct().sorted().forEach(id -> jdbc.sql("INSERT INTO yumpoo.work_item_time_revision(company_id,project_id,revision) VALUES (:c,:p,1) ON CONFLICT(company_id,project_id) DO UPDATE SET revision=work_item_time_revision.revision+1")
@@ -208,9 +257,10 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
                 .param("c",companyId).param("ids",ids).param("now",Timestamp.from(now))
                 .query((rs,n) -> { shares.put(rs.getObject("session_id",UUID.class),new long[]{rs.getLong("allocated"),0}); return 0; }).list();
         jdbc.sql("""
-            SELECT a.session_id,COUNT(DISTINCT b.work_item_id) AS parallel
+            SELECT a.session_id,COUNT(DISTINCT COALESCE(b.work_item_id::text,'category:'||b.time_category)) AS parallel
             FROM yumpoo.work_item_time_share a JOIN yumpoo.work_item_time_share b
-              ON b.company_id=a.company_id AND b.user_id=a.user_id AND b.started_at=a.started_at AND b.work_item_id<>a.work_item_id
+              ON b.company_id=a.company_id AND b.user_id=a.user_id AND b.started_at=a.started_at
+                AND COALESCE(b.work_item_id::text,'category:'||b.time_category)<>COALESCE(a.work_item_id::text,'category:'||a.time_category)
             WHERE a.company_id=:c AND a.session_id IN (:ids) GROUP BY a.session_id
             """).param("c",companyId).param("ids",ids)
                 .query((rs,n) -> { shares.computeIfAbsent(rs.getObject("session_id",UUID.class),id -> new long[2])[1]=rs.getLong("parallel"); return 0; }).list();
@@ -219,6 +269,7 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
     private static Timestamp timestamp(Instant value) { return value == null ? null : Timestamp.from(value); }
     private static Instant instant(ResultSet rs, String key) throws SQLException { Timestamp t=rs.getTimestamp(key); return t==null ? null : t.toInstant(); }
     static Session map(ResultSet rs, int n) throws SQLException {
-        return new Session(rs.getObject("id",UUID.class),rs.getObject("company_id",UUID.class),rs.getObject("project_id",UUID.class),rs.getObject("work_item_id",UUID.class),rs.getObject("user_id",UUID.class),instant(rs,"started_at"),instant(rs,"stopped_at"),rs.getString("source"),rs.getLong("row_version"),instant(rs,"deleted_at"),rs.getString("change_reason"));
+        return new Session(rs.getObject("id",UUID.class),rs.getObject("company_id",UUID.class),rs.getObject("project_id",UUID.class),rs.getObject("work_item_id",UUID.class),rs.getObject("user_id",UUID.class),instant(rs,"started_at"),instant(rs,"stopped_at"),rs.getString("source"),rs.getLong("row_version"),instant(rs,"deleted_at"),rs.getString("change_reason"),
+                Optional.ofNullable(rs.getString("time_category")).map(TimeCategory::valueOf).orElse(null),rs.getObject("category_project_id",UUID.class));
     }
 }

@@ -6,6 +6,7 @@ import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.foundation.application.request.RequestIdContext;
 import com.yumpoo.platform.identityaccess.application.authentication.WebLoginCompletionService;
 import com.yumpoo.platform.identityaccess.application.session.SessionService;
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
@@ -72,6 +73,9 @@ public class SessionSecurityConfiguration {
                         .accessDeniedHandler(csrfDenied(errorWriter)))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(AnonymousAuthenticationPaths.ALL.toArray(String[]::new))
+                        .permitAll()
+                        // 首次派发已认证并授权；流式下载收尾的异步派发不再携带会话，响应也可能已提交。
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR)
                         .permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(

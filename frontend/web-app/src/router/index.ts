@@ -9,6 +9,7 @@ import {
 } from 'vue-router'
 import { consumeReturnPath, rememberReturnPath } from '../auth/navigation'
 import TimerPanel from '../components/timer/TimerPanel.vue'
+import { SHELL_SURFACE } from '../components/desktop/surfaces'
 import AppShell from '../components/AppShell.vue'
 import { useSession } from '../composables/useSession'
 import LoginView from '../views/auth/LoginView.vue'
@@ -27,7 +28,10 @@ import ProjectSettingsView from '../views/projects/ProjectSettingsView.vue'
 import ProjectActivityView from '../views/projects/ProjectActivityView.vue'
 
 export const routes: RouteRecordRaw[] = [
-  { path: '/timer', name: 'timer', component: TimerPanel, props: route => ({ initialExpanded: route.query.mode !== 'compact' }) },
+  { path: SHELL_SURFACE.timer, name: 'timer', component: TimerPanel, props: route => ({ initialExpanded: route.query.mode !== 'compact' }) },
+  // Desktop shell windows outside AppShell, like /timer; only shells from 1.1.1 load them.
+  { path: SHELL_SURFACE.quick, name: 'desktop-quick', component: () => import('../views/desktop/QuickTimeView.vue') },
+  { path: SHELL_SURFACE.rail, name: 'desktop-rail', component: () => import('../views/desktop/ProjectRailView.vue') },
   {
     path: '/login',
     name: 'login',
@@ -38,6 +42,15 @@ export const routes: RouteRecordRaw[] = [
     name: 'desktop-download',
     component: () => import('../views/download/DesktopDownloadView.vue'),
     meta: { public: true },
+  },
+  {
+    path: '/docs',
+    component: () => import('../docs-site/DocsLayout.vue'),
+    meta: { public: true },
+    children: [
+      { path: '', name: 'docs-home', component: () => import('../docs-site/DocsHome.vue') },
+      { path: ':slug(.*)', name: 'docs-page', component: () => import('../docs-site/DocsPage.vue') },
+    ],
   },
   {
     path: '/status/account-disabled',
@@ -109,20 +122,20 @@ export const routes: RouteRecordRaw[] = [
         path: 'workspace/:workspaceSlug/my-time',
         name: 'my-time',
         component: () => import('../views/MyTimePageView.vue'),
-        meta: { shellSection: 'work' },
+        meta: { shellSection: 'work', onboardingTour: 'my-time' },
       },
       {
         path: 'workspace/:workspaceSlug/my-time/day/:date(\\d{4}-\\d{2}-\\d{2})',
         name: 'my-time-day',
         component: () => import('../views/MyTimeDayPageView.vue'),
-        meta: { shellSection: 'work' },
+        meta: { shellSection: 'work', onboardingTour: 'my-day' },
       },
       { path: 'team', name: 'team-entry', redirect: { name: 'team', params: { view: 'timesheet' } } },
       {
-        path: 'team/:view(timesheet|overtime|workload)',
+        path: 'team/:view(timesheet|projects|overtime|workload)',
         name: 'team',
         component: () => import('../views/TeamReviewView.vue'),
-        meta: { shellSection: 'team', requiredRoles: [AuthenticationRole.AppManager, AuthenticationRole.CompanyAdmin] },
+        meta: { shellSection: 'team', requiredRoles: [AuthenticationRole.AppManager, AuthenticationRole.CompanyAdmin], onboardingTour: 'team' },
       },
       {
         path: 'projects/archived',
@@ -161,7 +174,7 @@ export const routes: RouteRecordRaw[] = [
           { path: 'activity', name: 'company-activity', component: () => import('../views/admin/CompanyActivityView.vue') },
           { path: 'sync-runs', name: 'company-sync-runs', component: IdentitySyncRunsView },
           { path: 'scheduled-jobs', name: 'company-scheduled-jobs', component: () => import('../views/admin/CompanyScheduledJobsView.vue') },
-          { path: 'work-calendar', name: 'company-work-calendar', component: () => import('../views/admin/CompanyWorkCalendarView.vue') },
+          { path: 'work-calendar', name: 'company-work-calendar', component: () => import('../views/admin/CompanyWorkCalendarView.vue'), meta: { onboardingTour: 'work-calendar' } },
         ],
       },
       {
@@ -172,6 +185,12 @@ export const routes: RouteRecordRaw[] = [
         path: 'forbidden',
         name: 'forbidden',
         component: ForbiddenView,
+        meta: { shellSection: 'work' },
+      },
+      {
+        path: 'settings',
+        name: 'settings',
+        component: () => import('../views/settings/SettingsView.vue'),
         meta: { shellSection: 'work' },
       },
       {

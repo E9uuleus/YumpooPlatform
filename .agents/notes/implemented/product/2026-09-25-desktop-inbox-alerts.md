@@ -16,7 +16,7 @@ Status: implemented
 
 Windows 使用 `tray.displayBalloon` 且设置 `respectQuietTime`。安装版设置与安装器快捷方式一致的 AppUserModelId `com.yumpoo.desktop`，开发运行不设置（见[桌面安装包与发布渠道](../process/2026-10-17-desktop-release-channel.md)）；改用原生 toast 另行决策。每条 balloon 由自身十秒生命周期定时器或点击推进队列；`balloon-closed` 不推进，因为该原生事件没有通知 ID，点击后迟到的关闭事件无法区分属于前一条还是新一条。点击立即消费当前提醒、唤起主窗口并尝试推进；若主窗口已获得焦点，剩余队列按焦点抑制规则清除。定时器绑定提醒对象及账号代次，reset 同时取消定时器，防止旧回调消费新账号队列。其他平台使用 Electron `Notification`。单条仅显示操作者与“提到了你 / 回复了你 / 评论了你关注的工作项 / 给你指派了工作项 / 更新了你的项目成员身份”，不显示标题、正文或项目名。点击通过 `yumpoo:inbox:open` 发送通知 UUID；合并提醒发送 null 进入收件箱。账号代次防止旧通知回调跳进另一账号。
 
-`InboxPreferenceStore` 单独保存 `userData/inbox-preferences.json`，格式 `{version:1,toasts:true}`。损坏、超大文件或版本不匹配回退默认；串行临时文件写入后重命名，不触碰计时偏好。快捷面板同一新增行提供收件箱未读数与“桌面通知”开关，原生回退菜单提供收件箱入口。面板高度由 356 增至 396 像素，宽度不变。旧壳无 `inbox` 契约时 Web 隐藏桌面相关控件，通知中心仍可作为纯 Web 功能运行。新偏好不通过会拒绝未知键的 `yumpoo:timer:preferences` 发送。
+`InboxPreferenceStore` 单独保存 `userData/inbox-preferences.json`，格式 `{version:1,toasts:true}`。损坏、超大文件或版本不匹配回退默认；串行临时文件写入后重命名，不触碰计时偏好。快捷面板同一新增行提供收件箱未读数与“桌面通知”开关，原生回退菜单提供收件箱入口。面板为收件箱行增高 40 像素，宽度不变，当前高度见[桌面计时界面决策](2026-09-24-desktop-timer-surfaces.md)。旧壳无 `inbox` 契约时 Web 隐藏桌面相关控件，通知中心仍可作为纯 Web 功能运行。新偏好不通过会拒绝未知键的 `yumpoo:timer:preferences` 发送。
 
 本记录补充[桌面计时界面与快捷面板](2026-09-24-desktop-timer-surfaces.md)，其计时显示、置顶、窗口几何与命令握手约定继续有效。
 

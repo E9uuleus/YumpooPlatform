@@ -9,13 +9,15 @@ Status: implemented
 ## Decision
 
 - 每项运维 API 重新校验当前有效 `APP_MANAGER`，公司管理员不自动获得权限。入口和路由同步限制，读写及错误响应均禁止缓存，角色撤销导致正在展示的数据清空。
-- System Log 使用内部 `userId` UUID 关联请求，允许 `APP_MANAGER` 读取统一映射处理后的异常。堆栈限制长度和帧数，文件及浏览器都不接受原始 Throwable 的无界输出。会话详情在 SQL 中按公司过滤，采样器的跨公司会话端口只返回汇总数量。
+- System Log 使用内部 `userId` UUID 关联请求，允许 `APP_MANAGER` 读取统一映射处理后的异常。堆栈限制长度和帧数；每段 throwable 的前 8 帧不按包名过滤，以保留容器、过滤器内的真实抛出点，此后照旧滤掉 `org.apache.`、Spring Web 过滤器、Spring Security Web 与反射帧，单段上限 40 帧不变。文件及浏览器都不接受原始 Throwable 的无界输出。会话详情在 SQL 中按公司过滤，采样器的跨公司会话端口只返回汇总数量。
 - 凭据、请求正文、SQL 明细、电子邮件、手机号、IP 和文件路径需脱敏；URL 保留端点，移除 userinfo 和查询数据，保留之后的故障原因。pgJDBC 关闭服务器明细输出。三种日志输出共用映射规则，规则预编译，缓冲映射在写锁外执行。
 - 管理读取保留 INFO 访问日志及安全路由；仅 `logs/tail` 与 `alerts/summary` 两个正常轮询请求使用 DEBUG。失败、慢请求不因轮询而降级。规则变更与确认操作使用 CSRF 和安全审计，规则修改另外要求条件版本；不为每次日志读取写数据库审计以免形成反馈循环。
 - 应用层拒绝在同一条访问日志中附带稳定 `errorCode` 和 `reason`，403 使用 WARN，保留 `requestId`、方法及模板路由供运维追踪。界面摘要展示拒绝码与原因；不记录请求正文、人工操作理由或任意异常消息。最近认证过期可通过 `RECENT_AUTHENTICATION_REQUIRED` 定位，数据库安全审计仍独立保存。
 - 文件检索只允许配置的活动文件及规定归档，拒绝任意路径及符号链接，限制扫描预算和并发。无 `fileKey` 的 Windows 文件以创建时间、大小不回退及前缀内容验证快照；滚动或替换使游标结果显式 partial。
 
-行为依据：[访问日志](../../../../backend/src/main/java/com/yumpoo/platform/foundation/api/web/HttpAccessLog.java)、[日志脱敏](../../../../backend/src/main/java/com/yumpoo/platform/foundation/infrastructure/logging/LogSanitizer.java)、[文件检索](../../../../backend/src/main/java/com/yumpoo/platform/foundation/infrastructure/logging/LogQueryAdapter.java)、[会话查询](../../../../backend/src/main/java/com/yumpoo/platform/identityaccess/infrastructure/session/JdbcActiveSessionQueryRepository.java)、[HTTP 集成验证](../../../../backend/src/test/java/com/yumpoo/platform/operations/api/OperationsHttpIT.java)。运行时设计由[架构 Note](../architecture/2026-09-26-operations-center.md)维护。
+- `RequestIdFilter` 同时处理异步与错误派发：沿用首次派发的 requestId，不重写响应头，并从请求属性恢复 `userId`、`clientType` 到 MDC；访问日志与业务耗时只在首次派发记录；响应已提交的失败照旧抛出，不把截断的下载记成成功。
+
+行为依据：[RequestIdFilter](../../../../backend/src/main/java/com/yumpoo/platform/foundation/api/web/RequestIdFilter.java)、[访问日志](../../../../backend/src/main/java/com/yumpoo/platform/foundation/api/web/HttpAccessLog.java)、[日志脱敏](../../../../backend/src/main/java/com/yumpoo/platform/foundation/infrastructure/logging/LogSanitizer.java)、[文件检索](../../../../backend/src/main/java/com/yumpoo/platform/foundation/infrastructure/logging/LogQueryAdapter.java)、[会话查询](../../../../backend/src/main/java/com/yumpoo/platform/identityaccess/infrastructure/session/JdbcActiveSessionQueryRepository.java)、[HTTP 集成验证](../../../../backend/src/test/java/com/yumpoo/platform/operations/api/OperationsHttpIT.java)。运行时设计由[架构 Note](../architecture/2026-09-26-operations-center.md)维护。
 
 ## Alternatives considered
 
@@ -28,4 +30,4 @@ Status: implemented
 
 - 应用内日志不是不可篡改审计仓；安全写操作的审计仍在数据库中。生产日志目录继续受部署 ACL 和轮转保留限制。
 - 正则脱敏无法证明任意自由文本均无敏感数据，调用方仍应只记录稳定事件与允许的结构化字段，不主动记录请求正文或凭据。
-- 数据库不可达时不绕过认证来暴露诊断数据。进程停止和数据库完全故障期间的可用性监控留给后续外部探活。
+- 数据库不可达时不绕过认证来暴露诊断数据。进程停止和数据库完全故障期间的可用性由[异机监控](../architecture/2026-10-23-offsite-monitoring-notifications.md)负责。内部 Prometheus 出口仅返回固定低基数指标与已提交告警缓存，不暴露日志、身份或任意诊断，也不依赖业务数据库认证。

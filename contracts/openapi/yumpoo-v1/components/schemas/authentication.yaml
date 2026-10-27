@@ -1,0 +1,172 @@
+components:
+  schemas:
+    AuthenticationRole:
+      type: string
+      enum:
+        - COMPANY_MEMBER
+        - COMPANY_ADMIN
+        - APP_MANAGER
+    AuthenticationClientType:
+      type: string
+      enum:
+        - WEB
+        - ELECTRON
+    OpaqueDesktopToken:
+      type: string
+      minLength: 43
+      maxLength: 43
+      pattern: ^[A-Za-z0-9_-]{43}$
+    ElectronAuthAttemptRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - state
+        - codeChallenge
+        - codeChallengeMethod
+      properties:
+        state:
+          $ref: "#/components/schemas/OpaqueDesktopToken"
+        codeChallenge:
+          type: string
+          minLength: 43
+          maxLength: 43
+          pattern: ^[A-Za-z0-9_-]{43}$
+        codeChallengeMethod:
+          type: string
+          enum:
+            - S256
+        remember:
+          type: boolean
+          default: true
+          description: 「7 天内免登录」。缺省按 true；false 时兑换出的会话闲置 8 小时失效。
+    ElectronAuthAttemptResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - authorizationUrl
+        - expiresAt
+      properties:
+        authorizationUrl:
+          type: string
+          format: uri
+        expiresAt:
+          type: string
+          format: date-time
+    ElectronAuthExchangeRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - state
+        - handoffCode
+        - codeVerifier
+      properties:
+        state:
+          $ref: "#/components/schemas/OpaqueDesktopToken"
+        handoffCode:
+          $ref: "#/components/schemas/OpaqueDesktopToken"
+        codeVerifier:
+          type: string
+          minLength: 43
+          maxLength: 128
+          pattern: ^[A-Za-z0-9._~-]{43,128}$
+    ElectronAuthExchangeResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - sessionCredential
+        - csrfCredential
+        - absoluteExpiresAt
+      properties:
+        sessionCredential:
+          type: string
+          minLength: 43
+          maxLength: 256
+          writeOnly: true
+        csrfCredential:
+          type: string
+          minLength: 43
+          maxLength: 256
+          writeOnly: true
+        absoluteExpiresAt:
+          type: string
+          format: date-time
+    ClientCompatibility:
+      type: string
+      enum:
+        - SUPPORTED
+        - DEPRECATED
+        - BLOCKED
+    CurrentAuthenticationUser:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - displayName
+        - workspaceSlug
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        displayName:
+          type: string
+          minLength: 1
+        workspaceSlug:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: ^[a-z0-9]([a-z0-9._@-]{0,62}[a-z0-9])?$
+          description: 当前用户不可变的工作台 URL 片段；不承担身份授权语义。
+    CurrentAuthenticationCompany:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - displayName
+        - timezone
+        - weekStartDay
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        displayName:
+          type: string
+          minLength: 1
+        timezone:
+          type: string
+          minLength: 1
+          description: IANA 时区标识。
+          example: Asia/Shanghai
+        weekStartDay:
+          type: string
+          enum:
+            - MONDAY
+    CurrentAuthenticationClient:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - compatibility
+      properties:
+        type:
+          $ref: "#/components/schemas/AuthenticationClientType"
+        compatibility:
+          $ref: "#/components/schemas/ClientCompatibility"
+    CurrentAuthentication:
+      type: object
+      additionalProperties: false
+      required:
+        - user
+        - company
+        - roles
+        - client
+      properties:
+        user:
+          $ref: "#/components/schemas/CurrentAuthenticationUser"
+        company:
+          $ref: "#/components/schemas/CurrentAuthenticationCompany"
+        roles:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/AuthenticationRole"
+        client:
+          $ref: "#/components/schemas/CurrentAuthenticationClient"

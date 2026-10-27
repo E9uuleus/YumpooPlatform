@@ -178,7 +178,7 @@ class JdbcDesktopAuthAttemptRepositoryIT {
     void productAttemptClaimsOnceAndConsumesPkceHandoffOnce() {
         attemptStore.createProduct(new ProductDesktopAuthAttempt(
                 hash(DESKTOP_STATE), VERIFIER.challenge(), "m114.persistence-1",
-                "0.1.0", "1", CREATED_AT, CREATED_AT.plusSeconds(300)
+                "0.1.0", "1", CREATED_AT, CREATED_AT.plusSeconds(300), false
         ));
 
         assertThat(attemptStore.claimProductAuthorization(
@@ -205,6 +205,7 @@ class JdbcDesktopAuthAttemptRepositoryIT {
             assertThat(value.userId()).isEqualTo(USER_ID);
             assertThat(value.clientVersion()).isEqualTo("0.1.0");
             assertThat(value.clientProtocolVersion()).isEqualTo("1");
+            assertThat(value.rememberMe()).isFalse();
         });
         assertThat(attemptStore.consumeProduct(
                 hash(DESKTOP_STATE), hash(HANDOFF_CODE), VERIFIER.challenge(),
@@ -258,7 +259,8 @@ class JdbcDesktopAuthAttemptRepositoryIT {
                 "authorization_claimed_at",
                 "authenticated_user_id",
                 "client_version",
-                "client_protocol_version"
+                "client_protocol_version",
+                "remember_me"
         );
         assertThat(stored.desktopStateHash()).isEqualTo(hash(DESKTOP_STATE).value());
         assertThat(stored.oauthStateHash()).isEqualTo(hash(OAUTH_STATE).value());

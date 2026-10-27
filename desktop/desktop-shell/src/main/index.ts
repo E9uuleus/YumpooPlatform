@@ -46,6 +46,8 @@ import { DesktopLogger } from './logger'
 import { runSelfCheck, selfCheckReportPath, UPDATE_CHECK_ARGUMENT } from './self-check'
 import { handleStartupFailure } from './startup-failure'
 import { CRASH_LOOP_THRESHOLD, LaunchHealth, StartupStateStore } from './startup-state'
+import { DesktopPreferenceStore } from './desktop-preferences'
+import { DesktopSettingsController, HIDDEN_ARGUMENT } from './desktop-settings'
 import { UpdateController, type FileDigest, type UpdaterLike } from './update-controller'
 import { installClientHeaders, installUpdateIpc, UPDATE_STATE_CHANNEL } from './update-ipc'
 import { resolveWebAppUrl } from './url-policy'
@@ -57,7 +59,7 @@ const DIAGNOSTICS_PAGE_TIMEOUT_MS = 15_000
 const ERR_ABORTED = -3
 // Must equal electron-builder appId: the installer stamps it on the shortcuts that Windows notifications resolve.
 const APP_USER_MODEL_ID = 'com.yumpoo.desktop'
-const PREFERENCE_FILES = ['timer-preferences.json', 'inbox-preferences.json']
+const PREFERENCE_FILES = ['timer-preferences.json', 'inbox-preferences.json', 'desktop-preferences.json']
 const LOCAL_PAGE_DIRECTORY = path.join(__dirname, '..', 'diagnostics')
 const launchStartedAt = Date.now()
 const smokeTest = process.argv.includes(SMOKE_TEST_ARGUMENT)
@@ -65,10 +67,15 @@ const selfCheckPath = app.isPackaged ? selfCheckReportPath(process.argv) : undef
 const updateCheckPath = app.isPackaged && !selfCheckPath ? selfCheckReportPath(process.argv, UPDATE_CHECK_ARGUMENT) : undefined
 const UPDATE_CHECK_TIMEOUT_MS = 180_000
 const userDataPath = app.getPath('userData')
+/** The first call creates the partition, so every call passes the options: no HTTP cache on disk for business responses. */
+const authenticatedSession = () => session.fromPartition(AUTHENTICATED_PARTITION, { cache: false })
 const logger = new DesktopLogger(path.join(userDataPath, 'logs'))
 const startupState = new StartupStateStore(userDataPath)
 const launchHealth = new LaunchHealth(startupState)
 const protocolDispatcher = new ProtocolLaunchDispatcher()
+const desktopPreferences = new DesktopPreferenceStore(userDataPath)
+// Start at sign-in passes this: the main window loads but stays hidden, leaving the tray and the rail.
+const hiddenLaunch = process.argv.includes(HIDDEN_ARGUMENT)
 
 class StartupError extends Error {
   constructor(readonly reason: DiagnosticsStartupFailure, cause: unknown) {
@@ -95,6 +102,7 @@ let restartAfterUpdate = false
 let launchOverlay: LaunchOverlay | undefined
 
 function failStartup(reason: DiagnosticsStartupFailure, error?: unknown): void {
+  if (timerController?.isQuitting) return
   logger.error('startup-failed', { reason, error: error instanceof Error ? error.message : undefined })
   console.error('[YUMPOO_DESKTOP_STARTUP_FAILED]', reason)
   if (smokeTest || !app.isReady()) {
@@ -108,6 +116,7 @@ function failStartup(reason: DiagnosticsStartupFailure, error?: unknown): void {
 
 /** The diagnostics window replaces the bare startup dialog, which stays as the fallback if it cannot open. */
 function openDiagnostics(reason?: DiagnosticsStartupFailure): void {
+  if (timerController?.isQuitting) return
   if (reason) startupFailure = reason
   void diagnostics().open().catch(error => {
     logger.error('diagnostics-open-failed', { error: error instanceof Error ? error.message : undefined })
@@ -152,7 +161,7 @@ function updateState(): DesktopUpdateState {
 function publishUpdateState(state: DesktopUpdateState): void {
   const window = mainWindow
   if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send(UPDATE_STATE_CHANNEL, state)
-  timerController?.setUpdateReady(state.phase === 'ready' && state.version ? { version: state.version, restart: restartForUpdate } : undefined)
+  timerController?.setUpdate(state, { check: () => updateController?.check(), download: () => updateController?.download(), restart: restartForUpdate })
 }
 
 /** Goes through the normal quit, including the timer's exit confirmation; the verified installer runs in will-quit. */
@@ -201,6 +210,8 @@ function startUpdates(schedule = true): void {
     updater: autoUpdater as unknown as UpdaterLike,
     update,
     currentVersion: app.getVersion(),
+    // The headless update check always downloads; it verifies the whole update path.
+    autoDownload: !schedule || desktopPreferences.get().autoDownload,
     fetchJson: fetchAuthorization,
     digest: digestFile,
     digestSync,
@@ -212,6 +223,7 @@ function startUpdates(schedule = true): void {
     schedule: (callback, delayMs) => { setTimeout(callback, delayMs).unref() },
   })
   if (!schedule) return
+  desktopPreferences.onChange(value => updateController?.setAutoDownload(value.autoDownload))
   powerMonitor.on('resume', () => updateController?.onResume())
   updateController.start()
 }
@@ -259,7 +271,7 @@ async function signOut(): Promise<void> {
   inboxNotifier?.reset()
   await (credentialStore ?? new DesktopCredentialStore(userDataPath, safeStorage)).clear()
   const origin = diagnosticsOrigin()
-  if (origin) await clearSessionCookies(session.fromPartition(AUTHENTICATED_PARTITION).cookies, origin)
+  if (origin) await clearSessionCookies(authenticatedSession().cookies, origin)
   if (mainWindow && !mainWindow.isDestroyed() && webAppUrl) void mainWindow.loadURL(webAppUrl.href).catch(() => undefined)
 }
 
@@ -285,8 +297,9 @@ function diagnostics(offline = false): DiagnosticsWindow {
       confirm: async (window, message, detail, confirmLabel) => (await dialog.showMessageBox(window, {
         type: 'warning', message, detail, buttons: [confirmLabel, '取消'], defaultId: 1, cancelId: 1, noLink: true,
       })).response === 0,
-      removePreferences: () => {
+      removePreferences: async () => {
         for (const name of PREFERENCE_FILES) rmSync(path.join(userDataPath, name), { force: true })
+        await authenticatedSession().clearStorageData({ storages: ['localstorage'] })
       },
       signOut,
       registerProtocol: () => registerYumpooProtocolClient(app, {
@@ -407,6 +420,7 @@ function showWithLaunchOverlay(window: BrowserWindow): void {
 }
 
 async function createMainWindow(): Promise<void> {
+  if (timerController?.isQuitting) return
   if (!webAppUrl) {
     throw new Error('Web application URL is not initialized')
   }
@@ -420,7 +434,7 @@ async function createMainWindow(): Promise<void> {
   // Safe mode keeps only the main window: the timer surfaces and inbox alerts are the optional extras.
   if (!smokeTest && !safeMode) {
     timerController ??= new TimerWindowController(() => mainWindow, webAppUrl.origin, preloadPath,
-      new TimerPreferenceStore(userDataPath), () => openDiagnostics())
+      new TimerPreferenceStore(userDataPath), () => openDiagnostics(), desktopPreferences)
     timerController.onExitCancelled(() => { restartAfterUpdate = false })
     timerController.install()
     timerController.attachMain(mainWindow)
@@ -428,11 +442,14 @@ async function createMainWindow(): Promise<void> {
     inboxNotifier.install()
     publishUpdateState(updateState())
   }
+  const window = mainWindow
   const restored = await credentialStore?.load(webAppUrl.origin)
+  if (timerController?.isQuitting || window.isDestroyed()) return
   if (restored) {
-    await installSessionCookies(mainWindow.webContents.session.cookies, webAppUrl.origin, restored)
+    await installSessionCookies(window.webContents.session.cookies, webAppUrl.origin, restored)
   }
 
+  if (timerController?.isQuitting || window.isDestroyed()) return
   if (smokeTest) {
     const timeout = setTimeout(() => failStartup('LOAD_FAILED'), SMOKE_TEST_TIMEOUT_MS)
     mainWindow.webContents.once('did-finish-load', () => {
@@ -455,13 +472,12 @@ async function createMainWindow(): Promise<void> {
         }
       },
     )
-  } else {
+  } else if (!hiddenLaunch) {
     showWithLaunchOverlay(mainWindow)
   }
 
-  const window = mainWindow
   window.webContents.on('did-finish-load', () => {
-    if (mainLoaded) return
+    if (mainLoaded || timerController?.isQuitting) return
     mainLoaded = true
     logger.info('main-loaded', { safeMode, elapsedMs: Date.now() - launchStartedAt })
     // A launch only counts as healthy after surviving a while; crashes right after load still count.
@@ -480,7 +496,7 @@ async function createMainWindow(): Promise<void> {
   window.webContents.on('render-process-gone', (_event, details) => {
     inboxNotifier?.reset()
     logger.error('renderer-gone', { reason: details.reason, exitCode: details.exitCode })
-    if (details.reason === 'clean-exit') return
+    if (details.reason === 'clean-exit' || timerController?.isQuitting) return
     launchHealth.failed()
     openDiagnostics('RENDERER_GONE')
   })
@@ -523,7 +539,7 @@ async function startApplication(): Promise<void> {
     logger.warn('certificate-rejected', { url, error })
   })
   installAppSecurityGuards(app)
-  installClientHeaders(session.fromPartition(AUTHENTICATED_PARTITION), webAppUrl.origin, app.getVersion())
+  installClientHeaders(authenticatedSession(), webAppUrl.origin, app.getVersion())
   credentialStore = new DesktopCredentialStore(userDataPath, safeStorage)
   // Chromium's stack, like the main window: same system proxy, Windows certificate store and no cookies.
   const authRequest = {
@@ -533,12 +549,14 @@ async function startApplication(): Promise<void> {
   }
   const controller = new DesktopAuthController({
     enabled: electronAuthEnabled(),
-    authorize: (attempt) => requestDesktopAuthorization(attempt, authRequest),
+    authorize: (attempt, remember) => requestDesktopAuthorization(attempt, remember, authRequest),
     openExternal: (url) => shell.openExternal(url, { activate: true }),
     logFailure: (stage, reason) => logger.warn('desktop-auth-failed', { stage, reason }),
-    exchange: async (input) => {
+    exchange: async (input, remember) => {
       const bundle = await exchangeDesktopAuthCode(input, authRequest)
-      await credentialStore?.save(bundle, webAppUrl?.origin ?? '')
+      // Without the 7-day sign-in the next launch starts signed out: the session lives only in this run's cookies.
+      if (remember) await credentialStore?.save(bundle, webAppUrl?.origin ?? '')
+      else await credentialStore?.clear()
       if (!mainWindow || mainWindow.isDestroyed() || !webAppUrl) {
         throw new Error('Main window is unavailable')
       }
@@ -571,8 +589,18 @@ async function startApplication(): Promise<void> {
     allowedOrigin: webAppUrl.origin,
     getState: updateState,
     check: () => updateController?.check(),
+    download: () => updateController?.download(),
     restart: restartForUpdate,
   })
+  // Safe mode has no quick panel or rail, so the settings bridge and its global shortcut stay off with them.
+  if (!smokeTest && !safeMode) {
+    new DesktopSettingsController({
+      store: desktopPreferences,
+      main: () => mainWindow,
+      origin: webAppUrl.origin,
+      toggleQuick: () => timerController?.toggleQuick('shortcut'),
+    }).install()
+  }
   startUpdates()
   if (safeMode) openDiagnostics()
   await createMainWindow()
@@ -625,6 +653,7 @@ if (updateCheckPath) {
 
   protocolDispatcher.dispatch(process.argv)
   app.on('second-instance', (_event, processArguments) => {
+    if (timerController?.isQuitting) return
     protocolDispatcher.dispatch(processArguments)
     if (processArguments.includes(SAFE_MODE_ARGUMENT) || processArguments.includes(DIAGNOSTICS_ARGUMENT)) {
       openDiagnostics()
@@ -652,6 +681,7 @@ if (updateCheckPath) {
   })
 
   app.on('activate', () => {
+    if (timerController?.isQuitting) return
     if (BrowserWindow.getAllWindows().length === 0) {
       void createMainWindow().catch(error => failStartup(error instanceof StartupError ? error.reason : 'STARTUP_ERROR', error))
     } else timerController?.showMain()

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { TimeSessionFillMode } from '@yumpoo/api-client'
+import { TimeCategory, TimeSessionFillMode } from '@yumpoo/api-client'
 import {
   atMinute, clampMove, clampResize, coveredMs, dayWindow, defaultMode, formatClock, freeInterval, gaps, HOUR, itemTotals, layout,
   MINUTE, overlapEffect, parseClock, parseDuration, placeSequential, rangeInGap, shares, snap, type DayBlock,
@@ -10,7 +10,7 @@ const day = dayWindow('2026-10-08', zone)
 const at = (clock: string) => atMinute('2026-10-08', parseClock(clock)!, zone)
 let sequence = 0
 function block(start: string, end: string | null, item = `item-${++sequence}`, extra: Partial<DayBlock> = {}): DayBlock {
-  return { id: `b-${++sequence}`, workItemId: item, projectId: 'project', title: item, itemNo: null, projectName: null, colorToken: null,
+  return { id: `b-${++sequence}`, workItemId: item, timeCategory: null, subjectKey: item, projectId: 'project', title: item, itemNo: null, projectName: null, colorToken: null,
     start: at(start), end: end === null ? null : at(end), canEdit: end !== null, etag: '"0"', ...extra }
 }
 
@@ -107,6 +107,15 @@ describe('dayModel', () => {
     expect(clampResize(moving, 'end', at('10:05'), bounds)).toEqual({ start: at('10:00'), end: at('10:15') })
     expect(clampResize(moving, 'start', at('08:30'), bounds)).toEqual({ start: at('09:00'), end: at('11:00') })
     expect(freeInterval(moving, [moving], at('10:45'), day).end).toBe(at('10:45'))
+  })
+
+  it('uses one slot for a category across projects in overlap descriptions and drag bounds', () => {
+    const linked = block('09:00', '10:00', 'category:MEETING:p1', { workItemId: null, timeCategory: TimeCategory.Meeting, title: '会议' })
+    const effect = overlapEffect({ start: at('09:30'), end: at('10:30') }, ['category:MEETING'], [linked], at('16:00'))
+    expect(effect.parallelItems).toEqual([])
+    expect(effect.trimmed).toEqual([linked])
+    const unlinked = block('10:30', '11:30', 'category:MEETING', { workItemId: null, timeCategory: TimeCategory.Meeting, title: '会议' })
+    expect(freeInterval(linked, [linked, unlinked], at('16:00'), day)).toEqual({ start: day.start, end: at('10:30') })
   })
 
   it('fits a dropped or clicked hour into the gap under the pointer', () => {

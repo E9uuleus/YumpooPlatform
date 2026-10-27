@@ -13,7 +13,7 @@ Status: implemented
 - 白名单内为只扩展：新建表、普通索引、序列、类型、视图与函数、注释、授权、会话设置，可空或带默认值且不带内联 `CHECK`/具名约束的新增列，以及对同一迁移内新建表的任意操作。「新建」必须可证明：`CREATE TABLE IF NOT EXISTS` 不算，表名按 PostgreSQL 规则（未加引号折叠为小写，带引号的保留大小写并还原 `""`）逐段连同 schema 精确匹配，`"yumpoo.x"` 与 `yumpoo.x` 互不相同，其他 schema 的同名表或未限定写法不能豁免业务表。
 - 白名单外一律为破坏性：删除、改名、类型或约束收紧、已有表的唯一索引与约束、修改已有表数据、`DO` 块、`OR REPLACE` 等。无法解析的迁移同样按破坏性处理，不确定时失败关闭。
 - 破坏性迁移默认使 CI 失败。作者拆分为 expand/contract 两次发布：先发布新旧代码都能使用的扩展，下一版本再收缩。确需一次完成时，在只追加的[例外清单](../../../../contracts/migrations/rollback-safety-exceptions.json)登记精确条目：文件路径、LF 归一化后的 SHA-256、分类和理由。`breaking` 条目必须链接已实施的 Agent Note；`expand` 条目用于经审阅的误报。条目绑定原始字节，迁移内容一旦改动，例外即失效。
-- [服务器包](../../../../tools/verification/package-m1-15-win.mjs)写入 `windows/release-metadata.json`，记录每个迁移的版本、路径、摘要和最终分类（例外优先），[包验证](../../../../tools/verification/verify-m1-15-package.mjs)核对它与包内迁移集合及摘要一致。
+- [服务器包](../../../../tools/verification/package-server-win.mjs)写入 `windows/release-metadata.json`，记录每个迁移的版本、路径、摘要和最终分类（例外优先），[包验证](../../../../tools/verification/verify-server-package.mjs)核对它与包内迁移集合及摘要一致。
 - `spring.flyway.ignore-migration-patterns: "*:future"` 显式声明：旧 JAR 遇到更高版本的已应用迁移时继续启动，checksum、缺失和待执行迁移的校验保持不变。显式声明避免依赖 Flyway 默认值被后续配置无意改变。
 - 已交付的历史迁移不追溯门禁。元数据同样给出它们的分类，但只有两个版本之间新增的迁移影响回退判定。
 

@@ -64,5 +64,11 @@ jobs:
         if: ${{ failure() }}
         env:
           WECOM_RELEASE_WEBHOOK: ${{ secrets.WECOM_RELEASE_WEBHOOK }}
+          MONITOR_ENABLED: ${{ vars.MONITOR_ENABLED }}
+          MONITOR_ENVIRONMENT: ${{ vars.MONITOR_ENVIRONMENT }}
+          MONITOR_SSH_HOST: ${{ secrets.MONITOR_SSH_HOST }}
+          MONITOR_SSH_KEY: ${{ secrets.MONITOR_SSH_KEY }}
+          MONITOR_KNOWN_HOSTS: ${{ secrets.MONITOR_KNOWN_HOSTS }}
+          MONITOR_SOURCE_SECRET: ${{ secrets.MONITOR_SOURCE_SECRET }}
           NOTIFY_TEXT: "**Yumpoo 代码回退作业失败：目标 ${{ inputs.target_tag }}**\n> 服务器任务的最终状态以主机通知为准。\n> 日志：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         run: node tools/release/notify.mjs

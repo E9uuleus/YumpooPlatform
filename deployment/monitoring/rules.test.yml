@@ -1,0 +1,165 @@
+rule_files: [rules.yml]
+evaluation_interval: 30s
+tests:
+  - name: recovery partitions are excluded from disk alerts
+    interval: 30s
+    input_series:
+      - series: 'windows_logical_disk_free_bytes{volume="HarddiskVolume1"}'
+        values: '5+0x8'
+      - series: 'windows_logical_disk_size_bytes{volume="HarddiskVolume1"}'
+        values: '100+0x8'
+      - series: 'windows_logical_disk_free_bytes{volume="C:"}'
+        values: '50+0x8'
+      - series: 'windows_logical_disk_size_bytes{volume="C:"}'
+        values: '100+0x8'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: WindowsDiskLow
+        exp_alerts: []
+  - name: drive-letter disks escalate to warning and critical
+    interval: 30s
+    input_series:
+      - series: 'windows_logical_disk_free_bytes{volume="C:"}'
+        values: '5+0x8'
+      - series: 'windows_logical_disk_size_bytes{volume="C:"}'
+        values: '100+0x8'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: WindowsDiskLow
+        exp_alerts:
+          - exp_labels: { volume: 'C:', severity: warning, source_job: windows }
+            exp_annotations: { summary: 'Windows 磁盘可用空间不足 20%。' }
+          - exp_labels: { volume: 'C:', severity: critical, source_job: windows }
+            exp_annotations: { summary: 'Windows 磁盘可用空间不足 10%。' }
+  - name: missing service metrics alert only when the exporter is up
+    interval: 30s
+    input_series:
+      - series: 'up{job="windows"}'
+        values: '1+0x8'
+      - series: 'windows_service_state{service="YumpooServer",state="running"}'
+        values: '1+0x8'
+      - series: 'windows_service_state{service="postgresql-x64-17",state="running"}'
+        values: '1+0x8'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: WindowsServiceMissing
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: WindowsServiceMissing
+        exp_alerts:
+          - exp_labels: { state: running, windows_service: sshd, service: server, severity: critical, source_job: windows }
+            exp_annotations: { summary: '关键 Windows 服务指标缺失，无法确认运行状态；请检查 exporter 服务筛选与服务名。' }
+  - name: exporter outage does not duplicate missing-service alerts
+    interval: 30s
+    input_series:
+      - series: 'up{job="windows"}'
+        values: '0+0x8'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: WindowsServiceMissing
+        exp_alerts: []
+  - name: availability recording retains the worst probe per service
+    interval: 30s
+    input_series:
+      - series: 'probe_success{service="server",check="home"}'
+        values: '1 0 1'
+      - series: 'probe_success{service="server",check="health"}'
+        values: '1 1 1'
+      - series: 'probe_success{service="desktop",check="download"}'
+        values: '1 1 1'
+    promql_expr_test:
+      - expr: service:probe_success:min
+        eval_time: 30s
+        exp_samples:
+          - labels: 'service:probe_success:min{service="server"}'
+            value: 0
+          - labels: 'service:probe_success:min{service="desktop"}'
+            value: 1
+  - name: windows exporter 0.32 CPU counters drive sustained warning and critical alerts
+    interval: 30s
+    input_series:
+      - series: 'windows_cpu_time_seconds_total{job="windows",core="0,0",mode="idle"}'
+        values: '0+0.6x16'
+      - series: 'windows_cpu_time_seconds_total{job="windows",core="0,1",mode="idle"}'
+        values: '0+0.6x16'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: WindowsCpuHigh
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: WindowsCpuHigh
+        exp_alerts:
+          - exp_labels: { severity: warning, source_job: windows }
+            exp_annotations: { summary: 'Windows CPU 使用率持续超过 85%。' }
+          - exp_labels: { severity: critical, source_job: windows }
+            exp_annotations: { summary: 'Windows CPU 使用率持续超过 95%。' }
+  - name: application maintenance never suppresses database or SSH service failures
+    interval: 30s
+    input_series:
+      - series: 'windows_service_state{job="windows",instance="127.0.0.1:19100",service="YumpooServer",state="running"}'
+        values: '0+0x8'
+      - series: 'windows_service_state{job="windows",instance="127.0.0.1:19100",service="postgresql-x64-17",state="running"}'
+        values: '0+0x8'
+      - series: 'windows_service_state{job="windows",instance="127.0.0.1:19100",service="sshd",state="running"}'
+        values: '1+0x8'
+      - series: 'yumpoo_ops_db_failures{job="application",instance="127.0.0.1:19100"}'
+        values: '2+0x8'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: WindowsServiceStopped
+        exp_alerts:
+          - exp_labels: { job: windows, instance: '127.0.0.1:19100', service: server, windows_service: YumpooServer, state: running, severity: critical, source_job: windows, expected_maintenance: 'true' }
+            exp_annotations: { summary: 'Windows 关键服务未运行。' }
+          - exp_labels: { job: windows, instance: '127.0.0.1:19100', service: server, windows_service: postgresql-x64-17, state: running, severity: critical, source_job: windows }
+            exp_annotations: { summary: 'Windows 关键服务未运行。' }
+      - eval_time: 2m
+        alertname: DatabaseUnavailable
+        exp_alerts:
+          - exp_labels: { job: application, instance: '127.0.0.1:19100', service: server, severity: critical, source_job: application }
+            exp_annotations: { summary: '应用内存采样显示数据库连续不可达。' }
+  - name: timestamp labels distinguish metrics without losing original scrape time
+    interval: 30s
+    input_series:
+      - series: 'up{job="external",check="health"}'
+        values: '1 1 1'
+      - series: 'probe_success{job="external",check="health"}'
+        values: '1 1 1'
+    promql_expr_test:
+      - expr: 'label_replace(timestamp(up), "monitor_metric_name", "up", "", "") or label_replace(timestamp(probe_success), "monitor_metric_name", "probe_success", "", "")'
+        eval_time: 45s
+        exp_samples:
+          - labels: '{job="external",check="health",monitor_metric_name="up"}'
+            value: 30
+          - labels: '{job="external",check="health",monitor_metric_name="probe_success"}'
+            value: 30
+  - name: failed scrape needs 90 seconds and 60 seconds of confirmed recovery
+    interval: 30s
+    input_series:
+      - series: 'up{job="windows",instance="127.0.0.1:19100"}'
+        values: '1 0 0 0 0 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 1m30s
+        alertname: MonitoringTargetUnavailable
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: MonitoringTargetUnavailable
+        exp_alerts:
+          - exp_labels: { job: windows, instance: '127.0.0.1:19100', severity: critical, source_job: prometheus }
+            exp_annotations: { summary: '采集目标不可达；缺失数据不能算作恢复。' }
+      - eval_time: 4m
+        alertname: MonitoringTargetUnavailable
+        exp_alerts: []
+  - name: certificate escalates within seven days
+    interval: 30s
+    input_series:
+      - series: 'probe_ssl_earliest_cert_expiry{job="external",instance="https://example.com"}'
+        values: '500000+0x10'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: CertificateExpiring
+        exp_alerts:
+          - exp_labels: { job: external, instance: 'https://example.com', severity: warning, source_job: external }
+            exp_annotations: { summary: 'HTTPS 证书将在 30 天内到期。' }
+          - exp_labels: { job: external, instance: 'https://example.com', severity: critical, source_job: external }
+            exp_annotations: { summary: 'HTTPS 证书将在 7 天内到期。' }
+

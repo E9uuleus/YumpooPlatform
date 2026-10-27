@@ -22,16 +22,22 @@ const DESKTOP_AREAS = {
 }
 
 const PRELOAD_ENTRY = path.join(DESKTOP_AREAS.preload, 'index.ts')
+const WEB_BUILD = path.join(PACKAGE_ROOTS.web, 'build')
 const PRELOAD_IPC_CHANNELS = new Map([
-  ['invoke', new Set(['yumpoo:auth:is-enabled', 'yumpoo:auth:start', 'yumpoo:auth:clear', 'yumpoo:timer:show', 'yumpoo:timer:hide', 'yumpoo:timer:mode', 'yumpoo:timer:window-state', 'yumpoo:timer:orb-layout', 'yumpoo:timer:state', 'yumpoo:timer:command-complete', 'yumpoo:timer:pin', 'yumpoo:timer:refresh', 'yumpoo:timer:exit-received', 'yumpoo:timer:exit-complete', 'yumpoo:timer:open-item', 'yumpoo:timer:preferences', 'yumpoo:timer:menu-action', 'yumpoo:timer:drag', 'yumpoo:inbox:state', 'yumpoo:inbox:preferences', 'yumpoo:inbox:get-preferences', 'yumpoo:files:save-export', 'yumpoo:update:get-state', 'yumpoo:update:check', 'yumpoo:update:restart'])],
-  ['on', new Set(['yumpoo:auth:status', 'yumpoo:timer:changed', 'yumpoo:timer:mode-changed', 'yumpoo:timer:orb-hover', 'yumpoo:timer:command', 'yumpoo:timer:command-failed', 'yumpoo:timer:exit-request', 'yumpoo:timer:menu-state', 'yumpoo:timer:dragging', 'yumpoo:inbox:open', 'yumpoo:update:state'])],
-  ['removeListener', new Set(['yumpoo:auth:status', 'yumpoo:timer:changed', 'yumpoo:timer:mode-changed', 'yumpoo:timer:orb-hover', 'yumpoo:timer:command', 'yumpoo:timer:command-failed', 'yumpoo:timer:exit-request', 'yumpoo:timer:menu-state', 'yumpoo:timer:dragging', 'yumpoo:inbox:open', 'yumpoo:update:state'])],
+  ['invoke', new Set(['yumpoo:auth:is-enabled', 'yumpoo:auth:start', 'yumpoo:auth:cancel', 'yumpoo:auth:clear', 'yumpoo:timer:show', 'yumpoo:timer:hide', 'yumpoo:timer:mode', 'yumpoo:timer:window-state', 'yumpoo:timer:orb-layout', 'yumpoo:timer:state', 'yumpoo:timer:command-complete', 'yumpoo:timer:pin', 'yumpoo:timer:refresh', 'yumpoo:timer:appearance', 'yumpoo:timer:exit-phase', 'yumpoo:timer:exit-received', 'yumpoo:timer:exit-complete', 'yumpoo:timer:open-item', 'yumpoo:timer:preferences', 'yumpoo:timer:menu-action', 'yumpoo:timer:drag', 'yumpoo:inbox:state', 'yumpoo:inbox:preferences', 'yumpoo:inbox:get-preferences', 'yumpoo:files:save-export', 'yumpoo:update:get-state', 'yumpoo:update:check', 'yumpoo:update:restart', 'yumpoo:update:download', 'yumpoo:preferences:get', 'yumpoo:preferences:set', 'yumpoo:preferences:shortcut', 'yumpoo:quick:pin', 'yumpoo:quick:resize', 'yumpoo:quick:close', 'yumpoo:quick:open-main', 'yumpoo:rail:get-state', 'yumpoo:rail:open', 'yumpoo:rail:projects', 'yumpoo:rail:settings'])],
+  ['on', new Set(['yumpoo:auth:status', 'yumpoo:timer:changed', 'yumpoo:timer:mode-changed', 'yumpoo:timer:orb-hover', 'yumpoo:timer:command', 'yumpoo:timer:command-failed', 'yumpoo:timer:exit-cancelled', 'yumpoo:timer:exit-request', 'yumpoo:timer:menu-state', 'yumpoo:timer:dragging', 'yumpoo:inbox:open', 'yumpoo:update:state', 'yumpoo:preferences:changed', 'yumpoo:quick:open', 'yumpoo:quick:closing', 'yumpoo:quick:pinned', 'yumpoo:rail:state'])],
+  ['removeListener', new Set(['yumpoo:auth:status', 'yumpoo:timer:changed', 'yumpoo:timer:mode-changed', 'yumpoo:timer:orb-hover', 'yumpoo:timer:command', 'yumpoo:timer:command-failed', 'yumpoo:timer:exit-cancelled', 'yumpoo:timer:exit-request', 'yumpoo:timer:menu-state', 'yumpoo:timer:dragging', 'yumpoo:inbox:open', 'yumpoo:update:state', 'yumpoo:preferences:changed', 'yumpoo:quick:open', 'yumpoo:quick:closing', 'yumpoo:quick:pinned', 'yumpoo:rail:state'])],
 ])
 
 // The diagnostics window has its own preload: it reaches only the diagnostics channels, never the web app's.
 const DIAGNOSTICS_PRELOAD_ENTRY = path.join(DESKTOP_AREAS.preload, 'diagnostics.ts')
 const PRELOAD_ENTRY_CHANNELS = new Map([
   [PRELOAD_ENTRY, PRELOAD_IPC_CHANNELS],
+  [path.join(DESKTOP_AREAS.preload, 'menu.ts'), new Map([
+    ['invoke', new Set(['yumpoo:menu:get-state', 'yumpoo:menu:ready', 'yumpoo:timer:menu-action', 'yumpoo:inbox:get-preferences', 'yumpoo:inbox:preferences'])],
+    ['on', new Set(['yumpoo:timer:menu-state'])],
+    ['removeListener', new Set(['yumpoo:timer:menu-state'])],
+  ])],
   [DIAGNOSTICS_PRELOAD_ENTRY, new Map([
     ['invoke', new Set(['yumpoo:diagnostics:report', 'yumpoo:diagnostics:action'])],
     ['on', new Set()],
@@ -215,7 +221,11 @@ function createRule() {
         const typeOnly = isTypeOnlyImport(node)
 
         if (owner === 'web') {
-          if (nodeBuiltin || electron) {
+          const buildTime = isInside(filename, WEB_BUILD)
+          const resolved = isPathSpecifier(specifier) ? resolvePathSpecifier(specifier, filename) : undefined
+          if (isInside(filename, path.join(PACKAGE_ROOTS.web, 'src')) && resolved && isInside(resolved, WEB_BUILD)) {
+            report(node, specifier, 'Web/renderer 不得导入构建期模块')
+          } else if ((nodeBuiltin && !buildTime) || electron) {
             report(node, specifier, 'Web/renderer 不得依赖 Node 或 Electron')
           } else if (target === 'desktop') {
             report(node, specifier, 'Web/renderer 不得依赖 desktop-shell 实现')
@@ -307,7 +317,7 @@ function createRule() {
           channel?.type === 'Literal' && typeof channel.value === 'string'
             ? channel.value
             : undefined
-        const timerArguments = { 'yumpoo:timer:show': 3, 'yumpoo:timer:mode': 2, 'yumpoo:timer:orb-layout': 2, 'yumpoo:timer:state': 2, 'yumpoo:timer:command-complete': 3, 'yumpoo:timer:exit-received': 2, 'yumpoo:timer:pin': 2, 'yumpoo:timer:exit-complete': 3, 'yumpoo:timer:open-item': 3, 'yumpoo:timer:preferences': 2, 'yumpoo:timer:menu-action': 2, 'yumpoo:timer:drag': 2, 'yumpoo:inbox:state': 2, 'yumpoo:inbox:preferences': 2, 'yumpoo:files:save-export': 2, 'yumpoo:diagnostics:action': 2 }
+        const timerArguments = { 'yumpoo:timer:exit-phase': 3, 'yumpoo:timer:appearance': 2, 'yumpoo:auth:start': 2, 'yumpoo:timer:show': 3, 'yumpoo:timer:mode': 2, 'yumpoo:timer:orb-layout': 2, 'yumpoo:timer:state': 2, 'yumpoo:timer:command-complete': 3, 'yumpoo:timer:exit-received': 2, 'yumpoo:timer:pin': 2, 'yumpoo:timer:exit-complete': 3, 'yumpoo:timer:open-item': 3, 'yumpoo:timer:preferences': 2, 'yumpoo:timer:menu-action': 2, 'yumpoo:timer:drag': 2, 'yumpoo:inbox:state': 2, 'yumpoo:inbox:preferences': 2, 'yumpoo:files:save-export': 2, 'yumpoo:diagnostics:action': 2, 'yumpoo:preferences:set': 2, 'yumpoo:preferences:shortcut': 2, 'yumpoo:quick:open-main': 2, 'yumpoo:quick:pin': 2, 'yumpoo:quick:resize': 2, 'yumpoo:rail:open': 3, 'yumpoo:rail:projects': 2 }
         const expectedArguments = method === 'invoke' ? (timerArguments[channelName] ?? 1) : 2
         if (
           !allowedChannels?.has(channelName) ||

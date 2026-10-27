@@ -9,7 +9,7 @@ import { problemMessage, toApiProblem } from '../../api/problems'
 import { useSession } from '../../composables/useSession'
 import { onTimeTrackingChanged, useTimeTracker } from '../../composables/useTimeTracker'
 import '../projects/workItemAccentBar.css'
-import { buildTimesheet, dayBreakdown, hoursMinutes, projectColors, shortHours, todayIn, toApiDate, weekday } from '../team/teamDashboardModel'
+import { buildTimesheet, dayBreakdown, hoursMinutes, shortHours, timesheetColors, todayIn, toApiDate, weekday } from '../team/teamDashboardModel'
 import { useTweenedNumber } from '../team/teamMotion'
 import { dayTargetMs, daySegments, monthGrid, monthLabel, monthProjects, monthStats, runningExtraMs, shiftMonth, weekdayLabels,
   type CalendarCell } from './myTimeModel'
@@ -34,7 +34,7 @@ const days = computed(() => {
   return totals
 })
 const segments = computed(() => daySegments(row.value))
-const colors = computed(() => projectColors(sheet.value?.workItems.map(item => item.projectId) ?? []))
+const colors = computed(() => timesheetColors(sheet.value))
 const legend = computed(() => monthProjects(row.value, month.value))
 const stats = computed(() => monthStats(days.value, month.value))
 const weekTotals = computed(() => Array.from({ length: 6 }, (_, index) => cells.value.slice(index * 7, index * 7 + 7)
@@ -164,7 +164,10 @@ defineExpose({ refresh: load, loading, ready })
           重试
         </el-button>
       </el-alert>
-      <div class="my-time__stats">
+      <div
+        class="my-time__stats"
+        data-tour="my-time-stats"
+      >
         <div class="my-time__stat">
           <small>本月合计</small><strong>{{ shortHours(shownTotal) }}</strong><span>小时</span>
         </div>
@@ -184,7 +187,10 @@ defineExpose({ refresh: load, loading, ready })
       <p class="my-time__note">
         并行计时按项数平均计入，每日合计为实际时长。
       </p>
-      <div class="my-time__board">
+      <div
+        class="my-time__board"
+        data-tour="my-time-calendar"
+      >
         <div
           class="my-time__weekdays"
           aria-hidden="true"

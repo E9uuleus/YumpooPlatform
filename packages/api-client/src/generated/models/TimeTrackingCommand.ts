@@ -12,6 +12,21 @@
  */
 
 import { mapValues } from '../runtime';
+import type { TimeCategory } from './TimeCategory';
+import {
+    TimeCategoryFromJSON,
+    TimeCategoryFromJSONTyped,
+    TimeCategoryToJSON,
+    TimeCategoryToJSONTyped,
+} from './TimeCategory';
+import type { TimeCategorySubject } from './TimeCategorySubject';
+import {
+    TimeCategorySubjectFromJSON,
+    TimeCategorySubjectFromJSONTyped,
+    TimeCategorySubjectToJSON,
+    TimeCategorySubjectToJSONTyped,
+} from './TimeCategorySubject';
+
 /**
  *
  * @export
@@ -19,17 +34,41 @@ import { mapValues } from '../runtime';
  */
 export interface TimeTrackingCommand {
     /**
+     * 仅与 timeCategory 一起使用，把分类记录关联到本人可写的项目。
+     * @type {string}
+     * @memberof TimeTrackingCommand
+     */
+    categoryProjectId?: string;
+    /**
      *
      * @type {string}
      * @memberof TimeTrackingCommand
      */
     workItemId?: string;
     /**
-     * 仅 start 使用，批量并行开始的工作项。
+     * 仅 start 使用，批量并行开始的工作项；与 timeCategories 合计最多 10 项。
      * @type {Array<string>}
      * @memberof TimeTrackingCommand
      */
     workItemIds?: Array<string>;
+    /**
+     *
+     * @type {TimeCategory}
+     * @memberof TimeTrackingCommand
+     */
+    timeCategory?: TimeCategory;
+    /**
+     * 仅 start 使用，批量开始可关联项目的分类；与 workItemIds、timeCategories 合计最多 10 项，同一分类只能出现一次。
+     * @type {Array<TimeCategorySubject>}
+     * @memberof TimeTrackingCommand
+     */
+    timeCategorySubjects?: Array<TimeCategorySubject>;
+    /**
+     * 仅 start 使用，批量并行开始的非项目分类；与 workItemIds 合计最多 10 项。
+     * @type {Array<TimeCategory>}
+     * @memberof TimeTrackingCommand
+     */
+    timeCategories?: Array<TimeCategory>;
     /**
      *
      * @type {string}
@@ -56,6 +95,8 @@ export interface TimeTrackingCommand {
     reason?: string;
 }
 
+
+
 /**
  * Check if a given object implements the TimeTrackingCommand interface.
  */
@@ -73,12 +114,16 @@ export function TimeTrackingCommandFromJSONTyped(json: any, ignoreDiscriminator:
     }
     return {
 
-        'workItemId': json['workItemId'] == null ? undefined : json['workItemId'],
-        'workItemIds': json['workItemIds'] == null ? undefined : json['workItemIds'],
-        'sessionId': json['sessionId'] == null ? undefined : json['sessionId'],
+        ...(json['categoryProjectId'] == null ? {} : { 'categoryProjectId': json['categoryProjectId'] }),
+        ...(json['workItemId'] == null ? {} : { 'workItemId': json['workItemId'] }),
+        ...(json['workItemIds'] == null ? {} : { 'workItemIds': json['workItemIds'] }),
+        ...(json['timeCategory'] == null ? {} : { 'timeCategory': TimeCategoryFromJSON(json['timeCategory']) }),
+        ...(json['timeCategorySubjects'] == null ? {} : { 'timeCategorySubjects': ((json['timeCategorySubjects'] as Array<any>).map(TimeCategorySubjectFromJSON)) }),
+        ...(json['timeCategories'] == null ? {} : { 'timeCategories': ((json['timeCategories'] as Array<any>).map(TimeCategoryFromJSON)) }),
+        ...(json['sessionId'] == null ? {} : { 'sessionId': json['sessionId'] }),
         ...(json['startedAt'] == null ? {} : { 'startedAt': new Date(json['startedAt']) }),
         ...(json['stoppedAt'] == null ? {} : { 'stoppedAt': new Date(json['stoppedAt']) }),
-        'reason': json['reason'] == null ? undefined : json['reason'],
+        ...(json['reason'] == null ? {} : { 'reason': json['reason'] }),
     };
 }
 
@@ -93,8 +138,12 @@ export function TimeTrackingCommandToJSONTyped(value?: TimeTrackingCommand | nul
 
     return {
 
+        'categoryProjectId': value['categoryProjectId'],
         'workItemId': value['workItemId'],
         'workItemIds': value['workItemIds'],
+        'timeCategory': TimeCategoryToJSON(value['timeCategory']),
+        'timeCategorySubjects': value['timeCategorySubjects'] == null ? undefined : ((value['timeCategorySubjects'] as Array<any>).map(TimeCategorySubjectToJSON)),
+        'timeCategories': value['timeCategories'] == null ? undefined : ((value['timeCategories'] as Array<any>).map(TimeCategoryToJSON)),
         'sessionId': value['sessionId'],
         'startedAt': value['startedAt'] == null ? value['startedAt'] : value['startedAt'].toISOString(),
         'stoppedAt': value['stoppedAt'] == null ? value['stoppedAt'] : value['stoppedAt'].toISOString(),

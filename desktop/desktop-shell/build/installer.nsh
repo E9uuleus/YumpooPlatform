@@ -100,11 +100,32 @@
 
 ; Updates run the old uninstaller with --updated and keep everything. A real uninstall signs the
 ; user out (auth\ holds the only persisted session) and clears Chromium runtime data, keeping only
-; the two preference files.
+; the preference files.
 !macro customUnInstall
   ${ifNot} ${isUpdated}
+    ; A reader can briefly hold a newly created shortcut open. Finish this before removing registration
+    ; or data, and leave a retryable installation if the handle is not released within ten seconds.
+    Push $R7
+    StrCpy $R7 40
+    ${Do}
+      ClearErrors
+      Delete "$SMPROGRAMS\Yumpoo Desktop (Safe Mode).lnk"
+      ${ifNot} ${Errors}
+        ${ExitDo}
+      ${endif}
+      IntOp $R7 $R7 - 1
+      ${if} $R7 == 0
+        Pop $R7
+        SetErrorLevel 1
+        Abort "无法删除安全模式快捷方式，请关闭占用该文件的程序后重试卸载。"
+      ${endif}
+      Sleep 250
+    ${Loop}
+    Pop $R7
     DeleteRegKey HKCU "Software\Classes\yumpoo"
-    Delete "$SMPROGRAMS\Yumpoo Desktop (Safe Mode).lnk"
+    ; "Start at sign-in" registers this value (named after the AppUserModelID); updates keep it, uninstall removes it.
+    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "com.yumpoo.desktop"
+    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" "com.yumpoo.desktop"
     ; The installer keeps a copy of itself here as the base for differential updates (about 100 MB).
     RMDir /r "$LOCALAPPDATA\yumpoo-desktop-updater"
     StrCpy $R9 "$APPDATA\Yumpoo Desktop"
@@ -115,6 +136,7 @@
         ${andIf} $R1 != ".."
         ${andIf} $R1 != "timer-preferences.json"
         ${andIf} $R1 != "inbox-preferences.json"
+        ${andIf} $R1 != "desktop-preferences.json"
           ${if} ${FileExists} "$R9\$R1\*.*"
             RMDir /r "$R9\$R1"
           ${else}

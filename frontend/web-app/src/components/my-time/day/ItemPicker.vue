@@ -3,33 +3,46 @@ import { computed, nextTick, onMounted, ref, useId, watch } from 'vue'
 import { ElButton, ElInput } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import type { TimerCandidate } from '@yumpoo/api-client'
+import { categoryOption, matchCategories, type SubjectKey, type SubjectOption } from '../../timer/timeCategories'
+import { workItemLabelColorValue } from '../../projects/workItemLabelColors'
 import { useTimerCandidates } from '../../../composables/useTimerCandidates'
+import { useInfiniteSentinel } from '../../../composables/useInfiniteSentinel'
+import { useHideCompleted } from '../../../composables/useHideCompleted'
+import HideCompletedSwitch from '../../timer/HideCompletedSwitch.vue'
 import WorkItemGlyph from '../../timer/WorkItemGlyph.vue'
 import { MAX_PARALLEL_ITEMS } from './dayModel'
 
-const props = withDefaults(defineProps<{ selected?: TimerCandidate[]; multiple?: boolean; exclude?: (string | null)[]; placeholder?: string }>(),
-  { selected: () => [], multiple: false, exclude: () => [], placeholder: '搜索工作项或项目' })
-const emit = defineEmits<{ pick: [item: TimerCandidate]; 'update:selected': [items: TimerCandidate[]]; escape: [] }>()
+const props = withDefaults(defineProps<{ selected?: SubjectOption[]; multiple?: boolean; exclude?: (SubjectKey | null)[]; placeholder?: string }>(),
+  { selected: () => [], multiple: false, exclude: () => [], placeholder: '搜索工作项、项目或分类' })
+const emit = defineEmits<{ pick: [item: SubjectOption]; 'update:selected': [items: SubjectOption[]]; escape: [] }>()
 
 const input = ref<InstanceType<typeof ElInput>>()
 const listbox = ref<HTMLElement>()
 const id = useId()
-const { query, items, loading, problem, nextOffset, searching, load } = useTimerCandidates(ref(true))
-const options = computed(() => items.value.filter(item => !props.exclude.includes(item.workItemId)))
+const { query, items, hiddenCount, loading, problem, nextOffset, searching, load } = useTimerCandidates(ref(true))
+const { hideCompleted } = useHideCompleted()
+const sentinel = ref<HTMLElement>()
+useInfiniteSentinel(listbox, sentinel, () => items.value.length,
+  () => nextOffset.value !== null && !loading.value && !problem.value, () => load(true))
+const visible = items
+const options = computed(() => visible.value.filter(item => !props.exclude.includes(item.workItemId)))
+/** Non-project categories ride above the list as chips; they match the query by name like work items do. */
+const categories = computed(() => matchCategories(query.value).filter(option => !props.exclude.includes(option.key)))
 const active = ref(0)
 const picking = computed(() => props.multiple && props.selected.length > 0)
-const isSelected = (item: TimerCandidate) => props.selected.some(selected => selected.workItemId === item.workItemId)
+const isSelected = (key: SubjectKey) => props.selected.some(selected => selected.key === key)
 watch(options, () => { active.value = 0 })
 
-function toggle(item: TimerCandidate) {
-  if (isSelected(item)) emit('update:selected', props.selected.filter(selected => selected.workItemId !== item.workItemId))
-  else if (props.selected.length < MAX_PARALLEL_ITEMS) emit('update:selected', [...props.selected, item])
+const asOption = (item: TimerCandidate): SubjectOption => ({ key: item.workItemId, title: item.title, projectName: item.projectName })
+function toggle(option: SubjectOption) {
+  if (isSelected(option.key)) emit('update:selected', props.selected.filter(selected => selected.key !== option.key))
+  else if (props.selected.length < MAX_PARALLEL_ITEMS) emit('update:selected', [...props.selected, option])
 }
 
 /** A plain click saves one item; once anything is checked, clicks keep adding to the parallel selection instead. */
-function choose(item: TimerCandidate, event?: MouseEvent | KeyboardEvent) {
-  if (props.multiple && (event?.ctrlKey || event?.metaKey || picking.value)) toggle(item)
-  else emit('pick', item)
+function choose(option: SubjectOption, event?: MouseEvent | KeyboardEvent) {
+  if (props.multiple && (event?.ctrlKey || event?.metaKey || picking.value)) toggle(option)
+  else emit('pick', option)
 }
 
 async function move(step: number) {
@@ -46,7 +59,9 @@ function keydown(raw: Event | KeyboardEvent) {
   else if (event.key === 'Enter' && !event.isComposing) {
     event.preventDefault()
     const item = options.value[active.value]
-    if (item) choose(item, event)
+    const category = categories.value[0]
+    if (item) choose(asOption(item), event)
+    else if (category) choose(categoryOption(category), event)
   } else if (event.key === 'Escape') {
     event.preventDefault()
     if (query.value) query.value = ''
@@ -74,9 +89,33 @@ defineExpose({ focus: () => input.value?.focus() })
       :aria-activedescendant="options.length ? `${id}-${active}` : undefined"
       @keydown="keydown"
     />
-    <p class="item-picker__label">
-      {{ searching ? '搜索结果' : '最近与我的' }}
-    </p>
+    <div
+      v-if="categories.length"
+      class="item-picker__categories"
+      role="group"
+      aria-label="通用工时"
+    >
+      <button
+        v-for="category in categories"
+        :key="category.key"
+        type="button"
+        class="item-picker__category"
+        :class="{ 'is-selected': isSelected(category.key) }"
+        :style="{ '--category-color': workItemLabelColorValue(category.colorToken) }"
+        :aria-pressed="multiple ? isSelected(category.key) : undefined"
+        @mousedown.prevent
+        @click="choose(categoryOption(category), $event)"
+      >
+        <component
+          :is="category.icon"
+          aria-hidden="true"
+        />{{ category.label }}
+      </button>
+    </div>
+    <div class="item-picker__label">
+      <span>{{ searching ? '搜索结果' : '最近与我的' }}</span>
+      <HideCompletedSwitch :hidden-count="hiddenCount" />
+    </div>
     <ul
       :id="`${id}-list`"
       ref="listbox"
@@ -92,19 +131,19 @@ defineExpose({ focus: () => input.value?.focus() })
         :data-index="index"
         role="option"
         class="item-picker__option"
-        :class="{ 'is-active': index === active, 'is-selected': isSelected(item) }"
-        :aria-selected="isSelected(item)"
+        :class="{ 'is-active': index === active, 'is-selected': isSelected(item.workItemId), 'is-completed': hideCompleted && item.completed }"
+        :aria-selected="isSelected(item.workItemId)"
         @mousedown.prevent
         @mouseenter="active = index"
-        @click="choose(item, $event)"
+        @click="choose(asOption(item), $event)"
       >
         <span
           v-if="multiple"
           class="item-picker__check"
           role="checkbox"
-          :aria-checked="isSelected(item)"
+          :aria-checked="isSelected(item.workItemId)"
           :aria-label="`多选 ${item.title}`"
-          @click.stop="toggle(item)"
+          @click.stop="toggle(asOption(item))"
         />
         <WorkItemGlyph
           :code="item.contentCode"
@@ -115,16 +154,27 @@ defineExpose({ focus: () => input.value?.focus() })
           <strong>{{ item.title }}</strong>
           <small>{{ item.projectName }}</small>
         </span>
+        <span
+          v-if="hideCompleted && item.completed"
+          class="item-picker__done"
+        >已完成</span>
       </li>
+      <div
+        v-if="nextOffset !== null"
+        ref="sentinel"
+        class="item-picker-sentinel"
+        role="presentation"
+        aria-hidden="true"
+      />
     </ul>
     <p
-      v-if="loading"
+      v-if="loading && !items.length"
       class="item-picker__status"
     >
       正在加载…
     </p>
     <p
-      v-else-if="problem"
+      v-else-if="problem && !items.length"
       class="item-picker__status"
       role="alert"
     >
@@ -142,21 +192,36 @@ defineExpose({ focus: () => input.value?.focus() })
     >
       {{ searching ? '没有匹配的工作项' : '还没有分配给你或最近记录过的工作项，输入关键字搜索全部。' }}
     </p>
-    <el-button
-      v-else-if="nextOffset !== null"
-      text
-      size="small"
-      class="item-picker__more"
-      @click="load(true)"
+    <p
+      v-if="loading && items.length"
+      class="item-picker__status is-more"
     >
-      加载更多
-    </el-button>
+      正在加载更多工作项…
+    </p>
+    <p
+      v-else-if="problem && items.length"
+      class="item-picker__status is-more"
+      role="alert"
+    >
+      加载更多失败<el-button
+        text
+        size="small"
+        @click="load(true)"
+      >
+        重试
+      </el-button>
+    </p>
   </div>
 </template>
 
 <style scoped>
 .item-picker{display:flex;flex-direction:column;min-height:0}
-.item-picker__label{margin:10px 2px 4px;color:var(--yp-text-muted);font-size:11px}
+.item-picker__categories{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin:10px 2px 0}
+.item-picker__category{display:inline-flex;align-items:center;gap:4px;height:26px;padding:0 9px;border:1px solid var(--yp-border-subtle);border-radius:var(--yp-radius-pill);background:var(--yp-bg-surface);color:var(--yp-text-primary);font:12px var(--yp-font-family);cursor:pointer;transition:background var(--yp-motion-fast) ease-out,border-color var(--yp-motion-fast) ease-out}
+.item-picker__category svg{width:13px;height:13px;color:var(--category-color)}
+.item-picker__category:hover{background:var(--yp-bg-hover)}
+.item-picker__category.is-selected{border-color:var(--yp-action-primary);background:var(--yp-bg-selected)}
+.item-picker__label{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:10px 2px 4px;color:var(--yp-text-muted);font-size:11px}
 .item-picker__list{max-height:232px;margin:0;padding:0;overflow:auto;list-style:none;overscroll-behavior:contain}
 .item-picker__option{display:flex;align-items:center;gap:8px;min-height:40px;padding:4px 8px;border-radius:var(--yp-radius-sm);cursor:pointer}
 .item-picker__option.is-active{background:var(--yp-bg-selected)}
@@ -166,6 +231,10 @@ defineExpose({ focus: () => input.value?.focus() })
 .item-picker__text{display:grid;flex:1;min-width:0;gap:1px}
 .item-picker__text strong{overflow:hidden;color:var(--yp-text-primary);font-size:13px;font-weight:500;white-space:nowrap;text-overflow:ellipsis}
 .item-picker__text small{overflow:hidden;color:var(--yp-text-muted);font-size:11px;white-space:nowrap;text-overflow:ellipsis}
+.item-picker__option.is-completed .item-picker__text{opacity:.5}
+.item-picker__option.is-completed .item-picker__text strong{text-decoration:line-through}
+.item-picker__done{flex:none;padding:1px 6px;border-radius:var(--yp-radius-pill);background:var(--yp-bg-hover);color:var(--yp-text-muted);font-size:11px;line-height:16px}
 .item-picker__status{margin:6px 4px;color:var(--yp-text-muted);font-size:12px;line-height:18px}
-.item-picker__more{align-self:center}
+.item-picker__status.is-more{text-align:center}
+.item-picker-sentinel{height:1px}
 </style>

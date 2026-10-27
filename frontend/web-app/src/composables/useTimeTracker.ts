@@ -1,8 +1,11 @@
 import { computed, ref, shallowRef } from 'vue'
+import type { DesktopExitPhase } from '@yumpoo/preload-contract'
 import { ElMessage } from 'element-plus'
 import { readCsrfToken, type CurrentTimeTracker, type TimeTrackingPreferences, type TimeTrackingSummary, type TimeTrackingCommand } from '@yumpoo/api-client'
 import { timeTrackingApi } from '../api/client'
 import { timeProblemMessage } from './timeTrackingProblems'
+import { SHELL_SURFACE } from '../components/desktop/surfaces'
+import { categoryOf, categoryProjectOf, sessionKey, subjectFields, type SubjectKey } from '../components/timer/timeCategories'
 
 const current = shallowRef<CurrentTimeTracker>()
 const running = computed(() => current.value?.runningSessions ?? [])
@@ -21,7 +24,7 @@ let channel: BroadcastChannel | undefined
 let cleanup: (() => void) | undefined
 const retries = new Map<string, string>()
 const listeners = new Set<() => void>()
-export const DEFAULT_TIME_PREFERENCES: TimeTrackingPreferences = { timerEnabled: true, workdayStartMinute: 540, workdayEndMinute: 1080 }
+export const DEFAULT_TIME_PREFERENCES: TimeTrackingPreferences = { timerEnabled: true, workdayStartMinute: 540, workdayEndMinute: 1080, hideCompleted: false }
 const PREFERENCES_KEY = 'yumpoo.time-tracking.preferences.v1'
 /** Last known preferences, so timer controls do not flash in before the first poll for someone who switched the timer off. */
 const cachedPreferences = shallowRef<TimeTrackingPreferences | undefined>(readCachedPreferences())
@@ -48,22 +51,22 @@ export function formatTrackingDuration(ms: number): string {
   return `${hours ? `${hours}h ` : ''}${Math.floor(seconds / 60) % 60}m ${seconds % 60}s`
 }
 
-export function formatDuration(ms: number): string {
-  const seconds = Math.max(0, Math.floor(ms / 1000))
-  return `${Math.floor(seconds / 3600)}:${String(Math.floor(seconds / 60) % 60).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
-}
+export { formatDuration } from '../components/timer/duration'
 
 /** Server clock minus local clock from the latest poll, published so other desktop surfaces tick the same duration. */
 export function timerClockOffset(): number { return offset }
 
+/** Shared like the rest of the state, so callers inside computed getters do not allocate one per evaluation. */
+const wallDuration = computed(() => running.value.length ? Math.max(0, now.value - Math.min(...running.value.map(timer => timer.session.startedAt.getTime()))) : 0)
+
 export function useTimeTracker() {
   return { current, running, isRunning, runningFor, now, busy, problem, connected, savedAt, refresh, toggle, start, startMany, switchTo, stop, stopAll, notify, summaries,
-    preferences, timerEnabled, setPreferences,
-    wallDuration: computed(() => running.value.length ? Math.max(0, now.value - Math.min(...running.value.map(timer => timer.session.startedAt.getTime()))) : 0) }
+    preferences, timerEnabled, setPreferences, wallDuration }
 }
 
-function runningFor(workItemId: string) { return running.value.find(timer => timer.session.workItemId === workItemId) }
-function isRunning(workItemId: string): boolean { return !!runningFor(workItemId) }
+/** Timer commands take a work item id or a category key. */
+function runningFor(key: SubjectKey) { return running.value.find(timer => sessionKey(timer.session) === key) }
+function isRunning(key: SubjectKey): boolean { return !!runningFor(key) }
 
 export function observeTimer(workItemId: string, projectId: string, initial?: TimeTrackingSummary | null): () => void {
   const entry = observed.get(workItemId)
@@ -107,7 +110,9 @@ export function activateTimeTracker(active: boolean): void {
   }
   if (channel) channel.onmessage = invalidate
   const tick = window.setInterval(() => { now.value = Date.now() + offset }, 1000)
-  const poll = window.setInterval(() => { if (window.yumpooDesktop || document.visibilityState === 'visible') void refresh().catch(() => undefined) }, 5000)
+  // Desktop windows keep polling while hidden in the tray, except the prewarmed quick panel: it refreshes when shown (visibilitychange below).
+  const pollHidden = !!window.yumpooDesktop && window.location.pathname !== SHELL_SURFACE.quick
+  const poll = window.setInterval(() => { if (pollHidden || document.visibilityState === 'visible') void refresh().catch(() => undefined) }, 5000)
   const focus = () => { if (document.visibilityState === 'visible') void refresh().catch(() => undefined) }
   window.addEventListener('focus', focus)
   window.addEventListener('online', focus)
@@ -228,37 +233,43 @@ async function run(action: () => Promise<void>): Promise<boolean> {
   } finally { if (epoch === generation) busy.value = false }
 }
 
-async function start(workItemId: string): Promise<boolean> {
-  if (isRunning(workItemId)) return true
+async function start(key: SubjectKey): Promise<boolean> {
+  if (isRunning(key)) return true
   if (!timerEnabled.value) return false
   const success = await run(async () => {
-    if (!isRunning(workItemId)) await command('start', { workItemId })
+    if (!isRunning(key)) await command('start', subjectFields(key))
   })
   if (success) window.dispatchEvent(new Event('yumpoo:timer-started'))
   return success
 }
 
-async function startMany(workItemIds: string[]): Promise<boolean> {
+async function startMany(keys: SubjectKey[]): Promise<boolean> {
   if (!timerEnabled.value) return false
   const success = await run(async () => {
-    for (let index = 0; index < workItemIds.length; index += 10) {
-      await command('start', { workItemIds: workItemIds.slice(index, index + 10) })
+    for (let index = 0; index < keys.length; index += 10) {
+      const batch = keys.slice(index, index + 10)
+      const workItemIds = batch.filter(key => !categoryOf(key))
+      const timeCategorySubjects = batch.flatMap(key => {
+        const category = categoryOf(key)
+        return category ? [{ timeCategory: category.code, projectId: categoryProjectOf(key) }] : []
+      })
+      await command('start', { ...(workItemIds.length ? { workItemIds } : {}), ...(timeCategorySubjects.length ? { timeCategorySubjects } : {}) })
     }
   })
   if (success) window.dispatchEvent(new Event('yumpoo:timer-started'))
   return success
 }
 
-async function switchTo(workItemId: string): Promise<boolean> {
+async function switchTo(key: SubjectKey): Promise<boolean> {
   if (!timerEnabled.value) return false
-  const success = await run(() => command('switch', { workItemId }))
+  const success = await run(() => command('switch', subjectFields(key)))
   if (success) window.dispatchEvent(new Event('yumpoo:timer-started'))
   return success
 }
 
-function toggle(workItemId: string): Promise<boolean> {
-  const timer = runningFor(workItemId)
-  return timer ? stop(timer.session.id) : start(workItemId)
+function toggle(key: SubjectKey): Promise<boolean> {
+  const timer = runningFor(key)
+  return timer ? stop(timer.session.id) : start(key)
 }
 
 function stop(sessionId: string): Promise<boolean> {
@@ -282,28 +293,48 @@ function setPreferences(next: TimeTrackingPreferences): Promise<boolean> {
 }
 
 export const timerExitPrompt = ref(false)
+export const timerExitPhase = ref<DesktopExitPhase>('checking')
 let resolveExit: ((choice: 'stop' | 'continue' | 'cancel') => void) | undefined
 let exitPromise: Promise<boolean> | undefined
+let cancelExit: (() => void) | undefined
+let exitGeneration = 0
 export function chooseTimerExit(choice: 'stop' | 'continue' | 'cancel'): void {
   timerExitPrompt.value = false
   resolveExit?.(choice)
   resolveExit = undefined
 }
+export function cancelTimerExit(): void {
+  chooseTimerExit('cancel')
+  cancelExit?.()
+}
 export function confirmTimerExit(): Promise<boolean> {
   if (exitPromise) return exitPromise
+  const token = ++exitGeneration
+  timerExitPhase.value = 'checking'
+  const cancelled = new Promise<boolean>(resolve => { cancelExit = () => { ++exitGeneration; resolve(false) } })
   const operation = (async () => {
     let confirmed = false
     try { await refresh(); confirmed = true } catch { /* Keep explicit exit choices available while offline. */ }
+    if (token !== exitGeneration) return false
     if (confirmed && !running.value.length) return true
+    timerExitPhase.value = 'prompt'
     timerExitPrompt.value = true
     const choice = await new Promise<'stop' | 'continue' | 'cancel'>(resolve => { resolveExit = resolve })
-    if (choice === 'cancel') return false
+    if (token !== exitGeneration || choice === 'cancel') return false
     if (choice === 'continue') return true
-    if (await stopAll()) return true
+    timerExitPhase.value = 'saving'
+    const stopped = await run(async () => {
+      // A cancelled exit must not submit a stop after a delayed pre-save refresh.
+      if (token === exitGeneration) await command('stop-all')
+    })
+    if (token !== exitGeneration) return false
+    if (stopped) return true
     ElMessage.error('停止失败，尚未退出。请重试或明确选择继续计时并退出。')
     return false
   })()
-  exitPromise = operation
-  void operation.finally(() => { exitPromise = undefined })
-  return operation
+  const result = Promise.race([operation, cancelled]).finally(() => {
+    if (exitPromise === result) { exitPromise = undefined; cancelExit = undefined }
+  })
+  exitPromise = result
+  return result
 }

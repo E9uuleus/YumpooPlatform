@@ -26,6 +26,13 @@ import {
     TeamTimesheetWorkItemToJSON,
     TeamTimesheetWorkItemToJSONTyped,
 } from './TeamTimesheetWorkItem';
+import type { TeamTimesheetCategoryEntry } from './TeamTimesheetCategoryEntry';
+import {
+    TeamTimesheetCategoryEntryFromJSON,
+    TeamTimesheetCategoryEntryFromJSONTyped,
+    TeamTimesheetCategoryEntryToJSON,
+    TeamTimesheetCategoryEntryToJSONTyped,
+} from './TeamTimesheetCategoryEntry';
 import type { TeamDashboardMember } from './TeamDashboardMember';
 import {
     TeamDashboardMemberFromJSON,
@@ -90,6 +97,12 @@ export interface TeamTimesheet {
      */
     entries: Array<TeamTimesheetEntry>;
     /**
+     * 分类工时，每个成员、分类、关联项目、自然日一条，只包含大于 0 的耗时；有项目筛选时只含关联到这些项目的分类工时。服务端总是返回。
+     * @type {Array<TeamTimesheetCategoryEntry>}
+     * @memberof TeamTimesheet
+     */
+    categoryEntries?: Array<TeamTimesheetCategoryEntry>;
+    /**
      *
      * @type {Array<TeamTimesheetDay>}
      * @memberof TeamTimesheet
@@ -129,6 +142,7 @@ export function TeamTimesheetFromJSONTyped(json: any, ignoreDiscriminator: boole
         'members': ((json['members'] as Array<any>).map(TeamDashboardMemberFromJSON)),
         'workItems': ((json['workItems'] as Array<any>).map(TeamTimesheetWorkItemFromJSON)),
         'entries': ((json['entries'] as Array<any>).map(TeamTimesheetEntryFromJSON)),
+        ...(json['categoryEntries'] == null ? {} : { 'categoryEntries': ((json['categoryEntries'] as Array<any>).map(TeamTimesheetCategoryEntryFromJSON)) }),
         'days': ((json['days'] as Array<any>).map(TeamTimesheetDayFromJSON)),
     };
 }
@@ -151,6 +165,7 @@ export function TeamTimesheetToJSONTyped(value?: TeamTimesheet | null, ignoreDis
         'members': ((value['members'] as Array<any>).map(TeamDashboardMemberToJSON)),
         'workItems': ((value['workItems'] as Array<any>).map(TeamTimesheetWorkItemToJSON)),
         'entries': ((value['entries'] as Array<any>).map(TeamTimesheetEntryToJSON)),
+        'categoryEntries': value['categoryEntries'] == null ? undefined : ((value['categoryEntries'] as Array<any>).map(TeamTimesheetCategoryEntryToJSON)),
         'days': ((value['days'] as Array<any>).map(TeamTimesheetDayToJSON)),
     };
 }

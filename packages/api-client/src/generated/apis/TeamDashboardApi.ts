@@ -146,7 +146,7 @@ export class TeamDashboardApi extends runtime.BaseAPI {
     }
 
     /**
-     * 仅公司管理员可用。按公司时区切分自然日，跨日记录按重叠时长拆分；运行中计时统计到 asOf，时长为按并行均摊后的计入时长。projectIds 为空表示全公司项目（含已归档），userIds 为空表示在职成员及区间内有计时的成员。区间最多 93 天，排除已删除工作项。
+     * 仅公司管理员可用。按公司时区切分自然日，跨日记录按重叠时长拆分；运行中计时统计到 asOf，时长为按并行均摊后的计入时长。projectIds 为空表示全公司项目（含已归档），userIds 为空表示在职成员及区间内有计时的成员。区间最多 93 天，排除已删除工作项。categoryEntries 返回分类工时；有项目筛选时只含关联到这些项目的分类工时。
      * 按成员、自然日与工作项统计计入时长
      */
     async queryTeamTimesheetRaw(requestParameters: QueryTeamTimesheetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TeamTimesheet>> {
@@ -189,7 +189,7 @@ export class TeamDashboardApi extends runtime.BaseAPI {
     }
 
     /**
-     * 仅公司管理员可用。按公司时区切分自然日，跨日记录按重叠时长拆分；运行中计时统计到 asOf，时长为按并行均摊后的计入时长。projectIds 为空表示全公司项目（含已归档），userIds 为空表示在职成员及区间内有计时的成员。区间最多 93 天，排除已删除工作项。
+     * 仅公司管理员可用。按公司时区切分自然日，跨日记录按重叠时长拆分；运行中计时统计到 asOf，时长为按并行均摊后的计入时长。projectIds 为空表示全公司项目（含已归档），userIds 为空表示在职成员及区间内有计时的成员。区间最多 93 天，排除已删除工作项。categoryEntries 返回分类工时；有项目筛选时只含关联到这些项目的分类工时。
      * 按成员、自然日与工作项统计计入时长
      */
     async queryTeamTimesheet(requestParameters: QueryTeamTimesheetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TeamTimesheet> {

@@ -1,0 +1,143 @@
+groups:
+  - name: hosts-and-monitoring
+    interval: 30s
+    rules:
+      - alert: MonitoringTargetUnavailable
+        expr: up{job!="application"} == 0
+        for: 90s
+        keep_firing_for: 60s
+        labels:
+          severity: critical
+          source_job: prometheus
+        annotations:
+          summary: '采集目标不可达；缺失数据不能算作恢复。'
+      - alert: MonitoringTargetUnavailable
+        expr: up{job="application"} == 0
+        for: 90s
+        keep_firing_for: 60s
+        labels: { severity: critical, source_job: prometheus, service: server, expected_maintenance: 'true' }
+        annotations: { summary: '应用指标采集不可达。' }
+      - alert: MonitoringTargetMissing
+        expr: absent(up{job="windows"}) or absent(up{job="application"}) or absent(up{job="ubuntu"}) or absent(up{job="blackbox"}) or absent(up{job="monitor-hub"}) or absent(up{job="alertmanager"}) or absent(up{job="grafana"})
+        for: 90s
+        keep_firing_for: 60s
+        labels: { severity: critical, source_job: prometheus }
+        annotations: { summary: '监控目标缺失，请检查配置及采集链路。' }
+      - alert: CertificateExpiring
+        expr: (probe_ssl_earliest_cert_expiry - time()) < 30 * 86400
+        for: 90s
+        keep_firing_for: 60s
+        labels: { severity: warning, source_job: external }
+        annotations: { summary: 'HTTPS 证书将在 30 天内到期。' }
+      - alert: CertificateExpiring
+        expr: (probe_ssl_earliest_cert_expiry - time()) < 7 * 86400
+        for: 90s
+        keep_firing_for: 60s
+        labels: { severity: critical, source_job: external }
+        annotations: { summary: 'HTTPS 证书将在 7 天内到期。' }
+      - alert: WindowsCpuHigh
+        expr: 1 - avg(rate(windows_cpu_time_seconds_total{mode="idle"}[5m])) > 0.85
+        for: 5m
+        keep_firing_for: 60s
+        labels: { severity: warning, source_job: windows }
+        annotations: { summary: 'Windows CPU 使用率持续超过 85%。' }
+      - alert: WindowsCpuHigh
+        expr: 1 - avg(rate(windows_cpu_time_seconds_total{mode="idle"}[5m])) > 0.95
+        for: 5m
+        keep_firing_for: 60s
+        labels: { severity: critical, source_job: windows }
+        annotations: { summary: 'Windows CPU 使用率持续超过 95%。' }
+      - alert: WindowsMemoryLow
+        expr: windows_memory_available_bytes / windows_memory_physical_total_bytes < 0.10
+        for: 90s
+        keep_firing_for: 60s
+        labels: { severity: critical, source_job: windows }
+        annotations: { summary: 'Windows 可用内存不足 10%。' }
+      - alert: WindowsDiskLow
+        expr: windows_logical_disk_free_bytes{volume=~"[A-Z]:"} / windows_logical_disk_size_bytes{volume=~"[A-Z]:"} < 0.20
+        for: 90s
+        keep_firing_for: 60s
+        labels: { severity: warning, source_job: windows }
+        annotations: { summary: 'Windows 磁盘可用空间不足 20%。' }
+      - alert: WindowsDiskLow
+        expr: windows_logical_disk_free_bytes{volume=~"[A-Z]:"} / windows_logical_disk_size_bytes{volume=~"[A-Z]:"} < 0.10
+        for: 90s
+        keep_firing_for: 60s
+        labels: { severity: critical, source_job: windows }
+        annotations: { summary: 'Windows 磁盘可用空间不足 10%。' }
+      - alert: WindowsServiceStopped
+        expr: label_replace(windows_service_state{state="running",service="YumpooServer"}, "windows_service", "$1", "service", "(.*)") == 0
+        for: 90s
+        keep_firing_for: 60s
+        labels: { severity: critical, source_job: windows, service: server, expected_maintenance: 'true' }
+        annotations: { summary: 'Windows 关键服务未运行。' }
+      - alert: WindowsServiceStopped
+        expr: label_replace(windows_service_state{state="running",service=~"postgresql-x64-17|sshd"}, "windows_service", "$1", "service", "(.*)") == 0
+        for: 90s
+        keep_firing_for: 60s
+        labels: { severity: critical, source_job: windows, service: server }
+        annotations: { summary: 'Windows 关键服务未运行。' }
+      - alert: WindowsServiceMissing
+        expr: (label_replace(absent(windows_service_state{service="YumpooServer",state="running"}), "windows_service", "YumpooServer", "", "") or label_replace(absent(windows_service_state{service="postgresql-x64-17",state="running"}), "windows_service", "postgresql-x64-17", "", "") or label_replace(absent(windows_service_state{service="sshd",state="running"}), "windows_service", "sshd", "", "")) and on() (up{job="windows"} == 1)
+        for: 90s
+        keep_firing_for: 60s
+        labels: { severity: critical, source_job: windows, service: server }
+        annotations: { summary: '关键 Windows 服务指标缺失，无法确认运行状态；请检查 exporter 服务筛选与服务名。' }
+      - alert: UbuntuCpuHigh
+        expr: 1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) > 0.90
+        for: 5m
+        keep_firing_for: 60s
+        labels: { severity: warning, source_job: ubuntu }
+        annotations: { summary: '监控主机 CPU 持续超过 90%。' }
+      - alert: UbuntuMemoryLow
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.10
+        for: 90s
+        keep_firing_for: 60s
+        labels: { severity: critical, source_job: ubuntu }
+        annotations: { summary: '监控主机可用内存不足 10%。' }
+      - alert: UbuntuDiskLow
+        expr: node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} < 0.15
+        for: 90s
+        keep_firing_for: 60s
+        labels: { severity: critical, source_job: ubuntu }
+        annotations: { summary: '监控主机磁盘可用空间不足 15%。' }
+      - alert: NotificationBacklog
+        expr: monitor_delivery_pending > 20 or monitor_delivery_dead > 0
+        for: 90s
+        keep_firing_for: 60s
+        labels: { severity: critical, source_job: monitor-hub }
+        annotations: { summary: '企微通知积压或出现失败消息，请检查通道与投递记录。' }
+      - alert: WindowsEventRelayBacklog
+        expr: yumpoo_monitor_relay_pending > 0 or yumpoo_monitor_relay_dead > 0 or time() - yumpoo_monitor_relay_timestamp_seconds > 90
+        for: 3m
+        keep_firing_for: 60s
+        labels: { severity: critical, source_job: windows }
+        annotations: { summary: 'Windows 发布事件积压、被拒绝或投递任务停止，请检查本地持久队列。' }
+      - alert: DiscoveryFailed
+        expr: monitor_discovery_success == 0
+        for: 90s
+        keep_firing_for: 60s
+        labels: { severity: warning, source_job: monitor-hub }
+        annotations: { summary: '无法解析关键资源或桌面更新清单。' }
+      - alert: ApplicationSamplesStale
+        expr: time() - yumpoo_ops_sample_timestamp_seconds > 60 or time() - yumpoo_ops_io_timestamp_seconds > 90 or time() - yumpoo_ops_alert_evaluation_timestamp_seconds > 90
+        for: 90s
+        keep_firing_for: 60s
+        labels: { severity: critical, source_job: application, service: server, expected_maintenance: 'true' }
+        annotations: { summary: '应用采样或规则评估已过期，状态无法确认。' }
+      - alert: ApplicationRuleFiring
+        expr: yumpoo_ops_alert_active > 0
+        keep_firing_for: 60s
+        labels: { source_job: application, service: server }
+        annotations: { summary: '应用运维中心已有活动告警，请查看规则及诊断。' }
+      - alert: DatabaseUnavailable
+        expr: yumpoo_ops_db_failures >= 2
+        for: 90s
+        keep_firing_for: 60s
+        labels: { severity: critical, source_job: application, service: server }
+        annotations: { summary: '应用内存采样显示数据库连续不可达。' }
+  - name: dashboard-recordings
+    interval: 30s
+    rules:
+      - record: service:probe_success:min
+        expr: min by (service) (probe_success)

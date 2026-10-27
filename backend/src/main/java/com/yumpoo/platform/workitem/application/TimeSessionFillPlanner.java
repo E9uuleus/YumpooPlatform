@@ -14,25 +14,34 @@ public final class TimeSessionFillPlanner {
     private record Range(Instant start, Instant stop) {}
 
     static List<TimeSessionFillEntry> mergeEntries(List<TimeSessionFillEntry> entries) {
-        Map<UUID,List<Range>> grouped=new LinkedHashMap<>();
-        for(var entry:entries) grouped.computeIfAbsent(entry.workItemId(),id -> new ArrayList<>())
+        Map<TimeSubject,List<Range>> grouped=new LinkedHashMap<>();
+        for(var entry:entries) grouped.computeIfAbsent(entry.subject(),subject -> new ArrayList<>())
                 .add(new Range(entry.startedAt(),entry.stoppedAt()));
         var merged=new ArrayList<TimeSessionFillEntry>();
-        grouped.forEach((item,ranges) -> union(ranges).forEach(range -> merged.add(new TimeSessionFillEntry(item,range.start(),range.stop()))));
+        grouped.forEach((subject,ranges) -> union(ranges).forEach(range -> merged.add(TimeSessionFillEntry.of(subject,range.start(),range.stop()))));
         return merged;
+    }
+
+    /** True when two merged entries share a slot, i.e. the same category under different projects, and overlap in time. */
+    static boolean slotsOverlap(List<TimeSessionFillEntry> merged) {
+        var sorted=merged.stream().sorted(Comparator.comparing(TimeSessionFillEntry::startedAt)).toList();
+        for(int i=0;i<sorted.size();i++)
+            for(int j=i+1;j<sorted.size() && sorted.get(j).startedAt().isBefore(sorted.get(i).stoppedAt());j++)
+                if(sorted.get(i).subject().slot().equals(sorted.get(j).subject().slot())) return true;
+        return false;
     }
 
     public static Plan plan(TimeSessionFillMode mode,List<TimeSessionFillEntry> entries,List<Session> sessions,Set<UUID> editableIds) {
         var merged=mergeEntries(entries);
+        var targetSubjects=merged.stream().map(TimeSessionFillEntry::subject).collect(java.util.stream.Collectors.toSet());
         var effective=sessions.stream().filter(s -> s.deletedAt()==null && (s.stoppedAt()==null || s.stoppedAt().isAfter(s.startedAt()))).toList();
         var created=new ArrayList<TimeSessionFillEntry>();
         var changed=new ArrayList<Change>();
         var deleted=new ArrayList<Session>();
         if(mode==TimeSessionFillMode.REPLACE) {
-            var targetItems=merged.stream().map(TimeSessionFillEntry::workItemId).collect(java.util.stream.Collectors.toSet());
             var replaced=union(merged.stream().map(entry -> new Range(entry.startedAt(),entry.stoppedAt())).toList());
             for(Session session:effective) {
-                if(targetItems.contains(session.workItemId()) || !editableIds.contains(session.id())) continue;
+                if(targetSubjects.contains(session.subject()) || !editableIds.contains(session.id())) continue;
                 var remaining=subtract(new Range(session.startedAt(),session.stoppedAt()),replaced);
                 if(remaining.isEmpty()) deleted.add(session);
                 else {
@@ -41,19 +50,20 @@ public final class TimeSessionFillPlanner {
                         changed.add(new Change(session,first.start(),first.stop()));
                     for(int i=1;i<remaining.size();i++) {
                         var part=remaining.get(i);
-                        created.add(new TimeSessionFillEntry(session.workItemId(),part.start(),part.stop()));
+                        created.add(TimeSessionFillEntry.of(session.subject(),part.start(),part.stop()));
                     }
                 }
             }
         }
         long skipped=0;
         for(var entry:merged) {
-            var blocked=effective.stream().filter(s -> mode==TimeSessionFillMode.GAPS || s.workItemId().equals(entry.workItemId()))
+            var blocked=effective.stream().filter(s -> mode==TimeSessionFillMode.GAPS || s.subject().slot().equals(entry.subject().slot()))
+                    .filter(s -> mode!=TimeSessionFillMode.REPLACE || targetSubjects.contains(s.subject()) || !editableIds.contains(s.id()))
                     .map(s -> new Range(s.startedAt(),s.stoppedAt())).toList();
             var gaps=subtract(new Range(entry.startedAt(),entry.stoppedAt()),blocked);
             long added=0;
             for(var gap:gaps) {
-                created.add(new TimeSessionFillEntry(entry.workItemId(),gap.start(),gap.stop()));
+                created.add(TimeSessionFillEntry.of(entry.subject(),gap.start(),gap.stop()));
                 added+=Duration.between(gap.start(),gap.stop()).toMillis();
             }
             skipped+=Duration.between(entry.startedAt(),entry.stoppedAt()).toMillis()-added;

@@ -1,0 +1,260 @@
+components:
+  schemas:
+    AttachmentOwnerType:
+      type: string
+      enum:
+        - WORK_ITEM
+        - WORK_ITEM_UPDATE
+    AttachmentStatus:
+      type: string
+      enum:
+        - UPLOADING
+        - AVAILABLE
+        - REJECTED
+        - DELETED
+    AttachmentRejectedCode:
+      type: string
+      nullable: true
+      enum:
+        - FILE_TOO_LARGE
+        - FILE_TYPE_NOT_ALLOWED
+        - MALWARE_DETECTED
+        - SCAN_UNAVAILABLE
+        - UPLOAD_INCOMPLETE
+        - INTEGRITY_CHECK_FAILED
+        - PARENT_NOT_WRITABLE
+        - QUOTA_EXCEEDED
+    AttachmentCapabilities:
+      type: object
+      additionalProperties: false
+      required:
+        - canUploadContent
+        - canDownloadContent
+        - canDelete
+      properties:
+        canUploadContent:
+          type: boolean
+        canDownloadContent:
+          type: boolean
+        canDelete:
+          type: boolean
+    AttachmentMetadata:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - companyId
+        - projectId
+        - ownerType
+        - ownerId
+        - originalFileName
+        - declaredMime
+        - status
+        - uploadedByUserId
+        - createdAt
+        - expiresAt
+        - rowVersion
+        - etag
+        - capabilities
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        companyId:
+          $ref: "#/components/schemas/Uuid"
+        projectId:
+          $ref: "#/components/schemas/Uuid"
+        ownerType:
+          $ref: "#/components/schemas/AttachmentOwnerType"
+        ownerId:
+          $ref: "#/components/schemas/Uuid"
+        originalFileName:
+          type: string
+          minLength: 1
+          maxLength: 255
+        declaredMime:
+          type: string
+          minLength: 1
+          maxLength: 160
+        detectedMime:
+          type: string
+          minLength: 1
+          maxLength: 160
+          nullable: true
+        sizeBytes:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 104857600
+          nullable: true
+        status:
+          $ref: "#/components/schemas/AttachmentStatus"
+        rejectedCode:
+          $ref: "#/components/schemas/AttachmentRejectedCode"
+        uploadedByUserId:
+          $ref: "#/components/schemas/Uuid"
+        createdAt:
+          type: string
+          format: date-time
+        availableAt:
+          type: string
+          format: date-time
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+        rowVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        etag:
+          type: string
+          pattern: ^"[0-9]+"$
+        capabilities:
+          $ref: "#/components/schemas/AttachmentCapabilities"
+    AttachmentIntentCreateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - ownerType
+        - ownerId
+        - originalFileName
+        - declaredMime
+      properties:
+        ownerType:
+          $ref: "#/components/schemas/AttachmentOwnerType"
+        ownerId:
+          $ref: "#/components/schemas/Uuid"
+        originalFileName:
+          type: string
+          minLength: 1
+          maxLength: 255
+        declaredMime:
+          type: string
+          minLength: 1
+          maxLength: 160
+        sizeBytes:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 104857600
+          nullable: true
+    AttachmentIntentResult:
+      type: object
+      additionalProperties: false
+      required:
+        - uploadUrl
+        - expiresAt
+        - maxBytes
+        - metadata
+      properties:
+        uploadUrl:
+          type: string
+          pattern: ^/api/v1/attachments/[0-9a-f-]{36}/content$
+        expiresAt:
+          type: string
+          format: date-time
+        maxBytes:
+          type: integer
+          format: int64
+          enum:
+            - 104857600
+        metadata:
+          $ref: "#/components/schemas/AttachmentMetadata"
+    AttachmentPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttachmentMetadata"
+        nextCursor:
+          type: string
+          minLength: 1
+          nullable: true
+    AttachmentRescanRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    AttachmentDeleteRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    AttachmentDeleteResult:
+      type: object
+      additionalProperties: false
+      required:
+        - attachmentId
+        - status
+        - deletedByUserId
+        - deletedAt
+        - deleteReason
+        - previousRowVersion
+        - rowVersion
+        - etag
+      properties:
+        attachmentId:
+          $ref: "#/components/schemas/Uuid"
+        status:
+          type: string
+          enum:
+            - DELETED
+        deletedByUserId:
+          $ref: "#/components/schemas/Uuid"
+        deletedAt:
+          type: string
+          format: date-time
+        deleteReason:
+          type: string
+          minLength: 1
+          maxLength: 500
+        previousRowVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        rowVersion:
+          type: integer
+          format: int64
+          minimum: 1
+        etag:
+          type: string
+          pattern: ^"[0-9]+"$
+    AttachmentRescanResult:
+      type: object
+      additionalProperties: false
+      required:
+        - attachmentId
+        - status
+        - generation
+        - rowVersion
+        - etag
+      properties:
+        attachmentId:
+          $ref: "#/components/schemas/Uuid"
+        status:
+          $ref: "#/components/schemas/AttachmentStatus"
+        generation:
+          type: integer
+          format: int32
+          minimum: 1
+        rowVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        etag:
+          type: string
+          pattern: ^"[0-9]+"$

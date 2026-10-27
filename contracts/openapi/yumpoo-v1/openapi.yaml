@@ -1,0 +1,57 @@
+openapi: 3.0.3
+info:
+  title: Yumpoo API
+  version: 1.0.0
+  description: |
+    Yumpoo 一期 HTTP API 的唯一静态契约源。
+
+    所有业务 operation 都必须挂载在相对 server `/api/v1` 下。M0-09 只冻结公共
+    schema、header、parameter、response 和 golden example；业务 paths 在对应模块
+    实现时按兼容新增原则加入。
+servers:
+  - url: /api/v1
+    description: Yumpoo v1 business API
+tags:
+  - name: Operations
+    description: APP_MANAGER 专属运行诊断、脱敏日志与应用内告警。
+  - name: Notifications
+    description: 本人站内收件箱与未读计数。
+  - name: Dashboards
+    description: 用户私有仪表板、跨项目统计与布局配置。
+  - name: TeamDashboard
+    description: 公司管理员团队视图：成员工时与当前任务统计。
+  - name: ProjectStatistics
+    description: 项目固定统计。
+  - name: TimeTracking
+    description: 工作项原始计时与本人跨端计时器。
+  - name: MyWork
+    description: 本人跨项目工时日历与当前任务。
+  - name: Onboarding
+    description: 本人新手引导的处理记录。
+  - name: Authentication
+    description: Web 企微登录、会话退出与当前主体查询。
+  - name: IdentityGovernance
+    description: 身份治理快照、平台角色与账号状态管理。
+  - name: IdentityAdministration
+    description: 公司、企微配置状态、通讯录同步运行与成员目录只读管理。
+  - name: Workspaces
+    description: Company 下只承担导航归类、不形成授权边界的 Workspace 生命周期。
+  - name: Projects
+    description: Company 下的统一项目模型、原子创建与内置默认协作结构。
+  - name: Contents
+    description: Project 下固定工作项类型容器的目录、配置与归档生命周期。
+  - name: WorkItems
+    description: Content 下真实工作项的创建、详情与分页只读视图。
+  - name: WorkItemUpdates
+    description: Work Item 下独立版本、独立时间线的项目讨论流。
+  - name: Attachments
+    description: Work Item 与已发布 Update 的附件意图、流式上传、处理状态和受控重新处理。
+  - name: Activity
+    description: Project 与 Work Item 的追加式安全动态时间线。
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-yumpoo-session
+      description: 服务端签发的 HttpOnly、Secure、SameSite=Lax Web Session Cookie。

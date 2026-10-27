@@ -81,14 +81,14 @@ class ProductDesktopAuthenticationServiceTest {
         ));
 
         ProductDesktopAuthorization authorization = service.begin(
-                STATE, VERIFIER.challenge(), "m114.begin-1", "0.1.0", "1"
+                STATE, VERIFIER.challenge(), "m114.begin-1", "0.1.0", "1", false
         );
 
         assertThat(authorization.expiresAt()).isEqualTo(NOW.plusSeconds(300));
         assertThat(authorization.authorizationUri().getHost()).isEqualTo("open.work.weixin.qq.com");
         verify(attemptStore).createProduct(new ProductDesktopAuthAttempt(
                 new DesktopAuthTokenHasher().hash(STATE), VERIFIER.challenge(),
-                "m114.begin-1", "0.1.0", "1", NOW, NOW.plusSeconds(300)
+                "m114.begin-1", "0.1.0", "1", NOW, NOW.plusSeconds(300), false
         ));
     }
 
@@ -124,7 +124,7 @@ class ProductDesktopAuthenticationServiceTest {
     void consumesPkceHandoffAndIssuesElectronSession() {
         AuthenticationUser user = eligibleUser();
         ProductDesktopAuthExchange exchange = new ProductDesktopAuthExchange(
-                USER_ID, "0.1.0", "1", NOW.minusSeconds(10), NOW
+                USER_ID, "0.1.0", "1", NOW.minusSeconds(10), NOW, false
         );
         IssuedSession issued = mock(IssuedSession.class);
         when(attemptStore.consumeProduct(
@@ -132,11 +132,11 @@ class ProductDesktopAuthenticationServiceTest {
                 new DesktopAuthTokenHasher().hash(HANDOFF),
                 VERIFIER.challenge(), NOW
         )).thenReturn(Optional.of(exchange));
-        when(sessionService.issueElectronSession(USER_ID, "0.1.0")).thenReturn(issued);
+        when(sessionService.issueElectronSession(USER_ID, "0.1.0", false)).thenReturn(issued);
         when(userRepository.findByUserId(USER_ID)).thenReturn(Optional.of(user));
 
         assertThat(service.exchange(HANDOFF, STATE, VERIFIER)).isSameAs(issued);
-        verify(sessionService).issueElectronSession(USER_ID, "0.1.0");
+        verify(sessionService).issueElectronSession(USER_ID, "0.1.0", false);
         verify(eventService).loginSucceeded(user, issued);
     }
 

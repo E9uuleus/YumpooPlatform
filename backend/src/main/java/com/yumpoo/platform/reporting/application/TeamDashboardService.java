@@ -64,10 +64,19 @@ public class TeamDashboardService {
         Map<UUID, TimesheetWorkItem> items = new LinkedHashMap<>();
         entries.forEach(e -> items.putIfAbsent(e.workItemId(),
                 new TimesheetWorkItem(e.workItemId(), e.projectId(), scope.get(e.projectId()).name(), e.itemNo(), e.title())));
-        var withTime = entries.stream().map(TeamWorkQuery.TimeEntry::userId).collect(Collectors.toCollection(LinkedHashSet::new));
+        // 有项目筛选时，只保留关联到这些项目的分类工时。
+        var categories = work.categoryEntries(actor, userIds, query.from(), query.to(), zone, asOf).stream()
+                .filter(e -> query.projectIds() == null || query.projectIds().isEmpty() || e.projectId() != null && scope.containsKey(e.projectId()))
+                .toList();
+        var withTime = Stream.concat(entries.stream().map(TeamWorkQuery.TimeEntry::userId), categories.stream().map(TeamWorkQuery.CategoryEntry::userId))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
         return new Timesheet(query.from(), query.to(), zone.getId(), asOf, members(actor.companyId(), userIds, withTime),
                 List.copyOf(items.values()), entries.stream().map(e -> new TimesheetEntry(e.userId(), e.workItemId(), e.date(), e.durationMs())).toList(),
-                CalendarDay.of(calendar.days(query.from(), query.to())));
+                Timesheet.categories(categories, names(scope)), CalendarDay.of(calendar.days(query.from(), query.to())));
+    }
+
+    private static Map<UUID,String> names(Map<UUID,MemberProjectQuery.Project> scope) {
+        return scope.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().name()));
     }
 
     public Workload workload(CurrentActor actor, WorkloadQuery query) {

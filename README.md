@@ -2,6 +2,8 @@
 
 面向团队的项目协作平台，提供项目与工作项管理、成员协作和企业微信身份接入。后端采用单部署的模块化单体，浏览器与 Electron 桌面端共用同一套在线 Vue SPA；桌面端需要连接服务端。
 
+部署后访问 `/docs` 查看产品与架构文档，源文件在 [frontend/web-app/src/docs-site/content/](frontend/web-app/src/docs-site/content/sections.ts)。
+
 ## 主要功能
 
 - 项目、成员和工作项类别管理，表格与看板视图、筛选和排序。
@@ -43,7 +45,6 @@ contracts/              OpenAPI、事件 Schema 与契约样例
 deployment/windows/     Windows 部署模板、维护脚本与运行手册
 tools/                  契约生成、架构检查、CI 与打包工具
 scripts/                文档链接与 Agent Note 校验
-evidence/               验收记录与验证证据
 .agents/notes/           活动决策记录与冻结历史
 ```
 
@@ -124,6 +125,23 @@ pnpm dev:desktop
 
 Vite 将 `/api` 代理至后端。修改 `YUMPOO_SERVER_PORT` 后，需同步修改 [vite.config.ts](frontend/web-app/vite.config.ts) 中的代理目标。
 
+### 端到端冒烟（本地）
+
+前置条件：Docker 可运行 Linux 容器、Java 21、已安装的系统 Edge（Windows 默认）或 Chrome，以及已构建的后端 JAR。在仓库根目录执行：
+
+```powershell
+.\backend\mvnw.cmd -f backend/pom.xml -DskipTests package
+pnpm test:e2e
+pnpm test:e2e -- --skip-web-build
+```
+
+默认命令构建 Web，启动独立的 PostgreSQL 容器、后端和 Web preview，依次检查首页登录、创建项目、工作项详情、我的一天、收件箱、管理后台和文档中心。运行前需释放 8100、18174 端口；正常结束、失败或收到 Ctrl+C / SIGTERM 时，自动停止本次启动的进程树并删除容器。`--skip-web-build` 复用已有 Web 构建，其他参数转交 Playwright，例如 `pnpm test:e2e -- --headed`。
+
+- `YUMPOO_E2E_BASE_URL`：指向已运行的测试环境；设置后不构建或启动服务，也不清理该环境。用例会创建一个带时间戳的项目和工作项，环境需提供“本地测试管理员”身份。
+- `YUMPOO_E2E_BROWSER`：系统浏览器 channel，例如 `msedge` 或 `chrome`；不下载浏览器二进制。
+
+服务日志在 `out/e2e/logs/`，HTML 报告在 `out/e2e/report/`，失败时的截图与 trace 在 `out/e2e/results/`。该命令仅供本地使用，不加入 CI 或合并门禁。
+
 ## 常用配置
 
 后端配置基线见 [application.yml](backend/src/main/resources/application.yml)，生产值通过外部配置与环境变量注入。
@@ -169,7 +187,7 @@ pnpm --filter @yumpoo/web-app preview
 
 统一验证入口使用 **`pnpm run ci`**，避免与 pnpm 自带的 `ci` 命令混淆。完整链路与失败定位见 [CI 与 PR](.github/CI.md)。
 
-REST 契约以 [yumpoo-v1.yaml](contracts/openapi/yumpoo-v1.yaml) 为唯一来源。修改后执行 `pnpm generate:api-client`，通过 `pnpm check:openapi` 校验；事件契约使用 `pnpm validate:event-contracts`。`packages/api-client/src/generated/` 由工具生成。
+REST 契约编辑入口是 [contracts/openapi/yumpoo-v1/](contracts/openapi/yumpoo-v1/)。修改分域源文件后运行 `pnpm generate:openapi` 生成 [yumpoo-v1.yaml](contracts/openapi/yumpoo-v1.yaml)，禁止手改生成文件；再执行 `pnpm generate:api-client`，通过 `pnpm check:openapi` 校验。兼容检查、文档和客户端生成继续读取单文件；事件契约使用 `pnpm validate:event-contracts`。`packages/api-client/src/generated/` 由工具生成。
 
 ## Windows 部署
 
@@ -186,13 +204,13 @@ REST 契约以 [yumpoo-v1.yaml](contracts/openapi/yumpoo-v1.yaml) 为唯一来�
 在 Windows x64 完成上述构建与验证后执行：
 
 ```powershell
-pnpm package:m1-15:win
-pnpm verify:m1-15:package
+pnpm package:server:win
+pnpm verify:server:package
 
 pnpm --filter @yumpoo/desktop-shell package:win
 ```
 
-服务器包位于 `out/m1-15/yumpoo-windows-server-m1-15.zip`，包含当前构建的 JAR、Web、迁移和部署资产，并附带 SHA-256 与产物清单；桌面包位于 `desktop/desktop-shell/out/Yumpoo Desktop-win32-x64/`。现有打包命令沿用里程碑编号。
+服务器包位于 `out/m1-15/yumpoo-windows-server-m1-15.zip`，包含当前构建的 JAR、Web、迁移和部署资产，并附带 SHA-256 与产物清单；桌面包位于 `desktop/desktop-shell/out/release/`。服务器产物名称暂时冻结，以兼容发布工具、构建证明与主机引擎。
 
 ### 配置与启动
 

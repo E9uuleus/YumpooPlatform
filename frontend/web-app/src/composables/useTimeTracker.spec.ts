@@ -5,7 +5,7 @@ const api = vi.hoisted(() => ({ getCurrentTimeTracker: vi.fn(), getTimeTrackingS
 vi.mock('../api/client', () => ({ timeTrackingApi: api }))
 vi.mock('@yumpoo/api-client', () => ({ readCsrfToken: () => 'csrf' }))
 vi.mock('element-plus', () => ({ ElMessage: { error: vi.fn(), warning: vi.fn() }, ElMessageBox: { confirm: vi.fn(async () => undefined) } }))
-import { activateTimeTracker, chooseTimerExit, confirmTimerExit, timerMutation, useTimeTracker } from './useTimeTracker'
+import { activateTimeTracker, cancelTimerExit, timerExitPhase, timerExitPrompt, chooseTimerExit, confirmTimerExit, timerMutation, useTimeTracker } from './useTimeTracker'
 
 function state(version: number, running = false) {
   const session = running ? { id: 'session', workItemId: 'item', projectId: 'project', startedAt: new Date(), userId: 'user' } : null
@@ -13,7 +13,7 @@ function state(version: number, running = false) {
     session, runningSessions: session ? [{ session, workItemTitle: '测试事项' }] : [] }
 }
 beforeEach(() => { vi.clearAllMocks(); vi.stubGlobal('BroadcastChannel', undefined); api.getCurrentTimeTracker.mockResolvedValue(state(0)); activateTimeTracker(true) })
-afterEach(() => { activateTimeTracker(false); vi.unstubAllGlobals() })
+afterEach(() => { cancelTimerExit(); activateTimeTracker(false); vi.unstubAllGlobals() })
 
 describe('application timer facts', () => {
   it('reuses the same idempotency key after a lost response', async () => {
@@ -39,6 +39,46 @@ describe('application timer facts', () => {
     const continuedExit = confirmTimerExit(); await flushPromises(); chooseTimerExit('continue')
     expect(await continuedExit).toBe(true)
     expect(api.stopAllTimeTrackers).toHaveBeenCalledOnce()
+  })
+  it('cancels a stuck exit check immediately and never opens a late prompt', async () => {
+    await useTimeTracker().refresh()
+    let resolve!: (value: ReturnType<typeof state>) => void
+    api.getCurrentTimeTracker.mockReturnValueOnce(new Promise(done => { resolve = done }))
+    const exiting = confirmTimerExit()
+    expect(timerExitPhase.value).toBe('checking')
+    cancelTimerExit()
+    expect(await exiting).toBe(false)
+    resolve(state(1, true)); await flushPromises()
+    expect(timerExitPrompt.value).toBe(false)
+    expect(api.stopAllTimeTrackers).not.toHaveBeenCalled()
+  })
+  it('reports the choice and save phases and can dismiss the choice from the shell', async () => {
+    await useTimeTracker().refresh()
+    api.getCurrentTimeTracker.mockResolvedValue(state(1, true))
+    const cancelled = confirmTimerExit(); await flushPromises()
+    expect(timerExitPhase.value).toBe('prompt')
+    cancelTimerExit()
+    expect(await cancelled).toBe(false)
+    expect(timerExitPrompt.value).toBe(false)
+    let resolve!: (value: ReturnType<typeof state>) => void
+    api.stopAllTimeTrackers.mockReturnValueOnce(new Promise(done => { resolve = done }))
+    const stopped = confirmTimerExit(); await flushPromises(); chooseTimerExit('stop'); await flushPromises()
+    expect(timerExitPhase.value).toBe('saving')
+    resolve(state(2)); expect(await stopped).toBe(true)
+  })
+  it('does not submit a stop after cancellation during the pre-save refresh', async () => {
+    await useTimeTracker().refresh()
+    api.getCurrentTimeTracker.mockResolvedValue(state(1, true))
+    const exiting = confirmTimerExit(); await flushPromises()
+    let resolve!: (value: ReturnType<typeof state>) => void
+    api.getCurrentTimeTracker.mockReturnValueOnce(new Promise(done => { resolve = done }))
+    chooseTimerExit('stop'); await flushPromises()
+    expect(timerExitPhase.value).toBe('saving')
+    cancelTimerExit()
+    expect(await exiting).toBe(false)
+    resolve(state(1, true)); await flushPromises()
+    expect(api.stopAllTimeTrackers).not.toHaveBeenCalled()
+    expect(useTimeTracker().busy.value).toBe(false)
   })
   it('starts another item in parallel without stopping or switching the running item', async () => {
     api.getCurrentTimeTracker.mockResolvedValue(state(1, true))

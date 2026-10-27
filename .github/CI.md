@@ -10,28 +10,40 @@ pnpm run ci
 
 日常快速反馈可先运行 `pnpm ci:static`；涉及后端时运行 `pnpm ci:backend`。`pnpm run ci` 按相同顺序执行全部本机可运行阶段，显式 `run` 避免与 pnpm 内置的清理安装命令 `ci` 冲突。需要 Node/pnpm 的仓库固定版本、Java 21 和 Linux-container Docker；Windows 交付阶段还需要 Windows x64、PowerShell 和 Electron。Linux 本地不会运行 Windows 阶段，PR 的 Windows Delivery 始终必需。
 
-旧 `verify:m*` 命令保留切片复现用途；已退役的 `verify:m2-03/07/24` 及其 `:assets` 入口仅校验历史验收记录，不再读取产品实现。普通 PR 使用统一入口，不需要串联里程碑命令、手工修改验收报告或刷新历史哈希。
+旧里程碑命令与 `evidence/` 已退役。历史验收可从 Git 查询；当前交付使用能力命名的打包、冒烟、交接包、部署配置与契约检查。
 
 ## 当前执行链
 
 | 入口 | 保障 |
 | --- | --- |
 | `pnpm ci:contracts` | PR 基线、历史迁移与冻结清单、OpenAPI 严格兼容、例外结构、lint/样例、生成客户端漂移、全部既有事件版本与共享载荷兼容、事件库存 |
-| `pnpm ci:static` | 上述契约检查各一次，加文档/归档完整性、校验器故障测试、前端/桌面 lint、架构、类型、构建与全部现有测试、历史证据结构和当前资产 |
+| `pnpm ci:static` | 上述契约检查各一次，加文档/归档完整性、校验器故障测试、前端/桌面 lint、架构、类型、构建与全部现有测试、品牌资产与生产部署配置不变量 |
 | `pnpm ci:backend` | 一次 `clean verify`：单元/集成、安全、架构、PostgreSQL/Flyway、备份恢复；随后单独执行 96 MiB JVM 的附件流式探针 |
 | `pnpm ci:portable` | 校验当前源码的 static/backend 成功记录与新鲜备份恢复报告；运行 packaged JAR + SPA HTTP；生成和验证 JAR/Web handoff |
 | `pnpm ci:windows` | 复核 handoff，真实 Electron smoke、Windows 桌面安装包（EXE 图标/版本资源/fuse/ASAR 白名单，默认目录与 `/D=` 自定义目录的静默安装、自检、覆盖安装与卸载边界）、ZIP、PowerShell 行为及服务器包验证；服务器包逐文件对照同一 handoff；生成并核对后端与 Web 的 CycloneDX SBOM；把经过冒烟的安装包、blockmap、`latest.yml`、桌面 SBOM 与 manifest 收集到 `out/desktop` |
 
-[plan.mjs](../tools/ci/plan.mjs) 是统一入口的执行清单。M2-23 的 `:assets` 检查当前切片资产，完整契约检查归 `ci:contracts`；类别资产只执行一次，M2-03、M2-07、M2-24 等旧切片由 [historical-assets.mjs](../tools/ci/historical-assets.mjs) 校验历史报告与验收矩阵。类型检查由各包实际构建或专用类型测试承担，不再重复运行同一整套 Node 入口。Windows smoke 使用 handoff 的 Web 字节；服务器不重复编译。
+[plan.mjs](../tools/ci/plan.mjs) 是统一入口的执行清单。static 资产步骤只保留品牌资产与 [部署配置校验](../tools/verification/verify-deployment-config.mjs)。portable 显式执行备份恢复报告、打包 HTTP 冒烟和交接包；Windows 显式执行工具链、配置隔离测试、引擎行为、交接包、桌面冒烟、打包、完整性、安装、更新、产物收集、首次引导和服务器组包校验，服务器不重复编译。桌面步骤默认使用 `desktop/desktop-shell/out/release`。
 
 Windows 打包前的[配置隔离测试](../tools/verification/desktop-profile.test.mjs)验证卸载等待不会漏掉已分离的子孙进程，也不等待无关进程，并覆盖参数、退出码和超时终止。卸载助手先将挂起的根进程加入 Job Object，再恢复执行；完整进程树退出后才能恢复本机配置。失败与超时继续保留备份，具体边界见[桌面交付决策](../.agents/notes/implemented/process/2026-10-17-desktop-release-channel.md)。
 
+[部署引擎行为测试](../deployment/windows/cd/Test-YumpooDeployment.ps1)使用含中文说明的无 BOM UTF-8 桌面更新描述，并模拟非 UTF-8 的默认读取编码，验证已有版本的校验与重发不依赖主机代码页，也不改写 Release 文件字节。
+
 `out/ci/<stage>.json` 记录步骤、起止时间、状态、解析后的基线提交及源码指纹。中途失败立即非零退出；重跑会覆盖本阶段结果，不缓存跳过步骤。后续阶段拒绝旧源码、旧基线、不完整或失败报告。输出、构建目录和测试夹具不写入 Git。子进程清除继承的 `SPRING_*`、`YUMPOO_*` 和 JVM/Maven/Node 注入选项，再显式设置本次验证需要的值；不连接开发或生产数据库，也不继承受控身份 fixture。
+
+## 异机监控验证
+
+监控回归覆盖事件入口可用但 Prometheus / Alertmanager 失效的场景；Windows 看门狗须绕过失效链路直接告警，接收端仍接受持久事件。数据库服务或连接失败不属于应用维护的静默范围。
+
+static 同时构建 `@yumpoo/monitor-hub` 与 `@yumpoo/monitor-dashboard`，执行持久队列、事件时序、维护和权限测试，以及 Compose 镜像摘要、回环监听、内存预算与 Grafana 配置检查。portable 用锁定的 Prometheus 镜像执行 `promtool test rules`，包括 windows_exporter 0.32.0 实际 CPU 指标的持续高负载升级。Windows 门禁验证旧配置默认关闭、正常发布等待 300 秒、回退不等待、落盘失败不改变倒计时和 Node/PowerShell HMAC 一致性。
+
+监控服务不加入业务 Release 的自动重启范围。Ubuntu 独立部署步骤见[监控部署手册](../deployment/monitoring/README.md)，三端字段与调整步骤见[监控配置指南](../deployment/monitoring/CONFIGURATION.md)。GitHub 的通知步骤使用仓库变量 `MONITOR_ENABLED`、`MONITOR_ENVIRONMENT` 及 `MONITOR_SSH_HOST`、`MONITOR_SSH_KEY`、`MONITOR_KNOWN_HOSTS`、`MONITOR_SOURCE_SECRET` Secrets；环境标识未设置时由通知脚本使用默认 `wecom-dev` 并在工作流摘要提示；与 Hub 不一致的事件会被拒绝，摘要单独标明，不改变业务部署 Environment。机器密钥只能转发事件端口。开启统一入口后不会因投递失败退回旧 Webhook 重复发送；未被接收的事件会写入工作流摘要，不能视为已持久化。
+
+采集器实机验收同时覆盖首次安装和同版本重复配置；MSI 返回成功之外，还须确认服务运行、回环监听和实际指标。纯脚本回归不能替代上游 MSI 的安装行为验证。
 
 ## 四种事实来源
 
 - **冻结历史**：归档 Agent Note 的 manifest、已在目标分支存在的 SQL 迁移、M2-23 冻结清单与既有 OpenAPI 精确例外不可改写。换行按仓库 LF 约定比较；迁移追加更高且唯一的版本，不能删除、移动或回填旧版本。
-- **当前规范**：`contracts/openapi/yumpoo-v1.yaml`、事件目录与 Schema、生产代码和行为测试。历史验收的 Flyway 版本、旧 UI 尺寸、源码片段及 Note 措辞不定义当前行为。
+- **当前规范**：编辑 `contracts/openapi/yumpoo-v1/` 下的分域源文件，运行 `pnpm generate:openapi` 生成 `contracts/openapi/yumpoo-v1.yaml`，禁止手改生成文件。契约阶段首先校验源文件与生成物逐字节同步，现有消费方继续读取单文件。事件目录与 Schema、生产代码和行为测试同样定义当前规范；历史验收的 Flyway 版本、旧 UI 尺寸、源码片段及 Note 措辞不定义当前行为。
 - **兼容性基线**：PR 取 `pull_request.base.sha`（晋升 PR 即线上 `main`），`dev`/`main` push 取 `before`，本地默认取 `origin/dev`，手动 Actions 使用 `base_ref`。开始时解析为完整 commit，缺失、全零或无效引用失败；不复制永久规范基线。用 `YUMPOO_CI_BASE_REF` 可以显式指定本地比较基线。
 - **例外**：已有条目只授权其原始 `oldSha256/newSha256` 对；原因、唯一 ID、活动决策链接必须完整。后续兼容演进不需要把当前规范连到旧例外。额外不兼容变更仍失败；真正破坏变更须先作明确产品/迁移决定，不能为过 CI 自动批准或刷新哈希。请求枚举缩减和响应枚举扩展恢复严格检测。
 
@@ -45,7 +57,7 @@ Windows 打包前的[配置隔离测试](../tools/verification/desktop-profile.t
 
 Actions 始终尝试上传故障诊断：`out/ci` 阶段记录和 Maven Surefire/Failsafe 报告。未产生诊断文件时只警告；交付所需的 handoff/报告缺失必须失败。handoff 名称绑定 run ID 与 attempt，Windows 校验提交、文件集合和哈希。SHA 固定的 Actions、只读 token 与不持久化 checkout 凭据继续保留。
 
-Windows 本机不能构造的大小写碰撞与无特权符号链接夹具由必需 Linux job 执行。公司 HTTPS/企微、干净 Windows Server、真实生产迁移及灾备环境验收继续遵守现有 evidence 延期清单；CI 阶段报告仍标记 `WINDOWS_X64_CI_STAGE` 和相应 `NOT_RUN`，不代表生产部署或 `WINDOWS_X64_FULL`。
+Windows 本机不能构造的大小写碰撞与无特权符号链接夹具由必需 Linux job 执行。CI 只证明当前验证链通过，不代表公司 HTTPS/企微、干净 Windows Server、真实生产迁移及灾备环境验收或已部署。历史延期记录可从 Git 查询，不生成历史全链证据包。
 
 ## 已核验的故障来源
 
@@ -60,12 +72,13 @@ Windows 本机不能构造的大小写碰撞与无特权符号链接夹具由必
 
 | 工作流 | 触发 | 职责 |
 | --- | --- | --- |
+| [Release Notes Policy](workflows/release-notes-policy.yml) | 指向 `dev` 或 `main` 的 PR（含修改正文） | PR 正文须有合格的「## 发布说明」段；Dependabot、`backmerge/*` 与 dev 晋升 PR 豁免 |
 | [Main Promotion Policy](workflows/main-promotion-policy.yml) | 指向 `main` 的 PR | 只允许 `dev`/`hotfix/*`；汇总提交、迁移分类与契约变化；`deployment/windows/cd/` 有改动时列出文件并提醒发布前升级主机引擎；破坏性迁移要求 `release:breaking-migration` 标签 |
-| [Prepare Release](workflows/prepare-release.yml) | `main` 推送 CI 成功 | 自动编号并创建草稿 Release，草稿阶段上传并核验来源清单、原包与 SBOM，上传前后各核验一次构建证明；不删除任何草稿 |
+| [Prepare Release](workflows/prepare-release.yml) | `main` 推送 CI 成功 | 自动编号并创建草稿 Release，正文按各 PR 的「发布说明」段分层生成（更新内容、升级影响、发布信息），草稿未发布时重跑会刷新正文；草稿阶段上传并核验来源清单、原包与 SBOM，上传前后各核验一次构建证明；不删除任何草稿 |
 | [Windows Release](workflows/windows-release.yml) | Release 发布 | 只校验不可变 Release（含 SBOM 与构建证明）并部署，不写附件 |
 | [Server Rollback](workflows/server-rollback.yml) | 手动，在上一版本 tag 上 | 提交只换代码、不动数据库的回退请求 |
 | [Back-merge Main](workflows/back-merge.yml) | `main` 或 `dev` 推送 | `main` 含 `dev` 缺少的改动（热修复）时开回合并 PR，或把已有回合并分支快进到最新 `main` |
-| [Prepare Desktop Release](workflows/prepare-desktop-release.yml) | `main` 推送 CI 成功，或在 `dev` 上手动运行 | 两个任务均执行受保护工作流提交中的发布工具，目标提交的版本与公钥只按精确 SHA 读取为 JSON；草稿任务上传并核验桌面产物、来源清单与 `release.json`；签名任务重新核对 CI attempt 和安装包构建证明后，在 `desktop-signing` 中签发 Ed25519 更新授权 |
+| [Prepare Desktop Release](workflows/prepare-desktop-release.yml) | `main` 推送 CI 成功，或在 `dev` 上手动运行 | 两个任务均执行受保护工作流提交中的发布工具，目标提交的版本与公钥只按精确 SHA 读取为 JSON；草稿任务上传并核验桌面产物、来源清单与 `release.json`，正文与 `release.json` 的 notes 只取范围为「桌面」的发布说明；签名任务重新核对 CI attempt 和安装包构建证明后，在 `desktop-signing` 中签发 Ed25519 更新授权 |
 | [Desktop Release](workflows/desktop-release.yml) | `desktop-v*` Release 发布 | 只读校验不可变 Release、构建证明与授权签名后，以 `desktop-publish` 请求写入主机更新源；独立并发组 |
 
 这些工作流的结构与权限由 [release-workflows.test.mjs](../tools/ci/release-workflows.test.mjs) 解析 YAML 校验，发布脚本自身的回归由 `tools/release/*.test.mjs` 覆盖，二者都在 `ci:static` 中执行。
@@ -102,9 +115,15 @@ Dependabot 生成的 PR 标题不带步骤编号，squash 合并时按提交规�
 - **规则集 `Protect main`**：
   - 禁止删除和强推；
   - 必须经过 PR，只允许合并提交；
-  - required checks 为 `M0 Portable Gate`、`M0 Windows x64 Gate`、`Main Promotion Policy`；
+  - required checks 为 `M0 Portable Gate`、`M0 Windows x64 Gate`、`Main Promotion Policy`、`Release Notes Policy`；
   - 不要求分支最新，原因是晋升 PR 的 head 是持续前进的 `dev`。
 - **规则集 `Release tags`**：`refs/tags/server-v*` 与 `refs/tags/desktop-v*` 禁止更新和删除，只有管理员可以创建。
 - **桌面发布渠道**：新建 Environment `desktop-signing`，部署分支只允许 `dev`（`workflow_run` 运行在默认分支），添加 secret `DESKTOP_UPDATE_SIGNING_KEY`；`wecom-dev` 的部署 tag 规则加入 `desktop-v*`。Environment 在被工作流首次引用时会自动创建且不带保护规则，所以要在第一次桌面版本递增之前配置好。
 - **Immutable Releases 与 secret**：开启 Immutable Releases；添加仓库 secret `WECOM_RELEASE_WEBHOOK`。
-- **供应链**：`Protect dev` 的 required checks 增加 `Dependency Review`、`Workflow Audit`；开启 Dependabot alerts 与 security updates；开启 CodeQL default setup（java-kotlin、javascript-typescript、actions）。
+- **供应链**：`Protect dev` 的 required checks 增加 `Dependency Review`、`Workflow Audit`、`Release Notes Policy`；开启 Dependabot alerts 与 security updates；开启 CodeQL default setup（java-kotlin、javascript-typescript、actions）。
+
+## 暂时冻结的交付标识
+
+部署配置中的 XML 在 Linux 使用 runner 已提供的 Python 3 标准库解析，在 Windows 使用 PowerShell 解析；解析工具缺失或 XML 无效都会使门禁失败。
+
+工作流 `.github/workflows/m0-18-ci.yml` 与 `Platform CI`、Job ID `linux/windows_delivery/windows` 及名称 `M0 Portable Gate/Windows Delivery/M0 Windows x64 Gate` 保持不变。服务器 artifact `m1-15-server-<sha>-<attempt>`、桌面 artifact `desktop-<sha>-<attempt>`、`out/m1-15/`、`yumpoo-windows-server-m1-15.zip`、服务器 manifest 的 `M1-15` 与验证报告字段也保持不变：发布工具、Sigstore 构建证明和已安装主机引擎依赖它们。后续需先让发布工具与主机引擎接受新旧标识，再协调切换工作流和规则集，回退窗口结束后移除旧标识。

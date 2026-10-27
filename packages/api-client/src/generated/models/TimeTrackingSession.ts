@@ -12,6 +12,14 @@
  */
 
 import { mapValues } from '../runtime';
+import type { TimeCategory } from './TimeCategory';
+import {
+    TimeCategoryFromJSON,
+    TimeCategoryFromJSONTyped,
+    TimeCategoryToJSON,
+    TimeCategoryToJSONTyped,
+} from './TimeCategory';
+
 /**
  *
  * @export
@@ -19,23 +27,35 @@ import { mapValues } from '../runtime';
  */
 export interface TimeTrackingSession {
     /**
+     * 分类记录关联的项目；工作项记录为 null
+     * @type {string}
+     * @memberof TimeTrackingSession
+     */
+    categoryProjectId?: string | null;
+    /**
      *
      * @type {string}
      * @memberof TimeTrackingSession
      */
     id: string;
     /**
-     *
+     * 为 null 时，要么项目对调用者不可见，要么这是非项目分类记录（timeCategory 有值）。
      * @type {string}
      * @memberof TimeTrackingSession
      */
     projectId: string | null;
     /**
-     *
+     * 为 null 时，要么工作项对调用者不可见，要么这是非项目分类记录（timeCategory 有值）。
      * @type {string}
      * @memberof TimeTrackingSession
      */
     workItemId: string | null;
+    /**
+     * 非项目分类记录的分类；工作项记录为 null。服务端总是返回。
+     * @type {TimeCategory}
+     * @memberof TimeTrackingSession
+     */
+    timeCategory?: TimeCategory | null;
     /**
      *
      * @type {string}
@@ -109,7 +129,7 @@ export interface TimeTrackingSession {
      */
     allocatedDurationMs: number;
     /**
-     * 该记录期间本人同时计时的其他工作项数
+     * 该记录期间本人同时计时的其他工作项与非项目分类数
      * @type {number}
      * @memberof TimeTrackingSession
      */
@@ -174,9 +194,11 @@ export function TimeTrackingSessionFromJSONTyped(json: any, ignoreDiscriminator:
     }
     return {
 
+        ...(json['categoryProjectId'] === undefined ? {} : { 'categoryProjectId': json['categoryProjectId'] === null ? null : json['categoryProjectId'] }),
         'id': json['id'],
         'projectId': json['projectId'],
         'workItemId': json['workItemId'],
+        ...(json['timeCategory'] === undefined ? {} : { 'timeCategory': json['timeCategory'] === null ? null : TimeCategoryFromJSON(json['timeCategory']) }),
         'userId': json['userId'],
         'displayName': json['displayName'],
         'startedAt': (new Date(json['startedAt'])),
@@ -206,9 +228,11 @@ export function TimeTrackingSessionToJSONTyped(value?: TimeTrackingSession | nul
 
     return {
 
+        'categoryProjectId': value['categoryProjectId'],
         'id': value['id'],
         'projectId': value['projectId'],
         'workItemId': value['workItemId'],
+        'timeCategory': TimeCategoryToJSON(value['timeCategory']),
         'userId': value['userId'],
         'displayName': value['displayName'],
         'startedAt': value['startedAt'].toISOString(),

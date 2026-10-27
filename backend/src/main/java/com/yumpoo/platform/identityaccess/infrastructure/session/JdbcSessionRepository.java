@@ -35,7 +35,7 @@ public class JdbcSessionRepository implements SessionRepository {
             csrf_token_fingerprint, csrf_key_version,
             issued_authorization_version, client_type, client_version,
             issued_at, last_seen_at, idle_expires_at, absolute_expires_at,
-            revoked_at, revoke_reason, purge_after
+            revoked_at, revoke_reason, purge_after, remember_me
             """;
 
     private final JdbcClient jdbcClient;
@@ -91,14 +91,14 @@ public class JdbcSessionRepository implements SessionRepository {
                             csrf_token_fingerprint, csrf_key_version,
                             issued_authorization_version, client_type, client_version,
                             issued_at, last_seen_at, idle_expires_at, absolute_expires_at,
-                            revoked_at, revoke_reason, purge_after
+                            revoked_at, revoke_reason, purge_after, remember_me
                         ) VALUES (
                             :id, :companyId, :userId, :status,
                             :sessionFingerprint, :sessionKeyVersion,
                             :csrfFingerprint, :csrfKeyVersion,
                             :authorizationVersion, :clientType, :clientVersion,
                             :issuedAt, :lastSeenAt, :idleExpiresAt, :absoluteExpiresAt,
-                            :revokedAt, :revokeReason, :purgeAfter
+                            :revokedAt, :revokeReason, :purgeAfter, :rememberMe
                         )
                         """)
                 .param("id", session.id())
@@ -120,6 +120,7 @@ public class JdbcSessionRepository implements SessionRepository {
                 .param("revokeReason", session.revokeReason() == null
                         ? null : session.revokeReason().name())
                 .param("purgeAfter", utc(session.purgeAfter()))
+                .param("rememberMe", session.rememberMe())
                 .update();
         requireOne(inserted, "insert LoginSession");
     }
@@ -327,7 +328,8 @@ public class JdbcSessionRepository implements SessionRepository {
                 instant(resultSet, "absolute_expires_at"),
                 nullableInstant(resultSet, "revoked_at"),
                 revokeReason == null ? null : SessionRevocationReason.valueOf(revokeReason),
-                instant(resultSet, "purge_after")
+                instant(resultSet, "purge_after"),
+                resultSet.getBoolean("remember_me")
         );
     }
 

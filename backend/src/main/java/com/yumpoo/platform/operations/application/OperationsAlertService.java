@@ -40,6 +40,7 @@ public class OperationsAlertService {
     private final Clock clock;
     private volatile AlertEvaluator evaluator = new AlertEvaluator();
     private volatile List<Alert> active = List.of();
+    private volatile Instant evaluatedAt = Instant.EPOCH;
 
     public OperationsAlertService(
         OperationsRepository repository,
@@ -55,6 +56,10 @@ public class OperationsAlertService {
 
     public List<Alert> cached() {
         return active;
+    }
+
+    public Instant cachedEvaluatedAt() {
+        return evaluatedAt;
     }
 
     @Transactional
@@ -348,10 +353,14 @@ public class OperationsAlertService {
                     @Override
                     public void afterCommit() {
                         evaluator = working;
+                        evaluatedAt = now;
                     }
                 }
             );
-        } else evaluator = working;
+        } else {
+            evaluator = working;
+            evaluatedAt = now;
+        }
         publishActive();
     }
 

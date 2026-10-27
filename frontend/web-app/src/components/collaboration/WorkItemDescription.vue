@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { useEditor } from '@tiptap/vue-3'
 import { ErrorCode, readCsrfToken, type WorkItemDetail } from '@yumpoo/api-client'
-import { ElButton, ElImageViewer, ElMessage, ElMessageBox } from 'element-plus'
+import { ElButton, ElMessage, ElMessageBox } from 'element-plus'
 import { EditPen } from '@element-plus/icons-vue'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { workItemsApi } from '../../api/client'
 import { isProblemCode, isProblemStatus, localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../InlineProblem.vue'
+import AttachmentImageViewer from './AttachmentImageViewer.vue'
 import DiscussionComposer from './DiscussionComposer.vue'
 import { decorateAttachmentCards, descriptionImageTypes } from './descriptionImages'
 import { useEditorAttachments } from './useEditorAttachments'
@@ -43,6 +44,7 @@ const attachments = useEditorAttachments({
 const { insertFiles, abortUploads, pendingUploads } = attachments
 
 const editor = useEditor({
+  injectCSS: false,
   content: '',
   editable: true,
   extensions: [
@@ -281,12 +283,10 @@ defineExpose({ hasDraft, busy, discardDraft, editor, startEdit, save })
         暂无描述
       </p>
     </template>
-    <el-image-viewer
+    <attachment-image-viewer
       v-if="viewerIndex !== undefined"
       :url-list="imageSources"
       :initial-index="viewerIndex"
-      hide-on-click-modal
-      teleported
       @close="viewerIndex = undefined"
     />
   </section>

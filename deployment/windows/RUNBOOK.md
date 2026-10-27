@@ -26,7 +26,7 @@ Release 发布即为上线决定。主机初始化、Environment 配置和发布
 
 - 草稿只来自 `main` 推送且全部 required jobs 成功的 Platform CI。
 - 标签按北京时间日期自动编号，格式为 `server-vYYYY.MM.DD.N`。已有标签都占号，包括草稿和已删除的 Release 留下的标签。
-- 发布说明按提交类型分组。
+- 发布说明由各 PR 正文的「## 发布说明」段生成，分为更新内容、升级影响（迁移分类、契约、部署引擎、管理员操作、回退能力）和发布信息。缺少发布说明的 PR 列在「发布信息」中并写入工作流摘要；补写 PR 正文后在草稿未发布时重跑 Prepare Release 即可刷新正文。不要手改草稿正文，重跑会覆盖。
 - 来源清单与 CI 原包在**草稿阶段**就校验并上传；中断后重跑会沿用已钉住的 CI attempt，不会换到另一次构建。
 - 草稿永不自动删除：GitHub 按 ID 无条件删除 Release，清理与人工 Publish 交错时可能删掉刚发布的版本。新草稿生成时，源码是其祖先的旧草稿会在发布说明、工作流摘要和通知中标为「已被取代，请勿发布」；源码不早于它的其他草稿另行提示「发布前核对来源 SHA」。这些草稿都由发布负责人手动删除。
 - 已发布更新版本时，拒绝为更旧的提交生成草稿。
@@ -222,7 +222,7 @@ Release 不能升级 SYSTEM 部署引擎，必须由管理员手动操作：
 本地复核现行服务器包仍使用既有入口：
 
 ```powershell
-pnpm verify:m1-15:deployment
+pnpm verify:deployment-config
 ```
 
 输出位于 `out/m1-15`，包含 `yumpoo-windows-server-m1-15.zip`、同名 `.sha256`、`artifact-manifest.json`、两份 SBOM（`yumpoo-server.cdx.json`、`yumpoo-web.cdx.json`）和 `verification-report.json`。服务器包包含已验证的 JAR/Web、当前全部迁移、Nginx 和配置模板、数据库初始化资产、维护脚本、`service/` 锁定信息、`cd/` 部署资产、本手册及历史 checklist。WinSW 二进制从锁定官方 URL 获取并核验，不提交到仓库。不得把真实 CorpID、企微 UserID、Secret、SSH 私钥或一次性输入文件打入 ZIP。
@@ -408,7 +408,7 @@ Invoke-RestMethod http://127.0.0.1:8100/actuator/health/readiness
 
 指标每 15 秒采样，内存保留 1 小时、数据库分钟历史保留 14 天；告警历史保留 180 天。运维与 Actuator 请求不计入业务 HTTP 指标。P95 由不带路由标签的全局业务请求计时器计算，低请求量或缺失采样显示未知/空白；主机图表请求量统一显示次/分钟，阈值读取当前启用规则。采样使用独立执行器，数据库探针阻塞不占用 Outbox/附件的业务调度线程。连接池忙显示降级，本机告警观测继续采集，最多保留 240 份；连接恢复后按原采样时间顺序每轮评估至多 40 份，告警窗口不依赖 I/O 完成频率。运行中探针的等待时长作为数据库延迟下界。数据库长时间故障时，待写分钟桶最多 60 个；两类积压的丢弃数都在页面明示。
 
-数据库完全不可达会同时影响认证，应用内中心无法替代外部存活监测；连续数据库失败在连接恢复后补记，进程停止期间没有采样。当前出口为运维页面和徽标，未配置 P3 外部通知。构建信息中的 commit 可通过 Maven `-Dyumpoo.build.commit=<commit>` 注入，未注入显示 `unknown`；不要把它当成已验证的部署版本。
+数据库完全不可达会同时影响认证，应用内中心无法替代外部存活监测；连续数据库失败在连接恢复后补记，进程停止期间没有采样。应用内保留运维页面和徽标，异机监控及企微通知按本手册「异机监控接入」与 [监控部署说明](../monitoring/README.md) 单独启用。构建信息中的 commit 可通过 Maven `-Dyumpoo.build.commit=<commit>` 注入，未注入显示 `unknown`；不要把它当成已验证的部署版本。
 
 运维表随正常数据库备份一起保护。回滚到旧应用保留 V58/V59 表，禁止为了回滚修改既有 Flyway checksum 或手工删除运维数据。首次身份引导的 M1-15 回退边界仍适用前节。
 
@@ -480,7 +480,7 @@ Invoke-RestMethod http://127.0.0.1:8100/actuator/health/readiness
 - `yumpoo-desktop.cdx.json`：桌面 CycloneDX SBOM，列出 Electron 运行时和打进主进程的全部依赖；
 - `desktop-manifest.json`：上述文件的大小与摘要；
 - `provenance.json`：钉住的 CI 运行与 attempt；
-- `release.json`：下载页读取的版本、大小、SHA-256 与改动摘要；
+- `release.json`：下载页读取的版本、大小、SHA-256 与更新内容（范围为「桌面」的 PR 发布说明，不含运维条目；上传后不再替换）；
 - `YumpooDesktop-Setup-X.Y.Z-x64.exe.sig.json`：Ed25519 更新授权。
 
 CI 为前五个文件签署构建证明；草稿上传前后、发布前都会核验证明。不要手工新建 `desktop-v*` 草稿、打标签或替换附件。可以离线复核安装包：
@@ -501,6 +501,7 @@ gh attestation verify '<下载目录>\YumpooDesktop-Setup-X.Y.Z-x64.exe' -R E9uu
 
 - 部署引擎的 `desktop-publish` 请求与服务器部署共用部署锁，但不进入维护、不写 `active.json`、`current.json`；服务器处于 `running` 或 `recovery_required` 时同样拒绝桌面请求。
 - 引擎逐个核对上传文件与已发布不可变 Release 附件的 digest、标签提交、`main` 祖先关系和 CI 推送运行，然后写入 `<desktopFeed.root>/desktop/stable/`：先写安装包、blockmap 和授权签名，最后分别原子替换 `latest.yml` 与 `release.json`。以两个指针中的最高版本防止降级，拒绝同版本不同提交或更新元数据以及任何重解析点。
+- `release.json` 按 UTF-8 读取，包括不带 BOM 的中文发布说明；不依赖 Windows PowerShell 5.1 的系统代码页。旧引擎若因中文说明报 JSON 未终止字符串，先用 `Update-YumpooEngine.ps1` 安装包含此修复的已验证服务器包，再重跑同一桌面 tag；不要改写更新源文件的编码或内容，避免与 Release 摘要不一致。
 - 两个指针的替换不是事务。若第二次替换失败，自动更新可能已发现新版本，而下载页仍显示旧版本；发布报告失败不代表新版本尚未公开。重跑同一 tag 的 Desktop Release 可以补齐指针与缺失文件；只有全部内容已一致才返回 `already_current`。不要手工降低指针或改发较低版本。
 - 保留最近 3 个版本的安装包与签名、最近 20 个版本的 blockmap（旧版本客户端做差分下载要用自己版本的 blockmap）。
 - 状态与通知沿用服务器的 `status/<requestId>.json` 与企业微信通知，阶段为 `desktop_verify`、`desktop_publish`、`complete` 或 `already_current`。
@@ -526,3 +527,20 @@ gh attestation verify '<下载目录>\YumpooDesktop-Setup-X.Y.Z-x64.exe' -R E9uu
 5. 打开 `https://wecom-dev.yumpoo.com/download`，核对版本与 SHA-256 后通知同事安装，同时把[安装机制与隐私说明](desktop-client-install-and-privacy.md)发给管理层和同事；旧便携版直接覆盖安装，登录状态与偏好保留。此后全部自动更新。
 
 **每周核对**：供应链工作流的发布演练会读取更新源上的 `latest.yml` 与 `release.json`，要求与最新已发布桌面 Release 的附件逐字节一致；不一致时检查最近一次 Desktop Release 运行和主机上的 `desktop/stable` 目录。
+## 异机监控接入补充
+
+三端配置项、凭据存放、环境标识与常见调整见[异机监控配置指南](../monitoring/CONFIGURATION.md)。真实云主机连接信息和机器人地址只进入仓库外的受保护配置，不填写到源码、手册或 PR。
+
+独立监控栈、机器人配置、SSH 权限与离线部署步骤见[异机监控部署手册](../monitoring/README.md)。正常发布只有在 `host.json.monitoring.enabled=true` 时，才在前置检查通过后写入维护预告并等待 300 秒；通知失败仍等待并继续。未配置的旧主机保持原行为，回退操作不增加等待。
+
+升级监控相关固定引擎仍需使用 Prepare Release 草稿中的已验证 ZIP，在管理员维护通道运行 `Update-YumpooEngine.ps1`，并显式传入 `-EnableMonitoring -MonitoringEnvironment <environment>`。不要从普通发布包自动执行安装脚本，不直接替换正在工作的 SYSTEM 引擎。后续未传 `-EnableMonitoring` 时保留已有监控开关，显式 `-EnableMonitoring:$false` 可关闭发布接入。
+
+采集器首次安装须显式选择 `DefaultFeature`，并等待 `windows_exporter` 服务运行后检查指标网关；MSI 返回成功本身不能证明采集器已安装。接入验收同时核对 CPU、内存、磁盘和服务指标，CPU 使用 0.32.0 的 `windows_cpu_time_seconds_total`。
+
+同版本重复配置须显式重装 MSI 主功能、启动服务并验证指标，不能依赖服务的延迟故障恢复；安装器会根据已验证 MSI 的产品标识自动选择这一流程。
+
+独立看门狗同时检查事件入口及 Prometheus / Alertmanager 的采样新鲜度。连接或监测链路异常持续 3 分钟会直接通知运维群，链路连续健康 60 秒后再确认恢复；事件入口仍可在采集故障时保存发布事件。
+
+启用后，主机事件通过 `deployment/monitor-outbox` 和 `YumpooMonitorRelay` 独立任务投递；`YumpooMonitorTunnel` 负责受限 SSH 隧道，`YumpooMonitorWatchdog` 在监测端持续不可达时直发运维群。三者均与部署锁分离。主机部署完成是事实记录，用户公告还需异机复核目标健康及版本；异机失败不能反过来修改部署结果或自动回滚。
+
+自动维护从实际进入维护起最多 30 分钟；`recovery_required` 或超时解除预期告警静默。手工完成恢复后，管理员运行 `Send-YumpooRecoveryNotice.ps1 -RequestId <original-request>`；它检查当前公开健康与版本，提交 `deployment.recovered`，再由异机确认实际版本，不发送新版本成功公告，也不修改主机部署状态。公网继续拒绝整个 Actuator 路径，只有回环指标网关可经机器隧道读取固定指标出口。

@@ -52,7 +52,7 @@ export function useWorkItemEdits(options: {
       try {
         const answer = await ElMessageBox.prompt('该状态迁移需要填写说明。', `迁移到${target.displayName}`, {
           inputType: 'textarea', inputValidator: value => Boolean(value.trim()) || '请输入迁移说明',
-          confirmButtonText: '确认迁移', cancelButtonText: '取消',
+          confirmButtonText: '确认迁移', cancelButtonText: '取消', customClass: 'work-item-resolution-box',
         })
         resolution = answer.value.trim()
       } catch { return false }

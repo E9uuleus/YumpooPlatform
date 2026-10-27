@@ -59,8 +59,27 @@ describe('M1-12 Web 全局壳', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('项目管理')
     expect(wrapper.text()).toContain('Yumpoo 测试公司')
-    expect(wrapper.text()).toContain('Web 浏览器')
+    expect(wrapper.text()).not.toContain('在线壳')
+    expect(wrapper.text()).not.toContain('Web 浏览器')
     expect(wrapper.findAll('.module-rail__item-label').map(item => item.text())).toEqual(['首页', '工作台'])
+  })
+
+  it('顶栏图标按钮：本页引导随页面启用，偏好设置进入设置页', async () => {
+    const wrapper = await mountApplication('/settings')
+    await flushPromises()
+    const tour = wrapper.get('[data-tour="topbar-tour"]')
+    expect(tour.attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-tour="topbar-appearance"]').exists()).toBe(false)
+    const router = wrapper.vm.$router
+    await router.push('/')
+    await flushPromises()
+    expect(wrapper.get('[data-tour="topbar-tour"]').attributes('disabled')).toBeUndefined()
+    await router.push('/inbox')
+    await flushPromises()
+    await wrapper.get('[data-tour="topbar-preferences"]').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.name).toBe('settings')
+    expect(wrapper.get('[data-tour="topbar-preferences"]').classes()).toContain('is-active')
   })
 
   it('管理员显示全局身份入口且保留三个子入口', async () => {
@@ -160,6 +179,41 @@ describe('M1-12 Web 全局壳', () => {
     expect(wrapper.text()).toContain('在系统默认浏览器中完成')
     await wrapper.get('.login-action').trigger('click')
     expect(start).toHaveBeenCalledOnce()
+  })
+
+  it('Electron 等待浏览器回调时可重新打开或取消，并按勾选传递 7 天免登录', async () => {
+    let publish: ((status: unknown) => void) | undefined
+    const start = vi.fn(async () => undefined)
+    const cancel = vi.fn(async () => undefined)
+    Object.defineProperty(window, 'yumpooDesktop', {
+      configurable: true,
+      value: Object.freeze({
+        client: 'electron',
+        auth: Object.freeze({
+          isEnabled: vi.fn(async () => true),
+          start,
+          cancel,
+          clear: vi.fn(async () => undefined),
+          onStatus: vi.fn((listener: (status: unknown) => void) => {
+            publish = listener
+            return vi.fn()
+          }),
+        }),
+      }),
+    })
+    const wrapper = await mountApplication('/login')
+    await flushPromises()
+    await wrapper.get('.login-remember input').setValue(false)
+    publish?.({ phase: 'WAITING_FOR_CALLBACK' })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('已在系统浏览器中打开登录页')
+    expect(wrapper.get('.login-action').attributes('disabled')).toBeUndefined()
+    await wrapper.get('.login-action').trigger('click')
+    expect(start).toHaveBeenCalledWith({ remember: false })
+    await wrapper.get('.login-action--secondary').trigger('click')
+    expect(cancel).toHaveBeenCalledOnce()
+    localStorage.removeItem('yumpoo.auth.remember.v1')
   })
 
   it('Electron 登录失败时区分登录服务与浏览器，并为未知错误码兜底', async () => {

@@ -1,0 +1,6 @@
+{
+  "name": "@yumpoo/monitor-dashboard", "version": "0.0.0", "private": true, "type": "module",
+  "scripts": { "build": "vue-tsc --noEmit && vite build", "dev": "vite" },
+  "dependencies": { "vue": "3.5.43" },
+  "devDependencies": { "@vitejs/plugin-vue": "6.0.9", "vite": "8.3.4", "vue-tsc": "3.3.12", "typescript": "5.9.3" }
+}
