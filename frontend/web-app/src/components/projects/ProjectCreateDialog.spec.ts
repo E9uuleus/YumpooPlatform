@@ -15,12 +15,12 @@ function render() { return mount(ProjectCreateDialog, { props: { modelValue: tru
 type DialogVm = { submit: () => Promise<void>; close: (done?: () => void) => Promise<void> }
 
 describe('创建项目弹窗', () => {
-  it('固定 800 档位、禁用遮罩关闭，预览三个类别、五个状态与四个优先级', async () => {
+  it('固定 880 档位、禁用遮罩关闭，预览三个类别、五个状态与四个优先级', async () => {
     const wrapper = render(); await flushPromises()
     await flushPromises()
-    expect(wrapper.findComponent(ElDialog).props()).toMatchObject({ width: 'min(800px, calc(100vw - 32px))', top: '10vh', closeOnClickModal: false })
-    expect(document.body.querySelectorAll('.project-create-dialog__row')).toHaveLength(4)
-    expect(document.body.querySelectorAll('.project-create-dialog__labels span')).toHaveLength(12)
+    expect(wrapper.findComponent(ElDialog).props()).toMatchObject({ width: 'min(880px, calc(100vw - 32px))', top: '8vh', closeOnClickModal: false })
+    expect(document.body.querySelectorAll('.project-preview__row')).toHaveLength(5)
+    expect(document.body.querySelectorAll('.project-create-dialog__labels .structure-color-pill')).toHaveLength(12)
     expect(document.body.textContent).toContain('你（张三）将成为负责人')
     expect(document.body.textContent).toContain('项目编码创建后由系统生成')
     expect(document.body.textContent).toContain('未命名项目')
@@ -30,11 +30,11 @@ describe('创建项目弹窗', () => {
     expect(document.body.querySelector('textarea')?.getAttribute('maxlength')).toBe('500')
     await wrapper.findAllComponents(ElInput)[0]!.setValue(' 新项目 ')
     await wrapper.findAllComponents(ElInput)[1]!.setValue(' 项目目标 ')
-    expect(document.body.querySelector('.project-create-dialog__initial-avatar')?.textContent).toBe('新')
-    expect(document.body.querySelector('.project-create-dialog__identity-text')?.textContent).toContain('新项目')
-    expect(document.body.querySelector('.project-create-dialog__identity-text')?.textContent).toContain('项目目标')
+    expect(document.body.querySelector('.project-create-dialog__tile')?.textContent).toBe('新')
+    expect(document.body.querySelector('.project-preview__identity')?.textContent).toContain('新项目')
+    expect(document.body.querySelector('.project-preview__identity')?.textContent).toContain('项目目标')
   })
-  it('空白名称不可提交，去首尾空白后只发送名称和描述，成功通知父页面', async () => {
+  it('空白名称不可提交，去首尾空白后发送名称、描述与初始颜色，成功通知父页面', async () => {
     const wrapper = render(); await flushPromises()
     const vm = wrapper.vm as unknown as DialogVm
     await wrapper.findComponent(ElInput).setValue('   ')
@@ -44,7 +44,17 @@ describe('创建项目弹窗', () => {
     api.createProject.mockResolvedValue(project)
     await wrapper.findComponent(ElInput).setValue(' 新项目 ')
     await vm.submit()
-    expect(api.createProject).toHaveBeenCalledWith(expect.objectContaining({ xXSRFTOKEN: 'csrf', projectCreateRequest: { name: '新项目', description: null } }))
+    expect(api.createProject).toHaveBeenCalledWith(expect.objectContaining({
+      xXSRFTOKEN: 'csrf',
+      projectCreateRequest: {
+        name: '新项目', description: null,
+        initialColors: {
+          categories: { REQUIREMENTS: 'BRIGHT_BLUE', TASKS: 'BRIGHT_GREEN', DEFECTS: 'DARK_RED' },
+          statuses: { NOT_STARTED: 'GRAY', IN_PROGRESS: 'ORANGE', STUCK: 'RED', DONE: 'GREEN', CANCELED: 'AMERICAN_GRAY' },
+          priorities: { LOW: 'BLUE', MEDIUM: 'TEAL', HIGH: 'ORANGE', URGENT: 'RED' },
+        },
+      },
+    }))
     expect(wrapper.emitted('created')).toEqual([[project]])
     expect(wrapper.emitted('update:modelValue')).toEqual([[false]])
   })

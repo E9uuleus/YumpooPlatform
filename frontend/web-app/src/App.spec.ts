@@ -129,7 +129,7 @@ describe('M1-12 Web 全局壳', () => {
   it('项目层级导航默认展开，管理项目与详情入口正确高亮', async () => {
     const catalog = await mountApplication('/workspace/member')
     await flushPromises()
-    const catalogItems = catalog.findAll('.context-navigation > .global-navigation button')
+    const catalogItems = catalog.findAll('.context-navigation > .global-navigation button:not(.project-navigation__add)')
     expect(catalogItems.map(item => item.text())).toEqual(['仪表板', '我的工时', '项目', '管理项目', '归档项目'])
     expect(catalogItems[2]?.attributes('aria-expanded')).toBe('true')
     expect(catalogItems[3]?.attributes('aria-current')).toBe('page')
@@ -142,7 +142,7 @@ describe('M1-12 Web 全局壳', () => {
 
     const details = await mountApplication('/projects/project-42/members')
     await flushPromises()
-    const detailItems = details.findAll('.context-navigation > .global-navigation button')
+    const detailItems = details.findAll('.context-navigation > .global-navigation button:not(.project-navigation__add)')
     expect(detailItems.map(item => item.text())).toEqual(['仪表板', '我的工时', '项目', '管理项目', '归档项目', '工作项', '统计', '成员', '动态', '设置'])
     expect(detailItems.find(item => item.text() === '成员')?.attributes('aria-current')).toBe('page')
     details.unmount()
