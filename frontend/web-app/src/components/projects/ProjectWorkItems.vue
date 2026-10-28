@@ -23,7 +23,7 @@ import WorkItemNameCell from './WorkItemNameCell.vue'
 import WorkItemDraftCell from './WorkItemDraftCell.vue'
 import { useWorkItemInlineCreate } from './useWorkItemInlineCreate'
 import WorkItemUpdatedCell from './WorkItemUpdatedCell.vue'
-import { Filter as FilterIcon, Hide, Search, Sort, User } from '@element-plus/icons-vue'
+import { Filter as FilterIcon, Hide, Plus, Search, Sort, User } from '@element-plus/icons-vue'
 import {
   TimeTrackingState,
   WorkItemViewType,
@@ -189,6 +189,9 @@ const restoringArchive = ref(false)
 const quickOpen = ref(false)
 const quickTitle = ref('')
 const quickCreating = ref(false)
+const creatingTop = ref(false)
+/** Row whose name cell opens for editing as soon as it renders: the item the toolbar button just created. */
+const autoEditId = ref('')
 const quickRow = ref<HTMLElement>()
 const quickTitleInput = ref<InstanceType<typeof ElInput>>()
 const detailOpen = ref(false)
@@ -1615,6 +1618,54 @@ async function changeView(view: ProjectView): Promise<void> {
   await setViewQuery({ ...route.query, view })
 }
 
+async function createWithDefaults(title: string, csrf: string): Promise<WorkItemDetail> {
+  const inserted = await workItemsApi.createWorkItem({
+    projectId: projectId.value,
+    xXSRFTOKEN: csrf,
+    idempotencyKey: globalThis.crypto.randomUUID(),
+    workItemCreateRequest: {
+      contentId: defaultContentId.value!,
+      title,
+      priority: null,
+      assigneeUserId: null,
+      description: null,
+      notes: null,
+      timelineStartDate: null,
+      timelineEndDate: null,
+      dueDate: null,
+      ...createDefaults.value.fields,
+    },
+  })
+  return applyDefaultStatus(inserted, createDefaults.value.statusCode, csrf)
+}
+
+/** The server creates new items at the top of the manual order; the reload reveals the row and its name opens for editing. */
+async function createAtTop(): Promise<void> {
+  if (creatingTop.value || !defaultContentId.value) return
+  const csrf = readCsrfToken()
+  if (!csrf) { error.value = localProblem('缺少 CSRF 凭据，请刷新后重试。'); return }
+  creatingTop.value = true
+  error.value = undefined
+  try {
+    const created = await createWithDefaults('新工作项', csrf)
+    notifyChanged()
+    if (grouped.value) {
+      await grouping.refresh()
+      const key = grouping.keyOf({ ...created, subitemCount: 0 })
+      if (grouping.isCollapsed(key)) grouping.toggle(key)
+      await grouping.load(key, false)
+      const page = grouping.page(key)
+      while (page.nextCursor && !page.error && !page.items.some(item => item.id === created.id)) await grouping.load(key)
+    } else await reloadSortedTableInPlace(created.id)
+    await nextTick()
+    autoEditId.value = created.id
+  } catch (reason) {
+    error.value = await toApiProblem(reason)
+  } finally {
+    creatingTop.value = false
+  }
+}
+
 function openQuick(): void {
   if (!canCreate.value) return
   quickOpen.value = true
@@ -1636,24 +1687,7 @@ async function createQuick(continueAdding: boolean): Promise<void> {
   quickCreating.value = true
   error.value = undefined
   try {
-    const inserted = await workItemsApi.createWorkItem({
-      projectId: projectId.value,
-      xXSRFTOKEN: csrf,
-      idempotencyKey: globalThis.crypto.randomUUID(),
-      workItemCreateRequest: {
-        contentId: defaultContentId.value,
-        title: quickTitle.value.trim(),
-        priority: null,
-        assigneeUserId: null,
-        description: null,
-        notes: null,
-        timelineStartDate: null,
-        timelineEndDate: null,
-        dueDate: null,
-        ...createDefaults.value.fields,
-      },
-    })
-    const created = await applyDefaultStatus(inserted, createDefaults.value.statusCode, csrf)
+    const created = await createWithDefaults(quickTitle.value.trim(), csrf)
     notifyChanged()
     ElMessage.success(`已创建 ${created.itemNo}`)
     if (continueAdding) {
@@ -3062,6 +3096,15 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="work-items-toolbar" aria-label="工作项工具栏" data-work-item-view-control data-tour="work-item-toolbar">
+          <button
+            v-if="selectedView === 'table' && canCreate"
+            type="button"
+            class="toolbar-create"
+            :disabled="creatingTop || Boolean(editingCell) || tableSorting"
+            @click="createAtTop"
+          >
+            <el-icon><plus /></el-icon><span>新增工作项</span>
+          </button>
           <div class="toolbar-search" :class="{ 'toolbar-search--expanded': searchExpanded }">
             <el-input
               v-if="searchExpanded"
@@ -3471,11 +3514,12 @@ onBeforeUnmount(() => {
                       :item="scope.row as ProjectWorkItemListItem"
                       :strict-version="embedded"
                       :selected="selectedCellKey === `${scope.row.id}:title`"
+                      :auto-edit="autoEditId === scope.row.id"
                       :disabled="Boolean(editingCell)"
                       :create="isDraft(scope.row as ProjectWorkItemListItem) ? saveInlineDraft : undefined"
                       @open="openDetail(scope.row as ProjectWorkItemListItem, 'details')"
                       @updated="replaceLightItem"
-                      @editing="active => { if (active) { editingNames.add(scope.row.id); selectCell(scope.row.id, 'title') } else editingNames.delete(scope.row.id) }"
+                      @editing="active => { if (active) { autoEditId = ''; editingNames.add(scope.row.id); selectCell(scope.row.id, 'title') } else editingNames.delete(scope.row.id) }"
                       @cancel="cancelInlineDraft"
                     >
                       <template #prefix>
@@ -4215,6 +4259,11 @@ onBeforeUnmount(() => {
 :deep(.table-settings-toolbar-button) { width: 36px; justify-content: center; padding: 0; }
 :deep(.table-settings-toolbar-button--unsaved) { width: auto; padding: 0 var(--yp-space-3); }
 .toolbar-count { min-width: 18px; padding: 1px 5px; border-radius: var(--yp-radius-pill); color: var(--yp-priority-foreground); background: var(--yp-action-primary); font-size: 11px; }
+.toolbar-create { display: inline-flex; height: 32px; flex: 0 0 auto; align-items: center; gap: 6px; padding: 0 var(--yp-space-3); border: 0; border-radius: var(--yp-radius-sm); color: var(--yp-text-inverse); background: var(--yp-action-primary); font: inherit; font-weight: 600; cursor: pointer; transition: background var(--yp-motion-fast) var(--yp-ease-standard); }
+.toolbar-create:hover:not(:disabled) { background: var(--yp-action-primary-hover); }
+.toolbar-create:active:not(:disabled) { background: var(--yp-action-primary-active); }
+.toolbar-create:disabled { opacity: .6; cursor: not-allowed; }
+.toolbar-create:focus-visible { outline: 2px solid var(--yp-focus-ring); outline-offset: 2px; }
 .toolbar-search { width: 94px; flex: 0 0 auto; transition: width 100ms cubic-bezier(0, 0, .35, 1); }
 .toolbar-search > .toolbar-button { width: 100%; }
 .toolbar-search--expanded { width: min(360px, 40vw); }
