@@ -1654,7 +1654,7 @@ async function createAtTop(): Promise<void> {
     if (grouped.value) {
       await grouping.refresh()
       const key = grouping.keyOf({ ...created, subitemCount: 0 })
-      if (grouping.isCollapsed(key)) grouping.toggle(key)
+      if (grouping.isCollapsed(key)) grouping.reveal(key)
       await grouping.load(key, false)
       const page = grouping.page(key)
       while (page.nextCursor && !page.error && !page.items.some(item => item.id === created.id)) await grouping.load(key)
