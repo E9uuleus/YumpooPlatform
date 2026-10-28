@@ -106,7 +106,7 @@ public class TeamDashboardService {
         LocalDate today = LocalDate.ofInstant(clock.instant(), zone());
         var page = work.currentTasks(actor, List.copyOf(scope.keySet()), query.userId(), today, query.offset(), query.limit());
         return new TaskPage(page.items().stream().map(t -> new Task(t.id(), t.projectId(), scope.get(t.projectId()).name(), t.itemNo(), t.title(),
-                t.statusName(), t.statusCategory(), t.statusColor(), t.priorityName(), t.priorityColor(), t.dueDate(), t.overdue())).toList(),
+                t.statusCode(), t.statusName(), t.statusCategory(), t.statusColor(), t.priorityName(), t.priorityColor(), t.dueDate(), t.overdue())).toList(),
                 page.totalElements());
     }
 

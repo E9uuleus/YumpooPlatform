@@ -32,7 +32,7 @@ public interface TeamWorkQuery {
     record CategoryEntry(UUID userId, String timeCategory, UUID projectId, LocalDate date, long durationMs) {}
     /** A null user groups open work without assignees. */
     record Load(UUID userId, long todo, long inProgress, long overdue) {}
-    record Task(UUID id, UUID projectId, String itemNo, String title, String statusName, String statusCategory, String statusColor,
+    record Task(UUID id, UUID projectId, String itemNo, String title, String statusCode, String statusName, String statusCategory, String statusColor,
             String priorityName, String priorityColor, LocalDate dueDate, boolean overdue) {}
     record TaskPage(List<Task> items, long totalElements) {}
 }

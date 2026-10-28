@@ -102,7 +102,7 @@ public class JdbcTeamWorkRepository implements TeamWorkRepository {
 
     public List<Task> currentTasks(UUID companyId, List<UUID> projectIds, UUID userId, LocalDate today, int offset, int limit) {
         var statement = jdbc.sql("""
-            SELECT w.id,w.project_id,w.item_no,w.title,COALESCE(s.display_name,w.status_code) AS status_name,w.status_category,
+            SELECT w.id,w.project_id,w.item_no,w.title,w.status_code,COALESCE(s.display_name,w.status_code) AS status_name,w.status_category,
               COALESCE(s.color_token,'GRAY') AS status_color,pr.display_name AS priority_name,pr.color_token AS priority_color,w.due_date
             FROM yumpoo.work_item w
             LEFT JOIN yumpoo.project_work_item_status_label s
@@ -119,7 +119,7 @@ public class JdbcTeamWorkRepository implements TeamWorkRepository {
         return statement.query((rs, n) -> {
             LocalDate due = rs.getObject("due_date", LocalDate.class);
             return new Task(rs.getObject("id", UUID.class), rs.getObject("project_id", UUID.class), rs.getString("item_no"), rs.getString("title"),
-                    rs.getString("status_name"), rs.getString("status_category"), rs.getString("status_color"), rs.getString("priority_name"),
+                    rs.getString("status_code"), rs.getString("status_name"), rs.getString("status_category"), rs.getString("status_color"), rs.getString("priority_name"),
                     rs.getString("priority_color"), due, due != null && due.isBefore(today));
         }).list();
     }

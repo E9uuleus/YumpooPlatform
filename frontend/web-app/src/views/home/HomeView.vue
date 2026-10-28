@@ -18,7 +18,7 @@ import { useSession } from '../../composables/useSession'
 import { formatDuration, onTimeTrackingChanged, useTimeTracker } from '../../composables/useTimeTracker'
 import { onWorkItemChanged } from '../../composables/workItemChanges'
 import { usePageOnboarding } from '../../onboarding/useOnboarding'
-import { daypart, greeting, heroDate, hubProjects, sortTasks, type HubProject, type TaskFilter } from './homeModel'
+import { daypart, filterTasks, greeting, heroDate, hubProjects, isInProgressTask, isNotStartedTask, sortTasks, type HubProject, type TaskFilter } from './homeModel'
 import { timerTitle } from '../../components/timer/timeCategories'
 
 interface JumpCard { key: string; label: string; meta: string; icon: Component; tone: JumpTone; open: () => void }
@@ -43,12 +43,12 @@ const runningTitle = computed(() => {
 })
 
 const counts = computed(() => ({
-  inProgress: tasks.value.filter(task => task.statusCategory === TeamMemberTaskStatusCategoryEnum.InProgress).length,
-  todo: tasks.value.filter(task => task.statusCategory === TeamMemberTaskStatusCategoryEnum.Todo).length,
+  inProgress: tasks.value.filter(isInProgressTask).length,
+  todo: tasks.value.filter(isNotStartedTask).length,
   overdue: tasks.value.filter(task => task.overdue).length,
 }))
 const sortedTasks = computed(() => sortTasks(tasks.value))
-const visibleTasks = computed(() => filter.value === 'ALL' ? sortedTasks.value : sortedTasks.value.filter(task => task.statusCategory === filter.value))
+const visibleTasks = computed(() => filterTasks(sortedTasks.value, filter.value))
 const taskOptions = computed<{ value: TaskFilter; label: string }[]>(() => [
   { value: 'ALL', label: `全部 ${tasks.value.length}` },
   { value: TeamMemberTaskStatusCategoryEnum.InProgress, label: `进行中 ${counts.value.inProgress}` },

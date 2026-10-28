@@ -1,5 +1,6 @@
 import { TeamMemberTaskStatusCategoryEnum, type DashboardProject, type TeamMemberTask } from '@yumpoo/api-client'
 import { companyDateTime } from '../../components/timer/timeFormat'
+import { INITIAL_STATUS_CODE } from '../../components/projects/workItemTableSettings'
 import type { HeroDaypart } from '../../motion/scenes/auroraShapes'
 
 export type TaskFilter = 'ALL' | TeamMemberTaskStatusCategoryEnum.InProgress | TeamMemberTaskStatusCategoryEnum.Todo
@@ -45,11 +46,17 @@ export function heroDate(now: Date, timezone: string): string {
   return `${date.getUTCMonth() + 1}月${date.getUTCDate()}日 ${WEEKDAYS[date.getUTCDay()]}`
 }
 
-const inProgress = (task: TeamMemberTask) => task.statusCategory === TeamMemberTaskStatusCategoryEnum.InProgress
+export const isInProgressTask = (task: TeamMemberTask) => task.statusCategory === TeamMemberTaskStatusCategoryEnum.InProgress
+/** 待开始 is the project's initial status only; statuses members add are stored as TODO and listed under 全部 only. */
+export const isNotStartedTask = (task: TeamMemberTask) => task.statusCode === INITIAL_STATUS_CODE
+
+export function filterTasks(tasks: TeamMemberTask[], filter: TaskFilter): TeamMemberTask[] {
+  return filter === 'ALL' ? tasks : tasks.filter(filter === TeamMemberTaskStatusCategoryEnum.InProgress ? isInProgressTask : isNotStartedTask)
+}
 
 /** In-progress work first; the server order (due date, then recency) is kept inside each group. */
 export function sortTasks(tasks: TeamMemberTask[]): TeamMemberTask[] {
-  return [...tasks.filter(inProgress), ...tasks.filter(task => !inProgress(task))]
+  return [...tasks.filter(isInProgressTask), ...tasks.filter(task => !isInProgressTask(task))]
 }
 
 /** Member projects with the viewer's open-task counts; projects needing attention come first. */
@@ -59,8 +66,8 @@ export function hubProjects(projects: DashboardProject[], tasks: TeamMemberTask[
   for (const task of tasks) {
     const row = rows.get(task.projectId)
     if (!row) continue
-    if (inProgress(task)) row.inProgress += 1
-    else row.todo += 1
+    if (isInProgressTask(task)) row.inProgress += 1
+    else if (isNotStartedTask(task)) row.todo += 1
     if (task.overdue) row.overdue += 1
   }
   return [...rows.values()].sort((a, b) => b.overdue - a.overdue
