@@ -176,6 +176,7 @@ export * from './ProjectDeletion';
 export * from './ProjectDeletionMutation';
 export * from './ProjectDeletionRequest';
 export * from './ProjectDetail';
+export * from './ProjectInitialColors';
 export * from './ProjectLifecycle';
 export * from './ProjectLifecycleFilter';
 export * from './ProjectMember';

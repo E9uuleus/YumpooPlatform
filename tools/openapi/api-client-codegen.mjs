@@ -137,6 +137,16 @@ function applyStrictTypeScriptCompatibility(sourceRoot) {
   )
   fs.writeFileSync(emptyDetailsPath, emptyDetails, 'utf8')
 
+  for (const [model, fields] of [['ProjectCreateRequest', ['initialColors']],
+    ['ProjectInitialColors', ['categories', 'statuses', 'priorities']]]) {
+    const modelPath = path.join(sourceRoot, 'models', `${model}.ts`)
+    let source = normalizeText(fs.readFileSync(modelPath, 'utf8'))
+    for (const field of fields) source = source.replace(
+      new RegExp(`^        '${field}': json\\['${field}'\\] == null \\? undefined : (.+),$`, 'm'),
+      (_line, conversion) => `        ...(json['${field}'] == null ? {} : { '${field}': ${conversion} }),`)
+    fs.writeFileSync(modelPath, source, 'utf8')
+  }
+
   const workItemCreatePath = path.join(sourceRoot, 'models', 'WorkItemCreateRequest.ts')
   let workItemCreate = normalizeText(fs.readFileSync(workItemCreatePath, 'utf8'))
   workItemCreate = replaceExactlyOnce(

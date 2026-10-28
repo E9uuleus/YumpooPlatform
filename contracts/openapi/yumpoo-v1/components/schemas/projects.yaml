@@ -184,6 +184,25 @@ components:
           type: string
           maxLength: 500
           nullable: true
+        initialColors:
+          $ref: "#/components/schemas/ProjectInitialColors"
+    ProjectInitialColors:
+      type: object
+      additionalProperties: false
+      description: 创建时覆盖默认初始结构的颜色。键为默认结构中的类别、状态或优先级代码，未列出的代码保持默认颜色。
+      properties:
+        categories:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/WorkItemLabelColorToken"
+        statuses:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/WorkItemLabelColorToken"
+        priorities:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/WorkItemLabelColorToken"
     ProjectSummary:
       type: object
       additionalProperties: false
