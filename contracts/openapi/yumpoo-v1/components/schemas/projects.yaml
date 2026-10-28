@@ -54,6 +54,12 @@ components:
         canCancelDeletion:
           type: boolean
           readOnly: true
+        canEnd:
+          type: boolean
+          readOnly: true
+        canResume:
+          type: boolean
+          readOnly: true
     ProjectDeletion:
       type: object
       additionalProperties: false
@@ -132,6 +138,12 @@ components:
         - ownerUserId
         - rowVersion
       properties:
+        endedAt:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+          description: 项目结束时间；为 null 时项目未结束。已结束项目 lifecycle 仍为 ACTIVE。
         id:
           $ref: "#/components/schemas/Uuid"
         workspaceId:
@@ -192,6 +204,12 @@ components:
         - createdAt
         - updatedAt
       properties:
+        endedAt:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+          description: 项目结束时间；为 null 时项目未结束。已结束项目 lifecycle 仍为 ACTIVE。
         id:
           $ref: "#/components/schemas/Uuid"
         workspaceId:
@@ -309,6 +327,12 @@ components:
             - updatedAt
             - archivedAt
           properties:
+            endedAt:
+              type: string
+              format: date-time
+              nullable: true
+              readOnly: true
+              description: 项目结束时间；为 null 时项目未结束。已结束项目 lifecycle 仍为 ACTIVE。
             workspaceCode:
               type: string
               minLength: 2

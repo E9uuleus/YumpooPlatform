@@ -101,9 +101,9 @@ public class TimeTrackingService {
         resume.forEach(item -> projectIds.add(item.projectId()));
         var visibleProjects=access.findVisible(actor,projectIds);
         var recentItems=recent.stream().filter(item -> visibleProjects.containsKey(item.projectId())
-                && visibleProjects.get(item.projectId()).lifecycle()==ProjectAccessSnapshot.ProjectLifecycle.ACTIVE).limit(5).toList();
+                && visibleProjects.get(item.projectId()).contentWritable()).limit(5).toList();
         var resumeItems=resume.stream().filter(item -> visibleProjects.containsKey(item.projectId())
-                && visibleProjects.get(item.projectId()).lifecycle()==ProjectAccessSnapshot.ProjectLifecycle.ACTIVE).toList();
+                && visibleProjects.get(item.projectId()).contentWritable()).toList();
         var titles=new HashMap<UUID,String>();
         running.stream().filter(s -> s.projectId()!=null && visibleProjects.containsKey(s.projectId())).collect(java.util.stream.Collectors.groupingBy(Session::projectId))
                 .forEach((projectId,rows) -> items.findByIds(actor.companyId(),projectId,rows.stream().map(Session::workItemId).toList())
@@ -619,7 +619,7 @@ public class TimeTrackingService {
         return access.findVisible(actor,projectId).orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
     }
     private static boolean canWrite(ProjectAccessSnapshot p) {
-        return p.lifecycle()!=ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED && p.actorAccess()!=ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY;
+        return p.contentWritable() && p.actorAccess()!=ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY;
     }
     private Instant now() { return clock.instant().truncatedTo(ChronoUnit.MILLIS); }
     private static void requireVersion(long actual,long expected) { if(actual!=expected) throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT); }

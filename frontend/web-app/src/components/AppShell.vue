@@ -207,6 +207,7 @@ async function loadNavigationProjects(query = sidebarSearchQuery.value.trim()): 
     const projectPage = await projectsApi.listProjects({
       ...(query ? { query } : {}),
       lifecycle: ProjectLifecycleFilter.Active,
+      ended: false,
       actorAccesses: MY_PROJECT_ACCESSES,
       page: 0,
       size: 11,

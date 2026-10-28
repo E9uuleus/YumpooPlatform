@@ -184,7 +184,7 @@ public class ContentService {
     }
 
     private ProjectContentCatalog catalog(ProjectAccessSnapshot project, long version) {
-        boolean canManage = project.lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED
+        boolean canManage = project.contentWritable()
                 && project.actorAccess() == ProjectAccessSnapshot.ActorProjectAccess.OWNER;
         return new ProjectContentCatalog(contents.findAll(project.companyId(), project.projectId())
                 .stream().sorted(Comparator.comparingInt(Content::sortOrder).thenComparing(Content::id))
@@ -277,7 +277,7 @@ public class ContentService {
         if (project.actorAccess() != ProjectAccessSnapshot.ActorProjectAccess.OWNER) {
             throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
         }
-        if (project.lifecycle() == ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED) {
+        if (!project.contentWritable()) {
             throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION, "PROJECT_ARCHIVED");
         }
     }

@@ -10,8 +10,17 @@ public record ProjectAccessSnapshot(
         ProjectLifecycle lifecycle,
         ActorProjectAccess actorAccess,
         long projectVersion,
-        OptionalLong membershipVersion
+        OptionalLong membershipVersion,
+        boolean ended
 ) {
+
+    public ProjectAccessSnapshot(UUID projectId, UUID companyId, ProjectLifecycle lifecycle,
+            ActorProjectAccess actorAccess, long projectVersion, OptionalLong membershipVersion) {
+        this(projectId, companyId, lifecycle, actorAccess, projectVersion, membershipVersion, false);
+    }
+
+    /** Business content may change only in a running project: not archived and not ended. */
+    public boolean contentWritable() { return lifecycle == ProjectLifecycle.ACTIVE && !ended; }
 
     public ProjectAccessSnapshot {
         Objects.requireNonNull(projectId, "projectId must not be null");

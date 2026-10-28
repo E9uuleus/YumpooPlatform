@@ -15,6 +15,7 @@ export async function toConnectProblem(reason: unknown, options: {
   const detailReason = problem.error.details.reason
   let message: string | undefined
   if (detailReason === 'PROJECT_ARCHIVED') message = options.operation ? '目标项目已归档' : '项目已归档'
+  if (detailReason === 'PROJECT_ENDED') message = options.operation ? '目标项目已结束' : '项目已结束'
   if (detailReason === 'CONNECTION_LIMIT') message = '每个工作项在一列中最多连接 50 个工作项'
   if (problem.error.fieldErrors.some(field => field.field === 'targetProjectId' && field.code === 'CONNECT_TARGET_NOT_IN_COLUMN')
     || detailReason === 'CONNECT_TARGET_NOT_IN_COLUMN') message = '该项目已不在此连接列中，请刷新'

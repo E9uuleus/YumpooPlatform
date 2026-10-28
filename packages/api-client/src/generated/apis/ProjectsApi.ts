@@ -103,6 +103,13 @@ export interface CreateProjectRequest {
     projectCreateRequest: ProjectCreateRequest;
 }
 
+export interface EndProjectRequest {
+    projectId: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    idempotencyKey: string;
+}
+
 export interface GetProjectRequest {
     projectId: string;
 }
@@ -128,6 +135,7 @@ export interface ListProjectsRequest {
     actorAccesses?: Array<ProjectActorAccess>;
     updatedSince?: Date;
     lifecycle?: ProjectLifecycleFilter;
+    ended?: boolean;
     page?: number;
     size?: number;
 }
@@ -158,6 +166,13 @@ export interface RemoveProjectMemberRequest {
 }
 
 export interface RestoreProjectRequest {
+    projectId: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    idempotencyKey: string;
+}
+
+export interface ResumeProjectRequest {
     projectId: string;
     xXSRFTOKEN: string;
     ifMatch: string;
@@ -465,6 +480,78 @@ export class ProjectsApi extends runtime.BaseAPI {
     }
 
     /**
+     * 结束后内容只读，成员仍可见并计入统计；停止项目内运行中的计时。
+     * 负责人或 CompanyAdmin 结束进行中的 Project
+     */
+    async endProjectRaw(requestParameters: EndProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Project>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling endProject().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling endProject().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling endProject().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling endProject().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/projects/{projectId}/end`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectFromJSON(jsonValue));
+    }
+
+    /**
+     * 结束后内容只读，成员仍可见并计入统计；停止项目内运行中的计时。
+     * 负责人或 CompanyAdmin 结束进行中的 Project
+     */
+    async endProject(requestParameters: EndProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Project> {
+        const response = await this.endProjectRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
      * 查询可见 Project 完整详情
      */
     async getProjectRaw(requestParameters: GetProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectDetail>> {
@@ -666,6 +753,10 @@ export class ProjectsApi extends runtime.BaseAPI {
 
         if (requestParameters['lifecycle'] != null) {
             queryParameters['lifecycle'] = requestParameters['lifecycle'];
+        }
+
+        if (requestParameters['ended'] != null) {
+            queryParameters['ended'] = requestParameters['ended'];
         }
 
         if (requestParameters['page'] != null) {
@@ -1014,6 +1105,78 @@ export class ProjectsApi extends runtime.BaseAPI {
      */
     async restoreProject(requestParameters: RestoreProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Project> {
         const response = await this.restoreProjectRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 重新打开后项目内容恢复可写。
+     * 负责人或 CompanyAdmin 重新打开已结束的 Project
+     */
+    async resumeProjectRaw(requestParameters: ResumeProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Project>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling resumeProject().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling resumeProject().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling resumeProject().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling resumeProject().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/projects/{projectId}/resume`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectFromJSON(jsonValue));
+    }
+
+    /**
+     * 重新打开后项目内容恢复可写。
+     * 负责人或 CompanyAdmin 重新打开已结束的 Project
+     */
+    async resumeProject(requestParameters: ResumeProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Project> {
+        const response = await this.resumeProjectRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

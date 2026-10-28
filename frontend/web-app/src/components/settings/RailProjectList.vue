@@ -22,7 +22,7 @@ const options = computed(() => available.value.filter(project => !props.items.so
 
 onMounted(async () => {
   try {
-    available.value = (await projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.Active, actorAccesses: MY_PROJECT_ACCESSES, page: 0, size: 100 })).items
+    available.value = (await projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.Active, ended: false, actorAccesses: MY_PROJECT_ACCESSES, page: 0, size: 100 })).items
   } catch { available.value = [] }
 })
 

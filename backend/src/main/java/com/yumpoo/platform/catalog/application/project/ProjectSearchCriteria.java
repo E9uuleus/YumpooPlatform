@@ -12,8 +12,14 @@ public record ProjectSearchCriteria(
         List<UUID> ownerUserIds,
         List<ProjectActorAccess> actorAccesses,
         Instant updatedSince,
-        ProjectLifecycleFilter lifecycle
+        ProjectLifecycleFilter lifecycle,
+        Boolean ended
 ) {
+    public ProjectSearchCriteria(String query, List<UUID> ownerUserIds, List<ProjectActorAccess> actorAccesses,
+            Instant updatedSince, ProjectLifecycleFilter lifecycle) {
+        this(query, ownerUserIds, actorAccesses, updatedSince, lifecycle, null);
+    }
+
     public ProjectSearchCriteria {
         query = query == null || query.isBlank() ? null : query.strip();
         if (query != null && query.length() > 80) {

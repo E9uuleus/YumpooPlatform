@@ -193,10 +193,22 @@ public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, Proje
         return snapshot(lifecycleService.lockForNewFact(companyId, projectId));
     }
 
+    @Override
+    public ProjectSnapshot lockForEnded(ProjectEndMutation mutation) {
+        return snapshot(lifecycleService.lockForEnded(new com.yumpoo.platform.catalog.application.project.ProjectEndCommand(
+                mutation.companyId(), mutation.projectId(), mutation.expectedRowVersion(), mutation.actorUserId(), mutation.admin(), mutation.ended())));
+    }
+
+    @Override
+    public ProjectSnapshot changeEnded(ProjectEndMutation mutation) {
+        return snapshot(lifecycleService.changeEnded(new com.yumpoo.platform.catalog.application.project.ProjectEndCommand(
+                mutation.companyId(), mutation.projectId(), mutation.expectedRowVersion(), mutation.actorUserId(), mutation.admin(), mutation.ended())));
+    }
+
     private static ProjectSnapshot snapshot(ProjectApplicationSnapshot project) {
         return new ProjectSnapshot(project.projectId(), project.companyId(), project.workspaceId(),
                 project.code(), project.name(), project.description(),
-                project.lifecycle(), project.ownerUserId(), project.rowVersion());
+                project.lifecycle(), project.ownerUserId(), project.rowVersion(), project.endedAt());
     }
 
     private static ProjectMembershipModels.MemberCommand command(ProjectMemberMutation mutation) {
@@ -215,6 +227,6 @@ public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, Proje
         return new ProjectAccessSnapshot(access.projectId(),access.companyId(),
                 ProjectAccessSnapshot.ProjectLifecycle.valueOf(access.lifecycle()),
                 ProjectAccessSnapshot.ActorProjectAccess.valueOf(access.actorAccess().name()),
-                access.projectVersion(),access.membershipVersion());
+                access.projectVersion(),access.membershipVersion(),access.ended());
     }
 }

@@ -3,13 +3,11 @@ import { ProjectLifecycleFilter, type ProjectSummary } from '@yumpoo/api-client'
 import { projectsApi } from '../../api/client'
 import { MY_PROJECT_ACCESSES } from '../projects/projectScope'
 
-// The prewarmed panel lives as long as the app: the project list is read once, and the last project used stays the next default.
-let projectList: Promise<ProjectSummary[]> | undefined
+// The last project used stays the next default; every newly opened row reads the current writable projects.
 let lastProjectId: string | null = null
 function loadProjects(): Promise<ProjectSummary[]> {
-  projectList ??= projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.Active, actorAccesses: MY_PROJECT_ACCESSES, page: 0, size: 100 })
-    .then(page => page.items, reason => { projectList = undefined; throw reason })
-  return projectList
+  return projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.Active, ended: false, actorAccesses: MY_PROJECT_ACCESSES, page: 0, size: 100 })
+    .then(page => page.items)
 }
 </script>
 

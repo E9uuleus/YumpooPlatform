@@ -174,6 +174,8 @@ export interface DesktopRailBridge {
   /** `top` is the icon's top edge in the rail window's CSS pixels; the panel opens level with it. */
   openProject(projectId: string, top: number): Promise<void>
   setProjects(projects: RailProjects): Promise<void>
+  /** 渲染页实际显示的固定项目数；省略时按已保存的固定项目数排版。 */
+  setVisibleCount?(count: number): Promise<void>
   /** Shows the main window on the rail section of the settings page. */
   openSettings(): Promise<void>
 }

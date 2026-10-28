@@ -53,6 +53,7 @@ class WorkItemHttpIT {
     @Autowired private ObjectMapper json;
     @Autowired private PlatformTransactionManager transactionManager;
     @Autowired private WorkItemLabelRepository labels;
+    @Autowired private com.yumpoo.platform.foundation.application.outbox.OutboxDispatcher dispatcher;
     @Autowired private com.yumpoo.platform.identityaccess.application.authorization.PlatformRoleMaintenanceUseCase maintenance;
     @Autowired private com.yumpoo.platform.organization.api.CompanyConfigurationQuery company;
 
@@ -1040,6 +1041,33 @@ class WorkItemHttpIT {
         assertThat(ok(get(candidates+"?scope=ALL",member)).path("items").size()).isZero();
     }
 
+    @Test
+    void endedProjectStaysVisibleAndReadOnlyUntilResumedAndRecordsActivity() throws Exception {
+        String projectPath = "/api/v1/projects/" + PROJECT_ID;
+        JsonNode project = ok(get(projectPath, owner));
+        ok(mutate("POST", projectPath + "/end", owner, "", project.path("etag").asText(), UUID.randomUUID()));
+        JsonNode ended = ok(get(projectPath, member));
+        assertThat(ended.path("endedAt").isTextual()).isTrue();
+        var rejected = mutate("POST", projectPath + "/work-items", member,
+                workItemBody(tasksId, "结束后事项"), null, UUID.randomUUID());
+        assertThat(rejected.statusCode()).as(rejected.body()).isEqualTo(409);
+        assertThat(json.readTree(rejected.body()).path("details").path("reason").asText()).isEqualTo("PROJECT_ENDED");
+        dispatcher.dispatchOnce();
+        var endedActivity = ok(get(projectPath + "/activity", member)).path("items");
+        assertThat(endedActivity.get(0).path("summary").asText()).isEqualTo("结束了项目");
+
+        ok(mutate("POST", projectPath + "/resume", owner, "", ended.path("etag").asText(), UUID.randomUUID()));
+        created(mutate("POST", projectPath + "/work-items", member,
+                workItemBody(tasksId, "重新打开后事项"), null, UUID.randomUUID()));
+        dispatcher.dispatchOnce();
+        var summaries = new java.util.ArrayList<String>();
+        for (var activity : ok(get(projectPath + "/activity", member)).path("items")) {
+            if (List.of("catalog.project_ended", "catalog.project_resumed").contains(activity.path("sourceEventType").asText()))
+                summaries.add(activity.path("summary").asText());
+        }
+        assertThat(summaries).containsExactly("重新打开了项目", "结束了项目");
+    }
+
     private String commentBody(String text, String parent) throws Exception {
         var body = json.createObjectNode().put("bodyHtml", "<p>" + text + "</p>");
         if (parent != null) body.put("parentUpdateId", parent);
@@ -1146,6 +1174,8 @@ class WorkItemHttpIT {
     }
 
     private void cleanUp() {
+        jdbc.sql("DELETE FROM yumpoo.activity_event WHERE company_id=:id").param("id", COMPANY_ID).update();
+        jdbc.sql("DELETE FROM yumpoo.work_item_cell_activity WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.attachment_scan_task WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.attachment WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.attachment_quota_usage WHERE company_id=:id").param("id", COMPANY_ID).update();
