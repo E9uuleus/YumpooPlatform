@@ -79,10 +79,12 @@ public final class TimeTrackingModels {
     public record TimerCandidate(UUID workItemId, UUID projectId, String projectName, String itemNo,
             String title, String contentName, String contentCode, String contentColorToken, String statusCategory,
             String statusCode, String statusName, String statusColorToken, boolean completed,
-            boolean assignedToMe, Instant lastTrackedAt, long ownDurationMs) {
+            boolean assignedToMe, Instant lastTrackedAt, long ownDurationMs,
+            UUID parentWorkItemId, String parentTitle, boolean parentCompleted) {
         public TimerCandidate withProjectName(String name) {
             return new TimerCandidate(workItemId, projectId, name, itemNo, title, contentName, contentCode, contentColorToken,
-                    statusCategory, statusCode, statusName, statusColorToken, completed, assignedToMe, lastTrackedAt, ownDurationMs);
+                    statusCategory, statusCode, statusName, statusColorToken, completed, assignedToMe, lastTrackedAt, ownDurationMs,
+                    parentWorkItemId, parentTitle, parentCompleted);
         }
     }
 

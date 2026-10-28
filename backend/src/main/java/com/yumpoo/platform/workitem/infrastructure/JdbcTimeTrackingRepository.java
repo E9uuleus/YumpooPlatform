@@ -37,7 +37,8 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
                 rs.getString("content_name"), rs.getString("content_code"), rs.getString("content_color_token"),
                 rs.getString("status_category"), rs.getString("status_code"), rs.getString("status_name"),
                 rs.getString("status_color_token"), rs.getBoolean("completed"), rs.getBoolean("assigned"),
-                instant(rs,"last_tracked_at"), rs.getLong("duration"))).list();
+                instant(rs,"last_tracked_at"), rs.getLong("duration"),
+                rs.getObject("parent_id",UUID.class), rs.getString("parent_title"), rs.getBoolean("parent_completed"))).list();
     }
 
     public List<CandidateProjectCount> candidateProjectCounts(UUID companyId, UUID userId, Collection<UUID> projectIds,
@@ -76,9 +77,14 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
               c.color_token AS content_color_token, w.status_category, w.status_code,
               COALESCE(label.display_name,w.status_code) AS status_name, COALESCE(label.color_token,'GRAY') AS status_color_token,
               COALESCE(s.completed_status_codes @> jsonb_build_array(w.status_code), w.status_category IN ('DONE','CANCELED')) AS completed,
-              EXISTS (SELECT 1 FROM yumpoo.work_item_assignee a WHERE a.work_item_id=w.id AND a.user_id=:user) AS assigned, own.last_tracked_at, COALESCE(own.duration,0) AS duration
+              EXISTS (SELECT 1 FROM yumpoo.work_item_assignee a WHERE a.work_item_id=w.id AND a.user_id=:user) AS assigned, own.last_tracked_at, COALESCE(own.duration,0) AS duration,
+              parent.id AS parent_id, parent.title AS parent_title,
+              COALESCE(s.completed_status_codes @> jsonb_build_array(parent.status_code), parent.status_category IN ('DONE','CANCELED')) AS parent_completed
             FROM yumpoo.work_item w JOIN yumpoo.content c ON c.id=w.content_id AND c.company_id=w.company_id
             LEFT JOIN own ON own.work_item_id=w.id
+            LEFT JOIN yumpoo.work_item_relation rel ON rel.company_id=w.company_id AND rel.right_work_item_id=w.id
+              AND rel.relation_type='PARENT_CHILD' AND rel.deleted_at IS NULL
+            LEFT JOIN yumpoo.work_item parent ON parent.id=rel.left_work_item_id AND parent.company_id=w.company_id AND parent.deleted_at IS NULL
             LEFT JOIN yumpoo.project_work_item_status_label label
               ON label.company_id=w.company_id AND label.project_id=w.project_id AND label.status_code=w.status_code
             LEFT JOIN yumpoo.work_item_table_settings s ON s.company_id=w.company_id AND s.project_id=w.project_id AND s.user_id=:user
