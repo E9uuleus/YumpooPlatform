@@ -8,7 +8,8 @@ import { myWorkApi } from '../../api/client'
 import { problemMessage, toApiProblem } from '../../api/problems'
 import { useSession } from '../../composables/useSession'
 import { onTimeTrackingChanged, useTimeTracker } from '../../composables/useTimeTracker'
-import { buildTimesheet, dayBreakdown, hoursMinutes, shortHours, timesheetColors, todayIn, toApiDate, weekday } from '../team/teamDashboardModel'
+import { buildTimesheet, dayBreakdown, hoursMinutes, migratedDays, shortHours, timesheetColors, todayIn, toApiDate, weekday } from '../team/teamDashboardModel'
+import { MIGRATED_BADGE, MIGRATED_LEGEND } from '../timer/timeCategories'
 import DayBreakdownPopover from '../team/DayBreakdownPopover.vue'
 import { useTweenedNumber } from '../team/teamMotion'
 import { dayTargetMs, daySegments, monthGrid, monthLabel, monthProjects, monthStats, runningExtraMs, shiftMonth, weekdayLabels,
@@ -34,6 +35,8 @@ const days = computed(() => {
   return totals
 })
 const segments = computed(() => daySegments(row.value))
+const migrated = computed(() => migratedDays(row.value))
+const hasMigrated = computed(() => Object.keys(migrated.value).some(date => date.startsWith(month.value)))
 const colors = computed(() => timesheetColors(sheet.value))
 const legend = computed(() => monthProjects(row.value, month.value))
 const stats = computed(() => monthStats(days.value, month.value))
@@ -185,7 +188,9 @@ defineExpose({ refresh: load, loading, ready })
         </div>
       </div>
       <p class="my-time__note">
-        并行计时按项数平均计入，每日合计为实际时长。
+        并行计时按项数平均计入，每日合计为实际时长。<template v-if="hasMigrated">
+          {{ MIGRATED_LEGEND }}。
+        </template>
       </p>
       <div
         class="my-time__board"
@@ -226,7 +231,7 @@ defineExpose({ refresh: load, loading, ready })
                 }"
                 :style="{ '--d': cell.row + cell.column, '--level': level(cell.date) }"
                 :disabled="cell.future"
-                :aria-label="`${dayLabel(cell.date)} ${shortHours(days[cell.date] ?? 0)} 小时，查看时间线`"
+                :aria-label="`${dayLabel(cell.date)} ${shortHours(days[cell.date] ?? 0)} 小时${migrated[cell.date] ? `，含迁入工时 ${shortHours(migrated[cell.date] ?? 0)} 小时` : ''}，查看时间线`"
                 @mouseenter="previewDay(cell, $event)"
                 @focus="previewDay(cell, $event)"
                 @click="openDay(cell.date)"
@@ -236,6 +241,11 @@ defineExpose({ refresh: load, loading, ready })
                   class="my-time-cell__level"
                 />
                 <span class="my-time-cell__date">{{ cell.day }}</span>
+                <i
+                  v-if="migrated[cell.date]"
+                  class="my-time-cell__migrated"
+                  aria-hidden="true"
+                >{{ MIGRATED_BADGE }}</i>
                 <i
                   v-if="cell.today && running"
                   class="my-time-cell__live"

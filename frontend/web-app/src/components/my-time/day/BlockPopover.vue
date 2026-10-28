@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { ElButton } from 'element-plus'
 import { Close } from '@element-plus/icons-vue'
 import { workItemLabelColorValue } from '../../projects/workItemLabelColors'
+import { isMigratedCategory } from '../../timer/timeCategories'
 import { companyDateTime } from '../../timer/timeFormat'
 import ItemPicker from './ItemPicker.vue'
 import TimeField from './TimeField.vue'
@@ -127,6 +128,12 @@ function save() { if (!problem.value) emit('save', { start: start.value, end: en
       class="block-popover__note"
     >
       正在计时，停止后才能调整时段或归属。
+    </p>
+    <p
+      v-else-if="isMigratedCategory(block.timeCategory)"
+      class="block-popover__note"
+    >
+      迁入工时由管理员按日迁入，排出的时段不代表实际工作时间，成员不能修改。
     </p>
     <p
       v-else-if="!block.canEdit"

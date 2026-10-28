@@ -1,7 +1,7 @@
 import { WorkItemLabelColorToken, type TeamTimesheet } from '@yumpoo/api-client'
 import { formatDateOnly } from '../../design-system/dates'
 import { workItemLabelColorValue } from '../projects/workItemLabelColors'
-import { categoryKey, NON_PROJECT_COLOR, NON_PROJECT_KEY, NON_PROJECT_LABEL, timeCategory } from '../timer/timeCategories'
+import { categoryKey, categoryOf, isMigratedCategory, NON_PROJECT_COLOR, NON_PROJECT_KEY, NON_PROJECT_LABEL, timeCategory } from '../timer/timeCategories'
 
 export type PeriodKind = 'WEEK' | 'MONTH' | 'QUARTER'
 /** Inclusive company-calendar dates as `YYYY-MM-DD`. */
@@ -108,7 +108,8 @@ export function hoursMinutes(ms: number): string {
 /** `subjectKey` is the work item id or a category key; unlinked category rows group under the 未关联项目 pseudo project. */
 export interface TimesheetItemRow { key: string; subjectKey: string; projectId: string; projectName: string; itemNo: string; title: string; label: string; totalMs: number; days: Record<string, number> }
 export interface TimesheetRow { key: string; userId: string; name: string; active: boolean; totalMs: number; days: Record<string, number>; children: TimesheetItemRow[] }
-export interface DayItem { key: string; itemNo: string; title: string; ms: number }
+/** `migrated` marks time imported per day from the old platform; its clock slots are arranged, not worked. */
+export interface DayItem { key: string; itemNo: string; title: string; ms: number; migrated: boolean }
 
 export type TimesheetModel = ReturnType<typeof buildTimesheet>
 /** Keeps only `days` (the period's non-workdays) and recomputes every total from what remains. */
@@ -158,6 +159,18 @@ export function buildTimesheet(sheet: TeamTimesheet): { rows: TimesheetRow[]; da
   return { rows: sorted, dayTotals, totalMs }
 }
 
+export const isMigratedSubject = (subjectKey: string): boolean => isMigratedCategory(categoryOf(subjectKey)?.code)
+
+/** Per day, the milliseconds of a member's time that came from a migrated import. */
+export function migratedDays(row: TimesheetRow | undefined): Record<string, number> {
+  const days: Record<string, number> = {}
+  for (const item of row?.children ?? []) {
+    if (!isMigratedSubject(item.subjectKey)) continue
+    for (const [day, ms] of Object.entries(item.days)) days[day] = (days[day] ?? 0) + ms
+  }
+  return days
+}
+
 /** One member's work on one day, grouped by project, larger totals first. */
 export function dayBreakdown(row: TimesheetRow, day: string): DayProject[] {
   const projects = new Map<string, DayProject>()
@@ -167,7 +180,7 @@ export function dayBreakdown(row: TimesheetRow, day: string): DayProject[] {
     let project = projects.get(item.projectId)
     if (!project) projects.set(item.projectId, project = { projectId: item.projectId, projectName: item.projectName || '未知项目', totalMs: 0, items: [] })
     project.totalMs += ms
-    project.items.push({ key: item.key, itemNo: item.itemNo, title: item.title, ms })
+    project.items.push({ key: item.key, itemNo: item.itemNo, title: item.title, ms, migrated: isMigratedSubject(item.subjectKey) })
   }
   const list = [...projects.values()].sort((a, b) => b.totalMs - a.totalMs || a.projectName.localeCompare(b.projectName, 'zh-CN'))
   list.forEach(project => project.items.sort((a, b) => b.ms - a.ms))

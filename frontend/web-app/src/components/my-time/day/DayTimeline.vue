@@ -7,7 +7,7 @@ import { workItemLabelColorValue } from '../../projects/workItemLabelColors'
 import { blockEnd, clampMove, clampResize, durationLabel, FINE_SNAP_MS, formatClock, freeInterval, gaps, HOUR, MIN_BLOCK_MS, MIN_VISUAL_MS, MINUTE,
   PX_PER_MINUTE, rangeInGap, snap, snapDown, SNAP_MS, type BlockLayout, type BlockShare, type DayBlock, type Range } from './dayModel'
 import { draggedItem, type ShelfItem } from './shelfDrag'
-import { timeCategory } from '../../timer/timeCategories'
+import { isMigratedCategory, MIGRATED_TIME_NOTE, timeCategory } from '../../timer/timeCategories'
 
 /** Space kept around every card, so stacked and side-by-side records read as separate cards. */
 const GAP_Y = 2, GAP_X = 4
@@ -63,7 +63,7 @@ const drafts = ref(new Map<string, Range>())
 watch(() => props.blocks, () => { if (!drag.value) drafts.value = new Map() })
 
 interface BlockView { block: DayBlock; range: Range; style: Record<string, string>; tier: 'full' | 'medium' | 'compact'; label: string
-  duration: string; split: number; splitTitle: string; continuesBefore: boolean; continuesAfter: boolean
+  duration: string; split: number; splitTitle: string; continuesBefore: boolean; continuesAfter: boolean; migrated: boolean
   movable: boolean; startHandle: boolean; endHandle: boolean }
 const views = computed<BlockView[]>(() => props.blocks.map(original => {
   const draft = drafts.value.get(original.id)
@@ -77,11 +77,12 @@ const views = computed<BlockView[]>(() => props.blocks.map(original => {
   const split = share.maxParallel
   const splitTitle = split > 1 ? `与其他 ${split - 1} 项并行，当天计入 ${durationLabel(share.allocatedMs)}（实际 ${duration}）` : ''
   return {
-    block: original, range, duration, split, splitTitle,
+    block: original, range, duration, split, splitTitle, migrated: isMigratedCategory(block.timeCategory),
     movable: editable && startInDay && endInDay, startHandle: editable && startInDay, endHandle: editable && endInDay,
     tier: height >= 64 ? 'full' : height >= 45 ? 'medium' : 'compact',
     continuesBefore: block.start < props.bounds.start, continuesAfter: end > props.bounds.end,
-    label: [`${clock(block.start)}–${block.end === null ? '计时中' : clock(end)}`, block.title, block.projectName ?? '', duration, splitTitle]
+    label: [`${clock(block.start)}–${block.end === null ? '计时中' : clock(end)}`, block.title, block.projectName ?? '', duration, splitTitle,
+      isMigratedCategory(block.timeCategory) ? MIGRATED_TIME_NOTE : '']
       .filter(Boolean).join('，'),
     style: { ...box(range), left: `calc(${place.lane / place.lanes * 100}% + ${GAP_X}px)`, width: `calc(${100 / place.lanes}% - ${2 * GAP_X}px)`,
       '--day-block-color': color(block.colorToken) },
@@ -350,7 +351,7 @@ const tip = computed(() => {
   const anchor = tipId.value ? blockElements.get(tipId.value) : undefined
   if (!view || !anchor) return undefined
   const meta = [`${clock(view.range.start)}–${view.block.end === null ? '计时中' : clock(view.range.end)}`, view.block.projectName,
-    view.duration, view.split > 1 ? `与其他 ${view.split - 1} 项并行` : ''].filter(Boolean).join(' · ')
+    view.duration, view.split > 1 ? `与其他 ${view.split - 1} 项并行` : '', view.migrated ? MIGRATED_TIME_NOTE : ''].filter(Boolean).join(' · ')
   return { title: view.block.title, meta, anchor }
 })
 /** The last anchor stays after hiding, so the tooltip fades out where it was instead of jumping. */
@@ -496,6 +497,7 @@ defineExpose({ scrollToWorkday, pendingEl, discardDraft })
           :class="[`is-${view.tier}`, {
             'is-running': view.block.end === null,
             'is-locked': !view.block.canEdit,
+            'is-migrated': view.migrated,
             'is-selected': view.block.id === selectedId,
             'is-dragging': drag?.moved && drag.block.id === view.block.id,
             'is-fresh': fresh?.has(view.block.id),
@@ -545,7 +547,7 @@ defineExpose({ scrollToWorkday, pendingEl, discardDraft })
             v-if="view.tier !== 'compact'"
             class="day-block__meta"
           >
-            <span class="day-block__project">{{ view.block.projectName ?? '' }}</span>
+            <span class="day-block__project">{{ view.block.projectName ?? (view.migrated ? MIGRATED_TIME_NOTE : '') }}</span>
             <span class="day-block__duration">{{ view.block.end === null ? `计时中 · ${view.duration}` : view.duration }}</span>
           </span>
         </button>
@@ -672,6 +674,7 @@ defineExpose({ scrollToWorkday, pendingEl, discardDraft })
 .day-block.is-compact{justify-content:center;padding-block:0}
 .day-block.is-running{border-bottom-style:dashed;background:color-mix(in srgb,var(--day-block-color) 18%,var(--yp-bg-surface))}
 .day-block.is-locked{cursor:default;background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--day-block-color) 10%,var(--yp-bg-surface)) 0 6px,color-mix(in srgb,var(--day-block-color) 16%,var(--yp-bg-surface)) 6px 12px)}
+.day-block.is-migrated{border-style:dashed;background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--day-block-color) 6%,var(--yp-bg-surface)) 0 5px,color-mix(in srgb,var(--day-block-color) 22%,var(--yp-bg-surface)) 5px 7px)}
 .day-block.continues-before{border-top-style:dashed;border-top-left-radius:0;border-top-right-radius:0}
 .day-block.continues-after{border-bottom-style:dashed;border-bottom-left-radius:0;border-bottom-right-radius:0}
 .day-block__handle{position:absolute;left:0;right:0;z-index:1;height:min(8px,33.333%);pointer-events:none}

@@ -109,13 +109,13 @@ export const TOURS: Record<TourId, TourDefinition> = {
     ],
   },
   team: {
-    version: 1,
+    version: 2,
     steps: [
       { target: at('context-nav'), placement: 'right-start', title: '团队视图', description: '在成员工时、加班统计和成员当前任务之间切换。',
         fallback: { target: at('context-nav-expand'), placement: 'right-start', description: '点这里展开团队视图菜单，在成员工时、加班统计和成员当前任务之间切换。' } },
       { target: at('team-period'), placement: 'bottom-start', title: '统计周期', description: '按周、月或季度查看，用左右箭头切换周期。' },
       { target: at('team-grid'), placement: 'top', title: '成员工时表', description: '每行一位成员、每列一天，口径与“我的工时”一致；勾选成员后可以只导出所选。' },
-      { target: at('team-export'), placement: 'bottom-end', title: '筛选与导出', description: '隐藏没有工时的成员，或把当前表格导出为 Excel。' },
+      { target: at('team-export'), placement: 'bottom-end', title: '筛选、导出与迁入工时', description: '隐藏没有工时的成员，把当前表格导出为 Excel，或点“迁入工时”导入原平台的历史工时。', since: 2 },
     ],
   },
   'work-calendar': {
