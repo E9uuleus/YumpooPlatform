@@ -12049,6 +12049,18 @@ components:
           type: integer
           format: int64
           minimum: 0
+        parentWorkItemId:
+          type: string
+          format: uuid
+          nullable: true
+          description: 父工作项 ID；顶层工作项为 null。
+        parentTitle:
+          type: string
+          nullable: true
+          description: 父工作项标题，父项不在当前列表中时用于显示父项标题行。
+        parentCompleted:
+          type: boolean
+          description: 父工作项按本人对该项目的完成定义是否已完成；没有父项时为 false。
     RecentTimeTrackingItem:
       type: object
       additionalProperties: false
@@ -13396,6 +13408,25 @@ components:
           type: string
           maxLength: 500
           nullable: true
+        initialColors:
+          $ref: "#/components/schemas/ProjectInitialColors"
+    ProjectInitialColors:
+      type: object
+      additionalProperties: false
+      description: 创建时覆盖默认初始结构的颜色。键为默认结构中的类别、状态或优先级代码，未列出的代码保持默认颜色。
+      properties:
+        categories:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/WorkItemLabelColorToken"
+        statuses:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/WorkItemLabelColorToken"
+        priorities:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/WorkItemLabelColorToken"
     ProjectSummary:
       type: object
       additionalProperties: false

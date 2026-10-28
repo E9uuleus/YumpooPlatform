@@ -62,6 +62,8 @@ export function useWorkItemGrouping(options: Options) {
   const order = ref<GroupOrder>('DEFAULT')
   const showEmpty = ref(false)
   const collapsed = ref(new Set<string>())
+  /** Saved-collapsed groups opened for this visit only, such as to show an item just created; never saved. */
+  const revealed = ref(new Set<string>())
   const colors: Record<string, string> = {}
   const facets = ref<ProjectWorkItemFilterOption[]>([])
   const countsReady = ref(false)
@@ -79,7 +81,7 @@ export function useWorkItemGrouping(options: Options) {
   const active = computed(() => Boolean(field.value))
   const keyOf = (item: ProjectWorkItemListItem) => field.value ? itemGroupKey(item, field.value, options.today()) : ''
   const collapseKey = (key: string) => `${field.value}:${key}`
-  const isCollapsed = (key: string) => collapsed.value.has(collapseKey(key))
+  const isCollapsed = (key: string) => collapsed.value.has(collapseKey(key)) && !revealed.value.has(collapseKey(key))
   function page(key: string): GroupPage {
     return pages[key] ??= { items: [], nextCursor: null, loaded: false, loading: false, error: undefined }
   }
@@ -235,9 +237,19 @@ export function useWorkItemGrouping(options: Options) {
     page(key).items = items
     syncItems()
   }
+  function reveal(key: string): void {
+    revealed.value = new Set(revealed.value).add(collapseKey(key))
+  }
   function toggle(key: string): void {
-    const next = new Set(collapsed.value)
     const value = collapseKey(key)
+    if (revealed.value.has(value)) {
+      // Closing a revealed group returns it to the saved collapsed state, so nothing needs saving.
+      const next = new Set(revealed.value)
+      next.delete(value)
+      revealed.value = next
+      return
+    }
+    const next = new Set(collapsed.value)
     if (next.has(value)) next.delete(value); else next.add(value)
     collapsed.value = next
     persist()
@@ -296,7 +308,7 @@ export function useWorkItemGrouping(options: Options) {
   onBeforeUnmount(() => { stopped = true; stop() })
   const changed = async () => { await nextTick(); await refresh() }
   return { active, field, order, showEmpty, collapsed, groups, countsReady, loading, error,
-    page, keyOf, isCollapsed, toggle, setField, refresh, load, stop, changed, edgeItems, replaceOrder }
+    page, keyOf, isCollapsed, reveal, toggle, setField, refresh, load, stop, changed, edgeItems, replaceOrder }
 }
 
 export interface WorkItemGroupDisplayRow {

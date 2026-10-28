@@ -386,6 +386,18 @@ components:
           type: integer
           format: int64
           minimum: 0
+        parentWorkItemId:
+          type: string
+          format: uuid
+          nullable: true
+          description: 父工作项 ID；顶层工作项为 null。
+        parentTitle:
+          type: string
+          nullable: true
+          description: 父工作项标题，父项不在当前列表中时用于显示父项标题行。
+        parentCompleted:
+          type: boolean
+          description: 父工作项按本人对该项目的完成定义是否已完成；没有父项时为 false。
     RecentTimeTrackingItem:
       type: object
       additionalProperties: false

@@ -45,7 +45,7 @@ export const TOURS: Record<TourId, TourDefinition> = {
       { target: at('project-title'), placement: 'bottom-start', title: '项目信息', description: '点击项目名查看负责人、创建时间，并设置本项目的通知提醒。' },
       { target: at('project-sections'), placement: 'bottom-end', title: '项目分区', description: '在工作项、统计、成员、动态和设置之间切换。', since: 2 },
       { target: at('work-item-views'), placement: 'bottom-start', title: '表格与看板', description: '表格适合批量编辑；在看板中拖动卡片即可推进状态。' },
-      { target: at('work-item-toolbar'), placement: 'bottom-start', title: '工具栏', description: '搜索、按处理人或条件筛选、排序、隐藏列和分组；打开“隐没已完成”可淡化已完成的工作项。这些设置只影响你自己的视图。', since: 2 },
+      { target: at('work-item-toolbar'), placement: 'bottom-start', title: '工具栏', description: '「新增工作项」在表格顶部创建一条并直接改名；搜索、按处理人或条件筛选、排序、隐藏列和分组，打开“隐没已完成”可淡化已完成的工作项，这些视图设置只影响你自己。', since: 2 },
       { target: at('work-item-table'), placement: 'top', title: '直接在表格里编辑', description: '点击状态、处理人、截止日期等单元格即可修改；勾选多行后，底部会出现批量操作栏。' },
       { target: at('work-item-quick-add'), placement: 'top-start', title: '快速添加', description: '输入名称按 Enter 创建，Shift+Enter 创建后继续添加下一条；分组时每组底部都可以添加。', since: 2 },
       { target: at('work-item-discussion'), placement: 'right', title: '讨论与详情', description: '打开工作项详情：编写描述、讨论并 @同事、上传附件、查看活动记录。' },
@@ -56,7 +56,7 @@ export const TOURS: Record<TourId, TourDefinition> = {
   workspace: {
     version: 1,
     steps: [
-      { target: at('context-nav'), placement: 'right-start', title: '工作台导航', description: '仪表板、我的工时、管理项目、归档项目，以及你参与的项目列表；顶部的搜索按钮可以快速查找项目。',
+      { target: at('context-nav'), placement: 'right-start', title: '工作台导航', description: '仪表板、我的工时、管理项目、归档项目，以及你参与的项目列表；「项目」右侧的 + 可以直接创建项目，顶部的搜索按钮可以快速查找项目。',
         fallback: { target: at('context-nav-expand'), placement: 'right-start', description: '点这里展开工作台菜单：仪表板、我的工时、管理项目、归档项目和你参与的项目都在里面。' } },
       { target: at('project-catalog-tabs'), placement: 'bottom-start', title: '最近与内容', description: '“最近”是你最近打开的项目，可置顶常用项目；“内容”是全部项目目录。' },
       { target: at('project-filter'), placement: 'bottom', title: '搜索与筛选', description: '按名称或编码搜索，按最后修改时间、负责人和你的角色筛选。' },

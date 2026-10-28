@@ -10,6 +10,10 @@ import { shortDuration, type DateChoice, type QuickItemStatus } from './quickTim
 
 defineProps<{
   item: TimerCandidate
+  /** Sits under its parent: indented and joined to it by the branch line. */
+  child: boolean
+  /** More siblings follow, so the line runs on past this row. */
+  continued: boolean
   todayMs: number
   expanded: boolean
   /** Completed while "hide completed" is on: shown only in search results, struck through and faded. */
@@ -45,7 +49,7 @@ const rangeEnd = defineModel<number>('rangeEnd', { required: true })
 <template>
   <div
     class="quick-item"
-    :class="{ 'is-expanded': expanded, 'is-flashing': flashing, 'is-completed': faded }"
+    :class="{ 'is-expanded': expanded, 'is-flashing': flashing, 'is-completed': faded, 'is-child': child, 'is-continued': child && continued }"
   >
     <div class="quick-item__inner">
       <div
@@ -125,7 +129,7 @@ const rangeEnd = defineModel<number>('rangeEnd', { required: true })
 .quick-row__bar{width:4px;align-self:stretch;border-radius:2px;flex-shrink:0;transition:opacity .2s}
 .quick-row__text{flex:1;min-width:0}
 /* The title element belongs to YpOverflowText, so it is reached through :deep(). */
-.quick-row__text :deep(.quick-row__title){display:block;overflow:hidden;font-weight:500;text-overflow:ellipsis;white-space:nowrap;transition:color .2s}
+.quick-row__text :deep(.quick-row__title){display:block;overflow:hidden;font-weight:500;line-height:20px;text-overflow:ellipsis;white-space:nowrap;transition:color .2s}
 .quick-row__meta{display:flex;align-items:center;gap:6px;margin-top:3px;color:var(--yp-text-secondary);font-size:11.5px}
 .quick-row__status{display:inline-flex;transition:opacity .2s}
 .quick-row__today{font-variant-numeric:tabular-nums}
@@ -136,4 +140,8 @@ const rangeEnd = defineModel<number>('rangeEnd', { required: true })
 .is-completed .quick-row__bar,.is-completed .quick-row__status{opacity:.45}
 .quick-composer-wrap{display:grid;grid-template-rows:0fr;transition:grid-template-rows .26s var(--yp-timer-ease)}
 .is-expanded .quick-composer-wrap{grid-template-rows:1fr}
+/* Branch from the parent's colour bar (x 8px, bottom 7px above this row) to this row's title line. */
+.quick-item.is-child{position:relative;margin-left:18px}
+.quick-item.is-child::before{position:absolute;top:-7px;left:-10px;width:15px;height:24px;box-sizing:border-box;border-bottom:1.5px solid var(--yp-border-strong);border-left:1.5px solid var(--yp-border-strong);border-bottom-left-radius:8px;content:'';pointer-events:none}
+.quick-item.is-continued::after{position:absolute;top:-7px;bottom:0;left:-10px;border-left:1.5px solid var(--yp-border-strong);content:'';pointer-events:none}
 </style>

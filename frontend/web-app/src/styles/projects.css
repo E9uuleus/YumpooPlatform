@@ -187,6 +187,39 @@
   font-weight: 650;
 }
 
+.project-navigation__head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.project-navigation__head .project-navigation__toggle {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-shell .global-navigation .project-navigation__add {
+  display: grid;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  place-items: center;
+  padding: 0;
+  border-radius: var(--yp-radius-sm);
+  color: var(--yp-text-muted);
+}
+
+.app-shell .global-navigation .project-navigation__add:hover {
+  color: var(--yp-action-primary);
+  background: var(--yp-bg-hover);
+}
+
+.app-shell .global-navigation .project-navigation__add:focus-visible {
+  outline: 2px solid var(--yp-focus-ring);
+  outline-offset: 1px;
+}
+
 .project-navigation__chevron {
   flex: 0 0 12px;
   transition: transform var(--yp-motion-fast) var(--yp-ease-standard);
