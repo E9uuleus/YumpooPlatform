@@ -42,12 +42,13 @@ components:
           format: date-time
     TimeCategory:
       type: string
-      description: 固定工时分类：出差、学习、商务、会议；可选关联一个项目，但不关联工作项。
+      description: 固定工时分类：出差、学习、商务、会议，以及仅由系统写入、成员只读的迁入工时；可选关联一个项目，但不关联工作项。
       enum:
         - BUSINESS_TRIP
         - LEARNING
         - BUSINESS
         - MEETING
+        - MIGRATED
     TimeCategorySubject:
       type: object
       additionalProperties: false

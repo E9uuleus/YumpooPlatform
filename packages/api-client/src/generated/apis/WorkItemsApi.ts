@@ -44,6 +44,8 @@ import type {
   WorkItemDescriptionPatchRequest,
   WorkItemDetail,
   WorkItemDueDatePatchRequest,
+  WorkItemImportRequest,
+  WorkItemImportResult,
   WorkItemLabelCatalog,
   WorkItemLabelCreateRequest,
   WorkItemLabelUpdateRequest,
@@ -126,6 +128,10 @@ import {
     WorkItemDetailToJSON,
     WorkItemDueDatePatchRequestFromJSON,
     WorkItemDueDatePatchRequestToJSON,
+    WorkItemImportRequestFromJSON,
+    WorkItemImportRequestToJSON,
+    WorkItemImportResultFromJSON,
+    WorkItemImportResultToJSON,
     WorkItemLabelCatalogFromJSON,
     WorkItemLabelCatalogToJSON,
     WorkItemLabelCreateRequestFromJSON,
@@ -302,6 +308,13 @@ export interface GetWorkItemRequest {
 
 export interface GetWorkItemConnectionRequest {
     connectionId: string;
+}
+
+export interface ImportWorkItemsRequest {
+    projectId: string;
+    xXSRFTOKEN: string;
+    idempotencyKey: string;
+    workItemImportRequest: WorkItemImportRequest;
 }
 
 export interface LinkWorkItemConnectionRequest {
@@ -1912,6 +1925,77 @@ export class WorkItemsApi extends runtime.BaseAPI {
      */
     async getWorkItemConnection(requestParameters: GetWorkItemConnectionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemConnection> {
         const response = await this.getWorkItemConnectionRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 仅项目内可创建工作项的成员可用，项目已归档或已结束时与新建工作项同样拒绝。每行按 title（trim 后）匹配本项目内未删除、未归档的工作项，duplicateMode 决定全部新增、跳过已有或更新已有；UPDATE 只覆盖 fields 列出的字段，值为 null 表示清空。dryRun 为 true 时只返回规划结果、不写入；为 false 时在单事务内提交，报错行跳过、其余行照常写入。父项按标题在本次文件与项目已有项中查找，并压平到根祖先。导入不发工作项事件与通知，整次只写一条安全审计。不处理工时。
+     * 批量导入或预览导入工作项
+     */
+    async importWorkItemsRaw(requestParameters: ImportWorkItemsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemImportResult>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling importWorkItems().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling importWorkItems().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling importWorkItems().'
+            );
+        }
+
+        if (requestParameters['workItemImportRequest'] == null) {
+            throw new runtime.RequiredError(
+                'workItemImportRequest',
+                'Required parameter "workItemImportRequest" was null or undefined when calling importWorkItems().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/projects/{projectId}/work-item-imports`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: WorkItemImportRequestToJSON(requestParameters['workItemImportRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemImportResultFromJSON(jsonValue));
+    }
+
+    /**
+     * 仅项目内可创建工作项的成员可用，项目已归档或已结束时与新建工作项同样拒绝。每行按 title（trim 后）匹配本项目内未删除、未归档的工作项，duplicateMode 决定全部新增、跳过已有或更新已有；UPDATE 只覆盖 fields 列出的字段，值为 null 表示清空。dryRun 为 true 时只返回规划结果、不写入；为 false 时在单事务内提交，报错行跳过、其余行照常写入。父项按标题在本次文件与项目已有项中查找，并压平到根祖先。导入不发工作项事件与通知，整次只写一条安全审计。不处理工时。
+     * 批量导入或预览导入工作项
+     */
+    async importWorkItems(requestParameters: ImportWorkItemsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemImportResult> {
+        const response = await this.importWorkItemsRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

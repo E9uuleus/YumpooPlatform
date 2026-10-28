@@ -289,6 +289,35 @@ function applyStrictTypeScriptCompatibility(sourceRoot) {
     fs.writeFileSync(modelPath, source, 'utf8')
   }
 
+  const importRowPath = path.join(sourceRoot, 'models', 'WorkItemImportRow.ts')
+  let importRow = normalizeText(fs.readFileSync(importRowPath, 'utf8'))
+    .replaceAll('Set<string>', 'Array<string>')
+    .replaceAll("new Set(json['assigneeUserIds'])", "json['assigneeUserIds'] as Array<string>")
+    .replaceAll("Array.from(value['assigneeUserIds'] as Set<any>)", "value['assigneeUserIds']")
+  importRow = replaceExactlyOnce(importRow,
+    "        'dueDate': json['dueDate'] == null ? undefined : (new Date(json['dueDate'])),",
+    "        ...(json['dueDate'] === undefined ? {} : { 'dueDate': json['dueDate'] === null ? null : new Date(json['dueDate']) }),",
+    'WorkItemImportRow 可选自然日 dueDate 精确属性兼容')
+  fs.writeFileSync(importRowPath, importRow, 'utf8')
+
+  const importRequestPath = path.join(sourceRoot, 'models', 'WorkItemImportRequest.ts')
+  fs.writeFileSync(importRequestPath, normalizeText(fs.readFileSync(importRequestPath, 'utf8'))
+    .replaceAll('Set<WorkItemImportField>', 'Array<WorkItemImportField>')
+    .replaceAll("(new Set((json['fields'] as Array<any>).map(WorkItemImportFieldFromJSON)))",
+      "((json['fields'] as Array<any>).map(WorkItemImportFieldFromJSON))")
+    .replaceAll("(Array.from(value['fields'] as Set<any>).map(WorkItemImportFieldToJSON))",
+      "((value['fields'] as Array<any>).map(WorkItemImportFieldToJSON))"), 'utf8')
+
+  const migratedDayPath = path.join(sourceRoot, 'models', 'MigratedTimeImportDay.ts')
+  let migratedDay = normalizeText(fs.readFileSync(migratedDayPath, 'utf8'))
+  for (const field of ['startedAt', 'stoppedAt']) {
+    migratedDay = replaceExactlyOnce(migratedDay,
+      `        '${field}': json['${field}'] == null ? undefined : (new Date(json['${field}'])),`,
+      `        ...(json['${field}'] == null ? {} : { '${field}': new Date(json['${field}']) }),`,
+      `MigratedTimeImportDay 可选时间 ${field} 精确属性兼容`)
+  }
+  fs.writeFileSync(migratedDayPath, migratedDay, 'utf8')
+
   const operationsSeriesPath = path.join(sourceRoot, 'models', 'OperationsMetricSeries.ts')
   let operationsSeries = normalizeText(fs.readFileSync(operationsSeriesPath, 'utf8'))
   for (const field of ['timestamps', 'restarts']) {

@@ -1,0 +1,169 @@
+components:
+  schemas:
+    WorkItemImportDuplicateMode:
+      type: string
+      description: 标题与项目内已有工作项相同时的处理：全部新增、跳过已有、更新已有。
+      enum:
+        - CREATE
+        - SKIP
+        - UPDATE
+    WorkItemImportField:
+      type: string
+      description: 可选的已映射字段；标题总是映射，不在其中。
+      enum:
+        - CONTENT
+        - STATUS
+        - PRIORITY
+        - ASSIGNEES
+        - DUE_DATE
+        - PARENT
+        - NOTES
+    WorkItemImportRow:
+      type: object
+      additionalProperties: false
+      required:
+        - rowNumber
+        - title
+        - contentId
+        - statusCode
+        - assigneeUserIds
+      properties:
+        rowNumber:
+          type: integer
+          format: int32
+          minimum: 1
+          description: 表格中的行号，用于结果回显。
+        title:
+          type: string
+          maxLength: 1000
+          description: 原样传入，服务端 trim 后要求 1 到 300 字符。
+        contentId:
+          $ref: "#/components/schemas/Uuid"
+        statusCode:
+          type: string
+          maxLength: 32
+        priority:
+          type: string
+          maxLength: 32
+          nullable: true
+        assigneeUserIds:
+          type: array
+          maxItems: 20
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        dueDate:
+          type: string
+          format: date
+          nullable: true
+        parentTitle:
+          type: string
+          maxLength: 1000
+          nullable: true
+        notes:
+          type: string
+          maxLength: 16384
+          nullable: true
+    WorkItemImportRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - dryRun
+        - duplicateMode
+        - fields
+        - rows
+      properties:
+        dryRun:
+          type: boolean
+        duplicateMode:
+          $ref: "#/components/schemas/WorkItemImportDuplicateMode"
+        fields:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/WorkItemImportField"
+          description: 已映射的可选字段；UPDATE 只覆盖这些字段，值为 null 或空表示清空。
+        rows:
+          type: array
+          minItems: 1
+          maxItems: 2000
+          items:
+            $ref: "#/components/schemas/WorkItemImportRow"
+    WorkItemImportOutcome:
+      type: string
+      enum:
+        - CREATE
+        - UPDATE
+        - SKIP
+        - ERROR
+    WorkItemImportIssue:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - detail
+      properties:
+        code:
+          type: string
+          minLength: 1
+          description: 稳定问题代码，例如 TITLE_INVALID、DUPLICATE_EXISTS、MATCH_AMBIGUOUS、PARENT_FLATTENED；客户端映射为本地化文案。
+        detail:
+          type: string
+          nullable: true
+    WorkItemImportRowResult:
+      type: object
+      additionalProperties: false
+      required:
+        - rowNumber
+        - outcome
+        - issues
+      properties:
+        rowNumber:
+          type: integer
+          format: int32
+          minimum: 1
+        outcome:
+          $ref: "#/components/schemas/WorkItemImportOutcome"
+        workItemId:
+          $ref: "#/components/schemas/Uuid"
+        itemNo:
+          type: string
+          minLength: 1
+        issues:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkItemImportIssue"
+    WorkItemImportResult:
+      type: object
+      additionalProperties: false
+      required:
+        - dryRun
+        - createdCount
+        - updatedCount
+        - skippedCount
+        - failedCount
+        - rows
+      properties:
+        dryRun:
+          type: boolean
+        createdCount:
+          type: integer
+          format: int32
+          minimum: 0
+        updatedCount:
+          type: integer
+          format: int32
+          minimum: 0
+        skippedCount:
+          type: integer
+          format: int32
+          minimum: 0
+        failedCount:
+          type: integer
+          format: int32
+          minimum: 0
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkItemImportRowResult"
