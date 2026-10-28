@@ -88,8 +88,9 @@ public class JdbcTeamWorkRepository implements TeamWorkRepository {
     public List<Load> currentLoad(UUID companyId, List<UUID> projectIds, LocalDate today) {
         return jdbc.sql("""
             SELECT a.user_id,
-              COUNT(*) FILTER (WHERE w.status_category='TODO') AS todo,
+              COUNT(*) FILTER (WHERE w.status_category='TODO' AND w.status_code='NOT_STARTED') AS todo,
               COUNT(*) FILTER (WHERE w.status_category='IN_PROGRESS') AS in_progress,
+              COUNT(*) FILTER (WHERE w.status_category='TODO' AND w.status_code<>'NOT_STARTED') AS other,
               COUNT(*) FILTER (WHERE w.due_date < CAST(:today AS date)) AS overdue
             FROM yumpoo.work_item w
             LEFT JOIN yumpoo.work_item_assignee a ON a.company_id=w.company_id AND a.work_item_id=w.id
@@ -97,7 +98,7 @@ public class JdbcTeamWorkRepository implements TeamWorkRepository {
               AND w.status_category IN ('TODO','IN_PROGRESS')
             GROUP BY a.user_id
             """).param("company", companyId).param("projects", projectIds).param("today", today)
-                .query((rs, n) -> new Load(rs.getObject("user_id", UUID.class), rs.getLong("todo"), rs.getLong("in_progress"), rs.getLong("overdue"))).list();
+                .query((rs, n) -> new Load(rs.getObject("user_id", UUID.class), rs.getLong("todo"), rs.getLong("in_progress"), rs.getLong("other"), rs.getLong("overdue"))).list();
     }
 
     public List<Task> currentTasks(UUID companyId, List<UUID> projectIds, UUID userId, LocalDate today, int offset, int limit) {

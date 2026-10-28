@@ -18,7 +18,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   api.getTeamDashboardOptions.mockResolvedValue({ projects: [], members: [], timezone: 'Asia/Shanghai' })
   api.queryTeamTimesheet.mockResolvedValue({ from: new Date(), to: new Date(), timezone: 'Asia/Shanghai', asOf: new Date(), days: [], members: [], workItems: [], entries: [] })
-  api.queryTeamWorkload.mockResolvedValue({ asOf: new Date(), today: new Date(), members: [], unassigned: { todo: 0, inProgress: 0, overdue: 0 } })
+  api.queryTeamWorkload.mockResolvedValue({ asOf: new Date(), today: new Date(), members: [], unassigned: { todo: 0, inProgress: 0, other: 0, overdue: 0 } })
 })
 
 describe('团队视图页面导览', () => {

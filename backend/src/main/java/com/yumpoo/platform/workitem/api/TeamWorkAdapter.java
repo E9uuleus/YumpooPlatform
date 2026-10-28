@@ -31,7 +31,7 @@ public class TeamWorkAdapter implements TeamWorkQuery {
         return categories(service.ownCategoryEntries(actor, from, to, zone, asOf));
     }
     public List<Load> currentLoad(CurrentActor actor, List<UUID> projectIds, LocalDate today) {
-        return service.currentLoad(actor, projectIds, today).stream().map(l -> new Load(l.userId(), l.todo(), l.inProgress(), l.overdue())).toList();
+        return service.currentLoad(actor, projectIds, today).stream().map(l -> new Load(l.userId(), l.todo(), l.inProgress(), l.other(), l.overdue())).toList();
     }
     public TaskPage currentTasks(CurrentActor actor, List<UUID> projectIds, UUID userId, LocalDate today, int offset, int limit) {
         return tasks(service.currentTasks(actor, projectIds, userId, today, offset, limit));

@@ -85,15 +85,15 @@ public class TeamDashboardService {
         Instant asOf = clock.instant();
         LocalDate today = LocalDate.ofInstant(asOf, zone());
         Map<UUID, TeamWorkQuery.Load> loads = new HashMap<>();
-        var unassigned = new WorkloadCounts(0, 0, 0);
+        var unassigned = new WorkloadCounts(0, 0, 0, 0);
         for (var load : work.currentLoad(actor, List.copyOf(scope.keySet()), today)) {
             if (load.userId() != null) loads.put(load.userId(), load);
-            else if (userIds.isEmpty()) unassigned = new WorkloadCounts(load.todo(), load.inProgress(), load.overdue());
+            else if (userIds.isEmpty()) unassigned = new WorkloadCounts(load.todo(), load.inProgress(), load.other(), load.overdue());
         }
         var rows = members(actor.companyId(), userIds, userIds.isEmpty() ? loads.keySet() : Set.of()).stream().map(m -> {
             var load = loads.get(m.userId());
-            return load == null ? new WorkloadMember(m.userId(), m.displayName(), m.active(), 0, 0, 0)
-                    : new WorkloadMember(m.userId(), m.displayName(), m.active(), load.todo(), load.inProgress(), load.overdue());
+            return load == null ? new WorkloadMember(m.userId(), m.displayName(), m.active(), 0, 0, 0, 0)
+                    : new WorkloadMember(m.userId(), m.displayName(), m.active(), load.todo(), load.inProgress(), load.other(), load.overdue());
         }).toList();
         return new Workload(asOf, today, rows, unassigned);
     }

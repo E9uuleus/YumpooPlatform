@@ -35,8 +35,8 @@ public final class TeamDashboardModels {
         }
     }
     public record WorkloadQuery(List<UUID> projectIds, List<UUID> userIds) {}
-    public record WorkloadCounts(long todo, long inProgress, long overdue) {}
-    public record WorkloadMember(UUID userId, String displayName, boolean active, long todo, long inProgress, long overdue) {}
+    public record WorkloadCounts(long todo, long inProgress, long other, long overdue) {}
+    public record WorkloadMember(UUID userId, String displayName, boolean active, long todo, long inProgress, long other, long overdue) {}
     public record Workload(Instant asOf, LocalDate today, List<WorkloadMember> members, WorkloadCounts unassigned) {}
     public record TasksQuery(UUID userId, List<UUID> projectIds, Integer offset, Integer limit) {}
     public record Task(UUID id, UUID projectId, String projectName, String itemNo, String title, String statusCode, String statusName, String statusCategory,

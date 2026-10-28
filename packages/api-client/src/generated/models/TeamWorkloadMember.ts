@@ -49,6 +49,12 @@ export interface TeamWorkloadMember {
      */
     inProgress: number;
     /**
+     * 成员新增的状态（兼容分类 TODO）中的工作项；todo 只统计项目初始状态 NOT_STARTED。
+     * @type {number}
+     * @memberof TeamWorkloadMember
+     */
+    other: number;
+    /**
      *
      * @type {number}
      * @memberof TeamWorkloadMember
@@ -65,6 +71,7 @@ export function instanceOfTeamWorkloadMember(value: object): value is TeamWorklo
     if (!('active' in value) || value['active'] === undefined) return false;
     if (!('todo' in value) || value['todo'] === undefined) return false;
     if (!('inProgress' in value) || value['inProgress'] === undefined) return false;
+    if (!('other' in value) || value['other'] === undefined) return false;
     if (!('overdue' in value) || value['overdue'] === undefined) return false;
     return true;
 }
@@ -84,6 +91,7 @@ export function TeamWorkloadMemberFromJSONTyped(json: any, ignoreDiscriminator: 
         'active': json['active'],
         'todo': json['todo'],
         'inProgress': json['inProgress'],
+        'other': json['other'],
         'overdue': json['overdue'],
     };
 }
@@ -104,6 +112,7 @@ export function TeamWorkloadMemberToJSONTyped(value?: TeamWorkloadMember | null,
         'active': value['active'],
         'todo': value['todo'],
         'inProgress': value['inProgress'],
+        'other': value['other'],
         'overdue': value['overdue'],
     };
 }
