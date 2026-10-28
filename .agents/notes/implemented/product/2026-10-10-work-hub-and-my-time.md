@@ -16,7 +16,7 @@ Status: implemented
   - 自然日切分、跨日按重叠时长及对应并行数拆分、运行中计时统计到 asOf，与团队视图同用按并行均摊后的计入时长，不汇总父项，见[并行计时口径](../architecture/2026-10-14-parallel-time-tracking.md)；区间最多 93 天。响应复用 `TeamTimesheet`（`members` 只含本人）与 `TeamMemberTaskPage`。
   - workitem 的 `TeamWorkQuery` 新增不做管理员校验的 `ownTimeEntries` 与 `ownCurrentTasks`，用户由端口固定为当前主体，复用团队视图的同一组 SQL。接口只读、`no-store`、不写审计。
 - **工时日历入口：** 仪表板标签栏首位固定标签「我的工时」，使用保留路由 ID `my-time`，所有成员可见，管理员的「团队视图」排在其后；不新增路由。首页右栏当月简易工时日历的“查看明细”直达该标签。日历为周一开始的 6×7 网格，点击日期查看按项目分组的工作项明细；点击日期进入的日页面与格子填满所依据的公司标准工时见[我的一天时间线填报](2026-10-15-my-day-timeline-and-timer-opt-out.md)。
-- **首页：** `/` 发布为工作中台首页（路由名 `home`，`shellSection: 'home'`）。模块栏首项与品牌 Logo 指向首页，首页不渲染二级子菜单。`/workspace` 继续替换到个人工作台规范地址，管理项目目录不变。
+- **首页：** `/` 发布为工作中台首页（路由名 `home`，`shellSection: 'home'`）。模块栏首项与品牌 Logo 指向首页，首页不渲染二级子菜单。`/workspace` 继续替换到个人工作台规范地址，管理项目目录不变。「我的工作项」的「待开始」只统计项目初始状态 NOT_STARTED，「进行中」按 IN_PROGRESS 分类；成员新增的状态按[标签目录](../data/2026-08-26-project-work-item-label-catalog.md)归入兼容分类 TODO，首页只在「全部」中列出；项目卡片的待开始计数也不含它们，改为单独显示「其他」，仍计入卡片的未完成总数与排序；团队视图「成员当前任务」的负载计数采用同一口径（TeamWorkloadCounts.other）。TeamMemberTask 因此返回 statusCode。不给状态增加“阶段”选择：用户认为那会让新增状态的界面过于臃肿。
 - **首页动效：** hero 使用 Canvas 场景 `auroraShapes`：按时段切换色板的极光光晕、左侧表面色渐隐、按深度视差的悬浮几何与固定种子颗粒，30fps。这是非工作面的氛围动效例外；工时日历与首页卡片只使用一次性入场与悬停微交互。
 
 ## Alternatives considered

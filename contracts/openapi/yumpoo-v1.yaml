@@ -9424,6 +9424,7 @@ components:
         - projectName
         - itemNo
         - title
+        - statusCode
         - statusName
         - statusCategory
         - statusColor
@@ -9444,6 +9445,10 @@ components:
           type: string
         title:
           type: string
+        statusCode:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]{1,31}$
+          description: 项目状态代码；NOT_STARTED 为项目初始状态，成员新增的状态使用生成的代码。
         statusName:
           type: string
         statusCategory:
@@ -11454,6 +11459,7 @@ components:
       required:
         - todo
         - inProgress
+        - other
         - overdue
       properties:
         todo:
@@ -11464,6 +11470,11 @@ components:
           type: integer
           format: int64
           minimum: 0
+        other:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 成员新增的状态（兼容分类 TODO）中的工作项；todo 只统计项目初始状态 NOT_STARTED。
         overdue:
           type: integer
           format: int64
@@ -11477,6 +11488,7 @@ components:
         - active
         - todo
         - inProgress
+        - other
         - overdue
       properties:
         userId:
@@ -11494,6 +11506,11 @@ components:
           type: integer
           format: int64
           minimum: 0
+        other:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 成员新增的状态（兼容分类 TODO）中的工作项；todo 只统计项目初始状态 NOT_STARTED。
         overdue:
           type: integer
           format: int64

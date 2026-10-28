@@ -18,7 +18,7 @@ import { useSession } from '../../composables/useSession'
 import { formatDuration, onTimeTrackingChanged, useTimeTracker } from '../../composables/useTimeTracker'
 import { onWorkItemChanged } from '../../composables/workItemChanges'
 import { usePageOnboarding } from '../../onboarding/useOnboarding'
-import { daypart, greeting, heroDate, hubProjects, sortTasks, type HubProject, type TaskFilter } from './homeModel'
+import { daypart, filterTasks, greeting, heroDate, hubProjects, isInProgressTask, isNotStartedTask, openCount, sortTasks, type HubProject, type TaskFilter } from './homeModel'
 import { timerTitle } from '../../components/timer/timeCategories'
 
 interface JumpCard { key: string; label: string; meta: string; icon: Component; tone: JumpTone; open: () => void }
@@ -43,12 +43,12 @@ const runningTitle = computed(() => {
 })
 
 const counts = computed(() => ({
-  inProgress: tasks.value.filter(task => task.statusCategory === TeamMemberTaskStatusCategoryEnum.InProgress).length,
-  todo: tasks.value.filter(task => task.statusCategory === TeamMemberTaskStatusCategoryEnum.Todo).length,
+  inProgress: tasks.value.filter(isInProgressTask).length,
+  todo: tasks.value.filter(isNotStartedTask).length,
   overdue: tasks.value.filter(task => task.overdue).length,
 }))
 const sortedTasks = computed(() => sortTasks(tasks.value))
-const visibleTasks = computed(() => filter.value === 'ALL' ? sortedTasks.value : sortedTasks.value.filter(task => task.statusCategory === filter.value))
+const visibleTasks = computed(() => filterTasks(sortedTasks.value, filter.value))
 const taskOptions = computed<{ value: TaskFilter; label: string }[]>(() => [
   { value: 'ALL', label: `全部 ${tasks.value.length}` },
   { value: TeamMemberTaskStatusCategoryEnum.InProgress, label: `进行中 ${counts.value.inProgress}` },
@@ -255,8 +255,10 @@ onMounted(() => { void onboarding.ready() })
             >{{ project.name.slice(0, 1) }}</span>
             <span class="home-project__text">
               <strong>{{ project.name }}</strong>
-              <small v-if="project.inProgress + project.todo">
-                {{ project.inProgress }} 进行中 · {{ project.todo }} 待开始<b
+              <small v-if="openCount(project)">
+                {{ project.inProgress }} 进行中 · {{ project.todo }} 待开始<template v-if="project.other">
+                  · {{ project.other }} 其他
+                </template><b
                   v-if="project.overdue"
                   class="home-project__overdue"
                 > · {{ project.overdue }} 逾期</b>
@@ -270,6 +272,10 @@ onMounted(() => { void onboarding.ready() })
                 v-if="project.todo"
                 class="is-todo"
                 :style="{ flex: project.todo }"
+              /><i
+                v-if="project.other"
+                class="is-other"
+                :style="{ flex: project.other }"
               /></span>
             </span>
           </button>
@@ -690,6 +696,10 @@ onMounted(() => { void onboarding.ready() })
 
 .home-project__bar .is-todo {
   background: var(--yp-label-gray);
+}
+
+.home-project__bar .is-other {
+  background: var(--yp-border-strong);
 }
 
 .home-link {
