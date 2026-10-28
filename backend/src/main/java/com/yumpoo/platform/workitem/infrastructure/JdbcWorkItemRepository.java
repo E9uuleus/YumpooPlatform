@@ -2,6 +2,7 @@ package com.yumpoo.platform.workitem.infrastructure;
 
 import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
 import com.yumpoo.platform.workitem.application.WorkItemModels.WorkItemLocator;
+import com.yumpoo.platform.workitem.application.WorkItemImportPlanner;
 import com.yumpoo.platform.workitem.application.WorkItemQuery;
 import com.yumpoo.platform.workitem.application.WorkItemRepository;
 import com.yumpoo.platform.workitem.application.WorkItemSortRanks;
@@ -66,6 +67,28 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                 RETURNING last_sequence
                 """).param("projectId", projectId).param("companyId", companyId)
                 .query(Long.class).single();
+    }
+
+    @Override
+    public List<WorkItemImportPlanner.Existing> findImportTargets(UUID companyId, UUID projectId) {
+        return jdbc.sql("""
+                SELECT id, content_id, item_no, title, status_code, priority,
+                       ARRAY(SELECT wia.user_id FROM yumpoo.work_item_assignee wia
+                              WHERE wia.company_id=yumpoo.work_item.company_id
+                                AND wia.work_item_id=yumpoo.work_item.id
+                              ORDER BY wia.position) AS assignee_user_ids
+                  FROM yumpoo.work_item
+                 WHERE company_id=:companyId AND project_id=:projectId
+                   AND deleted_at IS NULL AND NOT archived
+                 ORDER BY project_sort_key ASC, id ASC
+                """).param("companyId", companyId).param("projectId", projectId)
+                .query((rs, row) -> new WorkItemImportPlanner.Existing(
+                        rs.getObject("id", UUID.class), rs.getObject("content_id", UUID.class),
+                        rs.getString("item_no"), rs.getString("title"), rs.getString("status_code"),
+                        rs.getString("priority"),
+                        java.util.Arrays.stream((Object[]) rs.getArray("assignee_user_ids").getArray())
+                                .map(v -> v instanceof UUID u ? u : UUID.fromString(v.toString()))
+                                .toList())).list();
     }
 
     @Override

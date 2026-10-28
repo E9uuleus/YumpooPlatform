@@ -1,5 +1,6 @@
 package com.yumpoo.platform.workitem.infrastructure;
 
+import com.yumpoo.platform.workitem.application.WorkItemImportPlanner;
 import com.yumpoo.platform.workitem.application.WorkItemRelationRepository;
 import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
 import com.yumpoo.platform.workitem.domain.WorkItemRelation;
@@ -51,6 +52,17 @@ public class JdbcWorkItemRelationRepository implements WorkItemRelationRepositor
                 WorkItemRelationType.PARENT_CHILD, relation.parentWorkItemId(),
                 relation.childWorkItemId(), relation.projectId(), relation.projectId(),
                 relation.createdByUserId(), relation.createdAt()));
+    }
+
+    @Override
+    public List<WorkItemImportPlanner.ParentLink> findActiveParentLinks(UUID companyId, UUID projectId) {
+        return jdbc.sql("SELECT left_work_item_id, right_work_item_id FROM yumpoo.work_item_relation "
+                        + "WHERE company_id=:companyId AND relation_type='PARENT_CHILD' "
+                        + "AND left_project_id=:projectId AND deleted_at IS NULL")
+                .param("companyId", companyId).param("projectId", projectId)
+                .query((rs, row) -> new WorkItemImportPlanner.ParentLink(
+                        rs.getObject("left_work_item_id", UUID.class),
+                        rs.getObject("right_work_item_id", UUID.class))).list();
     }
 
     @Override
