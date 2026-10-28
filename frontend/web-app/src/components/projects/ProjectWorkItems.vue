@@ -1647,8 +1647,10 @@ async function createAtTop(): Promise<void> {
   creatingTop.value = true
   error.value = undefined
   try {
+    autoEditId.value = ''
     const created = await createWithDefaults('新工作项', csrf)
     notifyChanged()
+    let shown: boolean
     if (grouped.value) {
       await grouping.refresh()
       const key = grouping.keyOf({ ...created, subitemCount: 0 })
@@ -1656,7 +1658,13 @@ async function createAtTop(): Promise<void> {
       await grouping.load(key, false)
       const page = grouping.page(key)
       while (page.nextCursor && !page.error && !page.items.some(item => item.id === created.id)) await grouping.load(key)
-    } else await reloadSortedTableInPlace(created.id)
+      shown = page.items.some(item => item.id === created.id)
+    } else {
+      await reloadSortedTableInPlace(created.id)
+      shown = tableItems.value.some(item => item.id === created.id)
+    }
+    // Search or filters can leave the new item out of the table; say it exists instead of editing a row nobody sees.
+    if (!shown) { ElMessage.success(`已创建 ${created.itemNo}，当前筛选下不显示`); return }
     await nextTick()
     autoEditId.value = created.id
   } catch (reason) {
