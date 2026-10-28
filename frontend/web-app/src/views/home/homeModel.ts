@@ -11,6 +11,8 @@ export interface HubProject {
   code: string
   inProgress: number
   todo: number
+  /** Open tasks in statuses members added: listed under 全部 only, but still open work on the card. */
+  other: number
   overdue: number
 }
 
@@ -59,18 +61,21 @@ export function sortTasks(tasks: TeamMemberTask[]): TeamMemberTask[] {
   return [...tasks.filter(isInProgressTask), ...tasks.filter(task => !isInProgressTask(task))]
 }
 
+export const openCount = (project: HubProject) => project.inProgress + project.todo + project.other
+
 /** Member projects with the viewer's open-task counts; projects needing attention come first. */
 export function hubProjects(projects: DashboardProject[], tasks: TeamMemberTask[]): HubProject[] {
   const rows = new Map<string, HubProject>(projects.map(project => [project.id,
-    { id: project.id, name: project.name, code: project.code, inProgress: 0, todo: 0, overdue: 0 }]))
+    { id: project.id, name: project.name, code: project.code, inProgress: 0, todo: 0, other: 0, overdue: 0 }]))
   for (const task of tasks) {
     const row = rows.get(task.projectId)
     if (!row) continue
     if (isInProgressTask(task)) row.inProgress += 1
     else if (isNotStartedTask(task)) row.todo += 1
+    else row.other += 1
     if (task.overdue) row.overdue += 1
   }
   return [...rows.values()].sort((a, b) => b.overdue - a.overdue
-    || (b.inProgress + b.todo) - (a.inProgress + a.todo)
+    || openCount(b) - openCount(a)
     || a.name.localeCompare(b.name, 'zh-CN'))
 }
