@@ -433,40 +433,54 @@ function keydown(event: KeyboardEvent) {
             {{ group.projectName }}
           </div>
           <TransitionGroup name="quick-row">
-            <QuickTimeRow
-              v-for="item in group.items"
-              :key="item.workItemId"
-              v-model:date-choice="dateChoice"
-              v-model:picked-date="pickedDate"
-              v-model:duration-ms="durationMs"
-              v-model:custom="custom"
-              v-model:custom-text="customText"
-              v-model:range-mode="rangeMode"
-              v-model:range-start="rangeStart"
-              v-model:range-end="rangeEnd"
-              :data-work-item-id="item.workItemId"
-              :item="item"
-              :today-ms="todayMs.get(item.workItemId) ?? 0"
-              :expanded="openId === item.workItemId"
-              :faded="hideCompleted && item.completed"
-              :flashing="flashId === item.workItemId"
-              :today="today"
-              :hint="hint"
-              :target-date="targetDate"
-              :timezone="timezone"
-              :day-range="targetDay.dayRange.value"
-              :range-note="rangeNote"
-              :range-invalid="!!rangeIssue"
-              :can-record="canRecord"
-              :recording="openId === item.workItemId ? recording : 'idle'"
-              :timer-enabled="tracker.timerEnabled.value"
-              @toggle="toggle(item.workItemId)"
-              @record="record(item.workItemId, item.title)"
-              @start="startTimer(item.workItemId, item.title)"
-              @status-changed="(detail, status) => statusChanged(item, detail, status)"
-              @status-resolved="(detail, status) => statusResolved(item, detail, status)"
-              @status-failed="showToast($event, true)"
-            />
+            <template
+              v-for="{ key, item, parent, child, last } in group.rows"
+              :key="key"
+            >
+              <div
+                v-if="!item"
+                class="quick-parent"
+                :class="{ 'is-completed': hideCompleted && parent!.completed }"
+                :title="`父工作项：${parent!.title}`"
+              >
+                <span class="quick-parent__bar" /><span class="quick-parent__title">{{ parent!.title }}</span>
+              </div>
+              <QuickTimeRow
+                v-else
+                v-model:date-choice="dateChoice"
+                v-model:picked-date="pickedDate"
+                v-model:duration-ms="durationMs"
+                v-model:custom="custom"
+                v-model:custom-text="customText"
+                v-model:range-mode="rangeMode"
+                v-model:range-start="rangeStart"
+                v-model:range-end="rangeEnd"
+                :data-work-item-id="item.workItemId"
+                :item="item"
+                :child="child"
+                :continued="!last"
+                :today-ms="todayMs.get(item.workItemId) ?? 0"
+                :expanded="openId === item.workItemId"
+                :faded="hideCompleted && item.completed"
+                :flashing="flashId === item.workItemId"
+                :today="today"
+                :hint="hint"
+                :target-date="targetDate"
+                :timezone="timezone"
+                :day-range="targetDay.dayRange.value"
+                :range-note="rangeNote"
+                :range-invalid="!!rangeIssue"
+                :can-record="canRecord"
+                :recording="openId === item.workItemId ? recording : 'idle'"
+                :timer-enabled="tracker.timerEnabled.value"
+                @toggle="toggle(item.workItemId)"
+                @record="record(item.workItemId, item.title)"
+                @start="startTimer(item.workItemId, item.title)"
+                @status-changed="(detail, status) => statusChanged(item, detail, status)"
+                @status-resolved="(detail, status) => statusResolved(item, detail, status)"
+                @status-failed="showToast($event, true)"
+              />
+            </template>
           </TransitionGroup>
         </div>
         <p
@@ -593,4 +607,8 @@ button:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:-2p
 .quick-row-enter-from,.quick-row-leave-to{grid-template-rows:0fr;opacity:0}
 @keyframes quick-in{from{opacity:0;transform:translateY(10px) scale(.96)}to{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+.quick-parent{display:flex;align-items:center;gap:10px;min-width:0;padding:7px 6px;color:var(--yp-text-secondary);font-size:12.5px}
+.quick-parent__bar{width:4px;align-self:stretch;flex-shrink:0;border-radius:2px;background:var(--yp-border-strong)}
+.quick-parent__title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.quick-parent.is-completed .quick-parent__title{color:var(--yp-text-muted);text-decoration:line-through}
 </style>
