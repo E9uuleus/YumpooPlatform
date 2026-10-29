@@ -232,7 +232,8 @@ code {
   display: inline-flex;
 }
 
-.app-topbar__tool {
+.app-topbar__tool,
+.yp-tool-button {
   display: inline-grid;
   width: var(--yp-control-height-small);
   height: var(--yp-control-height-small);
@@ -248,14 +249,23 @@ code {
 
 .app-topbar__tool:hover:not(:disabled),
 .app-topbar__tool.is-active,
-.app-topbar__tool[aria-expanded="true"] {
+.app-topbar__tool[aria-expanded="true"],
+.yp-tool-button:hover:not(:disabled),
+.yp-tool-button.is-active,
+.yp-tool-button[aria-expanded="true"] {
   background: var(--yp-bg-hover);
   color: var(--yp-text-primary);
 }
 
-.app-topbar__tool:disabled {
+.app-topbar__tool:disabled,
+.yp-tool-button:disabled {
   color: var(--yp-text-disabled);
   cursor: default;
+}
+
+/* 工具按钮的弹层打开时隐藏悬停提示；切换 tooltip 的 disabled 会让弹层吞掉第一次外部点击。 */
+.yp-tooltip--suppressed {
+  display: none !important;
 }
 
 .app-topbar__divider {

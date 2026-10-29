@@ -95,21 +95,23 @@ onBeforeUnmount(() => {
           <span class="docs-search-trigger__text">搜索文档</span>
           <kbd>{{ shortcut }}</kbd>
         </button>
-        <span class="docs-topbar__appearance">
-          <yp-theme-switcher
-            :theme="appearance.themeMode.value"
-            :density="appearance.densityMode.value"
-            @update:theme="appearance.setThemeMode"
-            @update:density="appearance.setDensityMode"
-          />
-        </span>
+        <yp-theme-switcher
+          :theme="appearance.themeMode.value"
+          :density="appearance.densityMode.value"
+          @update:theme="appearance.setThemeMode"
+          @update:density="appearance.setDensityMode"
+        />
         <router-link
           v-if="!desktop"
           class="docs-topbar__download"
           to="/download"
         >
-          <el-icon><Download /></el-icon>下载桌面端
+          <el-icon><Download /></el-icon>下载桌面客户端
         </router-link>
+        <span
+          class="app-topbar__divider"
+          aria-hidden="true"
+        />
         <router-link
           v-slot="{ href, navigate }"
           to="/"
@@ -219,7 +221,7 @@ onBeforeUnmount(() => {
           class="docs-drawer__download"
           to="/download"
         >
-          下载桌面端
+          下载桌面客户端
         </router-link>
       </nav>
     </el-drawer>
