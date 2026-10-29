@@ -1,4 +1,5 @@
 import { WorkItemLabelColorToken, type TimerCandidate, type WorkItemDetail, type WorkItemLabelCatalog } from '@yumpoo/api-client'
+import { candidateParent, withHierarchy, type HierarchyRow } from '../timer/candidateHierarchy'
 import type { RailProject } from '@yumpoo/preload-contract'
 import { addDays, projectColors } from '../team/teamDashboardModel'
 import { formatClock, gaps, HOUR, MIN_BLOCK_MS, MINUTE, placeSequential, type DayBlock, type Range } from '../my-time/day/dayModel'
@@ -29,7 +30,7 @@ export function itemStatus(detail: WorkItemDetail, labels: WorkItemLabelCatalog 
   }
 }
 
-export interface QuickGroup { projectId: string; projectName: string; items: TimerCandidate[] }
+export interface QuickGroup { projectId: string; projectName: string; items: TimerCandidate[]; rows: HierarchyRow<TimerCandidate>[] }
 
 /** `5h 30m`, `5h`, `30m`: the header total and the per-row "今日" reading. */
 export function shortDuration(ms: number): string {
@@ -45,13 +46,14 @@ export function spokenDuration(ms: number): string {
 
 /** Rail projects first in rail order, then the other projects in the order their first candidate appears. */
 export function groupCandidates(items: TimerCandidate[], rail: RailProject[]): QuickGroup[] {
-  const groups = new Map<string, QuickGroup>(rail.map(project => [project.id, { projectId: project.id, projectName: project.name, items: [] }]))
+  const groups = new Map<string, QuickGroup>(rail.map(project => [project.id, { projectId: project.id, projectName: project.name, items: [], rows: [] }]))
   for (const item of items) {
-    const group = groups.get(item.projectId) ?? { projectId: item.projectId, projectName: item.projectName, items: [] }
+    const group = groups.get(item.projectId) ?? { projectId: item.projectId, projectName: item.projectName, items: [], rows: [] }
     group.items.push(item)
     groups.set(item.projectId, group)
   }
   return [...groups.values()].filter(group => group.items.length)
+    .map(group => ({ ...group, rows: withHierarchy(group.items, item => item.workItemId, candidateParent) }))
 }
 
 /** Rail projects stay distinct among themselves, as on the rail; any other project gets its own hashed colour. */
@@ -109,4 +111,9 @@ export function rangeRecordable(range: Range, blocks: DayBlock[], now: number): 
 /** First character of a project name, upper-cased for Latin names: the rail icon's letter. */
 export function projectInitial(name: string): string {
   return name.trim().charAt(0).toUpperCase()
+}
+
+/** The rail tile text: the person's label, else the name's first character. */
+export function railLabel(project: { name: string; label?: string | undefined }): string {
+  return project.label || projectInitial(project.name)
 }

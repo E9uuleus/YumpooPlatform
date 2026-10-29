@@ -24,9 +24,9 @@ const readRange = () =>
 const range = ref<GetOperationsMetricsRangeEnum>(readRange())
 const query = useOperationsQuery(
   (signal) => operationsApi.getOperationsMetrics({ range: range.value }, { signal }),
-  { interval: () => overview.interval.value * 1000 },
+  { pageLoad: true, interval: () => overview.interval.value * 1000 },
 )
-const rules = useOperationsQuery((signal) => operationsApi.listOperationsAlertRules({ signal }))
+const rules = useOperationsQuery((signal) => operationsApi.listOperationsAlertRules({ signal }), { pageLoad: true })
 watch(overview.refreshVersion, () => {
   void query.refresh()
   void rules.refresh()

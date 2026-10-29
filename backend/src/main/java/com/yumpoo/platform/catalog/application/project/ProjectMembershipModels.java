@@ -14,7 +14,7 @@ public final class ProjectMembershipModels {
     public record Access(UUID projectId, UUID companyId, String lifecycle,
                          ActorAccess actorAccess,
                          long projectVersion,
-                         OptionalLong membershipVersion) {}
+                         OptionalLong membershipVersion, boolean ended) {}
     public record Member(UUID membershipId, UUID projectId, UUID userId, String displayName,
                          String employmentStatus, String accountStatus, String membershipStatus,
                          boolean owner, Instant joinedAt, UUID joinedByUserId, Instant removedAt,

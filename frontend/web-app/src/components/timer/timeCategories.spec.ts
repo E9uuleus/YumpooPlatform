@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { TimeCategory } from '@yumpoo/api-client'
-import { categoryKey, categoryOf, matchCategories, resumeSubjects, sessionKey, subjectFields, TIME_CATEGORIES, timerTitle } from './timeCategories'
+import { categoryKey, categoryOf, isMigratedCategory, matchCategories, resumeSubjects, sessionKey, subjectFields, subjectSlot, TIME_CATEGORIES, timeCategory, timerTitle } from './timeCategories'
 
 describe('非项目分类', () => {
   it('按固定顺序列出四类，键与线上枚举一致', () => {
@@ -14,13 +14,15 @@ describe('非项目分类', () => {
     expect(categoryOf('3f0d6a2e-0000-4000-8000-000000000001')).toBeUndefined()
     expect(subjectFields('category:LEARNING')).toEqual({ timeCategory: TimeCategory.Learning })
     expect(subjectFields('w1')).toEqual({ workItemId: 'w1' })
+    expect(subjectSlot('category:MEETING:p1')).toBe(subjectSlot('category:MEETING'))
+    expect(subjectSlot('w1')).toBe('w1')
     expect(sessionKey({ workItemId: null, timeCategory: TimeCategory.Business })).toBe('category:BUSINESS')
     expect(sessionKey({ workItemId: 'w1', timeCategory: null })).toBe('w1')
     expect(sessionKey({ workItemId: null })).toBeNull()
   })
 
   it('恢复组先列工作项再列分类，计时标题优先使用分类名', () => {
-    expect(resumeSubjects({ resumeItems: [{ workItemId: 'w1' }], resumeCategories: [TimeCategory.Meeting] })).toEqual(['w1', 'category:MEETING'])
+    expect(resumeSubjects({ resumeItems: [{ workItemId: 'w1' }], resumeCategorySubjects: [{ timeCategory: TimeCategory.Meeting }] })).toEqual(['w1', 'category:MEETING'])
     expect(resumeSubjects({ resumeItems: [] })).toEqual([])
     expect(timerTitle({ session: { timeCategory: TimeCategory.BusinessTrip }, workItemTitle: null })).toBe('出差')
     expect(timerTitle({ session: {}, workItemTitle: null })).toBe('不可见工作项')
@@ -30,5 +32,15 @@ describe('非项目分类', () => {
     expect(matchCategories('')).toHaveLength(4)
     expect(matchCategories(' 会 ').map(option => option.label)).toEqual(['会议'])
     expect(matchCategories('周报')).toEqual([])
+  })
+
+  it('迁入工时有展示元数据，但不进入可选列表', () => {
+    expect(timeCategory(TimeCategory.Migrated)?.label).toBe('迁入工时')
+    expect(categoryOf(categoryKey(TimeCategory.Migrated, 'p1'))?.label).toBe('迁入工时')
+    expect(isMigratedCategory(TimeCategory.Migrated)).toBe(true)
+    expect(isMigratedCategory(TimeCategory.Meeting)).toBe(false)
+    expect(TIME_CATEGORIES.map(option => option.code)).not.toContain(TimeCategory.Migrated)
+    expect(matchCategories('迁入')).toEqual([])
+    expect(timerTitle({ session: { timeCategory: TimeCategory.Migrated }, workItemTitle: null })).toBe('迁入工时')
   })
 })

@@ -27,6 +27,12 @@ import {
  */
 export interface TimeTrackingSession {
     /**
+     * 分类记录关联的项目；工作项记录为 null
+     * @type {string}
+     * @memberof TimeTrackingSession
+     */
+    categoryProjectId?: string | null;
+    /**
      *
      * @type {string}
      * @memberof TimeTrackingSession
@@ -188,6 +194,7 @@ export function TimeTrackingSessionFromJSONTyped(json: any, ignoreDiscriminator:
     }
     return {
 
+        ...(json['categoryProjectId'] === undefined ? {} : { 'categoryProjectId': json['categoryProjectId'] === null ? null : json['categoryProjectId'] }),
         'id': json['id'],
         'projectId': json['projectId'],
         'workItemId': json['workItemId'],
@@ -221,6 +228,7 @@ export function TimeTrackingSessionToJSONTyped(value?: TimeTrackingSession | nul
 
     return {
 
+        'categoryProjectId': value['categoryProjectId'],
         'id': value['id'],
         'projectId': value['projectId'],
         'workItemId': value['workItemId'],

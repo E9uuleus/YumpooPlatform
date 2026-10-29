@@ -1,6 +1,6 @@
 /** 应用路由名 → 帮助页 slug 或 slug#anchor；顶栏帮助菜单的「本页帮助」据此打开。只做重定向的入口路由不需要映射。 */
 export const ROUTE_HELP: Record<string, string> = {
-  home: 'guide/navigation',
+  home: 'guide/navigation#首页',
   settings: 'guide/navigation#偏好设置',
   workspace: 'guide/projects#管理项目',
   'archived-projects': 'guide/projects#归档与恢复',
@@ -13,6 +13,7 @@ export const ROUTE_HELP: Record<string, string> = {
   'my-time': 'guide/time-tracking#我的工时',
   'my-time-day': 'guide/time-tracking#我的一天',
   team: 'guide/team',
+  'team-hours-import': 'guide/team#迁入工时',
   'company-overview': 'guide/company#概览',
   'company-projects': 'guide/company#项目总览',
   'company-members': 'guide/company#成员与角色',

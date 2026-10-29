@@ -3,7 +3,6 @@ import { computed, nextTick, ref, watch } from 'vue'
 import type { TimerCandidate, WorkItemDetail } from '@yumpoo/api-client'
 import { ElPopover } from 'element-plus'
 import { problemMessage } from '../../api/problems'
-import WorkItemLabelPopoverContent from '../projects/WorkItemLabelPopoverContent.vue'
 import { useConnectedItem } from '../projects/connect/useConnectedItem'
 import { workItemLabelColorValue } from '../projects/workItemLabelColors'
 import { itemStatus, type QuickItemStatus } from './quickTime'
@@ -21,6 +20,8 @@ const { detail, loading, forbidden, problem, editable, statuses } = connected
 
 const name = computed(() => props.item.statusName ?? '查看状态')
 const options = computed(() => statuses.value.filter(status => status.active || status.code === detail.value?.statusCode))
+/** Statuses the workflow lets this item move to; the current one is always shown. */
+const allowed = (code: string) => editable.value && Boolean(detail.value?.capabilities.availableTransitions.some(transition => transition.toStatus === code))
 
 // Every open reads the item again, so the transition runs against its latest version and capabilities.
 async function load() {
@@ -49,9 +50,11 @@ async function choose(statusCode: string) {
     v-model:visible="open"
     trigger="click"
     placement="bottom-start"
-    width="auto"
+    :width="196"
+    :offset="4"
+    :show-arrow="false"
     teleported
-    popper-class="work-items-label-popover status-popover quick-status-popover"
+    popper-class="quick-status-menu"
   >
     <template #reference>
       <button
@@ -92,16 +95,41 @@ async function choose(statusCode: string) {
       {{ problem ? problemMessage(problem) : '正在读取…' }}
     </p>
     <template v-else>
-      <WorkItemLabelPopoverContent
-        kind="status"
-        :project-id="detail.projectId"
-        :catalog="connected.labels.value"
-        :workflow-statuses="options"
-        :current-value="detail.statusCode"
-        :can-manage="false"
-        :available-transitions="editable ? detail.capabilities.availableTransitions : []"
-        @select-status="choose"
-      />
+      <div
+        class="quick-status-list"
+        role="menu"
+        :aria-label="`修改「${item.title}」的状态`"
+      >
+        <button
+          v-for="status in options"
+          :key="status.code"
+          type="button"
+          role="menuitemradio"
+          class="quick-status-option"
+          :class="{ 'is-current': status.code === detail.statusCode }"
+          :aria-checked="status.code === detail.statusCode"
+          :disabled="status.code !== detail.statusCode && !allowed(status.code)"
+          :style="{ '--quick-status-color': workItemLabelColorValue(status.colorToken) }"
+          @click="choose(status.code)"
+        >
+          <i
+            class="quick-status-option__dot"
+            aria-hidden="true"
+          /><span class="quick-status-option__name">{{ status.displayName }}</span><svg
+            v-if="status.code === detail.statusCode"
+            class="quick-status-option__check"
+            viewBox="0 0 12 12"
+            aria-hidden="true"
+          ><path
+            d="M2.5 6.2 5 8.5l4.5-5"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          /></svg>
+        </button>
+      </div>
       <p
         v-if="!editable"
         class="quick-status-note is-hint"
@@ -121,10 +149,21 @@ async function choose(statusCode: string) {
 .quick-status__caret{width:0;overflow:hidden;font-size:9px;line-height:1;transition:width .15s}
 .quick-status:hover .quick-status__caret,.quick-status:focus-visible .quick-status__caret,.quick-status.is-open .quick-status__caret{width:9px}
 .quick-status-note{margin:0;padding:10px 12px;color:var(--yp-text-muted);font-size:12px;white-space:nowrap}
-.quick-status-note.is-hint{padding:0 12px 10px}
 </style>
 
 <style>
-/* The quick panel can be shorter than the status list; it scrolls instead of leaving the window. */
-.el-popover.quick-status-popover .yp-label-popover-root--select{max-height:calc(50vh - 24px);overflow-y:auto;overscroll-behavior:contain}
+/* A compact menu in the quick panel's own surface; it scrolls instead of leaving a short window. */
+.el-popover.el-popper.quick-status-menu{min-width:0;padding:4px;border:0;border-radius:10px;background:var(--yp-bg-raised);
+  box-shadow:inset 0 0 0 1px var(--yp-timer-hairline),var(--yp-timer-shadow)}
+.quick-status-menu .quick-status-list{display:grid;gap:1px;max-height:calc(50vh - 24px);overflow-y:auto;overscroll-behavior:contain}
+.quick-status-option{display:flex;align-items:center;gap:8px;width:100%;height:28px;padding:0 8px;border:0;border-radius:6px;background:none;
+  color:var(--yp-text-primary);font:inherit;font-size:12px;text-align:left;cursor:pointer;transition:background-color .12s}
+.quick-status-option:hover:not(:disabled),.quick-status-option:focus-visible{background:var(--yp-timer-hover);outline:0}
+.quick-status-option.is-current{background:color-mix(in srgb,var(--quick-status-color) 14%,transparent);font-weight:500;cursor:default}
+.quick-status-option:disabled{color:var(--yp-text-disabled);cursor:not-allowed}
+.quick-status-option__dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--quick-status-color)}
+.quick-status-option:disabled .quick-status-option__dot{opacity:.4}
+.quick-status-option__name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.quick-status-option__check{flex:none;width:12px;height:12px;color:color-mix(in srgb,var(--quick-status-color) 75%,var(--yp-text-primary))}
+.quick-status-menu .quick-status-note.is-hint{padding:6px 8px 4px}
 </style>

@@ -455,7 +455,7 @@ public class WorkItemService {
                 null, null, null, DueTimeChange.unchanged()), actor).item();
     }
 
-    private Optional<Content> lockCreationContent(UUID companyId, UUID projectId, UUID contentId) {
+    Optional<Content> lockCreationContent(UUID companyId, UUID projectId, UUID contentId) {
         var snapshot = contents.find(companyId, projectId, contentId);
         if (snapshot.isEmpty()) return Optional.empty();
         // First-use writers must wait for the catalog without holding a category share lock.
@@ -514,7 +514,7 @@ public class WorkItemService {
     private record CreatedWorkItem(WorkItem item,
             List<WorkItemLabelModels.StatusLabel> statusLabels) {}
 
-    private void markContentUsed(ItemWriteTarget project, Content content, CurrentActor actor) {
+    void markContentUsed(ItemWriteTarget project, Content content, CurrentActor actor) {
         if (content.everUsed()) return;
         long catalogVersion = contents.lockCatalogVersion(project.companyId(), project.projectId());
         Content locked = contents.lock(project.companyId(), project.projectId(), content.id())
@@ -1295,7 +1295,7 @@ public class WorkItemService {
         }
     }
 
-    private RankAllocation allocateRank(UUID companyId, UUID projectId,
+    RankAllocation allocateRank(UUID companyId, UUID projectId,
             String statusCode, WorkItemRankPlacement placement, UUID anchorWorkItemId,
             UUID movingWorkItemId) {
         List<RankedWorkItem> lane = workItems.findRankOrder(companyId, projectId, statusCode);
@@ -1601,7 +1601,7 @@ public class WorkItemService {
     }
 
     private static boolean canEdit(ProjectAccessSnapshot project, Content content) {
-        return project.lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED
+        return project.contentWritable()
                 && content != null
                 && project.actorAccess() != ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY;
     }
@@ -1675,7 +1675,7 @@ public class WorkItemService {
         return ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION, reason);
     }
 
-    private static void requireActiveContent(Content content) {
+    static void requireActiveContent(Content content) {
         if (!content.active()) {
             throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION,
                     "CONTENT_ARCHIVED");
@@ -1687,12 +1687,12 @@ public class WorkItemService {
             throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
     }
 
-    private static void requireWritableAccess(ProjectAccessSnapshot.ActorProjectAccess actorAccess) {
+    static void requireWritableAccess(ProjectAccessSnapshot.ActorProjectAccess actorAccess) {
         if (actorAccess == ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY)
             throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
     }
 
-    private static void requireWritableAccess(ProjectFactWriteSnapshot.ActorProjectAccess actorAccess) {
+    static void requireWritableAccess(ProjectFactWriteSnapshot.ActorProjectAccess actorAccess) {
         if (actorAccess == ProjectFactWriteSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY)
             throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
     }
@@ -1714,6 +1714,6 @@ public class WorkItemService {
         return ApplicationException.validation(new FieldViolation(field, code, message));
     }
 
-    private record RankAllocation(String rank, boolean noOp) {}
+    record RankAllocation(String rank, boolean noOp) {}
     private record VisibleContent(ProjectAccessSnapshot project, Content content) {}
 }

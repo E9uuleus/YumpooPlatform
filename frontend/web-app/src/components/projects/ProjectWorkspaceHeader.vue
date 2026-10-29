@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { projectStatus } from './projectStatus'
 import { Bell, Calendar, DataAnalysis, Clock, Grid, Setting, User } from '@element-plus/icons-vue'
-import { ProjectActorAccess, ProjectLifecycle, type ProjectDetail, type ProjectNotificationPreference } from '@yumpoo/api-client'
+import { ProjectActorAccess, type ProjectDetail, type ProjectNotificationPreference } from '@yumpoo/api-client'
 import { ElIcon, ElPopover, ElTooltip } from 'element-plus'
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
@@ -242,9 +243,9 @@ watch(projectId, () => { preference.value = undefined })
         </el-popover>
       </h1>
       <yp-status-tag
-        v-if="project?.lifecycle === ProjectLifecycle.Archived"
+        v-if="project && projectStatus(project) !== 'ACTIVE'"
         domain="project-lifecycle"
-        :status="project.lifecycle"
+        :status="projectStatus(project)"
         effect="soft"
         size="small"
       />

@@ -1,19 +1,23 @@
 <script setup lang="ts">
+import { usePageLoad } from '../../brand/page-progress'
+
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElAlert, ElButton, ElIcon, ElPopover } from 'element-plus'
+import { ElAlert, ElButton, ElIcon } from 'element-plus'
 import { ArrowLeft, ArrowRight, Calendar } from '@element-plus/icons-vue'
 import type { TeamTimesheet } from '@yumpoo/api-client'
 import { myWorkApi } from '../../api/client'
 import { problemMessage, toApiProblem } from '../../api/problems'
 import { useSession } from '../../composables/useSession'
 import { onTimeTrackingChanged, useTimeTracker } from '../../composables/useTimeTracker'
-import '../projects/workItemAccentBar.css'
-import { buildTimesheet, dayBreakdown, hoursMinutes, shortHours, timesheetColors, todayIn, toApiDate, weekday } from '../team/teamDashboardModel'
+import { buildTimesheet, dayBreakdown, hoursMinutes, migratedDays, shortHours, timesheetColors, todayIn, toApiDate, weekday } from '../team/teamDashboardModel'
+import { MIGRATED_BADGE, MIGRATED_LEGEND } from '../timer/timeCategories'
+import DayBreakdownPopover from '../team/DayBreakdownPopover.vue'
 import { useTweenedNumber } from '../team/teamMotion'
 import { dayTargetMs, daySegments, monthGrid, monthLabel, monthProjects, monthStats, runningExtraMs, shiftMonth, weekdayLabels,
   type CalendarCell } from './myTimeModel'
 
+const pageLoad = usePageLoad()
 const session = useSession(), tracker = useTimeTracker(), route = useRoute(), router = useRouter()
 const timezone = computed(() => session.authentication.value?.company.timezone ?? 'Asia/Shanghai')
 const today = computed(() => todayIn(timezone.value, new Date(tracker.now.value)))
@@ -34,6 +38,8 @@ const days = computed(() => {
   return totals
 })
 const segments = computed(() => daySegments(row.value))
+const migrated = computed(() => migratedDays(row.value))
+const hasMigrated = computed(() => Object.keys(migrated.value).some(date => date.startsWith(month.value)))
 const colors = computed(() => timesheetColors(sheet.value))
 const legend = computed(() => monthProjects(row.value, month.value))
 const stats = computed(() => monthStats(days.value, month.value))
@@ -80,7 +86,7 @@ function previewDay(cell: CalendarCell, event: MouseEvent | FocusEvent) {
   const show = () => { active.value = days.value[cell.date] ? { date: cell.date, anchor } : undefined }
   if (event.type !== 'mouseenter' || !active.value || active.value.date === cell.date) { show(); return }
   // 移向已打开的明细时会擦过其他日期格：停留片刻才切换，指针已进入明细则保持当前日期。
-  switchTimer = setTimeout(() => { if (!document.querySelector('.my-time-day-popover:hover')) show() }, 160)
+  switchTimer = setTimeout(() => { if (!document.querySelector('.day-breakdown-popover:hover')) show() }, 160)
 }
 function openDay(date: string) {
   active.value = undefined
@@ -88,7 +94,7 @@ function openDay(date: string) {
 }
 function closeDayOnOutside(event: PointerEvent) {
   const target = event.target
-  if (target instanceof Element && (active.value?.anchor.contains(target) || target.closest('.my-time-day-popover'))) return
+  if (target instanceof Element && (active.value?.anchor.contains(target) || target.closest('.day-breakdown-popover'))) return
   active.value = undefined
 }
 function closeDayOnEscape(event: KeyboardEvent) { if (event.key === 'Escape') active.value = undefined }
@@ -104,7 +110,7 @@ watch(() => Boolean(active.value), open => {
 watch(month, () => { active.value = undefined; void load() })
 const stopTracking = onTimeTrackingChanged(() => void load())
 onBeforeUnmount(() => { ++token; clearTimeout(switchTimer); stopListening(); stopTracking() })
-void load()
+void pageLoad.track(load)
 const ready = computed(() => Boolean(sheet.value) && sheetMonth.value === month.value && !loading.value && !error.value)
 defineExpose({ refresh: load, loading, ready })
 </script>
@@ -185,7 +191,9 @@ defineExpose({ refresh: load, loading, ready })
         </div>
       </div>
       <p class="my-time__note">
-        并行计时按项数平均计入，每日合计为实际时长。
+        并行计时按项数平均计入，每日合计为实际时长。<template v-if="hasMigrated">
+          {{ MIGRATED_LEGEND }}。
+        </template>
       </p>
       <div
         class="my-time__board"
@@ -226,7 +234,7 @@ defineExpose({ refresh: load, loading, ready })
                 }"
                 :style="{ '--d': cell.row + cell.column, '--level': level(cell.date) }"
                 :disabled="cell.future"
-                :aria-label="`${dayLabel(cell.date)} ${shortHours(days[cell.date] ?? 0)} 小时，查看时间线`"
+                :aria-label="`${dayLabel(cell.date)} ${shortHours(days[cell.date] ?? 0)} 小时${migrated[cell.date] ? `，含迁入工时 ${shortHours(migrated[cell.date] ?? 0)} 小时` : ''}，查看时间线`"
                 @mouseenter="previewDay(cell, $event)"
                 @focus="previewDay(cell, $event)"
                 @click="openDay(cell.date)"
@@ -236,6 +244,11 @@ defineExpose({ refresh: load, loading, ready })
                   class="my-time-cell__level"
                 />
                 <span class="my-time-cell__date">{{ cell.day }}</span>
+                <i
+                  v-if="migrated[cell.date]"
+                  class="my-time-cell__migrated"
+                  aria-hidden="true"
+                >{{ MIGRATED_BADGE }}</i>
                 <i
                   v-if="cell.today && running"
                   class="my-time-cell__live"
@@ -274,54 +287,25 @@ defineExpose({ refresh: load, loading, ready })
         </li>
       </ul>
     </div>
-    <el-popover
+    <DayBreakdownPopover
       v-if="active"
       :key="active.date"
-      :visible="true"
-      virtual-triggering
-      :virtual-ref="active.anchor"
-      placement="bottom"
-      :offset="4"
-      :show-arrow="false"
-      :width="340"
-      :persistent="false"
-      popper-class="my-time-day-popover"
-      transition="my-time-pop"
+      :anchor="active.anchor"
+      :title="dayLabel(active.date)"
+      :total-ms="days[active.date] ?? 0"
+      :projects="breakdown"
+      :colors="colors"
+      empty-text="计时进行中，停止后显示工作项明细。"
     >
-      <header class="my-time-day__head">
-        <strong>{{ dayLabel(active.date) }}</strong>
-        <span>{{ hoursMinutes(days[active.date] ?? 0) }}</span>
+      <template #action>
         <el-button
           text
           @click="openDay(active.date)"
         >
           时间线
         </el-button>
-      </header>
-      <p
-        v-if="!breakdown.length"
-        class="my-time-day__empty"
-      >
-        计时进行中，停止后显示工作项明细。
-      </p>
-      <section
-        v-for="(project, index) in breakdown"
-        :key="project.projectId"
-        class="my-time-day__project"
-        :style="{ '--my-time-project': colors.get(project.projectId), '--i': Math.min(index, 8) }"
-      >
-        <h4>{{ project.projectName }}<small>{{ hoursMinutes(project.totalMs) }}</small></h4>
-        <div
-          v-for="(item, order) in project.items"
-          :key="item.key"
-          class="my-time-day__item work-item-accent-bar"
-          :style="{ '--work-item-accent': colors.get(project.projectId), '--j': Math.min(order, 8) }"
-        >
-          <span class="my-time-day__text"><strong>{{ item.title }}</strong><small>{{ item.itemNo }}</small></span>
-          <span class="my-time-day__hours">{{ hoursMinutes(item.ms) }}</span>
-        </div>
-      </section>
-    </el-popover>
+      </template>
+    </DayBreakdownPopover>
   </section>
 </template>
 

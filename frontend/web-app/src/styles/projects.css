@@ -187,6 +187,39 @@
   font-weight: 650;
 }
 
+.project-navigation__head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.project-navigation__head .project-navigation__toggle {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-shell .global-navigation .project-navigation__add {
+  display: grid;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  place-items: center;
+  padding: 0;
+  border-radius: var(--yp-radius-sm);
+  color: var(--yp-text-muted);
+}
+
+.app-shell .global-navigation .project-navigation__add:hover {
+  color: var(--yp-action-primary);
+  background: var(--yp-bg-hover);
+}
+
+.app-shell .global-navigation .project-navigation__add:focus-visible {
+  outline: 2px solid var(--yp-focus-ring);
+  outline-offset: 1px;
+}
+
 .project-navigation__chevron {
   flex: 0 0 12px;
   transition: transform var(--yp-motion-fast) var(--yp-ease-standard);
@@ -863,6 +896,68 @@
 
 .project-name-cell__link:hover {
   color: var(--yp-action-primary);
+}
+
+.project-management-table--catalog .el-table__body-wrapper td.el-table__cell {
+  height: 60px;
+}
+
+.project-management-table--catalog .el-table__body tr:hover .project-name-cell__link {
+  color: var(--yp-action-primary);
+}
+
+.project-identity-cell {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--yp-space-3);
+  min-width: 0;
+}
+
+.project-identity-cell__mark {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--mark), color-mix(in srgb, var(--mark) 70%, var(--yp-bg-surface)));
+  color: var(--yp-status-blue-foreground);
+  font-family: var(--yp-font-heading);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.project-identity-cell__text {
+  display: grid;
+  min-width: 0;
+  line-height: 18px;
+}
+
+.project-identity-cell__text small {
+  display: flex;
+  gap: var(--yp-space-2);
+  overflow: hidden;
+  color: var(--yp-text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.project-identity-cell__text small span + span::before {
+  margin-right: var(--yp-space-2);
+  content: "·";
+}
+
+.project-role-chip {
+  display: inline-flex;
+  height: 24px;
+  align-items: center;
+  padding: 0 10px;
+  border: 1px solid var(--yp-border-subtle);
+  border-radius: var(--yp-radius-pill);
+  background: var(--yp-bg-sunken);
+  color: var(--yp-text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .project-name-cell__code,

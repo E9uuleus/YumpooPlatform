@@ -22,7 +22,7 @@ export class DeliveryWorker {
     if (this.running) return
     this.running = true
     try {
-      this.store.run("UPDATE deliveries SET state='expired' WHERE state='pending' AND expires IS NOT NULL AND expires <= ?", now)
+      this.store.run("UPDATE deliveries SET state='expired' WHERE state IN ('pending','dead') AND expires IS NOT NULL AND expires <= ?", now)
       for (const channel of ['operations', 'announcements'] as const) {
         const url = this.channels[channel]
         if (!url) continue

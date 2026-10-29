@@ -1,0 +1,41 @@
+paths:
+  /company/migrated-time-imports:
+    post:
+      tags:
+        - TeamDashboard
+      operationId: importMigratedTime
+      summary: 按成员与日期批量迁入或预览历史工时
+      description: 仅公司管理员可用。每个条目是一名成员一天的总分钟数，服务端从该成员的上班时间起，把时长依次排进当天的空闲时段，写成只读的 MIGRATED 工时分类记录；同一成员同一天再次迁入覆盖上次的迁入结果，minutes 为 0 表示清除。排布按公司时区计算，当天排不下的天不写入任何记录。dryRun 为 true 时只返回排布结果、不写入；为 false 时在单事务内提交。不发领域事件，整次只写一条安全审计。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MigratedTimeImportRequest"
+      responses:
+        "200":
+          description: 逐日排布结果；dryRun 为 false 时同时表示已提交，幂等重放返回同一结果。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MigratedTimeImportResult"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"

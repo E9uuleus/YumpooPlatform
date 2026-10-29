@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { usePageLoad } from '../../brand/page-progress'
+
 import { AlarmClock, EditPen, FolderOpened, Refresh, Tickets, User, WarningFilled } from '@element-plus/icons-vue'
 import {
   EmploymentStatus,
@@ -22,6 +24,7 @@ import { ensureAuthentication, useSession } from '../../composables/useSession'
 import { formatRelativeTime, formatTimestamp } from '../../design-system/dates'
 import { usePageOnboarding } from '../../onboarding/useOnboarding'
 
+const pageLoad = usePageLoad()
 interface EntryCard { key: string; label: string; meta: string; icon: Component; tone: JumpTone; routeName: string }
 
 const router = useRouter(), session = useSession()
@@ -125,18 +128,20 @@ async function load(): Promise<void> {
 }
 
 // Entry-card counts are decorative; a failure keeps the default meta text instead of blocking the page.
-function loadCounts(): void {
-  void projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.Active, page: 0, size: 1 })
-    .then(page => { projectTotal.value = page.totalElements }, quiet)
-  void identityAdministrationApi.listMembers({ employmentStatus: EmploymentStatus.Active, page: 0, size: 1 })
-    .then(page => { memberTotal.value = page.totalElements }, quiet)
-  void administrationApi.listScheduledJobs()
+function loadCounts(): Promise<unknown[]> {
+  return Promise.allSettled([
+    projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.Active, page: 0, size: 1 })
+    .then(page => { projectTotal.value = page.totalElements }, quiet),
+    identityAdministrationApi.listMembers({ employmentStatus: EmploymentStatus.Active, page: 0, size: 1 })
+    .then(page => { memberTotal.value = page.totalElements }, quiet),
+    administrationApi.listScheduledJobs()
     .then(result => { jobs.value = result.items }, quiet)
+  ])
 }
 
 onMounted(() => {
-  void load()
-  loadCounts()
+  void pageLoad.track(() => load())
+  pageLoad.track(() => loadCounts())
 })
 </script>
 

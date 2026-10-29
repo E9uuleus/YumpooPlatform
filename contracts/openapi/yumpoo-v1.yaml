@@ -1467,7 +1467,7 @@ paths:
         - TeamDashboard
       operationId: queryTeamTimesheet
       summary: 按成员、自然日与工作项统计计入时长
-      description: 仅公司管理员可用。按公司时区切分自然日，跨日记录按重叠时长拆分；运行中计时统计到 asOf，时长为按并行均摊后的计入时长。projectIds 为空表示全公司项目（含已归档），userIds 为空表示在职成员及区间内有计时的成员。区间最多 93 天，排除已删除工作项。非项目分类工时只在 projectIds 为空时通过 categoryEntries 返回。
+      description: 仅公司管理员可用。按公司时区切分自然日，跨日记录按重叠时长拆分；运行中计时统计到 asOf，时长为按并行均摊后的计入时长。projectIds 为空表示全公司项目（含已归档），userIds 为空表示在职成员及区间内有计时的成员。区间最多 93 天，排除已删除工作项。categoryEntries 返回分类工时；有项目筛选时只含关联到这些项目的分类工时。
       security:
         - sessionCookie: []
       parameters:
@@ -3812,6 +3812,11 @@ paths:
           in: query
           schema:
             $ref: "#/components/schemas/ProjectLifecycleFilter"
+        - name: ended
+          in: query
+          description: 省略时不按结束状态筛选；true 只返回已结束，false 只返回未结束。
+          schema:
+            type: boolean
         - name: page
           in: query
           schema:
@@ -4004,6 +4009,68 @@ paths:
       operationId: restoreProject
       summary: 负责人或 CompanyAdmin 恢复 ARCHIVED Project
       description: 锁内重验 Owner、ACTIVE membership、用户状态和 ACTIVE Workspace。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          $ref: "#/components/responses/ProjectChanged"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /projects/{projectId}/end:
+    post:
+      tags:
+        - Projects
+      operationId: endProject
+      summary: 负责人或 CompanyAdmin 结束进行中的 Project
+      description: 结束后内容只读，成员仍可见并计入统计；停止项目内运行中的计时。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          $ref: "#/components/responses/ProjectChanged"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /projects/{projectId}/resume:
+    post:
+      tags:
+        - Projects
+      operationId: resumeProject
+      summary: 负责人或 CompanyAdmin 重新打开已结束的 Project
+      description: 重新打开后项目内容恢复可写。
       security:
         - sessionCookie: []
       parameters:
@@ -7350,6 +7417,49 @@ paths:
           $ref: "#/components/responses/ValidationFailed"
         "428":
           $ref: "#/components/responses/PreconditionRequired"
+  /projects/{projectId}/work-item-imports:
+    post:
+      tags:
+        - WorkItems
+      operationId: importWorkItems
+      summary: 批量导入或预览导入工作项
+      description: 仅项目内可创建工作项的成员可用，项目已归档或已结束时与新建工作项同样拒绝。每行按 title（trim 后）匹配本项目内未删除、未归档的工作项，duplicateMode 决定全部新增、跳过已有或更新已有；UPDATE 只覆盖 fields 列出的字段，值为 null 表示清空。dryRun 为 true 时只返回规划结果、不写入；为 false 时在单事务内提交，报错行跳过、其余行照常写入。父项按标题在本次文件与项目已有项中查找，并压平到根祖先。导入不发工作项事件与通知，整次只写一条安全审计。不处理工时。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkItemImportRequest"
+      responses:
+        "200":
+          description: 逐行规划结果；dryRun 为 false 时同时表示已提交，幂等重放返回同一结果。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemImportResult"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
   /work-items/{workItemId}/updates:
     get:
       tags:
@@ -8156,6 +8266,46 @@ paths:
           $ref: "#/components/responses/AuthenticationRequired"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /company/migrated-time-imports:
+    post:
+      tags:
+        - TeamDashboard
+      operationId: importMigratedTime
+      summary: 按成员与日期批量迁入或预览历史工时
+      description: 仅公司管理员可用。每个条目是一名成员一天的总分钟数，服务端从该成员的上班时间起，把时长依次排进当天的空闲时段，写成只读的 MIGRATED 工时分类记录；同一成员同一天再次迁入覆盖上次的迁入结果，minutes 为 0 表示清除。排布按公司时区计算，当天排不下的天不写入任何记录。dryRun 为 true 时只返回排布结果、不写入；为 false 时在单事务内提交。不发领域事件，整次只写一条安全审计。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MigratedTimeImportRequest"
+      responses:
+        "200":
+          description: 逐日排布结果；dryRun 为 false 时同时表示已提交，幂等重放返回同一结果。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MigratedTimeImportResult"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "422":
           $ref: "#/components/responses/ValidationFailed"
   /admin/scheduled-jobs:
@@ -9261,6 +9411,13 @@ components:
         - date
         - durationMs
       properties:
+        projectId:
+          type: string
+          format: uuid
+          nullable: true
+        projectName:
+          type: string
+          nullable: true
         userId:
           $ref: "#/components/schemas/Uuid"
         timeCategory:
@@ -9311,7 +9468,7 @@ components:
             $ref: "#/components/schemas/TeamTimesheetEntry"
         categoryEntries:
           type: array
-          description: 非项目分类工时，每个成员、分类、自然日一条，只包含大于 0 的耗时；团队工时按项目筛选时为空。服务端总是返回。
+          description: 分类工时，每个成员、分类、关联项目、自然日一条，只包含大于 0 的耗时；有项目筛选时只含关联到这些项目的分类工时。服务端总是返回。
           items:
             $ref: "#/components/schemas/TeamTimesheetCategoryEntry"
         days:
@@ -9350,6 +9507,7 @@ components:
         - projectName
         - itemNo
         - title
+        - statusCode
         - statusName
         - statusCategory
         - statusColor
@@ -9370,6 +9528,10 @@ components:
           type: string
         title:
           type: string
+        statusCode:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]{1,31}$
+          description: 项目状态代码；NOT_STARTED 为项目初始状态，成员新增的状态使用生成的代码。
         statusName:
           type: string
         statusCategory:
@@ -11380,6 +11542,7 @@ components:
       required:
         - todo
         - inProgress
+        - other
         - overdue
       properties:
         todo:
@@ -11390,6 +11553,11 @@ components:
           type: integer
           format: int64
           minimum: 0
+        other:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 成员新增的状态（兼容分类 TODO）中的工作项；todo 只统计项目初始状态 NOT_STARTED。
         overdue:
           type: integer
           format: int64
@@ -11403,6 +11571,7 @@ components:
         - active
         - todo
         - inProgress
+        - other
         - overdue
       properties:
         userId:
@@ -11420,6 +11589,11 @@ components:
           type: integer
           format: int64
           minimum: 0
+        other:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 成员新增的状态（兼容分类 TODO）中的工作项；todo 只统计项目初始状态 NOT_STARTED。
         overdue:
           type: integer
           format: int64
@@ -11614,12 +11788,26 @@ components:
           format: date-time
     TimeCategory:
       type: string
-      description: 不关联项目与工作项的固定非项目工时分类：出差、学习、商务、会议。
+      description: 固定工时分类：出差、学习、商务、会议，以及仅由系统写入、成员只读的迁入工时；可选关联一个项目，但不关联工作项。
       enum:
         - BUSINESS_TRIP
         - LEARNING
         - BUSINESS
         - MEETING
+        - MIGRATED
+    TimeCategorySubject:
+      type: object
+      additionalProperties: false
+      required:
+        - timeCategory
+      properties:
+        timeCategory:
+          $ref: "#/components/schemas/TimeCategory"
+        projectId:
+          type: string
+          format: uuid
+          nullable: true
+          description: 关联的项目；为 null 时不关联项目。
     TimeSessionFillMode:
       type: string
       enum:
@@ -11634,6 +11822,10 @@ components:
         - startedAt
         - stoppedAt
       properties:
+        categoryProjectId:
+          type: string
+          format: uuid
+          description: 仅与 timeCategory 一起使用，把分类记录关联到本人可写的项目。
         workItemId:
           type: string
           format: uuid
@@ -11690,6 +11882,10 @@ components:
       additionalProperties: false
       description: 目标工作项或非项目分类，workItemId 与 timeCategory 必须且只能填一个。
       properties:
+        categoryProjectId:
+          type: string
+          format: uuid
+          description: 仅与 timeCategory 一起使用，把分类记录关联到本人可写的项目。
         workItemId:
           type: string
           format: uuid
@@ -11699,6 +11895,10 @@ components:
       type: object
       additionalProperties: false
       properties:
+        categoryProjectId:
+          type: string
+          format: uuid
+          description: 仅与 timeCategory 一起使用，把分类记录关联到本人可写的项目。
         workItemId:
           type: string
           format: uuid
@@ -11712,6 +11912,13 @@ components:
             format: uuid
         timeCategory:
           $ref: "#/components/schemas/TimeCategory"
+        timeCategorySubjects:
+          type: array
+          minItems: 1
+          maxItems: 10
+          description: 仅 start 使用，批量开始可关联项目的分类；与 workItemIds、timeCategories 合计最多 10 项，同一分类只能出现一次。
+          items:
+            $ref: "#/components/schemas/TimeCategorySubject"
         timeCategories:
           type: array
           minItems: 1
@@ -11754,6 +11961,11 @@ components:
         - workItemNo
         - workItemTitle
       properties:
+        categoryProjectId:
+          type: string
+          format: uuid
+          nullable: true
+          description: 分类记录关联的项目；工作项记录为 null
         id:
           type: string
           format: uuid
@@ -11921,6 +12133,18 @@ components:
           type: integer
           format: int64
           minimum: 0
+        parentWorkItemId:
+          type: string
+          format: uuid
+          nullable: true
+          description: 父工作项 ID；顶层工作项为 null。
+        parentTitle:
+          type: string
+          nullable: true
+          description: 父工作项标题，父项不在当前列表中时用于显示父项标题行。
+        parentCompleted:
+          type: boolean
+          description: 父工作项按本人对该项目的完成定义是否已完成；没有父项时为 false。
     RecentTimeTrackingItem:
       type: object
       additionalProperties: false
@@ -11985,6 +12209,7 @@ components:
         - recentItems
         - runningSessions
         - resumeItems
+        - resumeCategorySubjects
         - preferences
       properties:
         preferences:
@@ -11998,6 +12223,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/RecentTimeTrackingItem"
+        resumeCategorySubjects:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimeCategorySubject"
         resumeCategories:
           type: array
           description: 与 resumeItems 同一批最近停止的非项目分类计时，按分类固定顺序排列。服务端总是返回。
@@ -13133,6 +13362,12 @@ components:
         canCancelDeletion:
           type: boolean
           readOnly: true
+        canEnd:
+          type: boolean
+          readOnly: true
+        canResume:
+          type: boolean
+          readOnly: true
     ProjectDeletion:
       type: object
       additionalProperties: false
@@ -13211,6 +13446,12 @@ components:
         - ownerUserId
         - rowVersion
       properties:
+        endedAt:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+          description: 项目结束时间；为 null 时项目未结束。已结束项目 lifecycle 仍为 ACTIVE。
         id:
           $ref: "#/components/schemas/Uuid"
         workspaceId:
@@ -13251,6 +13492,25 @@ components:
           type: string
           maxLength: 500
           nullable: true
+        initialColors:
+          $ref: "#/components/schemas/ProjectInitialColors"
+    ProjectInitialColors:
+      type: object
+      additionalProperties: false
+      description: 创建时覆盖默认初始结构的颜色。键为默认结构中的类别、状态或优先级代码，未列出的代码保持默认颜色。
+      properties:
+        categories:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/WorkItemLabelColorToken"
+        statuses:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/WorkItemLabelColorToken"
+        priorities:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/WorkItemLabelColorToken"
     ProjectSummary:
       type: object
       additionalProperties: false
@@ -13271,6 +13531,12 @@ components:
         - createdAt
         - updatedAt
       properties:
+        endedAt:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+          description: 项目结束时间；为 null 时项目未结束。已结束项目 lifecycle 仍为 ACTIVE。
         id:
           $ref: "#/components/schemas/Uuid"
         workspaceId:
@@ -13388,6 +13654,12 @@ components:
             - updatedAt
             - archivedAt
           properties:
+            endedAt:
+              type: string
+              format: date-time
+              nullable: true
+              readOnly: true
+              description: 项目结束时间；为 null 时项目未结束。已结束项目 lifecycle 仍为 ACTIVE。
             workspaceCode:
               type: string
               minLength: 2
@@ -15677,6 +15949,173 @@ components:
           minLength: 1
           maxLength: 500
           nullable: true
+    WorkItemImportDuplicateMode:
+      type: string
+      description: 标题与项目内已有工作项相同时的处理：全部新增、跳过已有、更新已有。
+      enum:
+        - CREATE
+        - SKIP
+        - UPDATE
+    WorkItemImportField:
+      type: string
+      description: 可选的已映射字段；标题总是映射，不在其中。
+      enum:
+        - CONTENT
+        - STATUS
+        - PRIORITY
+        - ASSIGNEES
+        - DUE_DATE
+        - PARENT
+        - NOTES
+    WorkItemImportRow:
+      type: object
+      additionalProperties: false
+      required:
+        - rowNumber
+        - title
+        - contentId
+        - statusCode
+        - assigneeUserIds
+      properties:
+        rowNumber:
+          type: integer
+          format: int32
+          minimum: 1
+          description: 表格中的行号，用于结果回显。
+        title:
+          type: string
+          maxLength: 1000
+          description: 原样传入，服务端 trim 后要求 1 到 300 字符。
+        contentId:
+          $ref: "#/components/schemas/Uuid"
+        statusCode:
+          type: string
+          maxLength: 32
+        priority:
+          type: string
+          maxLength: 32
+          nullable: true
+        assigneeUserIds:
+          type: array
+          maxItems: 20
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        dueDate:
+          type: string
+          format: date
+          nullable: true
+        parentTitle:
+          type: string
+          maxLength: 1000
+          nullable: true
+        notes:
+          type: string
+          maxLength: 16384
+          nullable: true
+    WorkItemImportRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - dryRun
+        - duplicateMode
+        - fields
+        - rows
+      properties:
+        dryRun:
+          type: boolean
+        duplicateMode:
+          $ref: "#/components/schemas/WorkItemImportDuplicateMode"
+        fields:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/WorkItemImportField"
+          description: 已映射的可选字段；UPDATE 只覆盖这些字段，值为 null 或空表示清空。
+        rows:
+          type: array
+          minItems: 1
+          maxItems: 2000
+          items:
+            $ref: "#/components/schemas/WorkItemImportRow"
+    WorkItemImportOutcome:
+      type: string
+      enum:
+        - CREATE
+        - UPDATE
+        - SKIP
+        - ERROR
+    WorkItemImportIssue:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - detail
+      properties:
+        code:
+          type: string
+          minLength: 1
+          description: 稳定问题代码，例如 TITLE_INVALID、DUPLICATE_EXISTS、MATCH_AMBIGUOUS、PARENT_FLATTENED；客户端映射为本地化文案。
+        detail:
+          type: string
+          nullable: true
+    WorkItemImportRowResult:
+      type: object
+      additionalProperties: false
+      required:
+        - rowNumber
+        - outcome
+        - issues
+      properties:
+        rowNumber:
+          type: integer
+          format: int32
+          minimum: 1
+        outcome:
+          $ref: "#/components/schemas/WorkItemImportOutcome"
+        workItemId:
+          $ref: "#/components/schemas/Uuid"
+        itemNo:
+          type: string
+          minLength: 1
+        issues:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkItemImportIssue"
+    WorkItemImportResult:
+      type: object
+      additionalProperties: false
+      required:
+        - dryRun
+        - createdCount
+        - updatedCount
+        - skippedCount
+        - failedCount
+        - rows
+      properties:
+        dryRun:
+          type: boolean
+        createdCount:
+          type: integer
+          format: int32
+          minimum: 0
+        updatedCount:
+          type: integer
+          format: int32
+          minimum: 0
+        skippedCount:
+          type: integer
+          format: int32
+          minimum: 0
+        failedCount:
+          type: integer
+          format: int32
+          minimum: 0
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkItemImportRowResult"
     WorkItemUpdateStatus:
       type: string
       enum:
@@ -16478,6 +16917,145 @@ components:
           description: 单元格动态专用投影开始接收事件的明确切点，更早历史未回填。
         facets:
           $ref: "#/components/schemas/WorkItemCellActivityFacets"
+    MigratedTimeImportEntry:
+      type: object
+      additionalProperties: false
+      required:
+        - userId
+        - workDate
+        - minutes
+      properties:
+        userId:
+          $ref: "#/components/schemas/Uuid"
+        workDate:
+          type: string
+          format: date
+          description: 公司时区的自然日。
+        minutes:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 1440
+          description: 当天总分钟数；0 表示清除当天已有的迁入工时。
+    MigratedTimeImportRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - dryRun
+        - entries
+      properties:
+        dryRun:
+          type: boolean
+        categoryProjectId:
+          type: string
+          format: uuid
+          nullable: true
+          description: 可选的关联项目，必须是本公司 ACTIVE 状态的项目。
+        entries:
+          type: array
+          minItems: 1
+          maxItems: 20000
+          items:
+            $ref: "#/components/schemas/MigratedTimeImportEntry"
+          description: (userId, workDate) 不得重复。
+    MigratedTimeImportOutcome:
+      type: string
+      enum:
+        - IMPORT
+        - CLEAR
+        - ERROR
+    MigratedTimeImportIssue:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - detail
+      properties:
+        code:
+          type: string
+          minLength: 1
+          description: 稳定问题代码，例如 USER_INVALID、NOT_ENOUGH_FREE_TIME、PAST_WORKDAY_END、FUTURE_DATE、REPLACES_PREVIOUS。
+        detail:
+          type: string
+          nullable: true
+    MigratedTimeImportDay:
+      type: object
+      additionalProperties: false
+      required:
+        - userId
+        - workDate
+        - minutes
+        - outcome
+        - segmentCount
+        - issues
+      properties:
+        userId:
+          $ref: "#/components/schemas/Uuid"
+        workDate:
+          type: string
+          format: date
+        minutes:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 1440
+        outcome:
+          $ref: "#/components/schemas/MigratedTimeImportOutcome"
+        startedAt:
+          type: string
+          format: date-time
+          description: 排布后的首段起点；CLEAR 与 ERROR 时缺省。
+        stoppedAt:
+          type: string
+          format: date-time
+          description: 排布后的末段终点；CLEAR 与 ERROR 时缺省。
+        segmentCount:
+          type: integer
+          format: int32
+          minimum: 0
+        issues:
+          type: array
+          items:
+            $ref: "#/components/schemas/MigratedTimeImportIssue"
+    MigratedTimeImportResult:
+      type: object
+      additionalProperties: false
+      required:
+        - dryRun
+        - importedDayCount
+        - clearedDayCount
+        - failedDayCount
+        - importedMinutes
+        - replacedMinutes
+        - days
+      properties:
+        dryRun:
+          type: boolean
+        importedDayCount:
+          type: integer
+          format: int32
+          minimum: 0
+        clearedDayCount:
+          type: integer
+          format: int32
+          minimum: 0
+        failedDayCount:
+          type: integer
+          format: int32
+          minimum: 0
+        importedMinutes:
+          type: integer
+          format: int64
+          minimum: 0
+        replacedMinutes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 被覆盖或清除的原有迁入工时分钟数。
+        days:
+          type: array
+          items:
+            $ref: "#/components/schemas/MigratedTimeImportDay"
     ScheduledJob:
       type: object
       additionalProperties: false

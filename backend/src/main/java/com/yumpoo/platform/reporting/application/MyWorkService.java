@@ -48,7 +48,7 @@ public class MyWorkService {
         var self = users.findByUserIds(actor.companyId(), List.of(actor.userId())).get(actor.userId());
         return new Timesheet(from, to, zone.getId(), asOf, List.of(new Member(actor.userId(), self.displayName(), self.activeAndEnabled())),
                 List.copyOf(items.values()), entries.stream().map(e -> new TimesheetEntry(e.userId(), e.workItemId(), e.date(), e.durationMs())).toList(),
-                Timesheet.categories(categories), CalendarDay.of(calendar.days(from, to)));
+                Timesheet.categories(categories, scope.entrySet().stream().collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().name()))), CalendarDay.of(calendar.days(from, to)));
     }
 
     public TaskPage currentTasks(CurrentActor actor, int offset, int limit) {
@@ -57,7 +57,7 @@ public class MyWorkService {
         LocalDate today = LocalDate.ofInstant(clock.instant(), zone());
         var page = work.ownCurrentTasks(actor, List.copyOf(scope.keySet()), today, offset, limit);
         return new TaskPage(page.items().stream().map(t -> new Task(t.id(), t.projectId(), scope.get(t.projectId()).name(), t.itemNo(), t.title(),
-                t.statusName(), t.statusCategory(), t.statusColor(), t.priorityName(), t.priorityColor(), t.dueDate(), t.overdue())).toList(),
+                t.statusCode(), t.statusName(), t.statusCategory(), t.statusColor(), t.priorityName(), t.priorityColor(), t.dueDate(), t.overdue())).toList(),
                 page.totalElements());
     }
 

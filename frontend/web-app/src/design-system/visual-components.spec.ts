@@ -144,7 +144,9 @@ describe('视觉语义组件', () => {
       attachTo: document.body,
       props: { theme: 'system', density: 'comfortable' },
     })
-    await wrapper.get('.yp-theme-trigger').trigger('click')
+    const trigger = wrapper.get('button[aria-label="外观"]')
+    expect(trigger.text()).not.toContain('外观')
+    await trigger.trigger('click')
     await flushPromises()
     const radios = Array.from(document.body.querySelectorAll<HTMLInputElement>('input[type="radio"]'))
     expect(radios).toHaveLength(6)

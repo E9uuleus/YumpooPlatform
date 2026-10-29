@@ -1,8 +1,8 @@
 import type { Component } from 'vue'
 import type { TimeCategory, WorkItemLabelColorToken } from '@yumpoo/api-client'
-import { Briefcase, ChatDotRound, Reading, Suitcase } from '@element-plus/icons-vue'
+import { Briefcase, ChatDotRound, Files, Reading, Suitcase } from '@element-plus/icons-vue'
 
-/** A fixed non-project category: time recorded against it has no project or work item. */
+/** 固定工时分类；记录可关联一个项目，但不关联工作项。 */
 export interface TimeCategoryOption { code: TimeCategory; key: string; label: string; colorToken: WorkItemLabelColorToken; icon: Component }
 
 /**
@@ -12,12 +12,15 @@ export interface TimeCategoryOption { code: TimeCategory; key: string; label: st
 export type SubjectKey = string
 
 const PREFIX = 'category:'
-export const NON_PROJECT_LABEL = '非项目工时'
+/** Groups category rows that name no project apart from projects in the team timesheets. */
+export const NON_PROJECT_LABEL = '未关联项目'
 /** Groups non-project rows apart from projects in the timesheets; never a real project id. */
 export const NON_PROJECT_KEY = '__non_project__'
 export const NON_PROJECT_COLOR = 'var(--yp-label-american-gray)'
 
-export const categoryKey = (code: TimeCategory): SubjectKey => `${PREFIX}${code}`
+/** `category:<code>`, or `category:<code>:<projectId>` when the record is linked to a project. */
+export const categoryKey = (code: TimeCategory, projectId?: string | null): SubjectKey =>
+  `${PREFIX}${code}${projectId ? `:${projectId}` : ''}`
 
 // Wire values rather than the generated enums, so this catalogue stays plain data wherever the client is mocked.
 export const TIME_CATEGORIES: readonly TimeCategoryOption[] = ([
@@ -28,29 +31,60 @@ export const TIME_CATEGORIES: readonly TimeCategoryOption[] = ([
 ] as const).map(([code, label, colorToken, icon]) => ({ code: code as TimeCategory, key: categoryKey(code as TimeCategory), label,
   colorToken: colorToken as WorkItemLabelColorToken, icon }))
 
+/**
+ * 迁入工时由管理员按日导入、成员只读：它有展示元数据，但不在可选列表 `TIME_CATEGORIES` 里，
+ * 所以不会出现在选择器、工作项侧栏和快捷工时里。
+ */
+export const MIGRATED_CATEGORY: TimeCategoryOption = { code: 'MIGRATED' as TimeCategory, key: categoryKey('MIGRATED' as TimeCategory),
+  label: '迁入工时', colorToken: 'AMERICAN_GRAY' as WorkItemLabelColorToken, icon: Files }
+/** 迁入工时标识的统一文案：时段由系统排布，不代表实际工作时间。 */
+export const MIGRATED_TIME_NOTE = '不代表具体时段'
+export const MIGRATED_BADGE = '迁'
+export const MIGRATED_LEGEND = '迁＝含迁入工时，按日迁入，不代表具体工作时段'
+
+/** Every category with display metadata, including the read-only one nobody can pick. */
+const DISPLAYED_CATEGORIES: readonly TimeCategoryOption[] = [...TIME_CATEGORIES, MIGRATED_CATEGORY]
+
 export function timeCategory(code: TimeCategory | string | null | undefined): TimeCategoryOption | undefined {
-  return TIME_CATEGORIES.find(option => option.code === code)
+  return DISPLAYED_CATEGORIES.find(option => option.code === code)
 }
+
+export const isMigratedCategory = (code: TimeCategory | string | null | undefined): boolean => code === MIGRATED_CATEGORY.code
 
 /** The category a key names, or undefined for a work item id. */
 export function categoryOf(key: SubjectKey | null | undefined): TimeCategoryOption | undefined {
-  return key?.startsWith(PREFIX) ? timeCategory(key.slice(PREFIX.length)) : undefined
+  return key?.startsWith(PREFIX) ? timeCategory(key.slice(PREFIX.length).split(':')[0]) : undefined
+}
+
+/** The project a category key is linked to, or null. */
+export function categoryProjectOf(key: SubjectKey): string | null {
+  return key.startsWith(PREFIX) ? key.slice(PREFIX.length).split(':')[1] ?? null : null
+}
+
+/** The timeline slot a key occupies: its category whatever project it names, else the work item; a slot never overlaps itself. */
+export function subjectSlot(key: SubjectKey): string {
+  const category = categoryOf(key)
+  return category ? category.key : key
 }
 
 /** The key of a session's subject; null when the work item is not disclosed to the caller. */
-export function sessionKey(session: { workItemId: string | null; timeCategory?: TimeCategory | null }): SubjectKey | null {
-  return session.timeCategory ? categoryKey(session.timeCategory) : session.workItemId
+export function sessionKey(session: { workItemId: string | null; timeCategory?: TimeCategory | null; categoryProjectId?: string | null }): SubjectKey | null {
+  return session.timeCategory ? categoryKey(session.timeCategory, session.categoryProjectId) : session.workItemId
 }
 
 /** Request fields naming the subject, for fill, reassign and timer commands. */
-export function subjectFields(key: SubjectKey): { workItemId: string } | { timeCategory: TimeCategory } {
+export function subjectFields(key: SubjectKey): { workItemId: string } | { timeCategory: TimeCategory; categoryProjectId?: string } {
   const category = categoryOf(key)
-  return category ? { timeCategory: category.code } : { workItemId: key }
+  if (!category) return { workItemId: key }
+  const projectId = categoryProjectOf(key)
+  return projectId ? { timeCategory: category.code, categoryProjectId: projectId } : { timeCategory: category.code }
 }
 
 /** The last stopped timer group, work items first then categories, as `startMany` takes it back. */
-export function resumeSubjects(current: { resumeItems: { workItemId: string }[]; resumeCategories?: TimeCategory[] } | undefined): SubjectKey[] {
-  return [...(current?.resumeItems ?? []).map(item => item.workItemId), ...(current?.resumeCategories ?? []).map(categoryKey)]
+export function resumeSubjects(current: { resumeItems: { workItemId: string }[];
+  resumeCategorySubjects?: { timeCategory: TimeCategory; projectId?: string | null }[] } | undefined): SubjectKey[] {
+  return [...(current?.resumeItems ?? []).map(item => item.workItemId),
+    ...(current?.resumeCategorySubjects ?? []).map(subject => categoryKey(subject.timeCategory, subject.projectId))]
 }
 
 /** What a running timer is called: its category, or the work item title the caller may see. */
@@ -61,10 +95,11 @@ export function timerTitle(timer: { session: { timeCategory?: TimeCategory | nul
 /** A pickable work item or category, as the day view's pickers hand it on. */
 export interface SubjectOption { key: SubjectKey; title: string; projectName: string | null }
 
-export const categoryOption = (option: TimeCategoryOption): SubjectOption => ({ key: option.key, title: option.label, projectName: NON_PROJECT_LABEL })
+export const categoryOption = (option: TimeCategoryOption): SubjectOption => ({ key: option.key, title: option.label, projectName: null })
 
-/** Categories whose label contains the query; every category for an empty query. */
-export function matchCategories(query: string): TimeCategoryOption[] {
+/** Categories whose label contains the query, keyed to `projectId` when the list is narrowed to one project. */
+export function matchCategories(query: string, projectId: string | null = null): TimeCategoryOption[] {
   const text = query.trim()
   return TIME_CATEGORIES.filter(option => !text || option.label.includes(text))
+    .map(option => projectId ? { ...option, key: categoryKey(option.code, projectId) } : option)
 }

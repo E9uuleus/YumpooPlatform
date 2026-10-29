@@ -8,11 +8,20 @@ import { computed, ref } from 'vue'
 import { projectsApi, workItemsApi } from '../../api/client'
 import { isProblemStatus, localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import { notifyProjectLifecycleChanged } from '../../composables/projectLifecycleEvents'
+import { changeProjectEnded } from './projectEnding'
 
 const props = defineProps<{ project: ProjectDetail }>()
 const emit = defineEmits<{ changed: []; problem: [problem: ApiProblem] }>()
 const busy = ref(false)
-const canOperate = computed(() => props.project.capabilities.canArchive || props.project.capabilities.canRestore)
+const canOperate = computed(() => {
+  const capabilities = props.project.capabilities
+  return capabilities.canArchive || capabilities.canRestore || capabilities.canEnd || capabilities.canResume
+})
+async function toggleEnded(): Promise<void> {
+  if (busy.value) return
+  busy.value = true
+  try { if (await changeProjectEnded(props.project)) emit('changed') } finally { busy.value = false }
+}
 
 async function run(operation: (token: string) => Promise<unknown>, success: string): Promise<void> {
   const token = readCsrfToken()
@@ -85,50 +94,96 @@ async function restore(): Promise<void> {
 </script>
 
 <template>
-  <section
+  <div
     v-if="canOperate"
-    class="lifecycle-actions"
-    aria-labelledby="lifecycle-actions-title"
+    class="project-lifecycle"
   >
-    <div>
-      <h2 id="lifecycle-actions-title">
-        危险区域
-      </h2>
-      <p>归档项目仅负责人和企业管理员可只读浏览或恢复，不再计入统计。</p>
-    </div>
-    <div class="lifecycle-actions__buttons">
+    <section
+      v-if="project.capabilities.canEnd || project.capabilities.canResume"
+      class="lifecycle-status"
+      aria-labelledby="lifecycle-status-title"
+    >
+      <div>
+        <h2 id="lifecycle-status-title">
+          项目状态
+        </h2>
+        <p v-if="project.endedAt">
+          项目已结束，内容只读，仍对成员可见并计入统计。
+        </p>
+        <p v-else>
+          项目完成后可以结束：内容变为只读，仍对成员可见并计入统计。
+        </p>
+      </div>
       <el-button
-        v-if="project.capabilities.canArchive && project.lifecycle === ProjectLifecycle.Active"
+        :type="project.endedAt ? 'primary' : ''"
         :loading="busy"
-        @click="archive"
+        @click="toggleEnded"
       >
-        归档项目
+        {{ project.endedAt ? '重新打开项目' : '结束项目' }}
       </el-button>
-      <el-button
-        v-if="project.capabilities.canRestore"
-        type="primary"
-        :loading="busy"
-        @click="restore"
-      >
-        恢复项目
-      </el-button>
-    </div>
-  </section>
+    </section>
+    <section
+      v-if="project.capabilities.canArchive || project.capabilities.canRestore"
+      class="lifecycle-actions"
+      aria-labelledby="lifecycle-actions-title"
+    >
+      <div>
+        <h2 id="lifecycle-actions-title">
+          危险区域
+        </h2>
+        <p>归档项目仅负责人和企业管理员可只读浏览或恢复，不再计入统计。</p>
+      </div>
+      <div class="lifecycle-actions__buttons">
+        <el-button
+          v-if="project.capabilities.canArchive && project.lifecycle === ProjectLifecycle.Active"
+          :loading="busy"
+          @click="archive"
+        >
+          归档项目
+        </el-button>
+        <el-button
+          v-if="project.capabilities.canRestore"
+          type="primary"
+          :loading="busy"
+          @click="restore"
+        >
+          恢复项目
+        </el-button>
+      </div>
+    </section>
+  </div>
 </template>
 
 <style scoped>
+.project-lifecycle { display: grid; }
+.lifecycle-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--yp-space-4);
+  margin-bottom: var(--yp-space-5);
+  padding: var(--yp-space-5) var(--yp-space-6);
+  border: 1px solid var(--yp-border-subtle);
+  border-radius: var(--yp-radius-xl);
+  background: var(--yp-bg-surface);
+}
+.lifecycle-status h2,
+.lifecycle-status p { margin: 0; }
+.lifecycle-status h2 { font-size: var(--yp-type-card-title-size); font-weight: 600; }
+.lifecycle-status p { margin-top: var(--yp-space-1); color: var(--yp-text-secondary); }
+
 .lifecycle-actions {
   display: grid;
   gap: var(--yp-space-4);
   margin-bottom: var(--yp-space-5);
-  padding: var(--yp-space-6);
-  border: 1px solid var(--yp-border-subtle);
-  border-radius: var(--yp-radius-md);
-  background: var(--yp-bg-surface);
+  padding: var(--yp-space-5) var(--yp-space-6);
+  border: 1px solid color-mix(in srgb, var(--yp-status-red) 28%, var(--yp-border-subtle));
+  border-radius: var(--yp-radius-xl);
+  background: color-mix(in srgb, var(--yp-status-red) 3%, var(--yp-bg-surface));
 }
 .lifecycle-actions h2,
 .lifecycle-actions p { margin: 0; }
-.lifecycle-actions h2 { font-size: 16px; font-weight: 600; }
+.lifecycle-actions h2 { color: var(--yp-status-red); font-size: var(--yp-type-card-title-size); font-weight: 600; }
 .lifecycle-actions p { margin-top: var(--yp-space-1); color: var(--yp-text-secondary); }
 .lifecycle-actions__buttons { display: flex; flex-wrap: wrap; gap: var(--yp-space-2); }
 </style>

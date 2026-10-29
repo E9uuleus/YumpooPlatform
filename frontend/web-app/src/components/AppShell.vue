@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Calendar, DataLine, DataAnalysis, Box, Clock, Close, FolderOpened, Grid, House, Menu as MenuIcon, Search, Setting, User, OfficeBuilding, Monitor } from '@element-plus/icons-vue'
-import { AuthenticationClientType, ProjectLifecycleFilter, type ProjectSummary } from '@yumpoo/api-client'
+import { AuthenticationClientType, ProjectLifecycleFilter, ProjectActorAccess, type Project, type ProjectSummary } from '@yumpoo/api-client'
 import {
   ElButton,
   ElDrawer,
@@ -8,6 +8,7 @@ import {
   ElDropdownItem,
   ElDropdownMenu,
   ElIcon,
+  ElMessage,
   ElTooltip,
 } from 'element-plus'
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, readonly, ref, watch, type Component } from 'vue'
@@ -30,6 +31,7 @@ import { operationsAlertSummaryContext } from './operations/operationsContext'
 import type { ShellSection } from '../router/shell-navigation'
 import DesktopUpdateBanner from './desktop/DesktopUpdateBanner.vue'
 import InlineProblem from './InlineProblem.vue'
+import ProjectCreateDialog from './projects/ProjectCreateDialog.vue'
 import { MY_PROJECT_ACCESSES } from './projects/projectScope'
 import YpAssignee from './yp/YpAssignee.vue'
 import brandLogo from '../assets/brand/logo.svg'
@@ -62,6 +64,7 @@ const onboarding = useOnboarding()
 const routeTour = computed(() => route.meta.onboardingTour)
 const mobileNavigationOpen = ref(false)
 const projectNavigationOpen = ref(true)
+const projectCreateOpen = ref(false)
 const sidebarSearchOpen = ref(false)
 const sidebarSearchQuery = ref('')
 const desktopSearchInput = ref<HTMLInputElement>()
@@ -87,7 +90,7 @@ const releaseLabel = computed(() => releaseVersion.value
   : '')
 const activeSection = computed<ShellSection>(() => route.meta.shellSection ?? 'work')
 const myTimeActive = computed(() => route.name === 'my-time' || route.name === 'my-time-day')
-const dashboardFrame = computed(() => route.name === 'dashboards' || route.name === 'my-time' || route.name === 'my-time-day' || route.name === 'team')
+const fixedFrame = computed(() => route.meta.frame === 'fixed')
 const isWorkspaceSection = computed(() => activeSection.value === 'work')
 const hasContextNavigation = computed(() => activeSection.value !== 'home')
 const projectRecentScope = computed(() => {
@@ -138,6 +141,7 @@ const contextItems = computed<ContextItem[]>(() => {
   }
   if (activeSection.value === 'team') return [
     { label: '成员工时', routeName: 'team', params: { view: 'timesheet' } },
+    { label: '项目工时', routeName: 'team', params: { view: 'projects' } },
     { label: '加班统计', routeName: 'team', params: { view: 'overtime' } },
     { label: '成员当前任务', routeName: 'team', params: { view: 'workload' } },
   ]
@@ -186,6 +190,8 @@ function navigateProject(project: ProjectSummary): void {
 }
 
 function isContextItemActive(item: ContextItem): boolean {
+  // 迁入工时 is a sub-page of 成员工时.
+  if (route.name === 'team-hours-import') return item.routeName === 'team' && item.params?.view === 'timesheet'
   return route.name === item.routeName
     && (!item.params?.view || route.params.view === item.params.view)
     && (!item.query?.filter || parseInboxFilter(route.query.filter) === item.query.filter)
@@ -206,6 +212,7 @@ async function loadNavigationProjects(query = sidebarSearchQuery.value.trim()): 
     const projectPage = await projectsApi.listProjects({
       ...(query ? { query } : {}),
       lifecycle: ProjectLifecycleFilter.Active,
+      ended: false,
       actorAccesses: MY_PROJECT_ACCESSES,
       page: 0,
       size: 11,
@@ -224,6 +231,15 @@ async function loadNavigationProjects(query = sidebarSearchQuery.value.trim()): 
     hasMoreNavigationProjects.value = false
     navigationProjectsFailed.value = true
   }
+}
+
+function projectCreated(project: Project): void {
+  const now = new Date()
+  projectRecents.record({ ...project, ownerDisplayName: session.authentication.value?.user.displayName ?? '我',
+    actorAccess: ProjectActorAccess.Owner, createdAt: now, updatedAt: now })
+  ElMessage.success('项目已创建')
+  void loadNavigationProjects()
+  void router.push({ name: 'project-overview', params: { projectId: project.id } })
 }
 
 function openSidebarSearch(): void {
@@ -309,7 +325,7 @@ onBeforeUnmount(() => {
     :class="{
       'app-shell--context-open': contextNavigationOpen && hasContextNavigation,
       'app-shell--workspace': isWorkspaceSection,
-      'app-shell--dashboard': dashboardFrame,
+      'app-shell--fixed': fixedFrame,
     }"
   >
     <aside
@@ -696,25 +712,45 @@ onBeforeUnmount(() => {
               <calendar />
             </el-icon><span>我的工时</span>
           </button>
-          <button
-            class="project-navigation__toggle"
-            type="button"
-            :aria-expanded="projectNavigationOpen"
-            aria-controls="desktop-project-navigation"
-            @click="projectNavigationOpen = !projectNavigationOpen"
-          >
-            <span>项目</span>
-            <svg
-              viewBox="0 0 20 20"
-              fill="currentColor"
-              width="12"
-              height="12"
-              aria-hidden="true"
-              class="project-navigation__chevron"
+          <div class="project-navigation__head">
+            <button
+              class="project-navigation__toggle"
+              type="button"
+              :aria-expanded="projectNavigationOpen"
+              aria-controls="desktop-project-navigation"
+              @click="projectNavigationOpen = !projectNavigationOpen"
             >
-              <path d="M9.442 12.76a.77.77 0 0 0 1.116 0l4.21-4.363a.84.84 0 0 0 0-1.157.77.77 0 0 0-1.116 0L10 11.025 6.348 7.24a.77.77 0 0 0-1.117 0 .84.84 0 0 0 0 1.157l4.21 4.363Z" />
-            </svg>
-          </button>
+              <span>项目</span>
+              <svg
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                width="12"
+                height="12"
+                aria-hidden="true"
+                class="project-navigation__chevron"
+              >
+                <path d="M9.442 12.76a.77.77 0 0 0 1.116 0l4.21-4.363a.84.84 0 0 0 0-1.157.77.77 0 0 0-1.116 0L10 11.025 6.348 7.24a.77.77 0 0 0-1.117 0 .84.84 0 0 0 0 1.157l4.21 4.363Z" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="project-navigation__add"
+              aria-label="创建项目"
+              title="创建项目"
+              @click="projectCreateOpen = true"
+            >
+              <svg
+                viewBox="0 0 16 16"
+                width="14"
+                height="14"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linecap="round"
+                aria-hidden="true"
+              ><path d="M8 3.25v9.5M3.25 8h9.5" /></svg>
+            </button>
+          </div>
           <div
             v-show="projectNavigationOpen"
             id="desktop-project-navigation"
@@ -866,7 +902,7 @@ onBeforeUnmount(() => {
 
     <main
       class="app-main"
-      :class="{ 'app-main--dashboard': dashboardFrame }"
+      :class="{ 'app-main--fixed': fixedFrame }"
     >
       <desktop-update-banner />
       <inline-problem
@@ -1018,22 +1054,42 @@ onBeforeUnmount(() => {
               <calendar />
             </el-icon><span>我的工时</span>
           </button>
-          <button
-            type="button"
-            class="project-navigation__toggle"
-            :aria-expanded="projectNavigationOpen"
-            @click="projectNavigationOpen = !projectNavigationOpen"
-          >
-            <span>项目</span>
-            <svg
-              viewBox="0 0 20 20"
-              fill="currentColor"
-              width="12"
-              height="12"
-              aria-hidden="true"
-              class="project-navigation__chevron"
-            ><path d="M9.442 12.76a.77.77 0 0 0 1.116 0l4.21-4.363a.84.84 0 0 0 0-1.157.77.77 0 0 0-1.116 0L10 11.025 6.348 7.24a.77.77 0 0 0-1.117 0 .84.84 0 0 0 0 1.157l4.21 4.363Z" /></svg>
-          </button>
+          <div class="project-navigation__head">
+            <button
+              type="button"
+              class="project-navigation__toggle"
+              :aria-expanded="projectNavigationOpen"
+              @click="projectNavigationOpen = !projectNavigationOpen"
+            >
+              <span>项目</span>
+              <svg
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                width="12"
+                height="12"
+                aria-hidden="true"
+                class="project-navigation__chevron"
+              ><path d="M9.442 12.76a.77.77 0 0 0 1.116 0l4.21-4.363a.84.84 0 0 0 0-1.157.77.77 0 0 0-1.116 0L10 11.025 6.348 7.24a.77.77 0 0 0-1.117 0 .84.84 0 0 0 0 1.157l4.21 4.363Z" /></svg>
+            </button>
+            <button
+              type="button"
+              class="project-navigation__add"
+              aria-label="创建项目"
+              title="创建项目"
+              @click="mobileNavigationOpen = false; projectCreateOpen = true"
+            >
+              <svg
+                viewBox="0 0 16 16"
+                width="14"
+                height="14"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linecap="round"
+                aria-hidden="true"
+              ><path d="M8 3.25v9.5M3.25 8h9.5" /></svg>
+            </button>
+          </div>
           <div
             v-show="projectNavigationOpen"
             class="project-navigation__children"
@@ -1187,6 +1243,10 @@ onBeforeUnmount(() => {
         <menu-icon />
       </el-icon>
     </button>
+    <project-create-dialog
+      v-model="projectCreateOpen"
+      @created="projectCreated"
+    />
     <onboarding-host />
   </div>
 </template>

@@ -64,14 +64,19 @@ public class TeamDashboardService {
         Map<UUID, TimesheetWorkItem> items = new LinkedHashMap<>();
         entries.forEach(e -> items.putIfAbsent(e.workItemId(),
                 new TimesheetWorkItem(e.workItemId(), e.projectId(), scope.get(e.projectId()).name(), e.itemNo(), e.title())));
-        // A project filter asks for those projects' time, so non-project category time only joins the unfiltered sheet.
-        var categories = query.projectIds() == null || query.projectIds().isEmpty()
-                ? work.categoryEntries(actor, userIds, query.from(), query.to(), zone, asOf) : List.<TeamWorkQuery.CategoryEntry>of();
+        // 有项目筛选时，只保留关联到这些项目的分类工时。
+        var categories = work.categoryEntries(actor, userIds, query.from(), query.to(), zone, asOf).stream()
+                .filter(e -> query.projectIds() == null || query.projectIds().isEmpty() || e.projectId() != null && scope.containsKey(e.projectId()))
+                .toList();
         var withTime = Stream.concat(entries.stream().map(TeamWorkQuery.TimeEntry::userId), categories.stream().map(TeamWorkQuery.CategoryEntry::userId))
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         return new Timesheet(query.from(), query.to(), zone.getId(), asOf, members(actor.companyId(), userIds, withTime),
                 List.copyOf(items.values()), entries.stream().map(e -> new TimesheetEntry(e.userId(), e.workItemId(), e.date(), e.durationMs())).toList(),
-                Timesheet.categories(categories), CalendarDay.of(calendar.days(query.from(), query.to())));
+                Timesheet.categories(categories, names(scope)), CalendarDay.of(calendar.days(query.from(), query.to())));
+    }
+
+    private static Map<UUID,String> names(Map<UUID,MemberProjectQuery.Project> scope) {
+        return scope.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().name()));
     }
 
     public Workload workload(CurrentActor actor, WorkloadQuery query) {
@@ -80,15 +85,15 @@ public class TeamDashboardService {
         Instant asOf = clock.instant();
         LocalDate today = LocalDate.ofInstant(asOf, zone());
         Map<UUID, TeamWorkQuery.Load> loads = new HashMap<>();
-        var unassigned = new WorkloadCounts(0, 0, 0);
+        var unassigned = new WorkloadCounts(0, 0, 0, 0);
         for (var load : work.currentLoad(actor, List.copyOf(scope.keySet()), today)) {
             if (load.userId() != null) loads.put(load.userId(), load);
-            else if (userIds.isEmpty()) unassigned = new WorkloadCounts(load.todo(), load.inProgress(), load.overdue());
+            else if (userIds.isEmpty()) unassigned = new WorkloadCounts(load.todo(), load.inProgress(), load.other(), load.overdue());
         }
         var rows = members(actor.companyId(), userIds, userIds.isEmpty() ? loads.keySet() : Set.of()).stream().map(m -> {
             var load = loads.get(m.userId());
-            return load == null ? new WorkloadMember(m.userId(), m.displayName(), m.active(), 0, 0, 0)
-                    : new WorkloadMember(m.userId(), m.displayName(), m.active(), load.todo(), load.inProgress(), load.overdue());
+            return load == null ? new WorkloadMember(m.userId(), m.displayName(), m.active(), 0, 0, 0, 0)
+                    : new WorkloadMember(m.userId(), m.displayName(), m.active(), load.todo(), load.inProgress(), load.other(), load.overdue());
         }).toList();
         return new Workload(asOf, today, rows, unassigned);
     }
@@ -101,7 +106,7 @@ public class TeamDashboardService {
         LocalDate today = LocalDate.ofInstant(clock.instant(), zone());
         var page = work.currentTasks(actor, List.copyOf(scope.keySet()), query.userId(), today, query.offset(), query.limit());
         return new TaskPage(page.items().stream().map(t -> new Task(t.id(), t.projectId(), scope.get(t.projectId()).name(), t.itemNo(), t.title(),
-                t.statusName(), t.statusCategory(), t.statusColor(), t.priorityName(), t.priorityColor(), t.dueDate(), t.overdue())).toList(),
+                t.statusCode(), t.statusName(), t.statusCategory(), t.statusColor(), t.priorityName(), t.priorityColor(), t.dueDate(), t.overdue())).toList(),
                 page.totalElements());
     }
 

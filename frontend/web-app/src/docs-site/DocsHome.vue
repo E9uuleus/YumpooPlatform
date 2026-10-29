@@ -90,7 +90,7 @@ onMounted(() => { document.title = 'Yumpoo 文档' })
             class="docs-hero__download"
             to="/download"
           >
-            下载桌面端
+            下载桌面客户端
           </router-link>
         </div>
       </div>

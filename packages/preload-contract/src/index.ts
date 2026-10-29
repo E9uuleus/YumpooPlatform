@@ -84,8 +84,10 @@ export type RailSize = 'small' | 'medium' | 'large'
 
 export interface RailProject {
   id: string
-  /** At most 64 characters; the rail shows its first character and the full name as a tooltip. */
+  /** At most 64 characters, shown as the tooltip. */
   name: string
+  /** 1–3 characters the person chose for the tile; without it the tile shows the name's first character. */
+  label?: string
 }
 
 /** The rail's projects belong to one person: `owner` is `${companyId}:${userId}`, the same scope as project recents. */
@@ -172,6 +174,8 @@ export interface DesktopRailBridge {
   /** `top` is the icon's top edge in the rail window's CSS pixels; the panel opens level with it. */
   openProject(projectId: string, top: number): Promise<void>
   setProjects(projects: RailProjects): Promise<void>
+  /** 渲染页实际显示的固定项目数；省略时按已保存的固定项目数排版。 */
+  setVisibleCount?(count: number): Promise<void>
   /** Shows the main window on the rail section of the settings page. */
   openSettings(): Promise<void>
 }

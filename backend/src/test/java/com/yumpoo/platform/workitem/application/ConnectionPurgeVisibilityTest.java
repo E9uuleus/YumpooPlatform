@@ -143,7 +143,7 @@ class ConnectionPurgeVisibilityTest {
     }
     private ConnectTargetProjectSnapshot snapshot(Project project,boolean purging) {
         return new ConnectTargetProjectSnapshot(project.id(),project.code(),"真实秘密项目名",
-                purging?ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED:ProjectAccessSnapshot.ProjectLifecycle.ACTIVE,purging);
+                purging?ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED:ProjectAccessSnapshot.ProjectLifecycle.ACTIVE,purging,false);
     }
     private CardRow cardRow(UUID item,Project project,String title) {
         return new CardRow(item,project.id(),"SECRET-ITEM",title,false,

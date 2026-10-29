@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { usePageLoad } from '../../brand/page-progress'
+
 import { vBrandLoading as vLoading } from '../../brand/loading'
 import { Plus } from '@element-plus/icons-vue'
-import { ProjectActorAccess, ProjectLifecycle, ProjectLifecycleFilter, type Project, type ProjectOwnerOption, type ProjectPage } from '@yumpoo/api-client'
+import { ProjectActorAccess, ProjectLifecycle, ProjectLifecycleFilter, type Project, type ProjectOwnerOption, type ProjectPage, type ProjectSummary } from '@yumpoo/api-client'
 import {
   ElButton, ElCheckbox, ElCheckboxGroup, ElIcon, ElInput,
   ElMessage, ElPagination,
@@ -12,8 +14,10 @@ import { useRouter } from 'vue-router'
 import { projectsApi } from '../../api/client'
 import { isProblemStatus, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
+import { projectStatus } from '../../components/projects/projectStatus'
 import ProjectCreateDialog from '../../components/projects/ProjectCreateDialog.vue'
 import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHeader.vue'
+import { projectColors } from '../../components/team/teamDashboardModel'
 import { MY_PROJECT_ACCESSES } from '../../components/projects/projectScope'
 import YpAssignee from '../../components/yp/YpAssignee.vue'
 import YpEmptyState from '../../components/yp/YpEmptyState.vue'
@@ -27,12 +31,20 @@ import { formatDateOnly, formatTimestamp } from '../../design-system/dates'
 import { businessLabel } from '../../design-system/labels'
 import type { ActiveFilter } from '../../design-system/types'
 
+const pageLoad = usePageLoad()
+type StatusPreset = 'running' | 'ended'
+const statusOptions: { value: StatusPreset; label: string }[] = [{ value: 'running', label: '进行中' }, { value: 'ended', label: '已结束' }]
+const statusPreset = ref<StatusPreset>()
+const endedFilter = computed(() => statusPreset.value ? statusPreset.value === 'ended' : undefined)
+function selectStatus(value: StatusPreset): void { statusPreset.value = statusPreset.value === value ? undefined : value; refreshForFilters() }
+
 type ModifiedPreset = 'TODAY' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'LAST_90_DAYS'
 type ProjectCatalogView = 'recent' | 'content'
 
 const router = useRouter()
 const session = useSession()
 const result = ref<ProjectPage>()
+const colors = computed(() => projectColors((result.value?.items ?? []).map(item => item.id)))
 const ownerOptions = ref<ProjectOwnerOption[]>([])
 const referenceReady = ref(false)
 const activeView = ref<ProjectCatalogView>('content')
@@ -75,6 +87,7 @@ const modifiedOptions: Array<{ value: ModifiedPreset; label: string; days: numbe
 const accessOptions = MY_PROJECT_ACCESSES
 const scopedAccesses = computed(() => actorAccesses.value.length ? actorAccesses.value : MY_PROJECT_ACCESSES)
 const activeFilters = computed<ActiveFilter[]>(() => [
+  ...(statusPreset.value ? [{ key: 'status', label: '项目状态', valueLabel: statusOptions.find(item => item.value === statusPreset.value)?.label ?? '' }] : []),
   ...(modifiedPreset.value ? [{ key: 'modified', label: '最后修改时间', valueLabel: modifiedOptions.find(item => item.value === modifiedPreset.value)?.label ?? '' }] : []),
   ...(ownerUserIds.value.length ? [{ key: 'owners', label: '负责人', valueLabel: ownerUserIds.value.map(id => ownerOptions.value.find(item => item.userId === id)?.displayName ?? id).join('、') }] : []),
   ...(actorAccesses.value.length ? [{ key: 'accesses', label: '我的角色', valueLabel: actorAccesses.value.map(businessLabel).join('、') }] : []),
@@ -113,6 +126,7 @@ const recentProjectItems = computed(() => {
     if (!verifiedRecentIds.value.has(item.id)) return false
     if (normalizedQuery && !`${item.name} ${item.code}`.toLocaleLowerCase().includes(normalizedQuery)) return false
     if (item.lifecycle !== ProjectLifecycle.Active) return false
+    if (endedFilter.value !== undefined && Boolean(item.endedAt) !== endedFilter.value) return false
     if (ownerUserIds.value.length && !ownerUserIds.value.includes(item.ownerUserId)) return false
     if (!scopedAccesses.value.includes(item.actorAccess)) return false
     return since === undefined || new Date(item.updatedAt).getTime() >= since
@@ -129,6 +143,7 @@ async function load(): Promise<void> {
   try {
     result.value = await projectsApi.listProjects({
       ...(appliedQuery.value ? { query: appliedQuery.value } : {}),
+      ...(endedFilter.value === undefined ? {} : { ended: endedFilter.value }),
       ...(ownerUserIds.value.length ? { ownerUserIds: ownerUserIds.value } : {}),
       actorAccesses: scopedAccesses.value,
       ...(since ? { updatedSince: since } : {}),
@@ -153,12 +168,13 @@ async function loadReferenceData(): Promise<void> {
 function refreshForFilters(): void { page.value = 0; void load() }
 function selectModified(value: ModifiedPreset): void { modifiedPreset.value = modifiedPreset.value === value ? undefined : value; refreshForFilters() }
 function removeFilter(key: string): void {
+  if (key === 'status') statusPreset.value = undefined
   if (key === 'modified') modifiedPreset.value = undefined
   if (key === 'owners') ownerUserIds.value = []
   if (key === 'accesses') actorAccesses.value = []
   refreshForFilters()
 }
-function clearFilters(): void { modifiedPreset.value = undefined; ownerUserIds.value = []; actorAccesses.value = []; refreshForFilters() }
+function clearFilters(): void { statusPreset.value = undefined; modifiedPreset.value = undefined; ownerUserIds.value = []; actorAccesses.value = []; refreshForFilters() }
 function scheduleSearch(): void {
   if (searchTimer) clearTimeout(searchTimer)
   searchTimer = setTimeout(runSearchImmediately, 300)
@@ -208,7 +224,7 @@ function projectCreated(project: Project): void {
 }
 
 onMounted(async () => {
-  await Promise.all([load(), loadReferenceData()])
+  await pageLoad.track(() => Promise.all([load(), loadReferenceData()]))
 })
 onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTimer) })
 </script>
@@ -309,6 +325,20 @@ onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTi
         <template #filters>
           <div class="project-filter-grid">
             <section class="project-filter-group">
+              <h3>项目状态</h3>
+              <button
+                v-for="option in statusOptions"
+                :key="option.value"
+                type="button"
+                class="project-filter-option"
+                :class="{ selected: statusPreset === option.value }"
+                :aria-pressed="statusPreset === option.value"
+                @click="selectStatus(option.value)"
+              >
+                {{ option.label }}
+              </button>
+            </section>
+            <section class="project-filter-group">
               <h3>最后修改时间</h3>
               <el-tooltip
                 v-for="option in modifiedOptions"
@@ -402,97 +432,57 @@ onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTi
         >
           <div class="table-scroll project-desktop-table">
             <el-table
-              class="project-management-table"
+              class="project-management-table project-management-table--catalog"
               :data="result?.items ?? []"
               @row-click="openProjectFromTable"
             >
               <el-table-column
                 fixed="left"
                 label="项目名称"
-                min-width="260"
+                min-width="360"
               >
                 <template #default="scope">
-                  <div class="project-name-cell">
-                    <svg
-                      class="project-name-cell__icon"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 16 16"
-                      fill="none"
+                  <div class="project-identity-cell">
+                    <span
+                      class="project-identity-cell__mark"
+                      :style="{ '--mark': colors.get(scope.row.id) }"
                       aria-hidden="true"
-                    >
-                      <rect
-                        x="2"
-                        y="2.5"
-                        width="12"
-                        height="11"
-                        rx="2"
-                        stroke="currentColor"
-                        stroke-width="1.3"
-                      />
-                      <path
-                        d="M2 6.5h12M6.5 6.5v7"
-                        stroke="currentColor"
-                        stroke-width="1.3"
-                      />
-                    </svg>
-                    <button
-                      class="project-name-cell__link"
-                      type="button"
-                      @click.stop="openProjectFromTable(scope.row)"
-                    >
-                      {{ scope.row.name }}
-                    </button>
+                    >{{ scope.row.name.slice(0, 1) }}</span>
+                    <span class="project-identity-cell__text">
+                      <button
+                        class="project-name-cell__link"
+                        type="button"
+                        @click.stop="openProjectFromTable(scope.row)"
+                      >{{ scope.row.name }}</button>
+                      <small>
+                        <span>负责人 {{ scope.row.ownerDisplayName }}</span>
+                        <span :title="formatTimestamp(scope.row.createdAt, companyTimezone)">创建 {{ formatDateOnly(scope.row.createdAt, companyTimezone) }}</span>
+                        <span :title="formatTimestamp(scope.row.updatedAt, companyTimezone)">修改 {{ formatDateOnly(scope.row.updatedAt, companyTimezone) }}</span>
+                      </small>
+                    </span>
                   </div>
                 </template>
               </el-table-column>
               <el-table-column
                 label="状态"
-                width="110"
+                width="120"
+                align="center"
               >
                 <template #default="scope">
                   <yp-status-tag
                     domain="project-lifecycle"
-                    :status="scope.row.lifecycle"
+                    :status="projectStatus(scope.row as ProjectSummary)"
                     effect="soft"
                   />
                 </template>
               </el-table-column>
               <el-table-column
-                label="负责人"
-                width="80"
-              >
-                <template #default="scope">
-                  <yp-assignee
-                    :user-id="scope.row.ownerUserId"
-                    :display-name="scope.row.ownerDisplayName"
-                    size="table"
-                    :show-name="false"
-                  />
-                </template>
-              </el-table-column>
-              <el-table-column
-                label="创建时间"
-                width="120"
-              >
-                <template #default="scope">
-                  <span :title="formatTimestamp(scope.row.createdAt, companyTimezone)">{{ formatDateOnly(scope.row.createdAt, companyTimezone) }}</span>
-                </template>
-              </el-table-column>
-              <el-table-column
-                label="最后修改时间"
-                width="120"
-              >
-                <template #default="scope">
-                  <span :title="formatTimestamp(scope.row.updatedAt, companyTimezone)">{{ formatDateOnly(scope.row.updatedAt, companyTimezone) }}</span>
-                </template>
-              </el-table-column>
-              <el-table-column
                 label="我的角色"
-                width="110"
+                width="120"
+                align="center"
               >
                 <template #default="scope">
-                  {{ businessLabel(scope.row.actorAccess) }}
+                  <span class="project-role-chip">{{ businessLabel(scope.row.actorAccess) }}</span>
                 </template>
               </el-table-column>
             </el-table>
@@ -512,7 +502,7 @@ onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTi
               >
                 <span class="project-mobile-row__header"><span class="project-mobile-row__identity"><strong>{{ item.name }}</strong></span><yp-status-tag
                   domain="project-lifecycle"
-                  :status="item.lifecycle"
+                  :status="projectStatus(item)"
                   size="small"
                   effect="soft"
                 /></span>
@@ -610,7 +600,7 @@ onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTi
               />
               <yp-status-tag
                 domain="project-lifecycle"
-                :status="item.lifecycle"
+                :status="projectStatus(item)"
                 effect="soft"
               />
               <time

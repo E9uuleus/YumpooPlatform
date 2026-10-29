@@ -54,6 +54,12 @@ components:
         canCancelDeletion:
           type: boolean
           readOnly: true
+        canEnd:
+          type: boolean
+          readOnly: true
+        canResume:
+          type: boolean
+          readOnly: true
     ProjectDeletion:
       type: object
       additionalProperties: false
@@ -132,6 +138,12 @@ components:
         - ownerUserId
         - rowVersion
       properties:
+        endedAt:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+          description: 项目结束时间；为 null 时项目未结束。已结束项目 lifecycle 仍为 ACTIVE。
         id:
           $ref: "#/components/schemas/Uuid"
         workspaceId:
@@ -172,6 +184,25 @@ components:
           type: string
           maxLength: 500
           nullable: true
+        initialColors:
+          $ref: "#/components/schemas/ProjectInitialColors"
+    ProjectInitialColors:
+      type: object
+      additionalProperties: false
+      description: 创建时覆盖默认初始结构的颜色。键为默认结构中的类别、状态或优先级代码，未列出的代码保持默认颜色。
+      properties:
+        categories:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/WorkItemLabelColorToken"
+        statuses:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/WorkItemLabelColorToken"
+        priorities:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/WorkItemLabelColorToken"
     ProjectSummary:
       type: object
       additionalProperties: false
@@ -192,6 +223,12 @@ components:
         - createdAt
         - updatedAt
       properties:
+        endedAt:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+          description: 项目结束时间；为 null 时项目未结束。已结束项目 lifecycle 仍为 ACTIVE。
         id:
           $ref: "#/components/schemas/Uuid"
         workspaceId:
@@ -309,6 +346,12 @@ components:
             - updatedAt
             - archivedAt
           properties:
+            endedAt:
+              type: string
+              format: date-time
+              nullable: true
+              readOnly: true
+              description: 项目结束时间；为 null 时项目未结束。已结束项目 lifecycle 仍为 ACTIVE。
             workspaceCode:
               type: string
               minLength: 2

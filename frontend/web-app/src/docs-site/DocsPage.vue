@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { usePageLoad } from '../brand/page-progress'
+
 import { ArrowLeft, ArrowRight, Guide, TopRight } from '@element-plus/icons-vue'
 import { ElButton, ElIcon } from 'element-plus'
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
@@ -7,6 +9,7 @@ import YpResultPage from '../components/yp/YpResultPage.vue'
 import { SECTIONS } from './content/sections'
 import { AUDIENCE_LABELS, findDoc, loadDocHtml, neighbours, type DocMeta } from './docsNav'
 
+const pageLoad = usePageLoad()
 const route = useRoute()
 const router = useRouter()
 const slug = computed(() => typeof route.params.slug === 'string' ? route.params.slug : '')
@@ -74,7 +77,7 @@ async function load(value: string): Promise<void> {
     if (current === revision) loading.value = false
   }
 }
-watch(slug, value => { void load(value) }, { immediate: true })
+watch(slug, value => { void pageLoad.track(() => load(value)) }, { immediate: true })
 
 watch(() => route.hash, () => { if (!loading.value && doc.value?.slug === slug.value) scrollToHash() })
 

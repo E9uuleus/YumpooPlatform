@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { usePageLoad } from '../../brand/page-progress'
 import { Refresh } from '@element-plus/icons-vue'
 import type { ActivityItem } from '@yumpoo/api-client'
 import { ElButton, ElDatePicker, ElIcon, ElTooltip } from 'element-plus'
@@ -13,6 +14,7 @@ import YpEmptyState from '../yp/YpEmptyState.vue'
 import YpSegmented from '../yp/YpSegmented.vue'
 import { ACTIVITY_CATEGORIES, ACTIVITY_CATEGORY_ORDER, activityCategory, type ActivityCategory } from './activityPresentation'
 
+const pageLoad = usePageLoad()
 const props = defineProps<{
   projectId?: string | undefined
   workItemId?: string | undefined
@@ -125,10 +127,14 @@ async function loadOlder(): Promise<void> {
   }
 }
 
-watch([() => props.projectId, () => props.workItemId], () => void load())
+watch([() => props.projectId, () => props.workItemId], () => {
+  if (props.workItemId) void load()
+  else void pageLoad.track(load)
+})
 watch([category, dateRange], () => void load())
 onMounted(() => {
-  void load()
+  if (props.workItemId) void load()
+  else void pageLoad.track(load)
   clock = setInterval(() => { now.value = Date.now() }, 60_000)
 })
 onBeforeUnmount(() => clearInterval(clock))

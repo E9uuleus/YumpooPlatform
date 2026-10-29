@@ -15,6 +15,8 @@
 import * as runtime from '../runtime';
 import type {
   ErrorResponse,
+  MigratedTimeImportRequest,
+  MigratedTimeImportResult,
   TeamDashboardOptions,
   TeamMemberTaskPage,
   TeamMemberTasksQuery,
@@ -26,6 +28,10 @@ import type {
 import {
     ErrorResponseFromJSON,
     ErrorResponseToJSON,
+    MigratedTimeImportRequestFromJSON,
+    MigratedTimeImportRequestToJSON,
+    MigratedTimeImportResultFromJSON,
+    MigratedTimeImportResultToJSON,
     TeamDashboardOptionsFromJSON,
     TeamDashboardOptionsToJSON,
     TeamMemberTaskPageFromJSON,
@@ -41,6 +47,12 @@ import {
     TeamWorkloadQueryFromJSON,
     TeamWorkloadQueryToJSON,
 } from '../models/index';
+
+export interface ImportMigratedTimeRequest {
+    xXSRFTOKEN: string;
+    idempotencyKey: string;
+    migratedTimeImportRequest: MigratedTimeImportRequest;
+}
 
 export interface QueryTeamMemberTasksRequest {
     xXSRFTOKEN: string;
@@ -90,6 +102,69 @@ export class TeamDashboardApi extends runtime.BaseAPI {
      */
     async getTeamDashboardOptions(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TeamDashboardOptions> {
         const response = await this.getTeamDashboardOptionsRaw(initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 仅公司管理员可用。每个条目是一名成员一天的总分钟数，服务端从该成员的上班时间起，把时长依次排进当天的空闲时段，写成只读的 MIGRATED 工时分类记录；同一成员同一天再次迁入覆盖上次的迁入结果，minutes 为 0 表示清除。排布按公司时区计算，当天排不下的天不写入任何记录。dryRun 为 true 时只返回排布结果、不写入；为 false 时在单事务内提交。不发领域事件，整次只写一条安全审计。
+     * 按成员与日期批量迁入或预览历史工时
+     */
+    async importMigratedTimeRaw(requestParameters: ImportMigratedTimeRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<MigratedTimeImportResult>> {
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling importMigratedTime().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling importMigratedTime().'
+            );
+        }
+
+        if (requestParameters['migratedTimeImportRequest'] == null) {
+            throw new runtime.RequiredError(
+                'migratedTimeImportRequest',
+                'Required parameter "migratedTimeImportRequest" was null or undefined when calling importMigratedTime().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/company/migrated-time-imports`;
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: MigratedTimeImportRequestToJSON(requestParameters['migratedTimeImportRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => MigratedTimeImportResultFromJSON(jsonValue));
+    }
+
+    /**
+     * 仅公司管理员可用。每个条目是一名成员一天的总分钟数，服务端从该成员的上班时间起，把时长依次排进当天的空闲时段，写成只读的 MIGRATED 工时分类记录；同一成员同一天再次迁入覆盖上次的迁入结果，minutes 为 0 表示清除。排布按公司时区计算，当天排不下的天不写入任何记录。dryRun 为 true 时只返回排布结果、不写入；为 false 时在单事务内提交。不发领域事件，整次只写一条安全审计。
+     * 按成员与日期批量迁入或预览历史工时
+     */
+    async importMigratedTime(requestParameters: ImportMigratedTimeRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<MigratedTimeImportResult> {
+        const response = await this.importMigratedTimeRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -146,7 +221,7 @@ export class TeamDashboardApi extends runtime.BaseAPI {
     }
 
     /**
-     * 仅公司管理员可用。按公司时区切分自然日，跨日记录按重叠时长拆分；运行中计时统计到 asOf，时长为按并行均摊后的计入时长。projectIds 为空表示全公司项目（含已归档），userIds 为空表示在职成员及区间内有计时的成员。区间最多 93 天，排除已删除工作项。非项目分类工时只在 projectIds 为空时通过 categoryEntries 返回。
+     * 仅公司管理员可用。按公司时区切分自然日，跨日记录按重叠时长拆分；运行中计时统计到 asOf，时长为按并行均摊后的计入时长。projectIds 为空表示全公司项目（含已归档），userIds 为空表示在职成员及区间内有计时的成员。区间最多 93 天，排除已删除工作项。categoryEntries 返回分类工时；有项目筛选时只含关联到这些项目的分类工时。
      * 按成员、自然日与工作项统计计入时长
      */
     async queryTeamTimesheetRaw(requestParameters: QueryTeamTimesheetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TeamTimesheet>> {
@@ -189,7 +264,7 @@ export class TeamDashboardApi extends runtime.BaseAPI {
     }
 
     /**
-     * 仅公司管理员可用。按公司时区切分自然日，跨日记录按重叠时长拆分；运行中计时统计到 asOf，时长为按并行均摊后的计入时长。projectIds 为空表示全公司项目（含已归档），userIds 为空表示在职成员及区间内有计时的成员。区间最多 93 天，排除已删除工作项。非项目分类工时只在 projectIds 为空时通过 categoryEntries 返回。
+     * 仅公司管理员可用。按公司时区切分自然日，跨日记录按重叠时长拆分；运行中计时统计到 asOf，时长为按并行均摊后的计入时长。projectIds 为空表示全公司项目（含已归档），userIds 为空表示在职成员及区间内有计时的成员。区间最多 93 天，排除已删除工作项。categoryEntries 返回分类工时；有项目筛选时只含关联到这些项目的分类工时。
      * 按成员、自然日与工作项统计计入时长
      */
     async queryTeamTimesheet(requestParameters: QueryTeamTimesheetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TeamTimesheet> {

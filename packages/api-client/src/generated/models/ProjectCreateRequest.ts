@@ -12,6 +12,14 @@
  */
 
 import { mapValues } from '../runtime';
+import type { ProjectInitialColors } from './ProjectInitialColors';
+import {
+    ProjectInitialColorsFromJSON,
+    ProjectInitialColorsFromJSONTyped,
+    ProjectInitialColorsToJSON,
+    ProjectInitialColorsToJSONTyped,
+} from './ProjectInitialColors';
+
 /**
  *
  * @export
@@ -30,6 +38,12 @@ export interface ProjectCreateRequest {
      * @memberof ProjectCreateRequest
      */
     description?: string | null;
+    /**
+     *
+     * @type {ProjectInitialColors}
+     * @memberof ProjectCreateRequest
+     */
+    initialColors?: ProjectInitialColors;
 }
 
 /**
@@ -52,6 +66,7 @@ export function ProjectCreateRequestFromJSONTyped(json: any, ignoreDiscriminator
 
         'name': json['name'],
         'description': json['description'] == null ? undefined : json['description'],
+        ...(json['initialColors'] == null ? {} : { 'initialColors': ProjectInitialColorsFromJSON(json['initialColors']) }),
     };
 }
 
@@ -68,5 +83,6 @@ export function ProjectCreateRequestToJSONTyped(value?: ProjectCreateRequest | n
 
         'name': value['name'],
         'description': value['description'],
+        'initialColors': ProjectInitialColorsToJSON(value['initialColors']),
     };
 }

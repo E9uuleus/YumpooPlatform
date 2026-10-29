@@ -26,7 +26,7 @@ const query = useOperations(),
   data = query.data
 const integration = useOperationsQuery(
   (signal) => identityAdministrationApi.getWeComIntegrationStatus({ signal }),
-  { interval: () => query.interval.value * 1000 },
+  { pageLoad: true, interval: () => query.interval.value * 1000 },
 )
 watch(query.refreshVersion, () => void integration.refresh())
 

@@ -31,7 +31,7 @@ public class TeamWorkAdapter implements TeamWorkQuery {
         return categories(service.ownCategoryEntries(actor, from, to, zone, asOf));
     }
     public List<Load> currentLoad(CurrentActor actor, List<UUID> projectIds, LocalDate today) {
-        return service.currentLoad(actor, projectIds, today).stream().map(l -> new Load(l.userId(), l.todo(), l.inProgress(), l.overdue())).toList();
+        return service.currentLoad(actor, projectIds, today).stream().map(l -> new Load(l.userId(), l.todo(), l.inProgress(), l.other(), l.overdue())).toList();
     }
     public TaskPage currentTasks(CurrentActor actor, List<UUID> projectIds, UUID userId, LocalDate today, int offset, int limit) {
         return tasks(service.currentTasks(actor, projectIds, userId, today, offset, limit));
@@ -50,10 +50,10 @@ public class TeamWorkAdapter implements TeamWorkQuery {
         return entries.stream().map(e -> new TimeEntry(e.userId(), e.workItemId(), e.projectId(), e.itemNo(), e.title(), e.date(), e.durationMs())).toList();
     }
     private static List<CategoryEntry> categories(List<TeamWorkRepository.CategoryEntry> entries) {
-        return entries.stream().map(e -> new CategoryEntry(e.userId(), e.timeCategory(), e.date(), e.durationMs())).toList();
+        return entries.stream().map(e -> new CategoryEntry(e.userId(), e.timeCategory(), e.projectId(), e.date(), e.durationMs())).toList();
     }
     private static TaskPage tasks(TeamWorkService.TaskPage page) {
-        return new TaskPage(page.items().stream().map(t -> new Task(t.id(), t.projectId(), t.itemNo(), t.title(), t.statusName(), t.statusCategory(),
+        return new TaskPage(page.items().stream().map(t -> new Task(t.id(), t.projectId(), t.itemNo(), t.title(), t.statusCode(), t.statusName(), t.statusCategory(),
                 t.statusColor(), t.priorityName(), t.priorityColor(), t.dueDate(), t.overdue())).toList(), page.totalElements());
     }
 }

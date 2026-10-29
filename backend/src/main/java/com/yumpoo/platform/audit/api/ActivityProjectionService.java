@@ -25,6 +25,7 @@ public class ActivityProjectionService implements OutboxEventConsumer {
     private static final Set<String> PROJECT_EVENTS = Set.of(
             "catalog.project_created", "catalog.project_updated",
             "catalog.project_archived", "catalog.project_reopened",
+            "catalog.project_ended", "catalog.project_resumed",
             "catalog.project_moved_to_workspace",
             "catalog.project_member_added", "catalog.project_member_removed",
             "catalog.project_owner_reassigned");

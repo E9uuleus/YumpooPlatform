@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { usePageLoad } from '../../brand/page-progress'
+
 import { DataAnalysis, DataLine, Monitor, FolderOpened, Message, OfficeBuilding, Timer } from '@element-plus/icons-vue'
 import { ProjectLifecycleFilter, TeamMemberTaskStatusCategoryEnum, type DashboardProject, type TeamMemberTask, type TeamTimesheet } from '@yumpoo/api-client'
 import { ElTooltip } from 'element-plus'
@@ -18,9 +20,10 @@ import { useSession } from '../../composables/useSession'
 import { formatDuration, onTimeTrackingChanged, useTimeTracker } from '../../composables/useTimeTracker'
 import { onWorkItemChanged } from '../../composables/workItemChanges'
 import { usePageOnboarding } from '../../onboarding/useOnboarding'
-import { daypart, greeting, heroDate, hubProjects, sortTasks, type HubProject, type TaskFilter } from './homeModel'
+import { daypart, filterTasks, greeting, heroDate, hubProjects, isInProgressTask, isNotStartedTask, openCount, sortTasks, type HubProject, type TaskFilter } from './homeModel'
 import { timerTitle } from '../../components/timer/timeCategories'
 
+const pageLoad = usePageLoad()
 interface JumpCard { key: string; label: string; meta: string; icon: Component; tone: JumpTone; open: () => void }
 
 const router = useRouter(), session = useSession(), tracker = useTimeTracker(), inbox = useInbox()
@@ -43,12 +46,12 @@ const runningTitle = computed(() => {
 })
 
 const counts = computed(() => ({
-  inProgress: tasks.value.filter(task => task.statusCategory === TeamMemberTaskStatusCategoryEnum.InProgress).length,
-  todo: tasks.value.filter(task => task.statusCategory === TeamMemberTaskStatusCategoryEnum.Todo).length,
+  inProgress: tasks.value.filter(isInProgressTask).length,
+  todo: tasks.value.filter(isNotStartedTask).length,
   overdue: tasks.value.filter(task => task.overdue).length,
 }))
 const sortedTasks = computed(() => sortTasks(tasks.value))
-const visibleTasks = computed(() => filter.value === 'ALL' ? sortedTasks.value : sortedTasks.value.filter(task => task.statusCategory === filter.value))
+const visibleTasks = computed(() => filterTasks(sortedTasks.value, filter.value))
 const taskOptions = computed<{ value: TaskFilter; label: string }[]>(() => [
   { value: 'ALL', label: `全部 ${tasks.value.length}` },
   { value: TeamMemberTaskStatusCategoryEnum.InProgress, label: `进行中 ${counts.value.inProgress}` },
@@ -72,7 +75,7 @@ const jumps = computed<JumpCard[]>(() => [
   { key: 'projects', label: '管理项目', meta: projectTotal.value === undefined ? '全部项目目录' : `${projectTotal.value} 个进行中项目`,
     icon: FolderOpened, tone: 'blue', open: () => openWorkspace('workspace') },
   session.isCompanyAdmin.value
-    ? { key: 'team', label: '团队视图', meta: '成员工时、加班与当前任务', icon: DataLine, tone: 'purple', open: () => void router.push({ name: 'team', params: { view: 'timesheet' } }) }
+    ? { key: 'team', label: '团队视图', meta: '成员与项目工时、加班与当前任务', icon: DataLine, tone: 'purple', open: () => void router.push({ name: 'team', params: { view: 'timesheet' } }) }
     : { key: 'dashboards', label: '仪表板', meta: '个人看板与统计', icon: DataAnalysis, tone: 'purple', open: () => openWorkspace('dashboards') },
   { key: 'inbox', label: '收件箱', meta: inbox.unread.value ? `${inbox.unread.value} 条未读` : '没有未读消息', icon: Message, tone: 'red',
     open: () => void router.push({ name: 'inbox' }) },
@@ -110,17 +113,17 @@ function calendarDuration(ms: number): string {
 }
 
 const quiet = () => undefined
-function loadMonth(): void {
-  void myWorkApi.getMyTimesheet({ from: toApiDate(`${month.value}-01`), to: toApiDate(addDays(`${shiftMonth(month.value, 1)}-01`, -1)) })
+function loadMonth() {
+  return myWorkApi.getMyTimesheet({ from: toApiDate(`${month.value}-01`), to: toApiDate(addDays(`${shiftMonth(month.value, 1)}-01`, -1)) })
     .then(sheet => { monthSheet.value = sheet }, quiet)
 }
-function loadTasks(): void {
-  void myWorkApi.listMyCurrentTasks({ offset: 0, limit: 100 }).then(page => { tasks.value = page.items }, quiet)
+function loadTasks() {
+  return myWorkApi.listMyCurrentTasks({ offset: 0, limit: 100 }).then(page => { tasks.value = page.items }, quiet)
 }
-loadTasks()
-void dashboardsApi.listDashboardProjects({ includeArchived: false, limit: 50 }).then(page => { projects.value = page.items }, quiet)
-void projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.Active, actorAccesses: MY_PROJECT_ACCESSES, page: 0, size: 1 }).then(page => { projectTotal.value = page.totalElements }, quiet)
-loadMonth()
+void pageLoad.track(loadTasks)
+void pageLoad.track(() => dashboardsApi.listDashboardProjects({ includeArchived: false, limit: 50 }).then(page => { projects.value = page.items }, quiet))
+void pageLoad.track(() => projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.Active, ended: false, actorAccesses: MY_PROJECT_ACCESSES, page: 0, size: 1 }).then(page => { projectTotal.value = page.totalElements }, quiet))
+void pageLoad.track(loadMonth)
 onBeforeUnmount(onTimeTrackingChanged(loadMonth))
 onBeforeUnmount(onWorkItemChanged(loadTasks))
 onMounted(() => { void onboarding.ready() })
@@ -255,8 +258,10 @@ onMounted(() => { void onboarding.ready() })
             >{{ project.name.slice(0, 1) }}</span>
             <span class="home-project__text">
               <strong>{{ project.name }}</strong>
-              <small v-if="project.inProgress + project.todo">
-                {{ project.inProgress }} 进行中 · {{ project.todo }} 待开始<b
+              <small v-if="openCount(project)">
+                {{ project.inProgress }} 进行中 · {{ project.todo }} 待开始<template v-if="project.other">
+                  · {{ project.other }} 其他
+                </template><b
                   v-if="project.overdue"
                   class="home-project__overdue"
                 > · {{ project.overdue }} 逾期</b>
@@ -270,6 +275,10 @@ onMounted(() => { void onboarding.ready() })
                 v-if="project.todo"
                 class="is-todo"
                 :style="{ flex: project.todo }"
+              /><i
+                v-if="project.other"
+                class="is-other"
+                :style="{ flex: project.other }"
               /></span>
             </span>
           </button>
@@ -690,6 +699,10 @@ onMounted(() => { void onboarding.ready() })
 
 .home-project__bar .is-todo {
   background: var(--yp-label-gray);
+}
+
+.home-project__bar .is-other {
+  background: var(--yp-border-strong);
 }
 
 .home-link {

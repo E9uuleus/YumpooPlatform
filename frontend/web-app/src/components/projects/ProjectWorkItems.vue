@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { usePageLoad } from '../../brand/page-progress'
+
+import { projectWritable } from './projectStatus'
 import './workItemCompactTable.css'
 import { useWorkItemEdits, type WorkItemPatchField, type WorkItemPatchValue } from './useWorkItemEdits'
 import { isWorkItemViewControl } from './workItemViewControls'
@@ -12,6 +15,7 @@ import WorkItemColumnVisibilityMenu from './WorkItemColumnVisibilityMenu.vue'
 import { createWorkItemColumnFlip, measureWorkItemColumns, visibleWorkItemColumnCells } from './workItemColumnFlip'
 import WorkItemRowActions from './WorkItemRowActions.vue'
 import WorkItemBatchBar from './WorkItemBatchBar.vue'
+import WorkItemImportDialog from './import/WorkItemImportDialog.vue'
 import WorkItemParentPicker from './WorkItemParentPicker.vue'
 import { useWorkItemBatchActions, type WorkItemSelection } from './useWorkItemBatchActions'
 import { useWorkItemCellPopover } from './useWorkItemCellPopover'
@@ -22,7 +26,7 @@ import WorkItemNameCell from './WorkItemNameCell.vue'
 import WorkItemDraftCell from './WorkItemDraftCell.vue'
 import { useWorkItemInlineCreate } from './useWorkItemInlineCreate'
 import WorkItemUpdatedCell from './WorkItemUpdatedCell.vue'
-import { Filter as FilterIcon, Hide, Search, Sort, User } from '@element-plus/icons-vue'
+import { ArrowDown, Filter as FilterIcon, Hide, Plus, Search, Sort, Upload, User } from '@element-plus/icons-vue'
 import {
   TimeTrackingState,
   WorkItemViewType,
@@ -43,6 +47,9 @@ import {
 } from '@yumpoo/api-client'
 import {
   ElButton,
+  ElDropdown,
+  ElDropdownItem,
+  ElDropdownMenu,
   ElDrawer,
   ElDatePicker,
   ElCheckbox,
@@ -106,6 +113,7 @@ import ConnectKanbanConnections from './connect/ConnectKanbanConnections.vue'
 import type { ProjectWorkItemFilterOption } from '@yumpoo/api-client'
 import { useConnectTable } from './connect/useConnectTable'
 
+const pageLoad = usePageLoad()
 type ProjectView = 'table' | 'kanban'
 
 interface KanbanLane {
@@ -188,6 +196,10 @@ const restoringArchive = ref(false)
 const quickOpen = ref(false)
 const quickTitle = ref('')
 const quickCreating = ref(false)
+const creatingTop = ref(false)
+const importOpen = ref(false)
+/** Row whose name cell opens for editing as soon as it renders: the item the toolbar button just created. */
+const autoEditId = ref('')
 const quickRow = ref<HTMLElement>()
 const quickTitleInput = ref<InstanceType<typeof ElInput>>()
 const detailOpen = ref(false)
@@ -675,7 +687,7 @@ const priorityOptions = computed(() => [...(labelCatalog.value?.priorities ?? []
   .sort((left, right) => left.sortOrder - right.sortOrder))
 const activeMembers = computed(() => members.value.filter(item => item.membershipStatus === ProjectMembershipStatus.Active))
 const canCreate = computed(() => Boolean(project.value
-  && project.value.lifecycle !== ProjectLifecycle.Archived
+  && projectWritable(project.value)
   && activeContents.value.length
   && (project.value.actorAccess === ProjectActorAccess.Owner
     || project.value.actorAccess === ProjectActorAccess.Member)))
@@ -908,13 +920,14 @@ async function changeGrouping(field: GroupField | ''): Promise<void> {
   } finally { groupingSwitching.value = false }
 }
 const canPublishDiscussion = computed(() => Boolean(project.value
-  && project.value.lifecycle !== ProjectLifecycle.Archived
+  && projectWritable(project.value)
   && detail.value?.capabilities?.canDiscuss
   && (project.value.actorAccess === ProjectActorAccess.Owner
     || project.value.actorAccess === ProjectActorAccess.Member)))
 const discussionReadOnlyReason = computed(() => {
   if (detail.value?.archived) return '工作项已归档，恢复后可继续编辑和讨论。'
   if (project.value?.lifecycle === ProjectLifecycle.Archived) return 'Project 已归档，工作项讨论仅可查看。'
+  if (project.value?.endedAt) return '项目已结束，工作项讨论仅可查看。'
   if (!canPublishDiscussion.value) return '当前角色没有发布讨论的权限。'
   return undefined
 })
@@ -1613,6 +1626,62 @@ async function changeView(view: ProjectView): Promise<void> {
   await setViewQuery({ ...route.query, view })
 }
 
+async function createWithDefaults(title: string, csrf: string): Promise<WorkItemDetail> {
+  const inserted = await workItemsApi.createWorkItem({
+    projectId: projectId.value,
+    xXSRFTOKEN: csrf,
+    idempotencyKey: globalThis.crypto.randomUUID(),
+    workItemCreateRequest: {
+      contentId: defaultContentId.value!,
+      title,
+      priority: null,
+      assigneeUserId: null,
+      description: null,
+      notes: null,
+      timelineStartDate: null,
+      timelineEndDate: null,
+      dueDate: null,
+      ...createDefaults.value.fields,
+    },
+  })
+  return applyDefaultStatus(inserted, createDefaults.value.statusCode, csrf)
+}
+
+/** The server creates new items at the top of the manual order; the reload reveals the row and its name opens for editing. */
+async function createAtTop(): Promise<void> {
+  if (creatingTop.value || !defaultContentId.value) return
+  const csrf = readCsrfToken()
+  if (!csrf) { error.value = localProblem('缺少 CSRF 凭据，请刷新后重试。'); return }
+  creatingTop.value = true
+  error.value = undefined
+  try {
+    autoEditId.value = ''
+    const created = await createWithDefaults('新工作项', csrf)
+    notifyChanged()
+    let shown: boolean
+    if (grouped.value) {
+      await grouping.refresh()
+      const key = grouping.keyOf({ ...created, subitemCount: 0 })
+      if (grouping.isCollapsed(key)) grouping.reveal(key)
+      await grouping.load(key, false)
+      const page = grouping.page(key)
+      while (page.nextCursor && !page.error && !page.items.some(item => item.id === created.id)) await grouping.load(key)
+      shown = page.items.some(item => item.id === created.id)
+    } else {
+      await reloadSortedTableInPlace(created.id)
+      shown = tableItems.value.some(item => item.id === created.id)
+    }
+    // Search or filters can leave the new item out of the table; say it exists instead of editing a row nobody sees.
+    if (!shown) { ElMessage.success(`已创建 ${created.itemNo}，当前筛选下不显示`); return }
+    await nextTick()
+    autoEditId.value = created.id
+  } catch (reason) {
+    error.value = await toApiProblem(reason)
+  } finally {
+    creatingTop.value = false
+  }
+}
+
 function openQuick(): void {
   if (!canCreate.value) return
   quickOpen.value = true
@@ -1634,24 +1703,7 @@ async function createQuick(continueAdding: boolean): Promise<void> {
   quickCreating.value = true
   error.value = undefined
   try {
-    const inserted = await workItemsApi.createWorkItem({
-      projectId: projectId.value,
-      xXSRFTOKEN: csrf,
-      idempotencyKey: globalThis.crypto.randomUUID(),
-      workItemCreateRequest: {
-        contentId: defaultContentId.value,
-        title: quickTitle.value.trim(),
-        priority: null,
-        assigneeUserId: null,
-        description: null,
-        notes: null,
-        timelineStartDate: null,
-        timelineEndDate: null,
-        dueDate: null,
-        ...createDefaults.value.fields,
-      },
-    })
-    const created = await applyDefaultStatus(inserted, createDefaults.value.statusCode, csrf)
+    const created = await createWithDefaults(quickTitle.value.trim(), csrf)
     notifyChanged()
     ElMessage.success(`已创建 ${created.itemNo}`)
     if (continueAdding) {
@@ -1730,6 +1782,11 @@ async function onRelationsChanged(affectedWorkItemIds: string[]): Promise<void> 
   await Promise.all(visibleExpandedIds.value
     .filter(id => affectedWorkItemIds.includes(id))
     .map(id => loadSubitems(id, true)))
+}
+
+/** 导入的工作项按文件顺序排在最前，已展开的子项列表一并失效重载。 */
+async function onWorkItemsImported(): Promise<void> {
+  await onRelationsChanged(Object.keys(subitems))
 }
 
 async function tableEdgeItems(_item: ProjectWorkItemListItem, edge: 'top' | 'bottom'): Promise<ProjectWorkItemListItem[]> {
@@ -1960,20 +2017,40 @@ async function loadAllSortedWorkItems(): Promise<boolean> {
   return true
 }
 
+/** 逐组加载完整排序结果；任一组失败或加载中途被重置时返回 undefined。 */
+async function loadAllGroupedWorkItems(): Promise<ProjectWorkItemListItem[][] | undefined> {
+  const revision = loadRevision
+  const runs: ProjectWorkItemListItem[][] = []
+  for (const group of workItemGroups.value) {
+    if (!group.count) continue
+    const page = grouping.page(group.key)
+    do {
+      await grouping.load(group.key)
+      if (revision !== loadRevision || grouping.page(group.key) !== page) return undefined
+    } while (page.nextCursor && !page.error)
+    if (page.error || !page.loaded) return undefined
+    runs.push([...page.items])
+  }
+  return runs
+}
+
+// 分组时每组各自排序：组内依次排在本组首项之后，组与组之间的相对位置不变。
 async function saveSortedWorkItemOrder(): Promise<void> {
-  if (grouped.value) return
   if (savingSortOrder.value || !sortRules.value.length) return
-  if (tableLoading.value || tableSorting.value) {
+  if (tableLoading.value || tableSorting.value || (grouped.value && groupsLoading.value)) {
     ElMessage.info('排序结果仍在加载，请稍后再保存工作项顺序')
     return
   }
   savingSortOrder.value = true
   try {
-    if (!await loadAllSortedWorkItems()) {
+    const runs = grouped.value
+      ? await loadAllGroupedWorkItems()
+      : await loadAllSortedWorkItems() ? [[...tableItems.value]] : undefined
+    if (!runs) {
       ElMessage.error('无法加载完整排序结果，暂未保存工作项顺序')
       return
     }
-    const ordered = [...tableItems.value]
+    const ordered = runs.flat()
     if (ordered.some(item => !item.capabilities.canMoveInProjectOrder)) {
       ElMessage.warning('当前结果中包含不可调整顺序的工作项')
       return
@@ -1983,20 +2060,19 @@ async function saveSortedWorkItemOrder(): Promise<void> {
       error.value = localProblem('缺少 CSRF 凭据，请刷新后重试。')
       return
     }
-    for (let index = 1; index < ordered.length; index += 1) {
-      const item = tableItems.value.find(candidate => candidate.id === ordered[index]!.id) ?? ordered[index]!
-      const updated = await workItemsApi.moveProjectWorkItemOrder({
-        projectId: projectId.value,
-        workItemId: item.id,
-        xXSRFTOKEN: csrf,
-        ifMatch: item.etag,
-        idempotencyKey: globalThis.crypto.randomUUID(),
-        projectWorkItemOrderMoveRequest: {
-          previousVisibleWorkItemId: ordered[index - 1]!.id,
-          nextVisibleWorkItemId: null,
-        },
-      })
-      replaceLightItem(item.id, updated)
+    for (const run of runs) {
+      for (let index = 1; index < run.length; index += 1) {
+        const item = tableItems.value.find(candidate => candidate.id === run[index]!.id) ?? run[index]!
+        const updated = await workItemsApi.moveProjectWorkItemOrder({
+          projectId: projectId.value,
+          workItemId: item.id,
+          xXSRFTOKEN: csrf,
+          ifMatch: item.etag,
+          idempotencyKey: globalThis.crypto.randomUUID(),
+          projectWorkItemOrderMoveRequest: { previousVisibleWorkItemId: run[index - 1]!.id, nextVisibleWorkItemId: null },
+        })
+        replaceLightItem(item.id, updated, false)
+      }
     }
     sortRules.value = []
     await syncUrl()
@@ -2792,13 +2868,13 @@ function clearFilters(): void {
   void syncUrl()
 }
 
-function resetCurrentData(): void {
+async function resetCurrentData(): Promise<void> {
   invalidateFilterOptions()
   clearSelection()
   grouping.stop()
   if (grouped.value && selectedView.value === 'table') {
     loadRevision++; activeController?.abort(); tableLoading.value = false; tableSorting.value = false
-    void grouping.refresh()
+    await grouping.refresh()
     return
   }
   const revision = ++loadRevision
@@ -2807,7 +2883,7 @@ function resetCurrentData(): void {
   Object.keys(lanes).forEach(key => delete lanes[key])
   Object.keys(subitems).forEach(key => delete subitems[key])
   Object.keys(subitemSelections).forEach(key => delete subitemSelections[key])
-  if (selectedView.value === 'kanban') void loadKanban(revision); else void loadTable(null, false, revision)
+  if (selectedView.value === 'kanban') await loadKanban(revision); else await loadTable(null, false, revision)
 }
 
 function onDueDateChange(item: ProjectWorkItemListItem, value: string | null, dueTime?: string | null): void {
@@ -2828,7 +2904,7 @@ watch(projectId, () => {
       void setViewQuery(embeddedQuery.value, true)
     }
   }
-  applyRouteState(); void loadWorkspace()
+  applyRouteState(); void (embedded.value ? loadWorkspace() : pageLoad.track(loadWorkspace))
 }, { immediate: true })
 watch(() => props.refreshKey, async () => {
   if (!project.value) return
@@ -2850,8 +2926,8 @@ watch([() => routeQuerySignature(true), () => routeQuerySignature(false)], ([, c
   if (!project.value) return
   const sortOnly = selectedView.value === 'table' && context === previousContext
   applyRouteState()
-  if (sortOnly) void reloadSortedTableInPlace()
-  else resetCurrentData()
+  if (sortOnly) void pageLoad.track(reloadSortedTableInPlace)
+  else void pageLoad.track(resetCurrentData)
 })
 watch([() => route.query.workItemId, () => route.query.tab], ([value, tab], [previousValue, previousTab]) => {
   if (value === previousValue && tab === undefined && previousTab !== undefined) return
@@ -2940,6 +3016,7 @@ onMounted(() => {
   watch(tableSentinel, (next, previous) => { if (previous) tableObserver?.unobserve(previous); if (next) tableObserver?.observe(next) }, { immediate: true })
 })
 onBeforeUnmount(() => {
+  loadRevision++
   columnFlip.cancel()
   groupObserver?.disconnect()
   activeController?.abort(); if (searchTimer) window.clearTimeout(searchTimer)
@@ -2975,6 +3052,17 @@ onBeforeUnmount(() => {
       :problem="error"
     />
     <template v-if="project">
+      <work-item-import-dialog
+        v-if="canCreate"
+        v-model="importOpen"
+        :project-id="projectId"
+        :contents="catalog?.items ?? []"
+        :statuses="labelCatalog?.statuses ?? []"
+        :priorities="labelCatalog?.priorities ?? []"
+        :members="members"
+        :default-content-id="defaultContentId"
+        @imported="onWorkItemsImported"
+      />
       <template v-if="!embedded">
         <connect-column-delete-dialog
           :column="connect.deletingColumn"
@@ -3040,6 +3128,42 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="work-items-toolbar" aria-label="工作项工具栏" data-work-item-view-control data-tour="work-item-toolbar">
+          <div
+            v-if="selectedView === 'table' && canCreate"
+            class="toolbar-create-group"
+          >
+            <button
+              type="button"
+              class="toolbar-create"
+              :disabled="creatingTop || Boolean(editingCell) || tableSorting"
+              @click="createAtTop"
+            >
+              <el-icon><plus /></el-icon><span>新增工作项</span>
+            </button>
+            <el-dropdown
+              trigger="click"
+              placement="bottom-end"
+              :disabled="creatingTop || Boolean(editingCell) || tableSorting"
+              @command="importOpen = true"
+            >
+              <button
+                type="button"
+                class="toolbar-create toolbar-create-more"
+                aria-label="更多新增方式"
+                aria-haspopup="menu"
+                :disabled="creatingTop || Boolean(editingCell) || tableSorting"
+              >
+                <el-icon><arrow-down /></el-icon>
+              </button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="import">
+                    <el-icon><upload /></el-icon>导入工作项
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
           <div class="toolbar-search" :class="{ 'toolbar-search--expanded': searchExpanded }">
             <el-input
               v-if="searchExpanded"
@@ -3438,9 +3562,9 @@ onBeforeUnmount(() => {
                 <template #default="scope">
                   <template v-if="isGroupDisplayRow(scope.row)">
                     <work-item-column-header v-if="scope.row.groupRowKind === 'columns'" :state="columnMenuState(columnByKey.get('title')!)"
-                      :saving="tableSorting" :allow-save="false"
+                      :saving="tableSorting || savingSortOrder"
                       @sort="applyColumnQuickSort('title')" @action="(action, anchor) => onColumnMenuAction('title', action, anchor)"
-                    @clear="clearColumnSort('title')" />
+                    @clear="clearColumnSort('title')" @save="saveSortedWorkItemOrder" />
                     <span class="monday-column-resize-handle monday-title-column-resize-handle" data-column-key="title" aria-hidden="true" />
                   </template>
                   <div v-else class="title-cell" :data-work-item-id="scope.row.id">
@@ -3449,11 +3573,12 @@ onBeforeUnmount(() => {
                       :item="scope.row as ProjectWorkItemListItem"
                       :strict-version="embedded"
                       :selected="selectedCellKey === `${scope.row.id}:title`"
+                      :auto-edit="autoEditId === scope.row.id"
                       :disabled="Boolean(editingCell)"
                       :create="isDraft(scope.row as ProjectWorkItemListItem) ? saveInlineDraft : undefined"
                       @open="openDetail(scope.row as ProjectWorkItemListItem, 'details')"
                       @updated="replaceLightItem"
-                      @editing="active => { if (active) { editingNames.add(scope.row.id); selectCell(scope.row.id, 'title') } else editingNames.delete(scope.row.id) }"
+                      @editing="active => { if (active) { autoEditId = ''; editingNames.add(scope.row.id); selectCell(scope.row.id, 'title') } else editingNames.delete(scope.row.id) }"
                       @cancel="cancelInlineDraft"
                     >
                       <template #prefix>
@@ -3555,9 +3680,9 @@ onBeforeUnmount(() => {
                 <template #default="scope">
                   <template v-if="isGroupDisplayRow(scope.row)">
                     <work-item-column-header v-if="scope.row.groupRowKind === 'columns'" :state="columnMenuState(column)"
-                      :collapsed="isColumnCollapsed(column.key)" :saving="tableSorting" :allow-save="false"
+                      :collapsed="isColumnCollapsed(column.key)" :saving="tableSorting || savingSortOrder"
                       @sort="applyColumnQuickSort(column.key)" @action="(action, anchor) => onColumnMenuAction(column.key, action, anchor)"
-                    @clear="clearColumnSort(column.key)" />
+                    @clear="clearColumnSort(column.key)" @save="saveSortedWorkItemOrder" />
                     <span v-if="!isColumnCollapsed(column.key)" class="monday-column-resize-handle" :data-column-key="column.key" aria-hidden="true" />
                   </template>
                   <span v-else-if="isColumnCollapsed(column.key)" class="work-item-collapsed-cell" aria-hidden="true" />
@@ -4193,6 +4318,14 @@ onBeforeUnmount(() => {
 :deep(.table-settings-toolbar-button) { width: 36px; justify-content: center; padding: 0; }
 :deep(.table-settings-toolbar-button--unsaved) { width: auto; padding: 0 var(--yp-space-3); }
 .toolbar-count { min-width: 18px; padding: 1px 5px; border-radius: var(--yp-radius-pill); color: var(--yp-priority-foreground); background: var(--yp-action-primary); font-size: 11px; }
+.toolbar-create { display: inline-flex; height: 32px; flex: 0 0 auto; align-items: center; gap: 6px; padding: 0 var(--yp-space-3); border: 0; border-radius: var(--yp-radius-sm); color: var(--yp-text-inverse); background: var(--yp-action-primary); font: inherit; font-weight: 600; cursor: pointer; transition: background var(--yp-motion-fast) var(--yp-ease-standard); }
+.toolbar-create-group { display: inline-flex; flex: 0 0 auto; }
+.toolbar-create-group .toolbar-create:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.toolbar-create-more { width: 30px; justify-content: center; padding: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 1px solid color-mix(in srgb, var(--yp-text-inverse) 35%, transparent); }
+.toolbar-create:hover:not(:disabled) { background: var(--yp-action-primary-hover); }
+.toolbar-create:active:not(:disabled) { background: var(--yp-action-primary-active); }
+.toolbar-create:disabled { opacity: .6; cursor: not-allowed; }
+.toolbar-create:focus-visible { outline: 2px solid var(--yp-focus-ring); outline-offset: 2px; }
 .toolbar-search { width: 94px; flex: 0 0 auto; transition: width 100ms cubic-bezier(0, 0, .35, 1); }
 .toolbar-search > .toolbar-button { width: 100%; }
 .toolbar-search--expanded { width: min(360px, 40vw); }

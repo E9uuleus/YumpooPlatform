@@ -78,7 +78,7 @@ const query = useOperationsQuery(
       }
     }
   },
-  { interval: () => (following.value ? (more ? 500 : 3000) : 0) },
+  { pageLoad: true, interval: () => (following.value ? (more ? 500 : 3000) : 0) },
 )
 async function loadEntries(signal: AbortSignal) {
   if (following.value) {

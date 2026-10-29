@@ -1,14 +1,54 @@
 import { WorkItemLabelColorToken, type TeamTimesheet } from '@yumpoo/api-client'
 import { formatDateOnly } from '../../design-system/dates'
 import { workItemLabelColorValue } from '../projects/workItemLabelColors'
-import { categoryKey, NON_PROJECT_COLOR, NON_PROJECT_KEY, NON_PROJECT_LABEL, timeCategory } from '../timer/timeCategories'
+import { categoryKey, categoryOf, isMigratedCategory, NON_PROJECT_COLOR, NON_PROJECT_KEY, NON_PROJECT_LABEL, timeCategory } from '../timer/timeCategories'
 
 export type PeriodKind = 'WEEK' | 'MONTH' | 'QUARTER'
 /** Inclusive company-calendar dates as `YYYY-MM-DD`. */
 export interface Period { kind: PeriodKind; from: string; to: string }
 export const MAX_RANGE_DAYS = 93
 export const periodOptions = [{ value: 'WEEK', label: '周' }, { value: 'MONTH', label: '月' }, { value: 'QUARTER', label: '季' }] as const
-export type TeamView = 'TIMESHEET' | 'OVERTIME' | 'WORKLOAD'
+export type TeamView = 'TIMESHEET' | 'PROJECTS' | 'OVERTIME' | 'WORKLOAD'
+
+/** Heat strength (percent) of a day cell. */
+export const heatMix = (ms: number) => ms >= 8 * 3_600_000 ? 52 : ms >= 4 * 3_600_000 ? 36 : ms >= 2 * 3_600_000 ? 24 : 14
+
+/** A member line, or a category line holding that project's linked category time across members. */
+export interface ProjectHoursChild { key: string; label: string; userId: string | null; totalMs: number; days: Record<string, number> }
+export interface ProjectHoursRow { key: string; projectId: string; name: string; totalMs: number; days: Record<string, number>; children: ProjectHoursChild[] }
+export type ProjectHoursModel = ReturnType<typeof buildProjectHours>
+
+/** Projects by total, members before categories inside each; category time that names no project closes the list under 未关联项目. */
+export function buildProjectHours(sheet: TeamTimesheet): { rows: ProjectHoursRow[]; dayTotals: Record<string, number>; totalMs: number } {
+  const items = new Map(sheet.workItems.map(item => [item.id, item]))
+  const names = new Map(sheet.members.map(member => [member.userId, member.displayName]))
+  const rows = new Map<string, ProjectHoursRow>()
+  const dayTotals: Record<string, number> = {}
+  let totalMs = 0
+  function add(projectId: string, projectName: string, key: string, label: string, userId: string | null, day: Date, ms: number) {
+    let row = rows.get(projectId)
+    if (!row) rows.set(projectId, row = { key: projectId, projectId, name: projectName, totalMs: 0, days: {}, children: [] })
+    let child = row.children.find(candidate => candidate.key === key)
+    if (!child) row.children.push(child = { key, label, userId, totalMs: 0, days: {} })
+    const date = fromApiDate(day)
+    for (const target of [row, child]) { target.totalMs += ms; target.days[date] = (target.days[date] ?? 0) + ms }
+    dayTotals[date] = (dayTotals[date] ?? 0) + ms
+    totalMs += ms
+  }
+  for (const entry of sheet.entries) {
+    const item = items.get(entry.workItemId)
+    if (item) add(item.projectId, item.projectName, `user:${entry.userId}`, names.get(entry.userId) ?? '历史成员', entry.userId, entry.date, entry.durationMs)
+  }
+  for (const entry of sheet.categoryEntries ?? []) {
+    add(entry.projectId ?? NON_PROJECT_KEY, entry.projectName ?? NON_PROJECT_LABEL, categoryKey(entry.timeCategory),
+      timeCategory(entry.timeCategory)?.label ?? '其他', null, entry.date, entry.durationMs)
+  }
+  const unlinked = (row: ProjectHoursRow) => row.projectId === NON_PROJECT_KEY ? 1 : 0
+  const category = (child: ProjectHoursChild) => child.userId ? 0 : 1
+  const list = [...rows.values()].sort((a, b) => unlinked(a) - unlinked(b) || b.totalMs - a.totalMs || a.name.localeCompare(b.name, 'zh-CN'))
+  list.forEach(row => row.children.sort((a, b) => category(a) - category(b) || b.totalMs - a.totalMs || a.label.localeCompare(b.label, 'zh-CN')))
+  return { rows: list, dayTotals, totalMs }
+}
 
 const DAY = 86_400_000
 const weekdays = ['日', '一', '二', '三', '四', '五', '六']
@@ -65,10 +105,11 @@ export function hoursMinutes(ms: number): string {
   return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`
 }
 
-/** `subjectKey` is the work item id or a category key; category rows group under the 非项目工时 pseudo project. */
+/** `subjectKey` is the work item id or a category key; unlinked category rows group under the 未关联项目 pseudo project. */
 export interface TimesheetItemRow { key: string; subjectKey: string; projectId: string; projectName: string; itemNo: string; title: string; label: string; totalMs: number; days: Record<string, number> }
 export interface TimesheetRow { key: string; userId: string; name: string; active: boolean; totalMs: number; days: Record<string, number>; children: TimesheetItemRow[] }
-export interface DayItem { key: string; itemNo: string; title: string; ms: number }
+/** `migrated` marks time imported per day from the old platform; its clock slots are arranged, not worked. */
+export interface DayItem { key: string; itemNo: string; title: string; ms: number; migrated: boolean }
 
 export type TimesheetModel = ReturnType<typeof buildTimesheet>
 /** Keeps only `days` (the period's non-workdays) and recomputes every total from what remains. */
@@ -86,7 +127,7 @@ export function restrictTimesheet(model: TimesheetModel, days: string[]): Timesh
 }
 export interface DayProject { projectId: string; projectName: string; totalMs: number; items: DayItem[] }
 
-/** Member rows sorted by name with per-item children, non-project categories last; the server already split cross-midnight sessions. */
+/** Member rows sorted by name with per-item children, 未关联项目 categories last; the server already split cross-midnight sessions. */
 export function buildTimesheet(sheet: TeamTimesheet): { rows: TimesheetRow[]; dayTotals: Record<string, number>; totalMs: number } {
   const items = new Map(sheet.workItems.map(item => [item.id, item]))
   const rows = new Map<string, TimesheetRow>(sheet.members.map(member => [member.userId,
@@ -108,14 +149,26 @@ export function buildTimesheet(sheet: TeamTimesheet): { rows: TimesheetRow[]; da
     return { projectId: item?.projectId ?? '', projectName: item?.projectName ?? '', itemNo: item?.itemNo ?? '',
       title: item?.title ?? '已删除的工作项', label: item ? `${item.itemNo} ${item.title}` : '已删除的工作项' }
   })
-  for (const entry of sheet.categoryEntries ?? []) add(entry.userId, categoryKey(entry.timeCategory), entry.date, entry.durationMs, () => {
+  for (const entry of sheet.categoryEntries ?? []) add(entry.userId, categoryKey(entry.timeCategory, entry.projectId), entry.date, entry.durationMs, () => {
     const label = timeCategory(entry.timeCategory)?.label ?? '其他'
-    return { projectId: NON_PROJECT_KEY, projectName: NON_PROJECT_LABEL, itemNo: '', title: label, label }
+    return { projectId: entry.projectId ?? NON_PROJECT_KEY, projectName: entry.projectName ?? NON_PROJECT_LABEL, itemNo: '', title: label, label }
   })
   const nonProject = (item: TimesheetItemRow) => item.projectId === NON_PROJECT_KEY ? 1 : 0
   const sorted = [...rows.values()].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))
   sorted.forEach(row => row.children.sort((a, b) => nonProject(a) - nonProject(b) || b.totalMs - a.totalMs || a.label.localeCompare(b.label, 'zh-CN')))
   return { rows: sorted, dayTotals, totalMs }
+}
+
+export const isMigratedSubject = (subjectKey: string): boolean => isMigratedCategory(categoryOf(subjectKey)?.code)
+
+/** Per day, the milliseconds of a member's time that came from a migrated import. */
+export function migratedDays(row: TimesheetRow | undefined): Record<string, number> {
+  const days: Record<string, number> = {}
+  for (const item of row?.children ?? []) {
+    if (!isMigratedSubject(item.subjectKey)) continue
+    for (const [day, ms] of Object.entries(item.days)) days[day] = (days[day] ?? 0) + ms
+  }
+  return days
 }
 
 /** One member's work on one day, grouped by project, larger totals first. */
@@ -127,7 +180,7 @@ export function dayBreakdown(row: TimesheetRow, day: string): DayProject[] {
     let project = projects.get(item.projectId)
     if (!project) projects.set(item.projectId, project = { projectId: item.projectId, projectName: item.projectName || '未知项目', totalMs: 0, items: [] })
     project.totalMs += ms
-    project.items.push({ key: item.key, itemNo: item.itemNo, title: item.title, ms })
+    project.items.push({ key: item.key, itemNo: item.itemNo, title: item.title, ms, migrated: isMigratedSubject(item.subjectKey) })
   }
   const list = [...projects.values()].sort((a, b) => b.totalMs - a.totalMs || a.projectName.localeCompare(b.projectName, 'zh-CN'))
   list.forEach(project => project.items.sort((a, b) => b.ms - a.ms))
@@ -138,9 +191,10 @@ const PROJECT_COLORS = [WorkItemLabelColorToken.BrightBlue, WorkItemLabelColorTo
   WorkItemLabelColorToken.SofiaPink, WorkItemLabelColorToken.Indigo, WorkItemLabelColorToken.BrightGreen, WorkItemLabelColorToken.Lipstick,
   WorkItemLabelColorToken.Royal, WorkItemLabelColorToken.Sunset].map(workItemLabelColorValue)
 
-/** Project colours of a sheet, with the 非项目工时 group kept on its own neutral colour. */
+/** Project colours of a sheet, with the 未关联项目 group kept on its own neutral colour. */
 export function timesheetColors(sheet: TeamTimesheet | undefined): Map<string, string> {
-  const colors = projectColors(sheet?.workItems.map(item => item.projectId) ?? [])
+  const colors = projectColors([...(sheet?.workItems.map(item => item.projectId) ?? []),
+    ...(sheet?.categoryEntries ?? []).flatMap(entry => entry.projectId ? [entry.projectId] : [])])
   colors.set(NON_PROJECT_KEY, NON_PROJECT_COLOR)
   return colors
 }

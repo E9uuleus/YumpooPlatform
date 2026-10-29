@@ -137,6 +137,16 @@ function applyStrictTypeScriptCompatibility(sourceRoot) {
   )
   fs.writeFileSync(emptyDetailsPath, emptyDetails, 'utf8')
 
+  for (const [model, fields] of [['ProjectCreateRequest', ['initialColors']],
+    ['ProjectInitialColors', ['categories', 'statuses', 'priorities']]]) {
+    const modelPath = path.join(sourceRoot, 'models', `${model}.ts`)
+    let source = normalizeText(fs.readFileSync(modelPath, 'utf8'))
+    for (const field of fields) source = source.replace(
+      new RegExp(`^        '${field}': json\\['${field}'\\] == null \\? undefined : (.+),$`, 'm'),
+      (_line, conversion) => `        ...(json['${field}'] == null ? {} : { '${field}': ${conversion} }),`)
+    fs.writeFileSync(modelPath, source, 'utf8')
+  }
+
   const workItemCreatePath = path.join(sourceRoot, 'models', 'WorkItemCreateRequest.ts')
   let workItemCreate = normalizeText(fs.readFileSync(workItemCreatePath, 'utf8'))
   workItemCreate = replaceExactlyOnce(
@@ -267,17 +277,46 @@ function applyStrictTypeScriptCompatibility(sourceRoot) {
   )
   fs.writeFileSync(attachmentMetadataPath, attachmentMetadata, 'utf8')
 
-  for (const model of ['DashboardChart', 'DashboardChartSelection', 'DashboardItem', 'DashboardItemsQuery', 'DashboardQuery', 'DashboardSnapshot', 'DashboardWidget', 'DashboardTableCriteria', 'DashboardTableQuery', 'NotificationReadAllRequest', 'NotificationTarget', 'NotificationItem', 'ProjectSummary', 'ProjectDetail', 'ProjectDeletionMutation', 'WorkCalendarDayInput', 'WorkItemTableSettingsUpdateRequest', 'CurrentTimeTracker', 'TeamTimesheet', 'TimeSessionFillEntry', 'TimeSessionReassignCommand', 'TimeTrackingCommand', 'TimeTrackingSession']) {
+  for (const model of ['DashboardChart', 'DashboardChartSelection', 'DashboardItem', 'DashboardItemsQuery', 'DashboardQuery', 'DashboardSnapshot', 'DashboardWidget', 'DashboardTableCriteria', 'DashboardTableQuery', 'NotificationReadAllRequest', 'NotificationTarget', 'NotificationItem', 'Project', 'ProjectSummary', 'ProjectDetail', 'ProjectDeletionMutation', 'WorkCalendarDayInput', 'WorkItemTableSettingsUpdateRequest', 'CurrentTimeTracker', 'TeamTimesheet', 'TimeSessionFillEntry', 'TimeSessionReassignCommand', 'TimeTrackingCommand', 'TimeTrackingSession']) {
     const modelPath = path.join(sourceRoot, 'models', `${model}.ts`)
     let source = normalizeText(fs.readFileSync(modelPath, 'utf8'))
     source = source.replace(/^        '([^']+)': json\['\1'\] == null \? undefined : (.+),$/gm, (_line, field, conversion) => {
-      const nullable = (model === 'ProjectSummary' && field === 'archivedAt') || (!['DashboardQuery', 'DashboardSnapshot', 'DashboardTableCriteria', 'DashboardTableQuery', 'NotificationReadAllRequest', 'ProjectSummary', 'ProjectDetail', 'ProjectDeletionMutation', 'CurrentTimeTracker', 'TeamTimesheet', 'TimeSessionFillEntry', 'TimeSessionReassignCommand', 'TimeTrackingCommand'].includes(model) && !(model === 'DashboardItem' && ['workItem', 'assignees'].includes(field)))
+      const nullable = (['Project', 'ProjectSummary', 'ProjectDetail'].includes(model) && field === 'endedAt') || (model === 'ProjectSummary' && field === 'archivedAt') || (!['DashboardQuery', 'DashboardSnapshot', 'DashboardTableCriteria', 'DashboardTableQuery', 'NotificationReadAllRequest', 'ProjectSummary', 'ProjectDetail', 'ProjectDeletionMutation', 'CurrentTimeTracker', 'TeamTimesheet', 'TimeSessionFillEntry', 'TimeSessionReassignCommand', 'TimeTrackingCommand'].includes(model) && !(model === 'DashboardItem' && ['workItem', 'assignees'].includes(field)))
       return nullable
         ? `        ...(json['${field}'] === undefined ? {} : { '${field}': json['${field}'] === null ? null : ${conversion} }),`
         : `        ...(json['${field}'] == null ? {} : { '${field}': ${conversion} }),`
     })
     fs.writeFileSync(modelPath, source, 'utf8')
   }
+
+  const importRowPath = path.join(sourceRoot, 'models', 'WorkItemImportRow.ts')
+  let importRow = normalizeText(fs.readFileSync(importRowPath, 'utf8'))
+    .replaceAll('Set<string>', 'Array<string>')
+    .replaceAll("new Set(json['assigneeUserIds'])", "json['assigneeUserIds'] as Array<string>")
+    .replaceAll("Array.from(value['assigneeUserIds'] as Set<any>)", "value['assigneeUserIds']")
+  importRow = replaceExactlyOnce(importRow,
+    "        'dueDate': json['dueDate'] == null ? undefined : (new Date(json['dueDate'])),",
+    "        ...(json['dueDate'] === undefined ? {} : { 'dueDate': json['dueDate'] === null ? null : new Date(json['dueDate']) }),",
+    'WorkItemImportRow 可选自然日 dueDate 精确属性兼容')
+  fs.writeFileSync(importRowPath, importRow, 'utf8')
+
+  const importRequestPath = path.join(sourceRoot, 'models', 'WorkItemImportRequest.ts')
+  fs.writeFileSync(importRequestPath, normalizeText(fs.readFileSync(importRequestPath, 'utf8'))
+    .replaceAll('Set<WorkItemImportField>', 'Array<WorkItemImportField>')
+    .replaceAll("(new Set((json['fields'] as Array<any>).map(WorkItemImportFieldFromJSON)))",
+      "((json['fields'] as Array<any>).map(WorkItemImportFieldFromJSON))")
+    .replaceAll("(Array.from(value['fields'] as Set<any>).map(WorkItemImportFieldToJSON))",
+      "((value['fields'] as Array<any>).map(WorkItemImportFieldToJSON))"), 'utf8')
+
+  const migratedDayPath = path.join(sourceRoot, 'models', 'MigratedTimeImportDay.ts')
+  let migratedDay = normalizeText(fs.readFileSync(migratedDayPath, 'utf8'))
+  for (const field of ['startedAt', 'stoppedAt']) {
+    migratedDay = replaceExactlyOnce(migratedDay,
+      `        '${field}': json['${field}'] == null ? undefined : (new Date(json['${field}'])),`,
+      `        ...(json['${field}'] == null ? {} : { '${field}': new Date(json['${field}']) }),`,
+      `MigratedTimeImportDay 可选时间 ${field} 精确属性兼容`)
+  }
+  fs.writeFileSync(migratedDayPath, migratedDay, 'utf8')
 
   const operationsSeriesPath = path.join(sourceRoot, 'models', 'OperationsMetricSeries.ts')
   let operationsSeries = normalizeText(fs.readFileSync(operationsSeriesPath, 'utf8'))

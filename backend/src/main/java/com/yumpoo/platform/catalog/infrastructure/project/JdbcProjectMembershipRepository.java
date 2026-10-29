@@ -167,7 +167,7 @@ public class JdbcProjectMembershipRepository implements ProjectMembershipReposit
     public Optional<Access> findVisible(CurrentActor actor, UUID projectId) {
         boolean admin = actor.hasRole(PlatformRoleCode.COMPANY_ADMIN);
         return jdbcClient.sql("""
-                SELECT p.id, p.company_id, p.lifecycle,
+                SELECT p.id, p.company_id, p.lifecycle, p.ended_at IS NOT NULL AS ended,
                        p.row_version AS project_version,
                        m.row_version AS membership_version,
                        CASE WHEN p.owner_user_id=:actorUserId THEN 'OWNER'
@@ -192,7 +192,7 @@ public class JdbcProjectMembershipRepository implements ProjectMembershipReposit
                 SELECT p.id, p.name, p.project_code AS code FROM yumpoo.project p
                 JOIN yumpoo.project_membership m ON m.project_id=p.id AND m.company_id=p.company_id
                   AND m.user_id=:userId AND m.status='ACTIVE'
-                WHERE p.company_id=:companyId AND p.lifecycle<>'ARCHIVED' AND p.purge_started_at IS NULL
+                WHERE p.company_id=:companyId AND p.lifecycle<>'ARCHIVED' AND p.ended_at IS NULL AND p.purge_started_at IS NULL
                 ORDER BY p.id
                 """).param("companyId", actor.companyId()).param("userId", actor.userId())
                 .query((rs, n) -> new com.yumpoo.platform.catalog.application.project.ProjectMembershipModels.WritableProject(
@@ -204,7 +204,7 @@ public class JdbcProjectMembershipRepository implements ProjectMembershipReposit
         if (projectIds.isEmpty()) return Map.of();
         boolean admin = actor.hasRole(PlatformRoleCode.COMPANY_ADMIN);
         return jdbcClient.sql("""
-                SELECT p.id, p.company_id, p.lifecycle,
+                SELECT p.id, p.company_id, p.lifecycle, p.ended_at IS NOT NULL AS ended,
                        p.row_version AS project_version,
                        m.row_version AS membership_version,
                        CASE WHEN p.owner_user_id=:actorUserId THEN 'OWNER'
@@ -246,7 +246,7 @@ public class JdbcProjectMembershipRepository implements ProjectMembershipReposit
                 rs.getObject("company_id", UUID.class), rs.getString("lifecycle"),
                 ActorAccess.valueOf(rs.getString("actor_access")), rs.getLong("project_version"),
                 rs.getObject("membership_version") == null ? OptionalLong.empty()
-                        : OptionalLong.of(rs.getLong("membership_version")));
+                        : OptionalLong.of(rs.getLong("membership_version")), rs.getBoolean("ended"));
     }
 
     private static Instant instant(ResultSet rs, String column) throws SQLException {

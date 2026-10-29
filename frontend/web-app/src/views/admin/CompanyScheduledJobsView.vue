@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { usePageLoad } from '../../brand/page-progress'
+
 import { readCsrfToken, type ScheduledJob } from '@yumpoo/api-client'
 import {
   ElAlert,
@@ -35,6 +37,7 @@ import { useIdentityAdmin } from '../../composables/useIdentityAdmin'
 import { useSession } from '../../composables/useSession'
 import { formatTimestamp } from '../../design-system/dates'
 
+const pageLoad = usePageLoad()
 const ElOption = ElOptionRaw as unknown as DefineComponent
 const ElSelect = ElSelectRaw as unknown as DefineComponent
 
@@ -114,7 +117,7 @@ async function submitEditor(): Promise<void> {
   }
 }
 
-onMounted(load)
+onMounted(() => pageLoad.track(load))
 </script>
 
 <template>

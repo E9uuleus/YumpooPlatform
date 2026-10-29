@@ -7,7 +7,7 @@ import { useOperationsQuery } from '../../composables/useOperationsQuery'
 import { useSession } from '../../composables/useSession'
 import { operationsContext } from '../../components/operations/operationsContext'
 import { duration, time } from '../../components/operations/operationsPresentation'
-import YpPageHeader from '../../components/yp/YpPageHeader.vue'
+import YpModulePage from '../../components/yp/YpModulePage.vue'
 import InlineProblem from '../../components/InlineProblem.vue'
 import OpsSegmented from '../../components/operations/OpsSegmented.vue'
 import './operations.css'
@@ -46,6 +46,7 @@ const hasActions = computed(() =>
   ['operations-overview', 'operations-host', 'operations-sessions'].includes(String(route.name)),
 )
 const query = useOperationsQuery((signal) => operationsApi.getOperationsOverview({ signal }), {
+  pageLoad: true,
   interval: () => (hasActions.value ? interval.value * 1000 : 0),
   enabled: () => session.isPlatformAdmin.value,
 })
@@ -64,44 +65,46 @@ watch(
 )
 </script>
 <template>
-  <section class="operations-page">
-    <yp-page-header :title="title">
-      <template #meta>
-        <span class="ops-muted">运维中心</span>
-        <template v-if="query.data.value">
-          <span>{{ query.data.value.runtime.host.hostName }}</span>
-          <span class="ops-code">{{ query.data.value.runtime.host.version }} ·
-            {{ query.data.value.runtime.host.commit.slice(0, 8) }}</span>
-          <span>迁移 {{ schemaLabel(query.data.value.runtime.host.schemaVersion) }}</span>
-          <span>已运行 {{ duration(query.data.value.runtime.host.uptimeMs) }}</span>
-        </template>
-      </template>
-      <template
-        v-if="hasActions"
-        #actions
+  <yp-module-page
+    class="operations-page"
+    module="operations"
+    :title="title"
+  >
+    <template
+      v-if="query.data.value"
+      #meta
+    >
+      <span>{{ query.data.value.runtime.host.hostName }}</span>
+      <span class="ops-code">{{ query.data.value.runtime.host.version }} ·
+        {{ query.data.value.runtime.host.commit.slice(0, 8) }}</span>
+      <span>迁移 {{ schemaLabel(query.data.value.runtime.host.schemaVersion) }}</span>
+      <span>已运行 {{ duration(query.data.value.runtime.host.uptimeMs) }}</span>
+    </template>
+    <template
+      v-if="hasActions"
+      #actions
+    >
+      <ops-segmented
+        group-label="自动刷新间隔"
+        :options="intervalOptions"
+        :selected="interval"
+        @select="interval = Number($event)"
+      />
+      <el-button
+        :loading="query.loading.value"
+        @click="refresh"
       >
-        <ops-segmented
-          group-label="自动刷新间隔"
-          :options="intervalOptions"
-          :selected="interval"
-          @select="interval = Number($event)"
-        />
-        <el-button
-          :loading="query.loading.value"
-          @click="refresh"
-        >
-          刷新
-        </el-button>
-        <span class="ops-muted operations-updated">更新于 {{ time(query.updatedAt.value) }}</span>
-      </template>
-    </yp-page-header>
+        刷新
+      </el-button>
+      <span class="ops-muted operations-updated">更新于 {{ time(query.updatedAt.value) }}</span>
+    </template>
     <inline-problem
       v-if="query.error.value"
       :problem="query.error.value"
       title="运行信息暂时不可用；已显示的数据可能过期"
     />
     <router-view v-if="session.isPlatformAdmin.value && session.phase.value === 'authenticated'" />
-  </section>
+  </yp-module-page>
 </template>
 
 <style scoped>

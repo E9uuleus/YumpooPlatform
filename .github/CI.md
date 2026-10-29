@@ -36,7 +36,7 @@ Windows 打包前的[配置隔离测试](../tools/verification/desktop-profile.t
 
 static 同时构建 `@yumpoo/monitor-hub` 与 `@yumpoo/monitor-dashboard`，执行持久队列、事件时序、维护和权限测试，以及 Compose 镜像摘要、回环监听、内存预算与 Grafana 配置检查。portable 用锁定的 Prometheus 镜像执行 `promtool test rules`，包括 windows_exporter 0.32.0 实际 CPU 指标的持续高负载升级。Windows 门禁验证旧配置默认关闭、正常发布等待 300 秒、回退不等待、落盘失败不改变倒计时和 Node/PowerShell HMAC 一致性。
 
-监控服务不加入业务 Release 的自动重启范围。Ubuntu 独立部署步骤见[监控部署手册](../deployment/monitoring/README.md)。GitHub 的通知步骤使用仓库变量 `MONITOR_ENABLED` 及 `MONITOR_SSH_HOST`、`MONITOR_SSH_KEY`、`MONITOR_KNOWN_HOSTS`、`MONITOR_SOURCE_SECRET` Secrets；机器密钥只能转发事件端口。开启统一入口后不会因投递失败退回旧 Webhook 重复发送；未被接收的事件会写入工作流摘要，不能视为已持久化。
+监控服务不加入业务 Release 的自动重启范围。Ubuntu 独立部署步骤见[监控部署手册](../deployment/monitoring/README.md)，三端字段与调整步骤见[监控配置指南](../deployment/monitoring/CONFIGURATION.md)。GitHub 的通知步骤使用仓库变量 `MONITOR_ENABLED`、`MONITOR_ENVIRONMENT` 及 `MONITOR_SSH_HOST`、`MONITOR_SSH_KEY`、`MONITOR_KNOWN_HOSTS`、`MONITOR_SOURCE_SECRET` Secrets；环境标识未设置时由通知脚本使用默认 `wecom-dev` 并在工作流摘要提示；与 Hub 不一致的事件会被拒绝，摘要单独标明，不改变业务部署 Environment。机器密钥只能转发事件端口。开启统一入口后不会因投递失败退回旧 Webhook 重复发送；未被接收的事件会写入工作流摘要，不能视为已持久化。
 
 采集器实机验收同时覆盖首次安装和同版本重复配置；MSI 返回成功之外，还须确认服务运行、回环监听和实际指标。纯脚本回归不能替代上游 MSI 的安装行为验证。
 

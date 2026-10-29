@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { usePageLoad } from '../../brand/page-progress'
+
 import { ProjectActorAccess, ProjectLifecycleFilter, type ProjectPage, type ProjectSummary } from '@yumpoo/api-client'
 import { ElButton, ElInput, ElPagination, ElTable, ElTableColumn } from 'element-plus'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
@@ -7,6 +9,10 @@ import { projectsApi } from '../../api/client'
 import { toApiProblem, type ApiProblem } from '../../api/problems'
 import { vBrandLoading as vLoading } from '../../brand/loading'
 import InlineProblem from '../../components/InlineProblem.vue'
+import { projectStatus } from '../../components/projects/projectStatus'
+import { changeProjectEnded } from '../../components/projects/projectEnding'
+import YpSegmented from '../../components/yp/YpSegmented.vue'
+import YpStatusTag from '../../components/yp/YpStatusTag.vue'
 import ArchivedProjectTable from '../../components/projects/ArchivedProjectTable.vue'
 import YpAssignee from '../../components/yp/YpAssignee.vue'
 import YpEmptyState from '../../components/yp/YpEmptyState.vue'
@@ -14,11 +20,14 @@ import YpTabs, { type TabItem } from '../../components/yp/YpTabs.vue'
 import { useSession } from '../../composables/useSession'
 import { formatTimestamp } from '../../design-system/dates'
 
+const pageLoad = usePageLoad()
 const ACCESS_LABELS: Partial<Record<ProjectActorAccess, string>> = {
   [ProjectActorAccess.Owner]: '负责人', [ProjectActorAccess.Member]: '成员', [ProjectActorAccess.CompanyAdmin]: '未加入',
 }
-const tabs: TabItem[] = [{ value: 'active', label: '进行中' }, { value: 'archived', label: '已归档' }]
+const tabs: TabItem[] = [{ value: 'active', label: '未归档' }, { value: 'archived', label: '已归档' }]
 const router = useRouter(), session = useSession()
+const statusOptions = [{ value: 'all', label: '全部' }, { value: 'running', label: '进行中' }, { value: 'ended', label: '已结束' }] as const
+const status = ref<'all' | 'running' | 'ended'>('all')
 const tab = ref('active')
 const result = ref<ProjectPage>(), error = ref<ApiProblem>(), query = ref(''), page = ref(0), loading = ref(false), size = 20
 const timezone = computed(() => session.authentication.value?.company.timezone ?? 'UTC')
@@ -32,6 +41,7 @@ async function load(): Promise<void> {
   try {
     const next = await projectsApi.listProjects({
       lifecycle: ProjectLifecycleFilter.Active, page: page.value, size,
+      ...(status.value === 'all' ? {} : { ended: status.value === 'ended' }),
       ...(query.value.trim() ? { query: query.value.trim() } : {}),
     })
     if (sequence === request) result.value = next
@@ -40,6 +50,8 @@ async function load(): Promise<void> {
     if (sequence === request) error.value = problem
   } finally { if (sequence === request) loading.value = false }
 }
+async function toggleEnded(project: ProjectSummary): Promise<void> { if (await changeProjectEnded(project)) void load() }
+watch(status, () => { page.value = 0; void load() })
 function search(): void {
   if (searchTimer) clearTimeout(searchTimer)
   request++
@@ -51,7 +63,7 @@ function open(project: ProjectSummary): void {
 onBeforeUnmount(() => { request++; if (searchTimer) clearTimeout(searchTimer) })
 // Restoring in the archived tab changes this list, so it reloads whenever the tab is shown again.
 watch(tab, value => { if (value === 'active') void load() })
-void load()
+void pageLoad.track(load)
 </script>
 
 <template>
@@ -75,6 +87,11 @@ void load()
             placeholder="搜索项目名称或编号"
             @input="search"
             @clear="search"
+          />
+          <yp-segmented
+            v-model="status"
+            :options="statusOptions"
+            label="项目状态"
           />
           <el-button
             :loading="loading"
@@ -113,6 +130,19 @@ void load()
               width="120"
             />
             <el-table-column
+              label="状态"
+              width="100"
+            >
+              <template #default="scope">
+                <yp-status-tag
+                  domain="project-lifecycle"
+                  :status="projectStatus(scope.row as ProjectSummary)"
+                  effect="soft"
+                  size="small"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column
               label="负责人"
               min-width="150"
             >
@@ -140,6 +170,29 @@ void load()
                 {{ formatTimestamp(scope.row.updatedAt, timezone) }}
               </template>
             </el-table-column>
+            <el-table-column
+              label="操作"
+              width="110"
+              fixed="right"
+            >
+              <template #default="scope">
+                <el-button
+                  v-if="scope.row.capabilities.canEnd"
+                  link
+                  @click="toggleEnded(scope.row as ProjectSummary)"
+                >
+                  结束
+                </el-button>
+                <el-button
+                  v-else-if="scope.row.capabilities.canResume"
+                  link
+                  type="primary"
+                  @click="toggleEnded(scope.row as ProjectSummary)"
+                >
+                  重新打开
+                </el-button>
+              </template>
+            </el-table-column>
           </el-table>
           <el-pagination
             v-if="result && result.totalElements > 0"
@@ -154,7 +207,7 @@ void load()
         <yp-empty-state
           v-else
           :reason="query ? 'no-results' : 'empty'"
-          :description="query ? '没有符合搜索条件的项目。' : '公司暂无进行中的项目。'"
+          :description="query ? '没有符合搜索条件的项目。' : '公司暂无未归档的项目。'"
           compact
         />
       </div>

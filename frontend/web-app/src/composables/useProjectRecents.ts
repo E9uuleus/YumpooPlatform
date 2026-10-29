@@ -8,6 +8,7 @@ export interface ProjectRecentSource {
   code: string
   name: string
   lifecycle: ProjectLifecycle
+  endedAt?: Date | string | null
   ownerUserId: string
   ownerDisplayName: string
   actorAccess: ProjectActorAccess
@@ -16,6 +17,7 @@ export interface ProjectRecentSource {
 }
 
 export interface ProjectRecentEntry extends ProjectRecentSource {
+  endedAt?: string | null
   createdAt: string
   updatedAt: string
   openedAt: number
@@ -93,6 +95,7 @@ export function useProjectRecents(scope: () => string | undefined) {
         code: project.code,
         name: project.name,
         lifecycle: project.lifecycle,
+        endedAt: project.endedAt ? isoDate(project.endedAt) : null,
         ownerUserId: project.ownerUserId,
         ownerDisplayName: project.ownerDisplayName,
         actorAccess: project.actorAccess,
@@ -113,7 +116,7 @@ export function useProjectRecents(scope: () => string | undefined) {
     const verified = new Map(projects.map(project => [project.id, project]))
     persist(items.value.filter(item => !removedIds.includes(item.id)).map(item => {
       const next = verified.get(item.id)
-      return next ? { ...item, ...next, createdAt: isoDate(next.createdAt), updatedAt: isoDate(next.updatedAt) } : item
+      return next ? { ...item, ...next, endedAt: next.endedAt ? isoDate(next.endedAt) : null, createdAt: isoDate(next.createdAt), updatedAt: isoDate(next.updatedAt) } : item
     }))
   }
 

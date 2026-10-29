@@ -5,6 +5,7 @@ const reasons: Record<string, string> = {
   SESSION_NOT_EDITABLE: '这条记录已不能修改：它可能正在计时、已被删除，或所属项目已归档。',
   TIMER_CHANGED: '记录已在其他窗口变化，已刷新，请重新操作。',
   PROJECT_ARCHIVED: '该项目已归档，不能再记录工时。',
+  PROJECT_ENDED: '该项目已结束，不能再记录工时。',
 }
 
 /** Chinese explanation for time-tracking failures, preferring the stable `details.reason` over the generic problem text. */

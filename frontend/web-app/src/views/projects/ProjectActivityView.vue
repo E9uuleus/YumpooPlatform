@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { usePageLoad } from '../../brand/page-progress'
+
 import type { ProjectDetail } from '@yumpoo/api-client'
 import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
@@ -8,6 +10,7 @@ import ActivityTimeline from '../../components/collaboration/ActivityTimeline.vu
 import InlineProblem from '../../components/InlineProblem.vue'
 import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHeader.vue'
 
+const pageLoad = usePageLoad()
 const route = useRoute()
 const projectId = String(route.params.projectId)
 const project = ref<ProjectDetail>()
@@ -19,7 +22,7 @@ async function loadProject(): Promise<void> {
   catch (reason) { error.value = await toApiProblem(reason) }
 }
 
-onMounted(() => void loadProject())
+onMounted(() => void pageLoad.track(loadProject))
 </script>
 
 <template>

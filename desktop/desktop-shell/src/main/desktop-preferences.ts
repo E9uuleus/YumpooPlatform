@@ -28,13 +28,17 @@ export function validAppearance(value: unknown): value is DesktopAppearance {
 }
 export const validAccelerator = (value: unknown): value is string => typeof value === 'string' && ACCELERATOR.test(value)
 
+export const validRailLabel = (value: unknown): value is string =>
+  typeof value === 'string' && value === value.trim() && [...value].length >= 1 && [...value].length <= 3
+
 export function validRailProjects(value: unknown): value is RailProjects {
   const projects = value as RailProjects | null
   if (!projects || typeof projects !== 'object' || typeof projects.owner !== 'string' || !Array.isArray(projects.items)) return false
   const [company, user, ...rest] = projects.owner.split(':')
   return uuid.test(company ?? '') && uuid.test(user ?? '') && !rest.length && projects.items.length <= MAX_RAIL_PROJECTS
     && projects.items.every(item => !!item && typeof item === 'object' && uuid.test(String(item.id))
-      && typeof item.name === 'string' && item.name.length > 0 && item.name.length <= 64)
+      && typeof item.name === 'string' && item.name.length > 0 && item.name.length <= 64
+      && (item.label === undefined || validRailLabel(item.label)))
     && new Set(projects.items.map(item => item.id)).size === projects.items.length
 }
 
@@ -111,7 +115,7 @@ function sanitize(value: Record<string, unknown>): Partial<DesktopPreferences> {
   if (validRailSize(value.railSize)) result.railSize = value.railSize
   if (value.railProjects === null) result.railProjects = null
   else if (validRailProjects(value.railProjects)) {
-    result.railProjects = { owner: value.railProjects.owner, items: value.railProjects.items.map(item => ({ id: item.id, name: item.name })) }
+    result.railProjects = { owner: value.railProjects.owner, items: value.railProjects.items.map(item => ({ id: item.id, name: item.name, ...(item.label ? { label: item.label } : {}) })) }
   }
   if (typeof value.aboveTaskbar === 'boolean') result.aboveTaskbar = value.aboveTaskbar
   if (value.shortcut === null || validAccelerator(value.shortcut)) result.shortcut = value.shortcut

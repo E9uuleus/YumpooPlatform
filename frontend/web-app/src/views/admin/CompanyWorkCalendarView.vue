@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { usePageLoad } from '../../brand/page-progress'
+
 import { CalendarDaySource, CalendarDayType, readCsrfToken, type WorkCalendarYear, type WorkHoursAlertSetting } from '@yumpoo/api-client'
 import { ElAlert, ElButton, ElDialog, ElInput, ElInputNumber, ElMessage, ElMessageBox } from 'element-plus'
 import { computed, onMounted, ref, watch } from 'vue'
@@ -16,6 +18,7 @@ import { useIdentityAdmin } from '../../composables/useIdentityAdmin'
 import { useSession } from '../../composables/useSession'
 import { usePageOnboarding } from '../../onboarding/useOnboarding'
 
+const pageLoad = usePageLoad()
 const session = useSession(), { canWrite } = useIdentityAdmin()
 const timezone = computed(() => session.authentication.value?.company.timezone ?? 'Asia/Shanghai')
 const today = computed(() => todayIn(timezone.value))
@@ -131,7 +134,7 @@ async function saveAlert(): Promise<void> {
   } catch (reason) { error.value = await toApiProblem(reason) }
   finally { alertSaving.value = false }
 }
-onMounted(load)
+onMounted(() => pageLoad.track(load))
 </script>
 
 <template>

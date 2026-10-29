@@ -78,14 +78,46 @@ class TimeSessionFillPlannerTest {
         assertThat(plan.created()).containsExactly(entry(work.workItemId(),20,30),categoryEntry(TimeCategory.BUSINESS_TRIP,10,20));
     }
 
+    @Test
+    void categoryUnderAnotherProjectBlocksTheSameSlot() {
+        UUID first=UUID.randomUUID(), second=UUID.randomUUID();
+        Session meeting=category(TimeCategory.MEETING,first,10,20);
+        var entries=List.of(categoryEntry(TimeCategory.MEETING,second,0,30));
+        var parallel=TimeSessionFillPlanner.plan(TimeSessionFillMode.PARALLEL,entries,List.of(meeting),Set.of(meeting.id()));
+        assertThat(parallel.created()).containsExactly(categoryEntry(TimeCategory.MEETING,second,0,10),
+                categoryEntry(TimeCategory.MEETING,second,20,30));
+        assertThat(parallel.skippedDurationMs()).isEqualTo(10000);
+        var replaced=TimeSessionFillPlanner.plan(TimeSessionFillMode.REPLACE,entries,List.of(meeting),Set.of(meeting.id()));
+        assertThat(replaced.deleted()).containsExactly(meeting);
+        assertThat(replaced.created()).containsExactly(categoryEntry(TimeCategory.MEETING,second,0,30));
+    }
+
+    @Test
+    void slotsOverlapOnlyForTheSameCategoryInTime() {
+        UUID first=UUID.randomUUID(), second=UUID.randomUUID();
+        var meeting=categoryEntry(TimeCategory.MEETING,first,0,10);
+        assertThat(TimeSessionFillPlanner.slotsOverlap(TimeSessionFillPlanner.mergeEntries(List.of(meeting,
+                categoryEntry(TimeCategory.MEETING,second,5,15))))).isTrue();
+        assertThat(TimeSessionFillPlanner.slotsOverlap(TimeSessionFillPlanner.mergeEntries(List.of(meeting,
+                categoryEntry(TimeCategory.MEETING,second,10,20))))).isFalse();
+        assertThat(TimeSessionFillPlanner.slotsOverlap(TimeSessionFillPlanner.mergeEntries(List.of(meeting,
+                categoryEntry(TimeCategory.LEARNING,second,5,15))))).isFalse();
+    }
+
     private static Instant at(int seconds) { return BASE.plusSeconds(seconds); }
     private static TimeSessionFillEntry categoryEntry(TimeCategory category,int start,int stop) {
-        return new TimeSessionFillEntry(null,at(start),at(stop),category);
+        return categoryEntry(category,null,start,stop);
+    }
+    private static TimeSessionFillEntry categoryEntry(TimeCategory category,UUID project,int start,int stop) {
+        return new TimeSessionFillEntry(null,at(start),at(stop),category,project);
     }
     private static Session category(TimeCategory category,int start,int stop) {
-        return new Session(UUID.randomUUID(),COMPANY,null,null,USER,at(start),at(stop),"MANUAL",0,null,null,category);
+        return category(category,null,start,stop);
     }
-    private static TimeSessionFillEntry entry(UUID item,int start,int stop) { return new TimeSessionFillEntry(item,at(start),at(stop),null); }
+    private static Session category(TimeCategory category,UUID project,int start,int stop) {
+        return new Session(UUID.randomUUID(),COMPANY,null,null,USER,at(start),at(stop),"MANUAL",0,null,null,category,project);
+    }
+    private static TimeSessionFillEntry entry(UUID item,int start,int stop) { return new TimeSessionFillEntry(item,at(start),at(stop),null, null); }
     private static Session session(UUID item,int start,Integer stop) {
         return new Session(UUID.randomUUID(),COMPANY,PROJECT,item,USER,at(start),stop==null ? null : at(stop),"MANUAL",0,null,null);
     }

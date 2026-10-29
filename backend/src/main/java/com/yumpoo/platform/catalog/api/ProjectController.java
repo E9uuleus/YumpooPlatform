@@ -49,12 +49,13 @@ public final class ProjectController {
             @RequestParam(required = false) List<ProjectActorAccess> actorAccesses,
             @RequestParam(required = false) Instant updatedSince,
             @RequestParam(required = false) ProjectLifecycleFilter lifecycle,
+            @RequestParam(required = false) Boolean ended,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         CurrentActor actor = actorProvider.requiredActive();
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                 .body(service.findAll(actor, new ProjectSearchCriteria(query,
-                                ownerUserIds, actorAccesses, updatedSince, lifecycle),
+                                ownerUserIds, actorAccesses, updatedSince, lifecycle, ended),
                         OffsetPageRequest.of(page, size)));
     }
 
