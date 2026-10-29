@@ -232,7 +232,8 @@ code {
   display: inline-flex;
 }
 
-.app-topbar__tool {
+.app-topbar__tool,
+.yp-tool-button {
   display: inline-grid;
   width: var(--yp-control-height-small);
   height: var(--yp-control-height-small);
@@ -248,12 +249,16 @@ code {
 
 .app-topbar__tool:hover:not(:disabled),
 .app-topbar__tool.is-active,
-.app-topbar__tool[aria-expanded="true"] {
+.app-topbar__tool[aria-expanded="true"],
+.yp-tool-button:hover:not(:disabled),
+.yp-tool-button.is-active,
+.yp-tool-button[aria-expanded="true"] {
   background: var(--yp-bg-hover);
   color: var(--yp-text-primary);
 }
 
-.app-topbar__tool:disabled {
+.app-topbar__tool:disabled,
+.yp-tool-button:disabled {
   color: var(--yp-text-disabled);
   cursor: default;
 }

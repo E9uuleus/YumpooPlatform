@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { Brush as AppearanceIcon } from '@element-plus/icons-vue'
-import { ElButton, ElIcon, ElPopover, ElRadioButton, ElRadioGroup } from 'element-plus'
+import { ElPopover, ElRadioButton, ElRadioGroup, ElTooltip } from 'element-plus'
+import { ref } from 'vue'
 import type { DensityMode, ThemeMode } from '../../composables/useAppearance'
+import ShellIcon from '../shell/ShellIcon.vue'
 
 defineProps<{
   theme: ThemeMode
@@ -12,21 +13,35 @@ defineEmits<{
   'update:theme': [value: ThemeMode]
   'update:density': [value: DensityMode]
 }>()
+
+const panelOpen = ref(false)
 </script>
 
 <template>
   <el-popover
+    v-model:visible="panelOpen"
     placement="bottom-end"
     :width="300"
     trigger="click"
   >
     <template #reference>
-      <el-button class="yp-theme-trigger">
-        <el-icon aria-hidden="true">
-          <appearance-icon />
-        </el-icon>
-        外观
-      </el-button>
+      <span class="yp-theme-reference">
+        <el-tooltip
+          content="外观"
+          placement="bottom"
+          :show-after="400"
+          :disabled="panelOpen"
+        >
+          <button
+            type="button"
+            class="yp-tool-button yp-theme-trigger"
+            :class="{ 'is-active': panelOpen }"
+            aria-label="外观"
+          >
+            <shell-icon name="appearance" />
+          </button>
+        </el-tooltip>
+      </span>
     </template>
     <div class="yp-theme-panel">
       <fieldset>
@@ -94,7 +109,7 @@ legend {
   flex-wrap: wrap;
 }
 
-.yp-theme-trigger .el-icon {
-  font-size: 18px;
+.yp-theme-reference {
+  display: inline-flex;
 }
 </style>
