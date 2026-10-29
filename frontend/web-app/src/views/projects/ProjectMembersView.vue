@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { usePageLoad } from '../../brand/page-progress'
+
 import { MoreFilled, Plus, Search } from '@element-plus/icons-vue'
 import {
   ProjectActorAccess,
@@ -33,6 +35,7 @@ import YpStatusTag from '../../components/yp/YpStatusTag.vue'
 import { useSession } from '../../composables/useSession'
 import { formatDateOnly } from '../../design-system/dates'
 
+const pageLoad = usePageLoad()
 type MemberAction = 'owner' | 'reactivate' | 'remove'
 
 const ACTION_COPY: Record<MemberAction, { menu: string; prompt: (name: string) => string; done: string }> = {
@@ -201,7 +204,7 @@ watch(query, () => {
   }, 250)
 })
 
-onMounted(() => { void refresh() })
+onMounted(() => { void pageLoad.track(refresh) })
 onBeforeUnmount(() => clearTimeout(timer))
 </script>
 

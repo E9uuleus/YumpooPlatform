@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { usePageLoad } from '../../brand/page-progress'
+
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElAlert, ElButton, ElIcon } from 'element-plus'
@@ -15,6 +17,7 @@ import { useTweenedNumber } from '../team/teamMotion'
 import { dayTargetMs, daySegments, monthGrid, monthLabel, monthProjects, monthStats, runningExtraMs, shiftMonth, weekdayLabels,
   type CalendarCell } from './myTimeModel'
 
+const pageLoad = usePageLoad()
 const session = useSession(), tracker = useTimeTracker(), route = useRoute(), router = useRouter()
 const timezone = computed(() => session.authentication.value?.company.timezone ?? 'Asia/Shanghai')
 const today = computed(() => todayIn(timezone.value, new Date(tracker.now.value)))
@@ -107,7 +110,7 @@ watch(() => Boolean(active.value), open => {
 watch(month, () => { active.value = undefined; void load() })
 const stopTracking = onTimeTrackingChanged(() => void load())
 onBeforeUnmount(() => { ++token; clearTimeout(switchTimer); stopListening(); stopTracking() })
-void load()
+void pageLoad.track(load)
 const ready = computed(() => Boolean(sheet.value) && sheetMonth.value === month.value && !loading.value && !error.value)
 defineExpose({ refresh: load, loading, ready })
 </script>

@@ -1,3 +1,4 @@
+import { usePageLoad } from '../../../brand/page-progress'
 import { computed, onBeforeUnmount, ref, watch, type Ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { TimeSessionFillMode, type MyTimeSessionPage, type TeamTimesheetDay, type TimeSessionFillResult } from '@yumpoo/api-client'
@@ -9,6 +10,7 @@ import { subjectFields, type SubjectKey } from '../../timer/timeCategories'
 import { atMinute, blockFromSession, coveredMs, dayWindow, durationLabel, itemTotals, layout, MINUTE, shares, type DayBlock, type Range } from './dayModel'
 
 export function useDayTimeline(date: Ref<string>, timezone: Ref<string>) {
+  const pageLoad = usePageLoad()
   const tracker = useTimeTracker()
   const page = ref<MyTimeSessionPage>()
   const day = ref<TeamTimesheetDay>()
@@ -135,7 +137,7 @@ export function useDayTimeline(date: Ref<string>, timezone: Ref<string>) {
   }
 
   const reloadVisible = () => { if (document.visibilityState === 'visible') void load() }
-  watch([date, timezone], () => { page.value = undefined; day.value = undefined; known = undefined; void load() }, { immediate: true })
+  watch([date, timezone], () => { page.value = undefined; day.value = undefined; known = undefined; void pageLoad.track(load) }, { immediate: true })
   const off = onTimeTrackingChanged(() => void load())
   document.addEventListener('visibilitychange', reloadVisible)
   onBeforeUnmount(() => {

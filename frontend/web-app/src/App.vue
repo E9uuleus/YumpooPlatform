@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageProgress from './brand/PageProgress.vue'
 import TimerHost from './components/timer/TimerHost.vue'
 import InboxHost from './components/inbox/InboxHost.vue'
 import type { Language } from 'element-plus/es/locale'
@@ -13,6 +14,7 @@ const ElConfigProvider = ElConfigProviderRaw as unknown as DefineComponent<{
 
 <template>
   <el-config-provider :locale="zhCn">
+    <PageProgress />
     <router-view />
     <TimerHost />
     <InboxHost />

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { usePageLoad } from '../../brand/page-progress'
+
 import { ProjectLifecycle, type ProjectDetail } from '@yumpoo/api-client'
 import { ElAlert } from 'element-plus'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -7,6 +9,7 @@ import { projectsApi } from '../../api/client'
 import { projectStatus } from '../../components/projects/projectStatus'
 import { PROJECT_LIFECYCLE_CHANGED } from '../../composables/projectLifecycleEvents'
 
+const pageLoad = usePageLoad()
 const route = useRoute()
 const project = ref<ProjectDetail>()
 let request = 0
@@ -20,7 +23,7 @@ async function load(): Promise<void> {
 function lifecycleChanged(event: Event): void {
   if ((event as CustomEvent<{ projectId: string }>).detail.projectId === route.params.projectId) void load()
 }
-watch(() => route.params.projectId, () => { project.value = undefined; void load() }, { immediate: true })
+watch(() => route.params.projectId, () => { project.value = undefined; void pageLoad.track(load) }, { immediate: true })
 onMounted(() => window.addEventListener(PROJECT_LIFECYCLE_CHANGED, lifecycleChanged))
 onBeforeUnmount(() => { request++; window.removeEventListener(PROJECT_LIFECYCLE_CHANGED, lifecycleChanged) })
 </script>

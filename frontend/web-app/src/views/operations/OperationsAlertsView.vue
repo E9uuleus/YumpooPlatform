@@ -69,9 +69,9 @@ const query = useOperationsQuery(
       },
       { signal },
     ),
-  { interval: () => (tab.value === 'active' ? 15000 : 0) },
+  { pageLoad: true, interval: () => (tab.value === 'active' ? 15000 : 0) },
 )
-const ruleQuery = useOperationsQuery((signal) => operationsApi.listOperationsAlertRules({ signal }))
+const ruleQuery = useOperationsQuery((signal) => operationsApi.listOperationsAlertRules({ signal }), { pageLoad: true })
 const rules = ref<OperationsRule[]>([]),
   baselines = ref(new Map<string, string>())
 const signature = (rule: OperationsRule) =>

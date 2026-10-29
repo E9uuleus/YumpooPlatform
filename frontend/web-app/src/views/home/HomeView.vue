@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { usePageLoad } from '../../brand/page-progress'
+
 import { DataAnalysis, DataLine, Monitor, FolderOpened, Message, OfficeBuilding, Timer } from '@element-plus/icons-vue'
 import { ProjectLifecycleFilter, TeamMemberTaskStatusCategoryEnum, type DashboardProject, type TeamMemberTask, type TeamTimesheet } from '@yumpoo/api-client'
 import { ElTooltip } from 'element-plus'
@@ -21,6 +23,7 @@ import { usePageOnboarding } from '../../onboarding/useOnboarding'
 import { daypart, filterTasks, greeting, heroDate, hubProjects, isInProgressTask, isNotStartedTask, openCount, sortTasks, type HubProject, type TaskFilter } from './homeModel'
 import { timerTitle } from '../../components/timer/timeCategories'
 
+const pageLoad = usePageLoad()
 interface JumpCard { key: string; label: string; meta: string; icon: Component; tone: JumpTone; open: () => void }
 
 const router = useRouter(), session = useSession(), tracker = useTimeTracker(), inbox = useInbox()
@@ -110,17 +113,17 @@ function calendarDuration(ms: number): string {
 }
 
 const quiet = () => undefined
-function loadMonth(): void {
-  void myWorkApi.getMyTimesheet({ from: toApiDate(`${month.value}-01`), to: toApiDate(addDays(`${shiftMonth(month.value, 1)}-01`, -1)) })
+function loadMonth() {
+  return myWorkApi.getMyTimesheet({ from: toApiDate(`${month.value}-01`), to: toApiDate(addDays(`${shiftMonth(month.value, 1)}-01`, -1)) })
     .then(sheet => { monthSheet.value = sheet }, quiet)
 }
-function loadTasks(): void {
-  void myWorkApi.listMyCurrentTasks({ offset: 0, limit: 100 }).then(page => { tasks.value = page.items }, quiet)
+function loadTasks() {
+  return myWorkApi.listMyCurrentTasks({ offset: 0, limit: 100 }).then(page => { tasks.value = page.items }, quiet)
 }
-loadTasks()
-void dashboardsApi.listDashboardProjects({ includeArchived: false, limit: 50 }).then(page => { projects.value = page.items }, quiet)
-void projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.Active, ended: false, actorAccesses: MY_PROJECT_ACCESSES, page: 0, size: 1 }).then(page => { projectTotal.value = page.totalElements }, quiet)
-loadMonth()
+void pageLoad.track(loadTasks)
+void pageLoad.track(() => dashboardsApi.listDashboardProjects({ includeArchived: false, limit: 50 }).then(page => { projects.value = page.items }, quiet))
+void pageLoad.track(() => projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.Active, ended: false, actorAccesses: MY_PROJECT_ACCESSES, page: 0, size: 1 }).then(page => { projectTotal.value = page.totalElements }, quiet))
+void pageLoad.track(loadMonth)
 onBeforeUnmount(onTimeTrackingChanged(loadMonth))
 onBeforeUnmount(onWorkItemChanged(loadTasks))
 onMounted(() => { void onboarding.ready() })

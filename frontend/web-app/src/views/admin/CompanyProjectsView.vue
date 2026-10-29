@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { usePageLoad } from '../../brand/page-progress'
+
 import { ProjectActorAccess, ProjectLifecycleFilter, type ProjectPage, type ProjectSummary } from '@yumpoo/api-client'
 import { ElButton, ElInput, ElPagination, ElTable, ElTableColumn } from 'element-plus'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
@@ -18,6 +20,7 @@ import YpTabs, { type TabItem } from '../../components/yp/YpTabs.vue'
 import { useSession } from '../../composables/useSession'
 import { formatTimestamp } from '../../design-system/dates'
 
+const pageLoad = usePageLoad()
 const ACCESS_LABELS: Partial<Record<ProjectActorAccess, string>> = {
   [ProjectActorAccess.Owner]: '负责人', [ProjectActorAccess.Member]: '成员', [ProjectActorAccess.CompanyAdmin]: '未加入',
 }
@@ -60,7 +63,7 @@ function open(project: ProjectSummary): void {
 onBeforeUnmount(() => { request++; if (searchTimer) clearTimeout(searchTimer) })
 // Restoring in the archived tab changes this list, so it reloads whenever the tab is shown again.
 watch(tab, value => { if (value === 'active') void load() })
-void load()
+void pageLoad.track(load)
 </script>
 
 <template>

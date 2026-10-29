@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { usePageLoad } from '../../brand/page-progress'
+
 import {
   AccountStatus,
   ErrorCode,
@@ -44,6 +46,7 @@ import { businessLabel } from '../../design-system/labels'
 import { getStatusPresentation } from '../../design-system/status'
 import type { ActiveFilter } from '../../design-system/types'
 
+const pageLoad = usePageLoad()
 const ElOption = ElOptionRaw as unknown as DefineComponent
 const ElSelect = ElSelectRaw as unknown as DefineComponent
 
@@ -320,7 +323,7 @@ function reauthenticate(member?: Member): void {
 }
 
 onMounted(async () => {
-  await load()
+  await pageLoad.track(() => load())
   const memberId = route.query?.memberId
   if (typeof memberId === 'string') await openMember(memberId)
 })

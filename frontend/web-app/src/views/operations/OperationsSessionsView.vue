@@ -37,11 +37,11 @@ const query = useOperationsQuery(
       },
       { signal },
     ),
-  { interval: () => operations.interval.value * 1000 },
+  { pageLoad: true, interval: () => operations.interval.value * 1000 },
 )
 const summary = useOperationsQuery(
   (signal) => operationsApi.getOperationsSessionSummary({ signal }),
-  { interval: () => operations.interval.value * 1000 },
+  { pageLoad: true, interval: () => operations.interval.value * 1000 },
 )
 watch(operations.refreshVersion, () => {
   void query.refresh()

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { usePageLoad } from '../../brand/page-progress'
+
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -13,6 +15,7 @@ import YpModulePage from '../../components/yp/YpModulePage.vue'
 import { plainRailProjects } from '../../components/desktop/railProjects'
 
 // Shells before 1.1.0 and browsers have no preferences bridge: the page then offers appearance only.
+const pageLoad = usePageLoad()
 const bridge = window.yumpooDesktop?.preferences
 const timerBridge = window.yumpooDesktop?.timer
 const route = useRoute()
@@ -69,7 +72,7 @@ const offChange = bridge?.onChange(value => { preferences.value = value })
 const focus = () => { void refresh().catch(() => undefined) }
 onMounted(async () => {
   window.addEventListener('focus', focus)
-  await refresh().catch(() => undefined)
+  await pageLoad.track(refresh).catch(() => undefined)
   if (route.query.section !== 'rail') return
   await nextTick()
   document.getElementById('settings-rail-projects')?.scrollIntoView({ block: 'center' })
