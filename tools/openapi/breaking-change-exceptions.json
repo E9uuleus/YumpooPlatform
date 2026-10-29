@@ -84,6 +84,13 @@
       "newSha256": "159578909df6b50acb2d0e3e027e574e9bed3d42f42f65be3b3250f742874fff",
       "reason": "新增 WORK_HOURS_ANOMALY 原因与 MEMBER_DAY 目标，仅移除这两个值的临时规范已通过完整 openapi-diff，不归入任何分组，Web 收件箱展示，桌面壳按原因能力过滤。",
       "agentNote": ".agents/notes/implemented/product/2026-10-12-work-calendar-and-overtime.md"
+    },
+    {
+      "id": "2026-10-28-migrated-time-category",
+      "oldSha256": "f2e4b81066180656066f2458681a453aec3d952073ae31447ee9ce26874faec9",
+      "newSha256": "a78ed408312be3a9f4e1e25d7ed849eb0e160dfe43b198dbffae6750b7f7083d",
+      "reason": "新增 TimeCategory.MIGRATED 响应枚举（迁入工时，仅系统写入、成员只读）。仅移除该枚举值的临时规范相对基线只剩新增接口 POST /projects/{projectId}/work-item-imports 与 POST /company/migrated-time-imports，属于兼容新增；精确哈希只覆盖该枚举扩展，既有字段与接口不变。",
+      "agentNote": ".agents/notes/implemented/architecture/2026-10-28-migrated-time-import.md"
     }
   ]
 }

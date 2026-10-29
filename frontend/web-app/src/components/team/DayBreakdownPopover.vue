@@ -2,6 +2,7 @@
 import { ElPopover } from 'element-plus'
 import YpOverflowText from '../yp/YpOverflowText.vue'
 import '../projects/workItemAccentBar.css'
+import { MIGRATED_TIME_NOTE } from '../timer/timeCategories'
 import { hoursMinutes, type DayProject } from './teamDashboardModel'
 
 /** One day's hours by project and work item for 我的工时 and 成员工时: rows keep the popover width, long names end in an ellipsis. */
@@ -56,7 +57,7 @@ defineProps<{ anchor: HTMLElement; title: string; totalMs: number; projects: Day
             tag="strong"
             :text="item.title"
           />
-          <small>{{ item.itemNo }}</small>
+          <small>{{ item.migrated ? MIGRATED_TIME_NOTE : item.itemNo }}</small>
         </span>
         <span class="day-breakdown__hours">{{ hoursMinutes(item.ms) }}</span>
       </div>

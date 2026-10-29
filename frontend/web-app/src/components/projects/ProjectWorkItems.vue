@@ -13,6 +13,7 @@ import WorkItemColumnVisibilityMenu from './WorkItemColumnVisibilityMenu.vue'
 import { createWorkItemColumnFlip, measureWorkItemColumns, visibleWorkItemColumnCells } from './workItemColumnFlip'
 import WorkItemRowActions from './WorkItemRowActions.vue'
 import WorkItemBatchBar from './WorkItemBatchBar.vue'
+import WorkItemImportDialog from './import/WorkItemImportDialog.vue'
 import WorkItemParentPicker from './WorkItemParentPicker.vue'
 import { useWorkItemBatchActions, type WorkItemSelection } from './useWorkItemBatchActions'
 import { useWorkItemCellPopover } from './useWorkItemCellPopover'
@@ -23,7 +24,7 @@ import WorkItemNameCell from './WorkItemNameCell.vue'
 import WorkItemDraftCell from './WorkItemDraftCell.vue'
 import { useWorkItemInlineCreate } from './useWorkItemInlineCreate'
 import WorkItemUpdatedCell from './WorkItemUpdatedCell.vue'
-import { Filter as FilterIcon, Hide, Plus, Search, Sort, User } from '@element-plus/icons-vue'
+import { ArrowDown, Filter as FilterIcon, Hide, Plus, Search, Sort, Upload, User } from '@element-plus/icons-vue'
 import {
   TimeTrackingState,
   WorkItemViewType,
@@ -44,6 +45,9 @@ import {
 } from '@yumpoo/api-client'
 import {
   ElButton,
+  ElDropdown,
+  ElDropdownItem,
+  ElDropdownMenu,
   ElDrawer,
   ElDatePicker,
   ElCheckbox,
@@ -190,6 +194,7 @@ const quickOpen = ref(false)
 const quickTitle = ref('')
 const quickCreating = ref(false)
 const creatingTop = ref(false)
+const importOpen = ref(false)
 /** Row whose name cell opens for editing as soon as it renders: the item the toolbar button just created. */
 const autoEditId = ref('')
 const quickRow = ref<HTMLElement>()
@@ -1776,6 +1781,11 @@ async function onRelationsChanged(affectedWorkItemIds: string[]): Promise<void> 
     .map(id => loadSubitems(id, true)))
 }
 
+/** 导入的工作项按文件顺序排在最前，已展开的子项列表一并失效重载。 */
+async function onWorkItemsImported(): Promise<void> {
+  await onRelationsChanged(Object.keys(subitems))
+}
+
 async function tableEdgeItems(_item: ProjectWorkItemListItem, edge: 'top' | 'bottom'): Promise<ProjectWorkItemListItem[]> {
   const rows: ProjectWorkItemListItem[] = []
   let cursor: string | null = null
@@ -3039,6 +3049,17 @@ onBeforeUnmount(() => {
       :problem="error"
     />
     <template v-if="project">
+      <work-item-import-dialog
+        v-if="canCreate"
+        v-model="importOpen"
+        :project-id="projectId"
+        :contents="catalog?.items ?? []"
+        :statuses="labelCatalog?.statuses ?? []"
+        :priorities="labelCatalog?.priorities ?? []"
+        :members="members"
+        :default-content-id="defaultContentId"
+        @imported="onWorkItemsImported"
+      />
       <template v-if="!embedded">
         <connect-column-delete-dialog
           :column="connect.deletingColumn"
@@ -3104,15 +3125,42 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="work-items-toolbar" aria-label="工作项工具栏" data-work-item-view-control data-tour="work-item-toolbar">
-          <button
+          <div
             v-if="selectedView === 'table' && canCreate"
-            type="button"
-            class="toolbar-create"
-            :disabled="creatingTop || Boolean(editingCell) || tableSorting"
-            @click="createAtTop"
+            class="toolbar-create-group"
           >
-            <el-icon><plus /></el-icon><span>新增工作项</span>
-          </button>
+            <button
+              type="button"
+              class="toolbar-create"
+              :disabled="creatingTop || Boolean(editingCell) || tableSorting"
+              @click="createAtTop"
+            >
+              <el-icon><plus /></el-icon><span>新增工作项</span>
+            </button>
+            <el-dropdown
+              trigger="click"
+              placement="bottom-end"
+              :disabled="creatingTop || Boolean(editingCell) || tableSorting"
+              @command="importOpen = true"
+            >
+              <button
+                type="button"
+                class="toolbar-create toolbar-create-more"
+                aria-label="更多新增方式"
+                aria-haspopup="menu"
+                :disabled="creatingTop || Boolean(editingCell) || tableSorting"
+              >
+                <el-icon><arrow-down /></el-icon>
+              </button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="import">
+                    <el-icon><upload /></el-icon>导入工作项
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
           <div class="toolbar-search" :class="{ 'toolbar-search--expanded': searchExpanded }">
             <el-input
               v-if="searchExpanded"
@@ -4268,6 +4316,9 @@ onBeforeUnmount(() => {
 :deep(.table-settings-toolbar-button--unsaved) { width: auto; padding: 0 var(--yp-space-3); }
 .toolbar-count { min-width: 18px; padding: 1px 5px; border-radius: var(--yp-radius-pill); color: var(--yp-priority-foreground); background: var(--yp-action-primary); font-size: 11px; }
 .toolbar-create { display: inline-flex; height: 32px; flex: 0 0 auto; align-items: center; gap: 6px; padding: 0 var(--yp-space-3); border: 0; border-radius: var(--yp-radius-sm); color: var(--yp-text-inverse); background: var(--yp-action-primary); font: inherit; font-weight: 600; cursor: pointer; transition: background var(--yp-motion-fast) var(--yp-ease-standard); }
+.toolbar-create-group { display: inline-flex; flex: 0 0 auto; }
+.toolbar-create-group .toolbar-create:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.toolbar-create-more { width: 30px; justify-content: center; padding: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 1px solid color-mix(in srgb, var(--yp-text-inverse) 35%, transparent); }
 .toolbar-create:hover:not(:disabled) { background: var(--yp-action-primary-hover); }
 .toolbar-create:active:not(:disabled) { background: var(--yp-action-primary-active); }
 .toolbar-create:disabled { opacity: .6; cursor: not-allowed; }

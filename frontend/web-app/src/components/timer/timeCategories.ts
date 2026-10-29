@@ -1,6 +1,6 @@
 import type { Component } from 'vue'
 import type { TimeCategory, WorkItemLabelColorToken } from '@yumpoo/api-client'
-import { Briefcase, ChatDotRound, Reading, Suitcase } from '@element-plus/icons-vue'
+import { Briefcase, ChatDotRound, Files, Reading, Suitcase } from '@element-plus/icons-vue'
 
 /** 固定工时分类；记录可关联一个项目，但不关联工作项。 */
 export interface TimeCategoryOption { code: TimeCategory; key: string; label: string; colorToken: WorkItemLabelColorToken; icon: Component }
@@ -31,9 +31,25 @@ export const TIME_CATEGORIES: readonly TimeCategoryOption[] = ([
 ] as const).map(([code, label, colorToken, icon]) => ({ code: code as TimeCategory, key: categoryKey(code as TimeCategory), label,
   colorToken: colorToken as WorkItemLabelColorToken, icon }))
 
+/**
+ * 迁入工时由管理员按日导入、成员只读：它有展示元数据，但不在可选列表 `TIME_CATEGORIES` 里，
+ * 所以不会出现在选择器、工作项侧栏和快捷工时里。
+ */
+export const MIGRATED_CATEGORY: TimeCategoryOption = { code: 'MIGRATED' as TimeCategory, key: categoryKey('MIGRATED' as TimeCategory),
+  label: '迁入工时', colorToken: 'AMERICAN_GRAY' as WorkItemLabelColorToken, icon: Files }
+/** 迁入工时标识的统一文案：时段由系统排布，不代表实际工作时间。 */
+export const MIGRATED_TIME_NOTE = '不代表具体时段'
+export const MIGRATED_BADGE = '迁'
+export const MIGRATED_LEGEND = '迁＝含迁入工时，按日迁入，不代表具体工作时段'
+
+/** Every category with display metadata, including the read-only one nobody can pick. */
+const DISPLAYED_CATEGORIES: readonly TimeCategoryOption[] = [...TIME_CATEGORIES, MIGRATED_CATEGORY]
+
 export function timeCategory(code: TimeCategory | string | null | undefined): TimeCategoryOption | undefined {
-  return TIME_CATEGORIES.find(option => option.code === code)
+  return DISPLAYED_CATEGORIES.find(option => option.code === code)
 }
+
+export const isMigratedCategory = (code: TimeCategory | string | null | undefined): boolean => code === MIGRATED_CATEGORY.code
 
 /** The category a key names, or undefined for a work item id. */
 export function categoryOf(key: SubjectKey | null | undefined): TimeCategoryOption | undefined {

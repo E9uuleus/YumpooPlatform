@@ -15,9 +15,11 @@ paths:
   - paths/projects.yaml
   - paths/contents.yaml
   - paths/work-items.yaml
+  - paths/work-item-imports.yaml
   - paths/work-item-updates.yaml
   - paths/attachments.yaml
   - paths/activity.yaml
+  - paths/migrated-time-imports.yaml
   - paths/administration.yaml
 components:
   - components/schemas/common.yaml
@@ -35,9 +37,11 @@ components:
   - components/schemas/projects.yaml
   - components/schemas/contents.yaml
   - components/schemas/work-items.yaml
+  - components/schemas/work-item-imports.yaml
   - components/schemas/work-item-updates.yaml
   - components/schemas/attachments.yaml
   - components/schemas/activity.yaml
+  - components/schemas/migrated-time-imports.yaml
   - components/schemas/administration.yaml
   - components/request-bodies.yaml
   - components/parameters.yaml
