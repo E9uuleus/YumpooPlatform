@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { usePageLoad } from '../../brand/page-progress'
+
 import { Download, Refresh } from '@element-plus/icons-vue'
 import { ProjectLifecycleFilter, type CompanyActivityItem } from '@yumpoo/api-client'
 import {
@@ -36,6 +38,7 @@ import { useSession } from '../../composables/useSession'
 import { formatTimestamp, zonedStartOfDay } from '../../design-system/dates'
 import type { ActiveFilter } from '../../design-system/types'
 
+const pageLoad = usePageLoad()
 interface Option { value: string; label: string }
 
 const ElOption = ElOptionRaw as unknown as DefineComponent
@@ -225,7 +228,7 @@ async function exportExcel(): Promise<void> {
 watch([dateRange, actorIds, projectIds, categories], () => void load())
 
 onMounted(() => {
-  void load()
+  void pageLoad.track(() => load())
   searchActors('')
   searchProjects('')
   if (typeof IntersectionObserver === 'undefined' || !sentinel.value) return

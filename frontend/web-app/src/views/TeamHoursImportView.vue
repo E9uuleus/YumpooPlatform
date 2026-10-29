@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { usePageLoad } from '../brand/page-progress'
+
 import { computed, onBeforeUnmount, ref, type DefineComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElAlert, ElButton, ElMessage, ElOption as ElOptionRaw, ElSelect as ElSelectRaw, ElTable, ElTableColumn } from 'element-plus'
@@ -19,6 +21,7 @@ import {
 } from '../components/team/hoursImportModel'
 import { fromApiDate } from '../components/team/teamDashboardModel'
 
+const pageLoad = usePageLoad()
 const ElSelect = ElSelectRaw as unknown as DefineComponent
 const ElOption = ElOptionRaw as unknown as DefineComponent
 
@@ -37,7 +40,7 @@ async function loadOptions(): Promise<void> {
   optionsError.value = ''
   try { options.value = await teamDashboardApi.getTeamDashboardOptions() } catch (reason) { optionsError.value = problemMessage(await toApiProblem(reason)) }
 }
-void loadOptions()
+void pageLoad.track(loadOptions)
 
 const fileName = ref(''), reading = ref(false), readError = ref('')
 const matrix = ref<ParsedMatrix>()

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { usePageLoad } from '../../brand/page-progress'
+
 import { projectWritable } from './projectStatus'
 import './workItemCompactTable.css'
 import { useWorkItemEdits, type WorkItemPatchField, type WorkItemPatchValue } from './useWorkItemEdits'
@@ -111,6 +113,7 @@ import ConnectKanbanConnections from './connect/ConnectKanbanConnections.vue'
 import type { ProjectWorkItemFilterOption } from '@yumpoo/api-client'
 import { useConnectTable } from './connect/useConnectTable'
 
+const pageLoad = usePageLoad()
 type ProjectView = 'table' | 'kanban'
 
 interface KanbanLane {
@@ -2865,13 +2868,13 @@ function clearFilters(): void {
   void syncUrl()
 }
 
-function resetCurrentData(): void {
+async function resetCurrentData(): Promise<void> {
   invalidateFilterOptions()
   clearSelection()
   grouping.stop()
   if (grouped.value && selectedView.value === 'table') {
     loadRevision++; activeController?.abort(); tableLoading.value = false; tableSorting.value = false
-    void grouping.refresh()
+    await grouping.refresh()
     return
   }
   const revision = ++loadRevision
@@ -2880,7 +2883,7 @@ function resetCurrentData(): void {
   Object.keys(lanes).forEach(key => delete lanes[key])
   Object.keys(subitems).forEach(key => delete subitems[key])
   Object.keys(subitemSelections).forEach(key => delete subitemSelections[key])
-  if (selectedView.value === 'kanban') void loadKanban(revision); else void loadTable(null, false, revision)
+  if (selectedView.value === 'kanban') await loadKanban(revision); else await loadTable(null, false, revision)
 }
 
 function onDueDateChange(item: ProjectWorkItemListItem, value: string | null, dueTime?: string | null): void {
@@ -2901,7 +2904,7 @@ watch(projectId, () => {
       void setViewQuery(embeddedQuery.value, true)
     }
   }
-  applyRouteState(); void loadWorkspace()
+  applyRouteState(); void (embedded.value ? loadWorkspace() : pageLoad.track(loadWorkspace))
 }, { immediate: true })
 watch(() => props.refreshKey, async () => {
   if (!project.value) return
@@ -2923,8 +2926,8 @@ watch([() => routeQuerySignature(true), () => routeQuerySignature(false)], ([, c
   if (!project.value) return
   const sortOnly = selectedView.value === 'table' && context === previousContext
   applyRouteState()
-  if (sortOnly) void reloadSortedTableInPlace()
-  else resetCurrentData()
+  if (sortOnly) void pageLoad.track(reloadSortedTableInPlace)
+  else void pageLoad.track(resetCurrentData)
 })
 watch([() => route.query.workItemId, () => route.query.tab], ([value, tab], [previousValue, previousTab]) => {
   if (value === previousValue && tab === undefined && previousTab !== undefined) return

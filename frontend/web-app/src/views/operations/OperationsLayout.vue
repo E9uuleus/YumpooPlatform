@@ -46,6 +46,7 @@ const hasActions = computed(() =>
   ['operations-overview', 'operations-host', 'operations-sessions'].includes(String(route.name)),
 )
 const query = useOperationsQuery((signal) => operationsApi.getOperationsOverview({ signal }), {
+  pageLoad: true,
   interval: () => (hasActions.value ? interval.value * 1000 : 0),
   enabled: () => session.isPlatformAdmin.value,
 })

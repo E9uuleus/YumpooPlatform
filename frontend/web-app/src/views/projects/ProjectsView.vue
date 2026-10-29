@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { usePageLoad } from '../../brand/page-progress'
+
 import { vBrandLoading as vLoading } from '../../brand/loading'
 import { Plus } from '@element-plus/icons-vue'
 import { ProjectActorAccess, ProjectLifecycle, ProjectLifecycleFilter, type Project, type ProjectOwnerOption, type ProjectPage, type ProjectSummary } from '@yumpoo/api-client'
@@ -29,6 +31,7 @@ import { formatDateOnly, formatTimestamp } from '../../design-system/dates'
 import { businessLabel } from '../../design-system/labels'
 import type { ActiveFilter } from '../../design-system/types'
 
+const pageLoad = usePageLoad()
 type StatusPreset = 'running' | 'ended'
 const statusOptions: { value: StatusPreset; label: string }[] = [{ value: 'running', label: '进行中' }, { value: 'ended', label: '已结束' }]
 const statusPreset = ref<StatusPreset>()
@@ -221,7 +224,7 @@ function projectCreated(project: Project): void {
 }
 
 onMounted(async () => {
-  await Promise.all([load(), loadReferenceData()])
+  await pageLoad.track(() => Promise.all([load(), loadReferenceData()]))
 })
 onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTimer) })
 </script>

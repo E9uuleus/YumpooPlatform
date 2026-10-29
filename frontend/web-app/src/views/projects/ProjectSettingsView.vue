@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { usePageLoad } from '../../brand/page-progress'
+
 import {
   readCsrfToken,
   type ProjectDetail,
@@ -31,6 +33,7 @@ import { notifyProjectSettingsChanged } from '../../composables/projectSettingsE
 import { formatTimestamp } from '../../design-system/dates'
 import { businessLabel } from '../../design-system/labels'
 
+const pageLoad = usePageLoad()
 const session = useSession()
 const route = useRoute()
 const projectId = String(route.params.projectId)
@@ -121,7 +124,7 @@ onBeforeRouteLeave(async () => {
   }
 })
 
-onMounted(load)
+onMounted(() => pageLoad.track(load))
 </script>
 
 <template>

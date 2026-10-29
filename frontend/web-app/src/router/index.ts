@@ -1,5 +1,6 @@
 import { AuthenticationRole } from '@yumpoo/api-client'
 import { watch } from 'vue'
+import { installPageProgress } from '../brand/page-progress'
 import {
   createRouter,
   createWebHistory,
@@ -220,6 +221,8 @@ const router = createRouter({
   history: createWebHistory(),
   routes,
 })
+
+installPageProgress(router)
 
 router.beforeEach(async (to) => {
   // First installs and upgrade-required clients reach the download page without signing in.

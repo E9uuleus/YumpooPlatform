@@ -1,10 +1,13 @@
 <script setup lang="ts">
+import { usePageLoad } from '../../brand/page-progress'
+
 import { ElButton } from 'element-plus'
 import { computed, onMounted, ref } from 'vue'
 import StatusScene from '../../components/motion/StatusScene.vue'
 import YpResultPage from '../../components/yp/YpResultPage.vue'
 import { CHANNEL_PATH, loadDesktopRelease, type DesktopRelease } from './desktopRelease'
 
+const pageLoad = usePageLoad()
 const release = ref<DesktopRelease>()
 const failed = ref(false)
 // The shell refuses downloads other than attachments; installing a new version starts from a browser.
@@ -28,7 +31,7 @@ const description = computed(() => failed.value
   ? '暂时无法获取桌面客户端版本信息，可以稍后重试，或继续使用浏览器访问。'
   : '适用于 Windows 10/11 64 位。安装后自动更新，无需管理员权限。')
 
-onMounted(load)
+onMounted(() => pageLoad.track(load))
 </script>
 
 <template>

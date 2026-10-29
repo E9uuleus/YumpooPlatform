@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { usePageLoad } from '../../brand/page-progress'
+
 import { ArrowLeft, ArrowRight, Refresh } from '@element-plus/icons-vue'
 import { ProjectLifecycle, readCsrfToken, type DashboardChartResult, type DashboardChartSelection, type DashboardWidget, type ProjectDetail, type ProjectWorklog } from '@yumpoo/api-client'
 import { ElAlert, ElButton, ElTag, ElTooltip } from 'element-plus'
@@ -17,6 +19,7 @@ import YpEmptyState from '../../components/yp/YpEmptyState.vue'
 import { useSession } from '../../composables/useSession'
 import { formatTimestamp } from '../../design-system/dates'
 
+const pageLoad = usePageLoad()
 const route = useRoute(), router = useRouter(), session = useSession()
 const projectId = String(route.params.projectId)
 const timezone = computed(() => session.authentication.value?.company.timezone ?? 'Asia/Shanghai')
@@ -79,12 +82,12 @@ function openWorkItem(workItemId: string): void {
 watch(period, () => void loadWorklog())
 onMounted(async () => {
   try {
-    project.value = await projectsApi.getProject({ projectId })
+    project.value = await pageLoad.track(() => projectsApi.getProject({ projectId }))
   } catch (reason) {
     projectError.value = await toApiProblem(reason)
     return
   }
-  if (project.value.lifecycle !== ProjectLifecycle.Archived) refresh()
+  if (project.value.lifecycle !== ProjectLifecycle.Archived) await pageLoad.track(() => Promise.all([loadCharts(), loadWorklog()]))
 })
 </script>
 
