@@ -7,11 +7,10 @@ export type NoticeTone = 'info' | 'success' | 'warning' | 'danger'
 withDefaults(defineProps<{
   tone?: NoticeTone
   /** 一句结论；只有一句话的提醒不写标题，直接放正文。 */
-  title?: string
+  title?: string | undefined
   size?: 'default' | 'small'
 }>(), {
   tone: 'info',
-  title: undefined,
   size: 'default',
 })
 
@@ -102,7 +101,7 @@ const ICONS = { info: InfoFilled, success: CircleCheckFilled, warning: WarningFi
 .yp-notice__title + .yp-notice__body { color: var(--yp-text-secondary); }
 :slotted(strong) { color: var(--yp-text-primary); font-weight: 600; }
 :slotted(p) { margin: 0; }
-:slotted(* + p) { margin-top: var(--yp-space-1); }
+:slotted(p:not(:first-child)) { margin-top: var(--yp-space-1); }
 :slotted(ul) { margin: var(--yp-space-1) 0 0; padding-left: 1.25em; }
 
 .yp-notice__actions {

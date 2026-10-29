@@ -118,12 +118,13 @@ function save() { if (!problem.value) emit('save', { start: start.value, end: en
     >
       {{ problem }}
     </p>
-    <p
+    <yp-notice
       v-if="share.maxParallel > 1"
       class="block-popover__note"
+      size="small"
     >
       与其他 {{ share.maxParallel - 1 }} 项并行 · 当天计入 {{ durationLabel(share.allocatedMs) }}
-    </p>
+    </yp-notice>
     <yp-notice
       v-if="running"
       class="block-popover__note"
