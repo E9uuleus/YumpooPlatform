@@ -52,6 +52,8 @@
 .team-grid thead th.is-col-hover{background:color-mix(in srgb,var(--team-accent) 16%,var(--yp-bg-surface))}
 .team-grid tbody tr:hover>td.is-col-hover{background:color-mix(in srgb,var(--team-accent) 16%,var(--yp-bg-surface))}
 .team-chip{display:inline-block;min-width:38px;height:26px;padding:0 6px;border:0;border-radius:var(--yp-radius-sm);color:color-mix(in srgb,var(--team-accent) 30%,var(--yp-text-primary));font:600 13px/26px var(--yp-font-mono);font-variant-numeric:tabular-nums;cursor:pointer;transition:transform var(--yp-motion-popover) var(--yp-ease-standard),box-shadow var(--yp-motion-popover) var(--yp-ease-standard)}
+.team-chip{position:relative}
+.team-chip__migrated{position:absolute;top:-4px;right:-4px;min-width:14px;height:14px;padding:0 2px;border:1px solid var(--yp-border-strong);border-radius:var(--yp-radius-pill);background:var(--yp-bg-surface);color:var(--yp-text-secondary);font:600 10px/12px var(--yp-font-family);text-align:center;pointer-events:none}
 .team-chip:hover{transform:translateY(-1px);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--team-accent) 60%,transparent),0 3px 8px color-mix(in srgb,var(--team-accent) 28%,transparent)}
 .team-chip:active{transform:scale(.94);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--team-accent) 60%,transparent)}
 .team-chip:focus-visible,.team-chip.is-active{outline:2px solid var(--yp-focus-ring);outline-offset:1px}
