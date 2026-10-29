@@ -172,9 +172,9 @@ onBeforeUnmount(() => { ++previewToken })
       </el-button>
     </template>
     <div class="hours-import">
-      <p class="hours-import__note">
+      <yp-notice class="hours-import__note">
         迁入工时用于导入原平台的历史工时，表格的行为成员、列为日期，单元格为当天的小时数。原平台只有每天的时长，系统会从成员的上班时间开始，依次排进当天的空闲时段，所以排出的时段不代表实际工作时间。迁入的记录在个人工时日历、我的一天和团队工时表中标为「迁入工时」，成员不能修改。同一成员同一天再次迁入会覆盖上次的结果，单元格填 0 可以清除。
-      </p>
+      </yp-notice>
       <import-steps
         :steps="STEPS"
         :current="step"
@@ -461,16 +461,7 @@ onBeforeUnmount(() => { ++previewToken })
   margin: 0 auto;
 }
 
-.hours-import__note {
-  margin: 0;
-  padding: var(--yp-space-3) var(--yp-space-4);
-  border-left: 3px solid var(--yp-action-primary);
-  border-radius: var(--yp-radius-sm);
-  background: var(--yp-bg-sunken);
-  color: var(--yp-text-secondary);
-  font-size: 13px;
-  line-height: 22px;
-}
+.hours-import__note { margin: 0; }
 
 .hours-import__panel {
   display: grid;
@@ -524,7 +515,7 @@ onBeforeUnmount(() => { ++previewToken })
 }
 
 .hours-import__hint.is-warning {
-  color: var(--yp-status-red-foreground);
+  color: color-mix(in srgb, var(--yp-status-orange) 62%, var(--yp-text-primary));
 }
 
 .hours-import__project {
@@ -568,7 +559,7 @@ onBeforeUnmount(() => { ++previewToken })
 }
 
 .hours-import__stats li.is-problem strong {
-  color: var(--yp-status-red-foreground);
+  color: var(--yp-status-red);
 }
 
 .hours-import__footer {

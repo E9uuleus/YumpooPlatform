@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import YpNotice from '../../yp/YpNotice.vue'
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { ElCheckbox, ElDropdown, ElDropdownItem, ElDropdownMenu, ElIcon, ElInput, ElMessage, ElPopover, ElTooltip } from 'element-plus'
 import { ArrowDown, Search, Setting, TopRight } from '@element-plus/icons-vue'
@@ -286,12 +287,13 @@ function toggleSort() { sort.value = sort.value === ConnectCandidateSort.Recent 
         <connect-search-fields-menu v-model="fields" />
       </el-popover>
     </div>
-    <p
+    <yp-notice
       v-if="notice"
       class="connect-picker__notice"
+      size="small"
     >
       {{ notice }}
-    </p>
+    </yp-notice>
     <inline-problem
       v-if="problem"
       :problem="problem"
@@ -505,7 +507,7 @@ function toggleSort() { sort.value = sort.value === ConnectCandidateSort.Recent 
 .connect-picker__search { display: flex; align-items: center; gap: 6px; }
 .connect-picker__filter.is-active { position: relative; }
 .connect-picker__filter.is-active::after { position: absolute; top: 5px; right: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--yp-action-primary); content: ''; }
-.connect-picker__notice { margin: 0; padding: 8px 10px; border-radius: var(--yp-radius-sm); background: var(--yp-bg-sunken); color: var(--yp-text-secondary); font-size: 12px; line-height: 1.6; }
+.connect-picker__notice { margin: 0; }
 .connect-picker__list { display: grid; align-content: start; gap: 2px; max-height: min(340px, calc(100vh - 260px)); min-height: 72px; margin: 0 -4px; padding: 0 4px; overflow-y: auto; overscroll-behavior: contain; }
 .connect-picker__caption { margin: 8px 0 4px; color: var(--yp-text-muted); font-size: 12px; }
 .connect-picker__caption:first-child { margin-top: 0; }
