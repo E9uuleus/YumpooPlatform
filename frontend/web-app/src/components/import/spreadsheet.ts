@@ -44,7 +44,7 @@ export async function readSpreadsheet(file: File): Promise<SheetCell[][]> {
   let book
   try {
     book = extensionOf(file.name) === '.csv'
-      ? XLSX.read(decodeCsv(buffer), { type: 'string', cellDates: true })
+      ? XLSX.read(decodeCsv(buffer), { type: 'string', raw: true })
       : XLSX.read(buffer, { type: 'array', cellDates: true })
   } catch {
     throw new SpreadsheetError('无法读取该文件，请确认它是有效的表格文件。')
@@ -110,7 +110,7 @@ const EXCEL_EPOCH = Date.UTC(1899, 11, 30)
 const DAY_MS = 86_400_000
 
 /**
- * 识别 Date、Excel 序列号、`YYYY-MM-DD`、`YYYY/M/D`、`YYYY.M.D`、`YYYY年M月D日`，输出 ISO 日期；无法识别返回 null。
+ * 识别 Date、Excel 序列号（含数字文本）、`YYYY-MM-DD`、`YYYY/M/D`、`YYYY.M.D`、`YYYY年M月D日`，输出 ISO 日期；无法识别返回 null。
  * 序列号只接受 20000 到 73050（1954 到 2099 年），避免把工时、数量之类的小数当成日期。
  */
 export function cellDate(cell: SheetCell | undefined): string | null {
@@ -122,6 +122,7 @@ export function cellDate(cell: SheetCell | undefined): string | null {
   }
   const text = cellText(cell)
   if (!text) return null
+  if (/^\d+(?:\.\d+)?$/u.test(text)) return cellDate(Number(text))
   const match = /^(\d{4})\s*[-/.年]\s*(\d{1,2})\s*[-/.月]\s*(\d{1,2})\s*日?(?:[ T]+\d{1,2}:\d{2}(?::\d{2})?)?$/u.exec(text)
   return match ? validDate(Number(match[1]), Number(match[2]), Number(match[3])) : null
 }

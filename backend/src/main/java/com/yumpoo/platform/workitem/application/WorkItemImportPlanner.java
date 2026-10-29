@@ -77,6 +77,7 @@ public final class WorkItemImportPlanner {
         private final ParentMode[] mode;
         private final Ref[] parent;
         private final Map<String, List<Existing>> existingByTitle = new HashMap<>();
+        private final Set<UUID> availableExistingIds = new HashSet<>();
         private final Map<UUID, UUID> dbParent = new HashMap<>();
         private final Set<UUID> dbParents = new HashSet<>();
         private final Map<UUID, Integer> updateRowByExisting = new HashMap<>();
@@ -92,9 +93,11 @@ public final class WorkItemImportPlanner {
             this.parent = new Ref[size];
             this.parentMapped = in.fields().contains(Field.PARENT);
             for (int i = 0; i < size; i++) issues.add(new ArrayList<>());
-            for (Existing existing : in.existing())
+            for (Existing existing : in.existing()) {
+                availableExistingIds.add(existing.id());
                 existingByTitle.computeIfAbsent(existing.title().strip(), key -> new ArrayList<>())
                         .add(existing);
+            }
             for (ParentLink link : in.links()) {
                 dbParent.put(link.childId(), link.parentId());
                 dbParents.add(link.parentId());
@@ -242,6 +245,12 @@ public final class WorkItemImportPlanner {
                 if (!processed(i) || mode[i] != ParentMode.SET) continue;
                 Ref root = parent[i];
                 for (Ref above = parentOf(root); above != null; above = parentOf(root)) root = above;
+                if (root.existingId() != null && !availableExistingIds.contains(root.existingId())) {
+                    issue(i, "PARENT_NOT_FOUND", in.rows().get(i).parentTitle().strip());
+                    mode[i] = ParentMode.KEEP;
+                    parent[i] = null;
+                    continue;
+                }
                 if (!root.equals(parent[i])) {
                     parent[i] = root;
                     issue(i, "PARENT_FLATTENED", in.rows().get(i).parentTitle().strip());

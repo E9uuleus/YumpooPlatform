@@ -42,6 +42,7 @@ import {
   fieldOfColumn,
   IMPORT_FIELD_LABELS,
   importableCount,
+  importLimitIssues,
   issueRows,
   mappedColumnCount,
   OPTIONAL_IMPORT_FIELDS,
@@ -93,6 +94,7 @@ const submitting = ref(false)
 const submitProblem = ref<ApiProblem>()
 const showIssues = ref(false)
 let previewSeq = 0
+let readSeq = 0
 let commitKey: string | undefined
 
 const catalog = computed(() => buildImportCatalog({
@@ -102,6 +104,7 @@ const headers = computed(() => table.value?.headers ?? [])
 const mapping = computed(() => settings.value.mapping)
 const mappedCount = computed(() => mappedColumnCount(mapping.value))
 const unrecognizedDates = computed(() => table.value ? countUnrecognizedDueDates(table.value, mapping.value) : 0)
+const mappingIssues = computed(() => table.value ? importLimitIssues(table.value, catalog.value, settings.value) : [])
 const canNext = computed(() => Boolean(table.value) && canLeaveMapping(table.value!, catalog.value, settings.value))
 const optionalTargets = OPTIONAL_IMPORT_FIELDS.map(field => ({ value: field, label: IMPORT_FIELD_LABELS[field] }))
 
@@ -155,16 +158,21 @@ function reset(): void {
   submitProblem.value = undefined
   showIssues.value = false
   previewSeq += 1
+  readSeq += 1
   commitKey = undefined
 }
 
 watch(() => props.modelValue, open => { if (open) reset() }, { immediate: true })
 
 async function onFile(file: File): Promise<void> {
+  const seq = ++readSeq
   reading.value = true
   readError.value = ''
+  table.value = undefined
+  fileName.value = ''
   try {
     const built = buildImportTable(await readSpreadsheet(file))
+    if (seq !== readSeq) return
     if (!built.ok) {
       readError.value = built.message
       return
@@ -173,9 +181,9 @@ async function onFile(file: File): Promise<void> {
     fileName.value = file.name
     settings.value = { ...settings.value, mapping: autoMapColumns(built.table.headers), choices: emptyChoices() }
   } catch (reason) {
-    readError.value = reason instanceof SpreadsheetError ? reason.message : '无法读取该文件，请确认它是有效的表格文件。'
+    if (seq === readSeq) readError.value = reason instanceof SpreadsheetError ? reason.message : '无法读取该文件，请确认它是有效的表格文件。'
   } finally {
-    reading.value = false
+    if (seq === readSeq) reading.value = false
   }
 }
 
@@ -458,6 +466,21 @@ const outcomeLabel = (outcome: WorkItemImportOutcome): string => outcome === Wor
         >
           {{ unrecognizedDates }} 行截止日期无法识别，将留空
         </p>
+        <el-alert
+          v-if="mappingIssues.length"
+          type="error"
+          :closable="false"
+          :title="`有 ${mappingIssues.length} 处超出导入上限，请调整文件或取消对应列的映射`"
+        >
+          <ul>
+            <li
+              v-for="issue in mappingIssues.slice(0, 20)"
+              :key="issue"
+            >
+              {{ issue }}
+            </li>
+          </ul>
+        </el-alert>
 
         <section class="wi-values">
           <h3>导入为类别</h3>

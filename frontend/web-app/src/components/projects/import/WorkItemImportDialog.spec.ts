@@ -54,6 +54,31 @@ beforeEach(() => {
 })
 
 describe('导入工作项弹窗', () => {
+  it('替换文件读取失败后不允许继续导入旧文件', async () => {
+    const wrapper = await openAtMapping()
+    expect(button('下一步').disabled).toBe(false)
+    wrapper.findComponent(ImportFileDrop).vm.$emit('file', new File(['标题\n'], '无数据.csv'))
+    await vi.waitFor(() => expect(document.body.textContent).toContain('文件里没有数据行'))
+    expect(button('下一步').disabled).toBe(true)
+    expect(document.body.textContent).not.toContain('已读取「导出.csv」')
+  })
+
+  it('重新打开弹窗后忽略上次尚未完成的文件读取', async () => {
+    const wrapper = mount(WorkItemImportDialog, { props, attachTo: document.body })
+    await flushPromises()
+    let finishRead!: (buffer: ArrayBuffer) => void
+    const file = new File([CSV], '旧文件.csv')
+    vi.spyOn(file, 'arrayBuffer').mockImplementation(() => new Promise(resolve => { finishRead = resolve }))
+    wrapper.findComponent(ImportFileDrop).vm.$emit('file', file)
+    await flushPromises()
+    await wrapper.setProps({ modelValue: false })
+    await wrapper.setProps({ modelValue: true })
+    finishRead(new TextEncoder().encode(CSV).buffer)
+    await flushPromises()
+    expect(button('下一步').disabled).toBe(true)
+    expect(document.body.textContent).not.toContain('已读取「旧文件.csv」')
+  })
+
   it('读取文件后进入映射，同名处理人选定前不能进入下一步', async () => {
     const wrapper = await openAtMapping()
     expect(document.body.textContent).toContain('2 行数据，4 列')

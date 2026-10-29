@@ -287,9 +287,10 @@ export function unresolvedAssigneeNames(table: ImportTable, catalog: ImportCatal
     .map(value => value.key)
 }
 
-/** 「下一步」可用：标题已映射，且同名的处理人都已选定。 */
+/** 「下一步」可用：标题已映射、同名处理人已选定，且字段没有超出导入上限。 */
 export function canLeaveMapping(table: ImportTable, catalog: ImportCatalog, settings: ImportSettings): boolean {
   return settings.mapping.title !== null && unresolvedAssigneeNames(table, catalog, settings).length === 0
+    && importLimitIssues(table, catalog, settings).length === 0
 }
 
 /** 截止日期列里有内容却无法识别为日期的行数。 */
@@ -322,11 +323,20 @@ export function buildImportRows(table: ImportTable, catalog: ImportCatalog, sett
       contentId: mapping.content === null ? settings.defaultContentId : resolveContent(catalog, settings, cellText(cellOf(row, 'content'))),
       statusCode: mapping.status === null ? catalog.defaultStatusCode : resolveStatus(catalog, settings, cellText(cellOf(row, 'status'))),
       priority: mapping.priority === null ? null : resolvePriority(catalog, settings, cellText(cellOf(row, 'priority'))),
-      assigneeUserIds: [...assigneeIds].slice(0, ASSIGNEES_MAX),
+      assigneeUserIds: [...assigneeIds],
       dueDate: due ? new Date(`${due}T00:00:00.000Z`) : null,
       parentTitle: optionalText(cellOf(row, 'parent'), TITLE_MAX),
-      notes: optionalText(cellOf(row, 'notes'), NOTES_MAX),
+      notes: cellText(cellOf(row, 'notes')) || null,
     }
+  })
+}
+
+export function importLimitIssues(table: ImportTable, catalog: ImportCatalog, settings: ImportSettings): string[] {
+  return buildImportRows(table, catalog, settings).flatMap(row => {
+    const issues: string[] = []
+    if ((row.notes?.length ?? 0) > NOTES_MAX) issues.push(`第 ${row.rowNumber} 行备注超过 ${NOTES_MAX} 个字符`)
+    if (row.assigneeUserIds.length > ASSIGNEES_MAX) issues.push(`第 ${row.rowNumber} 行处理人超过 ${ASSIGNEES_MAX} 位`)
+    return issues
   })
 }
 
@@ -363,7 +373,16 @@ const ISSUE_TEXT: Record<string, string> = {
   PARENT_HAS_CHILDREN: '该工作项已有子项，不能再变成子项，保持原样',
 }
 
-export function describeIssue(issue: Pick<WorkItemImportIssue, 'code' | 'detail'>): string {
+export function describeIssue(issue: Pick<WorkItemImportIssue, 'code' | 'detail'>, outcome?: WorkItemImportOutcome): string {
+  if (outcome === WorkItemImportOutcome.Update) {
+    const retainedParent: Record<string, string> = {
+      PARENT_NOT_FOUND: '找不到父工作项，保留原父项关系',
+      PARENT_AMBIGUOUS: '有多个同名的父工作项，保留原父项关系',
+      PARENT_CYCLE: '父子关系指向自己或成环，保留原父项关系',
+    }
+    const retained = retainedParent[issue.code]
+    if (retained) return retained
+  }
   const known = ISSUE_TEXT[issue.code]
   if (known) return known
   return issue.detail ? `${issue.code}：${issue.detail}` : `未知问题（${issue.code}）`
@@ -385,7 +404,7 @@ export function issueRows(result: Pick<WorkItemImportResult, 'rows'>, table: Imp
       rowNumber: row.rowNumber,
       title: titles.get(row.rowNumber) || '(无标题)',
       outcome: row.outcome,
-      messages: row.issues.map(describeIssue),
+      messages: row.issues.map(issue => describeIssue(issue, row.outcome)),
     }))
     .sort((left, right) => left.rowNumber - right.rowNumber)
 }

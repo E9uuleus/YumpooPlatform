@@ -17,6 +17,7 @@ import {
   emptyMapping,
   fieldOfColumn,
   importableCount,
+  importLimitIssues,
   IMPORT_MAX_ROWS,
   issueRows,
   mappedColumnCount,
@@ -292,6 +293,21 @@ describe('buildImportRequest', () => {
     expect(rows[0]).toMatchObject({ dueDate: null, notes: '说明' })
     expect(rows[1]).toMatchObject({ dueDate: new Date('2025-12-09T00:00:00.000Z'), notes: null })
   })
+
+  it('超长备注和过多处理人必须先修正，不静默截断', () => {
+    const names = Array.from({ length: 21 }, (_, index) => `成员${index}`)
+    const notes = '字'.repeat(16385)
+    const built = buildImportTable([['标题', '备注', '处理人'], ['甲', notes, names.join(';')]])
+    if (!built.ok) throw new Error('unexpected')
+    const catalog = { ...buildImportCatalog(SOURCE), members: names.map((name, index) => ({ value: `u-${index}`, label: name, match: [name] })) }
+    const settings: ImportSettings = { mapping: autoMapColumns(built.table.headers), defaultContentId: 'c-task', choices: emptyChoices() }
+    const request = buildImportRequest(built.table, catalog, settings, WorkItemImportDuplicateMode.Create, false)
+    expect(request.rows[0]!.notes).toBe(notes)
+    expect(request.rows[0]!.assigneeUserIds).toHaveLength(21)
+    expect(importLimitIssues(built.table, catalog, settings)).toEqual(['第 2 行备注超过 16384 个字符', '第 2 行处理人超过 20 位'])
+    expect(canLeaveMapping(built.table, catalog, settings)).toBe(false)
+    expect(canLeaveMapping(built.table, catalog, { ...settings, mapping: { ...emptyMapping(), title: 0 } })).toBe(true)
+  })
 })
 
 describe('结果说明', () => {
@@ -314,6 +330,17 @@ describe('结果说明', () => {
     expect(rows).toEqual([
       { rowNumber: 3, title: '开发进度跟进', outcome: 'ERROR', messages: ['项目中有多个同名工作项，无法确定更新哪一个'] },
       { rowNumber: 6, title: '升级前备份', outcome: 'CREATE', messages: ['找不到父工作项，已作为顶层工作项导入'] },
+    ])
+  })
+
+  it('更新已有项的父项警告说明保留原关系', () => {
+    const { table, settings } = load()
+    const rows = issueRows({ rows: [{ rowNumber: 6, outcome: WorkItemImportOutcome.Update,
+      issues: ['PARENT_NOT_FOUND', 'PARENT_AMBIGUOUS', 'PARENT_CYCLE'].map(code => ({ code, detail: null })) }] }, table, settings.mapping)
+    expect(rows[0]!.messages).toEqual([
+      '找不到父工作项，保留原父项关系',
+      '有多个同名的父工作项，保留原父项关系',
+      '父子关系指向自己或成环，保留原父项关系',
     ])
   })
 

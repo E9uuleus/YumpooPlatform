@@ -167,6 +167,25 @@ class WorkItemImportHttpIT {
         assertThat(unknownProject.statusCode()).isEqualTo(404);
     }
 
+    @Test
+    void archivedRootDoesNotMakeAnOtherwiseValidImportFailAfterPreview() throws Exception {
+        ok(post(owner, request(false, "CREATE", List.of("PARENT"),
+                row(1, "已归档父项", "NOT_STARTED", null, null),
+                row(2, "子项", "NOT_STARTED", "已归档父项", null))));
+        jdbc.sql("UPDATE yumpoo.work_item SET archived=true WHERE title='已归档父项'").update();
+
+        for (boolean dryRun : List.of(true, false)) {
+            JsonNode result = ok(post(owner, request(dryRun, "CREATE", List.of("PARENT"),
+                    row(1, "新项", "NOT_STARTED", "子项", null),
+                    row(2, "独立项", "NOT_STARTED", null, null))));
+            assertThat(result.path("createdCount").asInt()).isEqualTo(2);
+            assertThat(result.path("rows").get(0).path("issues").get(0).path("code").asText())
+                    .isEqualTo("PARENT_NOT_FOUND");
+        }
+        assertThat(count("work_item")).isEqualTo(4);
+        assertThat(count("work_item_relation WHERE deleted_at IS NULL")).isEqualTo(1);
+    }
+
     private ObjectNode request(boolean dryRun, String mode, List<String> fields, ObjectNode... rows) {
         ObjectNode body = json.createObjectNode();
         body.put("dryRun", dryRun);

@@ -44,6 +44,7 @@ describe('表格单元格工具', () => {
     expect(cellDate(' 2026-10-05 ')).toBe('2026-10-05')
     expect(cellDate('2026-10-05 08:30:00')).toBe('2026-10-05')
     expect(cellDate(46_000)).toBe('2025-12-09')
+    expect(cellDate('46000')).toBe('2025-12-09')
     expect(cellDate(45_292.75)).toBe('2024-01-01')
   })
 
@@ -55,6 +56,7 @@ describe('表格单元格工具', () => {
     expect(cellDate('')).toBeNull()
     expect(cellDate(null)).toBeNull()
     expect(cellDate(8)).toBeNull()
+    expect(cellDate('8')).toBeNull()
     expect(cellDate(0.5)).toBeNull()
     expect(cellDate(19_999)).toBeNull()
     expect(cellDate(73_051)).toBeNull()
@@ -126,6 +128,15 @@ describe('readSpreadsheet', () => {
     expect(utf8).toEqual([['标题', '状态'], ['任务', '已完成']])
     const gbk = await readSpreadsheet(fileOf([new Uint8Array([0xb1, 0xea, 0xcc, 0xe2, 0x2c, 0xd7, 0xb4, 0xcc, 0xac, 0x0a])], 'b.csv'))
     expect(gbk[0]).toEqual(['标题', '状态'])
+  })
+
+  it('CSV 保留原文，由映射字段决定数字和日期的含义', async () => {
+    const rows = await readSpreadsheet(fileOf(['标题,父需求,截止日期,工时\n00123,1-2,2026-02-30,8\n1-2,,2026-10-20,7.5\n'], 'a.csv'))
+    expect(rows[1]).toEqual(['00123', '1-2', '2026-02-30', '8'])
+    expect(rows[2]).toEqual(['1-2', null, '2026-10-20', '7.5'])
+    expect(cellDate(rows[1]![2])).toBeNull()
+    expect(cellDate(rows[2]![2])).toBe('2026-10-20')
+    expect(cellNumber(rows[2]![3])).toBe(7.5)
   })
 
   it('拒绝不支持的文件与损坏的文件', async () => {

@@ -294,6 +294,25 @@ class WorkItemImportPlannerTest {
     }
 
     @Test
+    void unavailableRootIsNotUsedAsTheParentOfANewOrUpdatedRow() {
+        Existing archivedRoot = existing("已归档父项", 10);
+        Existing child = existing("子项", 11);
+        Existing currentRoot = existing("原父项", 12);
+        Existing updated = existing("已有项", 13);
+
+        Plan plan = plan(DuplicateMode.UPDATE, fields(Field.PARENT), List.of(
+                parented(1, "新项", "子项"), parented(2, "已有项", "子项")),
+                List.of(child, currentRoot, updated), List.of(new ParentLink(archivedRoot.id(), child.id()),
+                        new ParentLink(currentRoot.id(), updated.id())));
+
+        assertThat(plan.rows()).allSatisfy(row -> {
+            assertThat(row.parentMode()).isEqualTo(ParentMode.KEEP);
+            assertThat(row.parent()).isNull();
+            assertThat(codes(row)).containsExactly("PARENT_NOT_FOUND");
+        });
+    }
+
+    @Test
     void parentThatBecomesAChildInTheSameUpdateIsFlattenedToo() {
         Existing parent = existing("父项", 10);
         Existing root = existing("根", 11);
