@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import YpNotice from '../../components/yp/YpNotice.vue'
 import { Coin, Connection, Files, FolderOpened, Monitor, Tickets } from '@element-plus/icons-vue'
 import type { OperationsAlert } from '@yumpoo/api-client'
 import { computed, watch, type Component } from 'vue'
 import { RouterLink } from 'vue-router'
-import { ElAlert, ElIcon, ElSkeleton } from 'element-plus'
+import { ElIcon, ElSkeleton } from 'element-plus'
 import { identityAdministrationApi } from '../../api/client'
 import { useOperationsQuery } from '../../composables/useOperationsQuery'
 import { useOperations } from '../../components/operations/operationsContext'
@@ -244,20 +245,20 @@ const postureTone = (severity: string) =>
         </div>
       </div>
     </section>
-    <el-alert
+    <yp-notice
       v-if="data.runtime.lostSamples"
       class="ops-overview-alert"
-      type="warning"
-      :closable="false"
-      :title="`历史存储积压，已丢弃 ${data.runtime.lostSamples} 个分钟桶。图表保留缺口。`"
-    />
-    <el-alert
+      tone="warning"
+    >
+      {{ `历史存储积压，已丢弃 ${data.runtime.lostSamples} 个分钟桶。图表保留缺口。` }}
+    </yp-notice>
+    <yp-notice
       v-if="data.runtime.metrics['alerts.droppedSamples']"
       class="ops-overview-alert"
-      type="warning"
-      :closable="false"
-      :title="`告警评估积压，已丢弃 ${data.runtime.metrics['alerts.droppedSamples']} 份旧观测；部分历史告警可能缺失。`"
-    />
+      tone="warning"
+    >
+      {{ `告警评估积压，已丢弃 ${data.runtime.metrics['alerts.droppedSamples']} 份旧观测；部分历史告警可能缺失。` }}
+    </yp-notice>
     <div class="ops-kpis">
       <ops-tile
         v-for="tile in tiles"

@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import YpNotice from '../../components/yp/YpNotice.vue'
 import { usePageLoad } from '../../brand/page-progress'
 
 import { CalendarDaySource, CalendarDayType, readCsrfToken, type WorkCalendarYear, type WorkHoursAlertSetting } from '@yumpoo/api-client'
-import { ElAlert, ElButton, ElDialog, ElInput, ElInputNumber, ElMessage, ElMessageBox } from 'element-plus'
+import { ElButton, ElDialog, ElInput, ElInputNumber, ElMessage, ElMessageBox } from 'element-plus'
 import { computed, onMounted, ref, watch } from 'vue'
 import { administrationApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
@@ -205,11 +206,10 @@ onMounted(() => pageLoad.track(load))
         >
       </div>
     </div>
-    <el-alert
+    <yp-notice
       v-if="importErrors.length"
-      type="error"
+      tone="danger"
       title="导入未完成，草稿未改变"
-      :closable="false"
     >
       <ul>
         <li
@@ -219,7 +219,7 @@ onMounted(() => pageLoad.track(load))
           {{ message }}
         </li>
       </ul>
-    </el-alert>
+    </yp-notice>
     <div class="calendar-legend">
       <span><i class="is-workday" />工作日</span><span><i class="is-rest" />休息日</span>
       <span><i class="is-holiday" />法定节假日</span><span><i class="is-makeup" />补班</span>
@@ -268,10 +268,28 @@ onMounted(() => pageLoad.track(load))
       <h3>工时异常提醒</h3>
       <div class="calendar-actions">
         <label for="work-hours-threshold">阈值（小时）</label>
-        <el-input-number id="work-hours-threshold" v-model="alertHours" :min="1" :max="24" :step="0.5" :disabled="!canWrite || alertSaving" />
-        <el-button type="primary" :disabled="!canWrite" :loading="alertSaving" @click="saveAlert">保存</el-button>
+        <el-input-number
+          id="work-hours-threshold"
+          v-model="alertHours"
+          :min="1"
+          :max="24"
+          :step="0.5"
+          :disabled="!canWrite || alertSaving"
+        />
+        <el-button
+          type="primary"
+          :disabled="!canWrite"
+          :loading="alertSaving"
+          @click="saveAlert"
+        >
+          保存
+        </el-button>
       </div>
-      <p>每天检查前一自然日每位成员的总工时（与团队视图同一口径），超过阈值时向全体公司管理员发送站内提醒「该成员工时数据异常请关注」。执行时间与启用在 <router-link :to="{ name: 'company-scheduled-jobs' }">定时任务</router-link> 中设置，默认停用。</p>
+      <p>
+        每天检查前一自然日每位成员的总工时（与团队视图同一口径），超过阈值时向全体公司管理员发送站内提醒「该成员工时数据异常请关注」。执行时间与启用在 <router-link :to="{ name: 'company-scheduled-jobs' }">
+          定时任务
+        </router-link> 中设置，默认停用。
+      </p>
     </article>
     <el-dialog
       v-model="dialogOpen"

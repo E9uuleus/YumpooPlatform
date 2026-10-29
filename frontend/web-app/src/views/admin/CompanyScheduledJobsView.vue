@@ -1,9 +1,9 @@
 <script setup lang="ts">
+import YpNotice from '../../components/yp/YpNotice.vue'
 import { usePageLoad } from '../../brand/page-progress'
 
 import { readCsrfToken, type ScheduledJob } from '@yumpoo/api-client'
 import {
-  ElAlert,
   ElButton,
   ElDialog,
   ElMessage,
@@ -122,13 +122,12 @@ onMounted(() => pageLoad.track(load))
 
 <template>
   <section class="scheduled-jobs">
-    <el-alert
-      type="info"
-      :closable="false"
-      show-icon
+    <yp-notice
+      tone="info"
       :title="`定时任务按公司时区（${timezone}）在服务端执行`"
-      description="同一计划时刻只会执行一次；服务停机错过的计划在恢复后最多补跑一次。手动同步请到「同步运行」页面操作。"
-    />
+    >
+      同一计划时刻只会执行一次；服务停机错过的计划在恢复后最多补跑一次。手动同步请到「同步运行」页面操作。
+    </yp-notice>
 
     <inline-problem
       v-if="error"

@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import YpNotice from '../yp/YpNotice.vue'
 import { computed, nextTick, onBeforeUnmount, onUpdated, ref, watch } from 'vue'
-import { ElAlert, ElButton, ElCheckbox, ElMessage } from 'element-plus'
+import { ElButton, ElCheckbox, ElMessage } from 'element-plus'
 import { Download, Upload } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import type { TeamTimesheet } from '@yumpoo/api-client'
@@ -166,21 +167,25 @@ async function exportExcel() {
       v-loading="loading"
       class="team-body"
     >
-      <el-alert
+      <yp-notice
         v-if="error"
-        :title="sheet ? `刷新失败，当前显示上次数据。${error}` : error"
-        type="error"
-        :closable="false"
+        tone="danger"
       >
-        <el-button
-          text
-          @click="emit('retry')"
-        >
-          重试
-        </el-button>
-      </el-alert>
+        {{ sheet ? `刷新失败，当前显示上次数据。${error}` : error }}
+
+        <template #actions>
+          <el-button
+            text
+            @click="emit('retry')"
+          >
+            重试
+          </el-button>
+        </template>
+      </yp-notice>
       <p class="team-summary">
-        {{ overtime ? '加班合计' : '合计' }} <strong>{{ shortHours(shownTotalMs) }}</strong> 小时<template v-if="overtime">（休息日 {{ shortHours(model.totalMs - holidayMs) }} · 节假日 {{ shortHours(holidayMs) }}）</template> · {{ overtime ? '有加班成员' : '有工时成员' }} <strong>{{ Math.round(shownMembers) }}</strong> / {{ model.rows.length }}<template v-if="sheet">
+        {{ overtime ? '加班合计' : '合计' }} <strong>{{ shortHours(shownTotalMs) }}</strong> 小时<template v-if="overtime">
+          （休息日 {{ shortHours(model.totalMs - holidayMs) }} · 节假日 {{ shortHours(holidayMs) }}）
+        </template> · {{ overtime ? '有加班成员' : '有工时成员' }} <strong>{{ Math.round(shownMembers) }}</strong> / {{ model.rows.length }}<template v-if="sheet">
           · 统计至 {{ formatTimestamp(sheet.asOf, timezone) }}
         </template>
       </p>
@@ -326,8 +331,12 @@ async function exportExcel() {
         {{ MIGRATED_LEGEND }}
       </p>
       <p class="team-note">
-        <template v-if="overtime">仅统计公司工作日历中休息日与法定节假日的工时，日历在「公司管理 → 工作日历」维护。点击工时数字查看当日工作项。</template>
-        <template v-else>按公司时区（{{ timezone }}）切分自然日，跨日计时按实际时长拆分；运行中的计时统计到刷新时刻。点击工时数字查看当日工作项。</template>
+        <template v-if="overtime">
+          仅统计公司工作日历中休息日与法定节假日的工时，日历在「公司管理 → 工作日历」维护。点击工时数字查看当日工作项。
+        </template>
+        <template v-else>
+          按公司时区（{{ timezone }}）切分自然日，跨日计时按实际时长拆分；运行中的计时统计到刷新时刻。点击工时数字查看当日工作项。
+        </template>
       </p>
     </div>
     <DayBreakdownPopover

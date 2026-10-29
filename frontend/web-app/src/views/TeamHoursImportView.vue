@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import YpNotice from '../components/yp/YpNotice.vue'
 import { usePageLoad } from '../brand/page-progress'
 
 import { computed, onBeforeUnmount, ref, type DefineComponent } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElAlert, ElButton, ElMessage, ElOption as ElOptionRaw, ElSelect as ElSelectRaw, ElTable, ElTableColumn } from 'element-plus'
+import { ElButton, ElMessage, ElOption as ElOptionRaw, ElSelect as ElSelectRaw, ElTable, ElTableColumn } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import {
   MigratedTimeImportOutcome, readCsrfToken, TeamDashboardProjectLifecycleEnum,
@@ -178,19 +179,21 @@ onBeforeUnmount(() => { ++previewToken })
         :steps="STEPS"
         :current="step"
       />
-      <el-alert
+      <yp-notice
         v-if="optionsError"
-        type="error"
-        :title="`成员与项目列表加载失败。${optionsError}`"
-        :closable="false"
+        tone="danger"
       >
-        <el-button
-          text
-          @click="loadOptions"
-        >
-          重试
-        </el-button>
-      </el-alert>
+        {{ `成员与项目列表加载失败。${optionsError}` }}
+
+        <template #actions>
+          <el-button
+            text
+            @click="loadOptions"
+          >
+            重试
+          </el-button>
+        </template>
+      </yp-notice>
 
       <section
         v-if="step === 0"
@@ -207,12 +210,12 @@ onBeforeUnmount(() => { ++previewToken })
         >
           正在读取 {{ fileName }}…
         </p>
-        <el-alert
+        <yp-notice
           v-if="readError"
-          type="error"
-          :title="readError"
-          :closable="false"
-        />
+          tone="danger"
+        >
+          {{ readError }}
+        </yp-notice>
         <template v-if="matrix">
           <dl class="hours-import__facts">
             <div><dt>文件</dt><dd>{{ fileName }}</dd></div>
@@ -226,10 +229,9 @@ onBeforeUnmount(() => { ++previewToken })
               <dt>已忽略的行</dt><dd>{{ matrix.ignoredRows.join('、') }}</dd>
             </div>
           </dl>
-          <el-alert
+          <yp-notice
             v-if="matrix.errors.length"
-            type="error"
-            :closable="false"
+            tone="danger"
             :title="`发现 ${matrix.errors.length} 个问题，请修正文件后重新上传`"
           >
             <ul class="hours-import__errors">
@@ -246,7 +248,7 @@ onBeforeUnmount(() => { ++previewToken })
             >
               另有 {{ matrix.errors.length - shownErrors.length }} 个问题未列出。
             </p>
-          </el-alert>
+          </yp-notice>
         </template>
         <footer class="hours-import__footer">
           <el-button
@@ -345,12 +347,12 @@ onBeforeUnmount(() => { ++previewToken })
           </el-select>
           <span class="hours-import__muted">选择后，这批迁入工时统一计入该项目的团队项目工时。</span>
         </div>
-        <el-alert
+        <yp-notice
           v-if="matchProblem"
-          type="warning"
-          :title="matchProblem"
-          :closable="false"
-        />
+          tone="warning"
+        >
+          {{ matchProblem }}
+        </yp-notice>
         <footer class="hours-import__footer">
           <span class="hours-import__muted">{{ migrating }} / {{ members.length }} 位成员将迁入</span>
           <el-button @click="back">
@@ -372,12 +374,12 @@ onBeforeUnmount(() => { ++previewToken })
         class="hours-import__panel"
         aria-label="预览并迁入"
       >
-        <el-alert
+        <yp-notice
           v-if="previewError"
-          type="error"
-          :title="previewError"
-          :closable="false"
-        />
+          tone="danger"
+        >
+          {{ previewError }}
+        </yp-notice>
         <template v-if="result">
           <ul
             class="hours-import__stats"

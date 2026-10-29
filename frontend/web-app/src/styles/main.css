@@ -456,17 +456,12 @@ code {
   margin-bottom: var(--yp-space-5);
 }
 
-.problem-message,
-.problem-retry {
-  margin: var(--yp-space-2) 0 0;
-}
-
 .problem-meta {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--yp-space-2);
-  margin-top: var(--yp-space-2);
+  margin-top: var(--yp-space-1);
 }
 
 .problem-meta code {
