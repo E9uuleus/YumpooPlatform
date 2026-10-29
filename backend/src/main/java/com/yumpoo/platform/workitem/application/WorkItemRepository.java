@@ -30,6 +30,7 @@ public interface WorkItemRepository {
     }
 
     long nextSequence(UUID companyId, UUID projectId);
+    List<WorkItemImportPlanner.Existing> findImportTargets(UUID companyId, UUID projectId);
     boolean insert(WorkItem workItem);
     void replaceAssignees(WorkItem workItem);
     Optional<WorkItemModels.WorkItemLocator> findLocator(UUID companyId, UUID workItemId);
