@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import YpNotice from '../../components/yp/YpNotice.vue'
 import { usePageLoad } from '../../brand/page-progress'
 
 import { AlarmClock, EditPen, FolderOpened, Refresh, Tickets, User, WarningFilled } from '@element-plus/icons-vue'
@@ -10,7 +11,7 @@ import {
   type ScheduledJob,
   type WeComIntegrationStatus,
 } from '@yumpoo/api-client'
-import { ElAlert, ElButton, ElIcon, ElMessage, ElMessageBox, ElSkeleton } from 'element-plus'
+import { ElButton, ElIcon, ElMessage, ElMessageBox, ElSkeleton } from 'element-plus'
 import { computed, onMounted, ref, watch, type Component } from 'vue'
 import { useRouter } from 'vue-router'
 import { administrationApi, identityAdministrationApi, projectsApi } from '../../api/client'
@@ -251,14 +252,13 @@ onMounted(() => {
       </yp-surface>
     </div>
 
-    <el-alert
+    <yp-notice
       class="security-note"
-      type="info"
-      :closable="false"
+      tone="info"
       title="凭据由外部安全配置注入"
-      description="此页面和 API 只显示配置状态，不读取、编辑或回显任何 Secret。"
-      show-icon
-    />
+    >
+      此页面和 API 只显示配置状态，不读取、编辑或回显任何 Secret。
+    </yp-notice>
   </div>
 </template>
 

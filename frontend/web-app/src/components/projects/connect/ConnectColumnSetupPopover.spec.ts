@@ -43,7 +43,7 @@ describe('Monday 式连接列设置弹层', () => {
     expect(rows().map(row => row.querySelector('strong')?.textContent)).not.toContain('本项目')
     expect(rows()[0]!.querySelector('strong')?.textContent).toBe('项目 3')
     expect(rows().filter(row => row.querySelector('strong')?.textContent === '项目 3')).toHaveLength(1)
-    expect(document.body.textContent).toContain('将创建双向连接所选项目的表格会自动出现「华东现场实施」列')
+    expect(document.querySelector('.connect-setup__two-way')?.textContent?.replace(/\s+/gu, '')).toContain('将创建双向连接所选项目的表格会自动出现「华东现场实施」列')
   })
   it('最多选择 20 个项目，点击行与复选框各切换一次，提交所选项目', async () => {
     const { wrapper, submit } = render(); await flushPromises()

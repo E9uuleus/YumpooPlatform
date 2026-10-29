@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import YpNotice from '../yp/YpNotice.vue'
 import { usePageLoad } from '../../brand/page-progress'
 
 import { projectWritable } from './projectStatus'
@@ -4101,19 +4102,22 @@ onBeforeUnmount(() => {
         class="detail-panel"
       >
         <template v-if="detail">
-          <div
+          <yp-notice
             v-if="detail.archived"
             class="work-item-archive-notice"
+            tone="warning"
           >
-            <span>此工作项已归档</span>
-            <el-button
-              v-if="detail.capabilities.canDelete"
-              :loading="restoringArchive"
-              @click="restoreArchivedItem"
-            >
-              恢复工作项
-            </el-button>
-          </div>
+            此工作项已归档
+            <template #actions>
+              <el-button
+                v-if="detail.capabilities.canDelete"
+                :loading="restoringArchive"
+                @click="restoreArchivedItem"
+              >
+                恢复工作项
+              </el-button>
+            </template>
+          </yp-notice>
           <div class="detail-heading">
             <small>{{ contentName(detail.contentId) }} · {{ detail.itemNo }}</small>
             <h2>{{ detail.title }}</h2>
@@ -5586,17 +5590,7 @@ onBeforeUnmount(() => {
   margin: var(--yp-space-1) 0 var(--yp-space-4);
 }
 
-.work-item-archive-notice {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  margin-bottom: 16px;
-  border-radius: 6px;
-  background: var(--yp-bg-sunken);
-  color: var(--yp-text-secondary);
-}
+.work-item-archive-notice { margin-bottom: 16px; }
 
 .detail-heading small {
   color: var(--yp-text-muted);

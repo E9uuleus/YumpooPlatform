@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import YpNotice from '../../components/yp/YpNotice.vue'
 import { usePageLoad } from '../../brand/page-progress'
 
 import { ArrowLeft, ArrowRight, Refresh } from '@element-plus/icons-vue'
 import { ProjectLifecycle, readCsrfToken, type DashboardChartResult, type DashboardChartSelection, type DashboardWidget, type ProjectDetail, type ProjectWorklog } from '@yumpoo/api-client'
-import { ElAlert, ElButton, ElTag, ElTooltip } from 'element-plus'
+import { ElButton, ElTag, ElTooltip } from 'element-plus'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { projectStatisticsApi, projectsApi } from '../../api/client'
@@ -129,12 +130,12 @@ onMounted(async () => {
           />
         </el-tooltip>
       </header>
-      <el-alert
+      <yp-notice
         v-if="error"
-        type="error"
-        :title="error"
-        :closable="false"
-      />
+        tone="danger"
+      >
+        {{ error }}
+      </yp-notice>
       <div class="project-statistics__metrics">
         <article
           v-for="widget in metrics"
@@ -190,12 +191,12 @@ onMounted(async () => {
           </div>
           <span class="project-statistics__total">合计 {{ hoursMinutes(weekTotal) }}</span>
         </div>
-        <el-alert
+        <yp-notice
           v-if="worklogError"
-          type="error"
-          :title="worklogError"
-          :closable="false"
-        />
+          tone="danger"
+        >
+          {{ worklogError }}
+        </yp-notice>
         <yp-empty-state
           v-else-if="worklog && !groups.length"
           compact

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import YpNotice from '../../yp/YpNotice.vue'
 import {
   WorkItemImportDuplicateMode,
   WorkItemImportOutcome,
@@ -10,7 +11,6 @@ import {
   type WorkItemStatusLabel,
 } from '@yumpoo/api-client'
 import {
-  ElAlert,
   ElButton,
   ElDialog,
   ElMessage,
@@ -370,12 +370,11 @@ const outcomeLabel = (outcome: WorkItemImportOutcome): string => outcome === Wor
       </template>
 
       <template v-else-if="step === 1 && table">
-        <el-alert
-          type="info"
-          :closable="false"
-          show-icon
-          title="工时不在这里导入，请在 团队视图 → 成员工时 → 迁入工时 中导入"
-        />
+        <yp-notice
+          tone="info"
+        >
+          工时不在这里导入，请在 团队视图 → 成员工时 → 迁入工时 中导入
+        </yp-notice>
         <div
           class="wi-map"
           role="table"
@@ -466,10 +465,9 @@ const outcomeLabel = (outcome: WorkItemImportOutcome): string => outcome === Wor
         >
           {{ unrecognizedDates }} 行截止日期无法识别，将留空
         </p>
-        <el-alert
+        <yp-notice
           v-if="mappingIssues.length"
-          type="error"
-          :closable="false"
+          tone="danger"
           :title="`有 ${mappingIssues.length} 处超出导入上限，请调整文件或取消对应列的映射`"
         >
           <ul>
@@ -480,7 +478,7 @@ const outcomeLabel = (outcome: WorkItemImportOutcome): string => outcome === Wor
               {{ issue }}
             </li>
           </ul>
-        </el-alert>
+        </yp-notice>
 
         <section class="wi-values">
           <h3>导入为类别</h3>

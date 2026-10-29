@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import YpNotice from '../yp/YpNotice.vue'
 import type {
   WorkItemCellActivityColumn,
   WorkItemCellActivityEntry,
@@ -8,7 +9,7 @@ import type {
 } from '@yumpoo/api-client'
 import { WorkItemCellActivityTimeRange as WorkItemCellActivityTimeRangeValue } from '@yumpoo/api-client'
 import { Refresh as RefreshIcon } from '@element-plus/icons-vue'
-import { ElAlert, ElButton, ElPopover, ElTooltip } from 'element-plus'
+import { ElButton, ElPopover, ElTooltip } from 'element-plus'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { activityApi } from '../../api/client'
 import { toApiProblem, type ApiProblem } from '../../api/problems'
@@ -151,14 +152,13 @@ onBeforeUnmount(() => { if (minuteTimer) clearInterval(minuteTimer) })
     class="cell-activity"
     aria-label="工作项动态"
   >
-    <el-alert
+    <yp-notice
       v-if="historyStartedAt"
       class="cell-activity__cutover"
-      type="info"
-      :closable="false"
-      show-icon
-      :title="`单元格动态从 ${formatChineseTimestamp(historyStartedAt, timezone)} 开始记录，更早历史未回填。`"
-    />
+      tone="info"
+    >
+      {{ `单元格动态从 ${formatChineseTimestamp(historyStartedAt, timezone)} 开始记录，更早历史未回填。` }}
+    </yp-notice>
 
     <div class="cell-activity__toolbar">
       <el-popover
@@ -379,7 +379,11 @@ onBeforeUnmount(() => { if (minuteTimer) clearInterval(minuteTimer) })
           >{{ item.column === 'TIME_TRACKING' ? '删除计时记录' : '移除' }}</span>
 
           <template v-if="item.changeType === 'REMOVED'">
-            <el-tooltip v-if="item.column === 'TIME_TRACKING'" :content="valueText(item.beforeValue, item.column)" placement="top">
+            <el-tooltip
+              v-if="item.column === 'TIME_TRACKING'"
+              :content="valueText(item.beforeValue, item.column)"
+              placement="top"
+            >
               <span class="cell-entry__value">{{ valueText(item.beforeValue, item.column) }}</span>
             </el-tooltip>
             <yp-assignee

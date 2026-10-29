@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import YpNotice from '../components/yp/YpNotice.vue'
 import { usePageLoad } from '../brand/page-progress'
 
 import { computed, onBeforeUnmount, ref, type DefineComponent } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElAlert, ElButton, ElMessage, ElOption as ElOptionRaw, ElSelect as ElSelectRaw, ElTable, ElTableColumn } from 'element-plus'
+import { ElButton, ElMessage, ElOption as ElOptionRaw, ElSelect as ElSelectRaw, ElTable, ElTableColumn } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import {
   MigratedTimeImportOutcome, readCsrfToken, TeamDashboardProjectLifecycleEnum,
@@ -171,26 +172,28 @@ onBeforeUnmount(() => { ++previewToken })
       </el-button>
     </template>
     <div class="hours-import">
-      <p class="hours-import__note">
+      <yp-notice class="hours-import__note">
         迁入工时用于导入原平台的历史工时，表格的行为成员、列为日期，单元格为当天的小时数。原平台只有每天的时长，系统会从成员的上班时间开始，依次排进当天的空闲时段，所以排出的时段不代表实际工作时间。迁入的记录在个人工时日历、我的一天和团队工时表中标为「迁入工时」，成员不能修改。同一成员同一天再次迁入会覆盖上次的结果，单元格填 0 可以清除。
-      </p>
+      </yp-notice>
       <import-steps
         :steps="STEPS"
         :current="step"
       />
-      <el-alert
+      <yp-notice
         v-if="optionsError"
-        type="error"
-        :title="`成员与项目列表加载失败。${optionsError}`"
-        :closable="false"
+        tone="danger"
       >
-        <el-button
-          text
-          @click="loadOptions"
-        >
-          重试
-        </el-button>
-      </el-alert>
+        {{ `成员与项目列表加载失败。${optionsError}` }}
+
+        <template #actions>
+          <el-button
+            text
+            @click="loadOptions"
+          >
+            重试
+          </el-button>
+        </template>
+      </yp-notice>
 
       <section
         v-if="step === 0"
@@ -207,12 +210,12 @@ onBeforeUnmount(() => { ++previewToken })
         >
           正在读取 {{ fileName }}…
         </p>
-        <el-alert
+        <yp-notice
           v-if="readError"
-          type="error"
-          :title="readError"
-          :closable="false"
-        />
+          tone="danger"
+        >
+          {{ readError }}
+        </yp-notice>
         <template v-if="matrix">
           <dl class="hours-import__facts">
             <div><dt>文件</dt><dd>{{ fileName }}</dd></div>
@@ -226,10 +229,9 @@ onBeforeUnmount(() => { ++previewToken })
               <dt>已忽略的行</dt><dd>{{ matrix.ignoredRows.join('、') }}</dd>
             </div>
           </dl>
-          <el-alert
+          <yp-notice
             v-if="matrix.errors.length"
-            type="error"
-            :closable="false"
+            tone="danger"
             :title="`发现 ${matrix.errors.length} 个问题，请修正文件后重新上传`"
           >
             <ul class="hours-import__errors">
@@ -246,7 +248,7 @@ onBeforeUnmount(() => { ++previewToken })
             >
               另有 {{ matrix.errors.length - shownErrors.length }} 个问题未列出。
             </p>
-          </el-alert>
+          </yp-notice>
         </template>
         <footer class="hours-import__footer">
           <el-button
@@ -345,12 +347,12 @@ onBeforeUnmount(() => { ++previewToken })
           </el-select>
           <span class="hours-import__muted">选择后，这批迁入工时统一计入该项目的团队项目工时。</span>
         </div>
-        <el-alert
+        <yp-notice
           v-if="matchProblem"
-          type="warning"
-          :title="matchProblem"
-          :closable="false"
-        />
+          tone="warning"
+        >
+          {{ matchProblem }}
+        </yp-notice>
         <footer class="hours-import__footer">
           <span class="hours-import__muted">{{ migrating }} / {{ members.length }} 位成员将迁入</span>
           <el-button @click="back">
@@ -372,12 +374,12 @@ onBeforeUnmount(() => { ++previewToken })
         class="hours-import__panel"
         aria-label="预览并迁入"
       >
-        <el-alert
+        <yp-notice
           v-if="previewError"
-          type="error"
-          :title="previewError"
-          :closable="false"
-        />
+          tone="danger"
+        >
+          {{ previewError }}
+        </yp-notice>
         <template v-if="result">
           <ul
             class="hours-import__stats"
@@ -459,16 +461,7 @@ onBeforeUnmount(() => { ++previewToken })
   margin: 0 auto;
 }
 
-.hours-import__note {
-  margin: 0;
-  padding: var(--yp-space-3) var(--yp-space-4);
-  border-left: 3px solid var(--yp-action-primary);
-  border-radius: var(--yp-radius-sm);
-  background: var(--yp-bg-sunken);
-  color: var(--yp-text-secondary);
-  font-size: 13px;
-  line-height: 22px;
-}
+.hours-import__note { margin: 0; }
 
 .hours-import__panel {
   display: grid;
@@ -522,7 +515,7 @@ onBeforeUnmount(() => { ++previewToken })
 }
 
 .hours-import__hint.is-warning {
-  color: var(--yp-status-red-foreground);
+  color: color-mix(in srgb, var(--yp-status-orange) 62%, var(--yp-text-primary));
 }
 
 .hours-import__project {
@@ -566,7 +559,7 @@ onBeforeUnmount(() => { ++previewToken })
 }
 
 .hours-import__stats li.is-problem strong {
-  color: var(--yp-status-red-foreground);
+  color: var(--yp-status-red);
 }
 
 .hours-import__footer {
