@@ -19,6 +19,8 @@ Status: implemented
 `TimeCategory` 增加第 5 个固定分类 `MIGRATED`（迁入工时），沿用[非项目固定分类工时](2026-10-22-non-project-time-categories.md)的会话与份额结构，因此份额分摊、GAPS 空档、`/me/timesheet`、团队工时表的 `categoryEntries` 与加班统计都不需要新的读取路径，界面上的标识也直接由分类得出。
 
 - **只读、不可选**：只能由迁入接口写入，成员不能选择它开始计时、补录或改归属，也不能修改、删除或把它作为改归属的来源；它不进入分类选择列表。
+  - 开始、切换、补录条目、改归属的目标遇到它返回 422 `TIME_CATEGORY_RESERVED`；修改、删除或把它作为改归属的来源返回 409 `MIGRATED_TIME_READ_ONLY`。
+  - `GET /me/time-sessions` 中它的 `canEdit` 为 false，REPLACE 补录的可编辑集合排除它。
 - **可选关联项目**：导入时可以统一关联一个 ACTIVE 状态的项目，沿用分类记录的 `category_project_id`。
 - **展示**：个人工时日历、我的一天和团队工时表把它标为「迁入工时」，并说明排出的时段不代表实际工作时间。
 
@@ -30,6 +32,8 @@ Status: implemented
 - **排布规则**（按公司时区）：从成员的上班时间（没有设置时取默认 09:00）开始，到当天 24:00 为止，把时长依次排进当天的空档。已占用时段是该成员所有未删除的会话，正在运行的会话视为占用到当天结束，当天开始的旧 `MIGRATED` 会话除外。比 `min(15 分钟, 剩余时长)` 短的空档跳过。排不下的一天记 `NOT_ENOUGH_FREE_TIME`，当天不写入任何记录。末段超过下班时间记警告 `PAST_WORKDAY_END`，日期不早于公司时区今天记 `FUTURE_DATE`，当天原有迁入工时被替换记 `REPLACES_PREVIOUS`。
 - **事务与并发**：单事务内按用户 ID 排序依次锁定成员的计时状态，先软删除旧记录再插入新记录，每个成员重建一次份额。预览与提交共用同一个纯函数排布器。
 - **事件与审计**：不发领域事件，整次导入写一条安全审计，内容是汇总数字。
+- **失败不动旧数据**：成员无效（`USER_INVALID`）或排不下的一天不写入也不删除，当天原有的迁入工时保持不变；整次导入的 `categoryProjectId` 不是本公司 ACTIVE 项目时返回 422。
+- **公司时区**：workitem 模块不能依赖 organization，控制器通过 workitem 自己的 `CompanyTimeZonePort` 取公司时区，由 reporting 模块用公司配置实现。
 
 ### 回退
 

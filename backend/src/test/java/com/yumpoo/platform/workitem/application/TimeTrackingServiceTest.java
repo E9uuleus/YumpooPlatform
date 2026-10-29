@@ -405,6 +405,66 @@ class TimeTrackingServiceTest {
         verifyNoInteractions(fixture.guard, fixture.deletion, fixture.events);
     }
 
+    @Test
+    void migratedCategoryCannotBeStartedFilledOrReassignedTo() {
+        var fixture = new TimerFixture(false);
+        var start = new TimeTrackingService.Input(null, null, null, null, null, null, TimeCategory.MIGRATED, null, null, null);
+        assertReserved(() -> fixture.service.command(fixture.actor, "start", start, 1, UUID.randomUUID(), new RequestHash("a".repeat(64))));
+        var fill = new TimeTrackingModels.TimeSessionFillCommand(TimeTrackingModels.TimeSessionFillMode.PARALLEL, List.of(
+                new TimeTrackingModels.TimeSessionFillEntry(null, TimerFixture.NOW.minusSeconds(7200), TimerFixture.NOW.minusSeconds(3600), TimeCategory.MIGRATED, null)));
+        assertReserved(() -> fixture.service.fill(fixture.actor, fill, UUID.randomUUID(), new RequestHash("b".repeat(64))));
+        var stopped = fixture.stoppedSession(0);
+        var reassign = new TimeTrackingModels.TimeSessionReassignCommand(null, TimeCategory.MIGRATED, null);
+        assertReserved(() -> fixture.service.reassign(fixture.actor, stopped.id(), reassign, 0, UUID.randomUUID(), new RequestHash("c".repeat(64))));
+        fixture.verifyNoWrites();
+    }
+
+    @Test
+    void migratedRecordsCannotBeEditedDeletedOrReassigned() {
+        var fixture = new TimerFixture(false);
+        var record = migratedSession(fixture);
+        var input = new TimeTrackingService.Input(null, record.id(), record.startedAt(), record.stoppedAt().plusSeconds(60), null, null, null, null, null, null);
+        for (String action : List.of("edit", "delete"))
+            assertReadOnly(() -> fixture.service.ownSession(fixture.actor, action, record.id(), input, 0, UUID.randomUUID(), new RequestHash("d".repeat(64))));
+        var reassign = new TimeTrackingModels.TimeSessionReassignCommand(null, TimeCategory.MEETING, null);
+        assertReadOnly(() -> fixture.service.reassign(fixture.actor, record.id(), reassign, 0, UUID.randomUUID(), new RequestHash("e".repeat(64))));
+        fixture.verifyNoWrites();
+    }
+
+    @Test
+    void migratedRecordsAreListedAsReadOnly() {
+        var fixture = new TimerFixture(false);
+        var migrated = migratedSession(fixture);
+        var learning = new TimeTrackingModels.Session(UUID.randomUUID(), fixture.company, null, null, fixture.user,
+                TimerFixture.NOW.minusSeconds(3000), TimerFixture.NOW.minusSeconds(2000), "MANUAL", 0, null, null, TimeCategory.LEARNING, null);
+        when(fixture.timers.mySessions(eq(fixture.company), eq(fixture.user), any(), any())).thenReturn(List.of(
+                new TimeTrackingModels.MySessionRow(migrated, null, null, null, false, false),
+                new TimeTrackingModels.MySessionRow(learning, null, null, null, false, false)));
+        var page = fixture.service.mySessions(fixture.actor, TimerFixture.NOW.minusSeconds(86400), TimerFixture.NOW);
+        assertThat(page.items()).extracting(item -> item.session().canEdit()).containsExactly(false, true);
+    }
+
+    private static TimeTrackingModels.Session migratedSession(TimerFixture fixture) {
+        var record = new TimeTrackingModels.Session(UUID.randomUUID(), fixture.company, null, null, fixture.user,
+                TimerFixture.NOW.minusSeconds(7200), TimerFixture.NOW.minusSeconds(3600), "MANUAL", 0, null, null, TimeCategory.MIGRATED, null);
+        when(fixture.timers.find(fixture.company, record.id())).thenReturn(Optional.of(record));
+        return record;
+    }
+
+    private static void assertReserved(org.assertj.core.api.ThrowableAssert.ThrowingCallable call) {
+        assertThatThrownBy(call).isInstanceOfSatisfying(ApplicationException.class, failure -> {
+            assertThat(failure.errorCode()).isEqualTo(StandardErrorCode.VALIDATION_FAILED);
+            assertThat(failure.fieldViolations()).extracting(violation -> violation.code()).containsExactly("TIME_CATEGORY_RESERVED");
+        });
+    }
+
+    private static void assertReadOnly(org.assertj.core.api.ThrowableAssert.ThrowingCallable call) {
+        assertThatThrownBy(call).isInstanceOfSatisfying(ApplicationException.class, failure -> {
+            assertThat(failure.errorCode()).isEqualTo(StandardErrorCode.INVALID_STATE_TRANSITION);
+            assertThat(failure.reason()).isEqualTo("MIGRATED_TIME_READ_ONLY");
+        });
+    }
+
     private static final class TimerFixture {
         static final Instant NOW = Instant.parse("2026-09-07T00:00:00Z");
         final UUID company = UUID.randomUUID(), user = UUID.randomUUID(), targetItem = UUID.randomUUID();

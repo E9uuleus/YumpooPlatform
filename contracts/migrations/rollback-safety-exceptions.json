@@ -7,6 +7,13 @@
       "classification": "breaking",
       "reason": "计时记录与计入份额支持无工作项的非项目固定分类：放宽 work_item_id/project_id 非空，以 CHECK 保证工作项与分类二选一，并新增分类运行计时唯一索引。上一版本读取分类行时，份额重建、停止全部、切换、归档停表与项目清除会空指针失败，回退不安全。",
       "agentNote": ".agents/notes/implemented/architecture/2026-10-22-non-project-time-categories.md"
+    },
+    {
+      "file": "workitem/V84__migrated_time_category.sql",
+      "sha256": "0681c4e6fb901a653ad131280f00a18e565cd1d260b0ccb34e7f736c7c059253",
+      "classification": "breaking",
+      "reason": "工时分类新增 MIGRATED（迁入工时）：放宽 work_item_time_session 与 work_item_time_share 的主体 CHECK 取值。上一版本解析到 time_category 为 MIGRATED 的会话或份额会因枚举无法识别而失败，回退前必须先删除这些记录。",
+      "agentNote": ".agents/notes/implemented/architecture/2026-10-28-migrated-time-import.md"
     }
   ]
 }
