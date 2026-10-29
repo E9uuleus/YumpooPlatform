@@ -190,6 +190,8 @@ function navigateProject(project: ProjectSummary): void {
 }
 
 function isContextItemActive(item: ContextItem): boolean {
+  // 迁入工时 is a sub-page of 成员工时.
+  if (route.name === 'team-hours-import') return item.routeName === 'team' && item.params?.view === 'timesheet'
   return route.name === item.routeName
     && (!item.params?.view || route.params.view === item.params.view)
     && (!item.query?.filter || parseInboxFilter(route.query.filter) === item.query.filter)
