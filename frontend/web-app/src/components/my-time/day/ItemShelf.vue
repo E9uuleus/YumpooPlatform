@@ -11,7 +11,7 @@ import '../../projects/workItemAccentBar.css'
 import { workItemLabelColorValue } from '../../projects/workItemLabelColors'
 import YpSegmented from '../../yp/YpSegmented.vue'
 import { candidateParent, withHierarchy, type HierarchyRow } from '../../timer/candidateHierarchy'
-import { categoryOf, matchCategories } from '../../timer/timeCategories'
+import { categoryOf, isMigratedCategory, matchCategories } from '../../timer/timeCategories'
 import { durationLabel, HOUR, MIN_BLOCK_MS, MINUTE, parseDuration, type ItemTotal } from './dayModel'
 import { draggedItem, SHELF_DRAG_TYPE, type ShelfItem } from './shelfDrag'
 
@@ -49,12 +49,14 @@ const categoryProject = computed(() => projects.value.size === 1 ? [...projects.
 const categories = computed<ShelfItem[]>(() => mine.value ? [] : matchCategories(query.value, categoryProject.value)
   .filter(option => filtering.value || !recorded.value.has(option.key))
   .map(option => ({ key: option.key, title: option.label, itemNo: null, projectName: null, colorToken: option.colorToken })))
+/** 迁入工时 is written only by the import, so it cannot be placed again from the shelf. */
+const recordable = computed(() => props.totals.filter(item => !isMigratedCategory(categoryOf(item.key)?.code)))
 interface ShelfSection { key: string; title: string; list: (ShelfItem & { ms?: number | undefined })[] }
 const sections = computed<ShelfSection[]>(() => {
   const fixed = categories.value.length ? [{ key: 'fixed', title: '通用工时', list: categories.value }] : []
   return filtering.value
     ? [...fixed, { key: 'result', title: searching.value ? '搜索结果' : '筛选结果', list: candidates.value }]
-    : [{ key: 'today', title: '今天已记录', list: props.totals }, ...fixed, { key: 'recent', title: '最近与我的', list: candidates.value }]
+    : [{ key: 'today', title: '今天已记录', list: recordable.value }, ...fixed, { key: 'recent', title: '最近与我的', list: candidates.value }]
 })
 const listsWorkItems = (key: string) => key === 'result' || key === 'recent'
 type ShelfRow = HierarchyRow<ShelfSection['list'][number]>
