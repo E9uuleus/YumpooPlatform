@@ -152,7 +152,7 @@ export const MIGRATED_ISSUE_LABELS: Readonly<Record<string, string>> = {
   USER_INVALID: '成员已停用或不属于本公司',
   NOT_ENOUGH_FREE_TIME: '当天空闲时间不够，未写入',
   PAST_WORKDAY_END: '排布后超过下班时间',
-  FUTURE_DATE: '日期不早于今天',
+  FUTURE_DATE: '只能迁入今天之前的日期，未写入',
   REPLACES_PREVIOUS: '覆盖原有迁入工时',
 }
 

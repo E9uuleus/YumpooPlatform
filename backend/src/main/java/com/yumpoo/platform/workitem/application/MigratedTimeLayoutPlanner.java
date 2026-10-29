@@ -30,7 +30,11 @@ public final class MigratedTimeLayoutPlanner {
         var previous = sessions.stream().filter(s -> s.migrated() && !s.startedAt().isBefore(dayStart) && s.startedAt().isBefore(dayEnd)).toList();
         long previousMinutes = Math.round(previous.stream().mapToLong(s -> Duration.between(s.startedAt(), endOf(s, dayEnd)).toMillis()).sum() / 60000.0);
         var issues = new ArrayList<Issue>();
-        if (!workDate.isBefore(today)) issues.add(new Issue("FUTURE_DATE", null));
+        // Recorded time may not end in the future, so today and later are rejected outright, clearing included.
+        if (!workDate.isBefore(today)) {
+            issues.add(new Issue("FUTURE_DATE", null));
+            return new DayPlan(Outcome.ERROR, List.of(), previous, previousMinutes, issues);
+        }
         if (minutes == 0) return new DayPlan(Outcome.CLEAR, List.of(), previous, previousMinutes, issues);
 
         Instant start = workDate.atStartOfDay().plusMinutes(workdayStartMinute).atZone(zone).toInstant();

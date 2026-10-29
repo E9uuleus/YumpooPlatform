@@ -122,10 +122,13 @@ class MigratedTimeLayoutPlannerTest {
     }
 
     @Test
-    void flagsTodayAndFutureDatesButStillLaysThemOut() {
+    void rejectsTodayAndFutureDatesWithoutLayingOrClearing() {
         var future = MigratedTimeLayoutPlanner.plan(TODAY, ZONE, TODAY, 60, 540, 1080, List.of());
-        assertThat(future.outcome()).isEqualTo(Outcome.IMPORT);
+        assertThat(future.outcome()).isEqualTo(Outcome.ERROR);
+        assertThat(future.segments()).isEmpty();
         assertThat(codes(future)).containsExactly("FUTURE_DATE");
+        assertThat(MigratedTimeLayoutPlanner.plan(TODAY.plusDays(1), ZONE, TODAY, 0, 540, 1080, List.of()).outcome())
+                .isEqualTo(Outcome.ERROR);
         assertThat(codes(MigratedTimeLayoutPlanner.plan(TODAY.minusDays(1), ZONE, TODAY, 60, 540, 1080, List.of()))).isEmpty();
     }
 
