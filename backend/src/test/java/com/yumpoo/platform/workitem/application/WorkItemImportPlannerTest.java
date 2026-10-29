@@ -370,7 +370,7 @@ class WorkItemImportPlannerTest {
     }
 
     @Test
-    void updateThatCannotFindItsParentDetachesTheItemAndSaysSo() {
+    void updateThatCannotFindItsParentKeepsTheExistingParentAndSaysSo() {
         Existing parent = existing("父项", 10);
         Existing child = existing("子项", 11);
 
@@ -378,8 +378,37 @@ class WorkItemImportPlannerTest {
                 parented(1, "子项", "没有")), List.of(parent, child),
                 List.of(new ParentLink(parent.id(), child.id())));
 
-        assertThat(plan.rows().get(0).parentMode()).isEqualTo(ParentMode.CLEAR);
+        assertThat(plan.rows().get(0).parentMode()).isEqualTo(ParentMode.KEEP);
         assertThat(codes(plan.rows().get(0))).containsExactly("PARENT_NOT_FOUND");
+    }
+
+    @Test
+    void updateWithAnAmbiguousParentKeepsTheExistingParent() {
+        Existing parent = existing("父项", 10);
+        Existing child = existing("子项", 11);
+
+        Plan plan = plan(DuplicateMode.UPDATE, fields(Field.PARENT), List.of(
+                parented(1, "子项", "别人")), List.of(parent, child, existing("别人", 12),
+                existing("别人", 13)), List.of(new ParentLink(parent.id(), child.id())));
+
+        assertThat(plan.rows().get(0).parentMode()).isEqualTo(ParentMode.KEEP);
+        assertThat(codes(plan.rows().get(0))).containsExactly("PARENT_AMBIGUOUS");
+    }
+
+    @Test
+    void updateInACycleKeepsTheExistingParents() {
+        Existing a = existing("甲", 10);
+        Existing b = existing("乙", 11);
+        Existing root = existing("根", 12);
+
+        Plan plan = plan(DuplicateMode.UPDATE, fields(Field.PARENT), List.of(
+                parented(1, "甲", "乙"), parented(2, "乙", "甲")), List.of(a, b, root),
+                List.of(new ParentLink(root.id(), a.id())));
+
+        assertThat(plan.rows()).allSatisfy(row -> {
+            assertThat(row.parentMode()).isEqualTo(ParentMode.KEEP);
+            assertThat(codes(row)).containsExactly("PARENT_CYCLE");
+        });
     }
 
     @Test

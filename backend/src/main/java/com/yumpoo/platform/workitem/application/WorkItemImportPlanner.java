@@ -204,12 +204,10 @@ public final class WorkItemImportPlanner {
             }
             for (int i = 0; i < size; i++) {
                 if (!processed(i)) continue;
-                boolean update = outcome[i] == Outcome.UPDATE;
                 String parentTitle = in.rows().get(i).parentTitle() == null ? ""
                         : in.rows().get(i).parentTitle().strip();
-                ParentMode detached = update ? ParentMode.CLEAR : ParentMode.KEEP;
                 if (parentTitle.isEmpty()) {
-                    mode[i] = detached;
+                    mode[i] = outcome[i] == Outcome.UPDATE ? ParentMode.CLEAR : ParentMode.KEEP;
                     continue;
                 }
                 Set<Ref> candidates = fileRefs.containsKey(parentTitle) ? fileRefs.get(parentTitle)
@@ -218,10 +216,10 @@ public final class WorkItemImportPlanner {
                                 .collect(Collectors.toCollection(LinkedHashSet::new));
                 if (candidates.isEmpty()) {
                     issue(i, "PARENT_NOT_FOUND", parentTitle);
-                    mode[i] = detached;
+                    mode[i] = ParentMode.KEEP;
                 } else if (candidates.size() > 1) {
                     issue(i, "PARENT_AMBIGUOUS", parentTitle);
-                    mode[i] = detached;
+                    mode[i] = ParentMode.KEEP;
                 } else {
                     mode[i] = ParentMode.SET;
                     parent[i] = candidates.iterator().next();
@@ -271,7 +269,7 @@ public final class WorkItemImportPlanner {
 
         private void detachForCycle(int i) {
             issue(i, "PARENT_CYCLE", in.rows().get(i).parentTitle().strip());
-            mode[i] = outcome[i] == Outcome.UPDATE ? ParentMode.CLEAR : ParentMode.KEEP;
+            mode[i] = ParentMode.KEEP;
             parent[i] = null;
         }
 
