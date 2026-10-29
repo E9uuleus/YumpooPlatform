@@ -14,6 +14,13 @@
       "classification": "breaking",
       "reason": "工时分类新增 MIGRATED（迁入工时）：放宽 work_item_time_session 与 work_item_time_share 的主体 CHECK 取值。上一版本解析到 time_category 为 MIGRATED 的会话或份额会因枚举无法识别而失败，回退前必须先删除这些记录。",
       "agentNote": ".agents/notes/implemented/architecture/2026-10-28-migrated-time-import.md"
+    },
+    {
+      "file": "workitem/V85__clear_imported_completion_time.sql",
+      "sha256": "a8b07092391a707dc4b80917c33b52507e12c7a4ce7ad6aef1507238cf4ce0ea",
+      "classification": "expand",
+      "reason": "只把导入写入的完成时间（completed_at 等于 created_at 的完成项）清为空。上一版本把空完成时间按「完成时间未记录」处理（V49 之前的历史数据即如此），读写不受影响，回退安全；迁移策略把修改已有数据一律判为破坏性，属经审阅的误报。",
+      "agentNote": ".agents/notes/implemented/product/2026-10-28-work-item-import.md"
     }
   ]
 }

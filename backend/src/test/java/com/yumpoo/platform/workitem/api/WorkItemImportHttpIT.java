@@ -107,7 +107,7 @@ class WorkItemImportHttpIT {
         assertThat(result.path("rows").get(2).path("issues").get(0).path("code").asText())
                 .isEqualTo("PARENT_FLATTENED");
         assertThat(jdbc.sql("SELECT status_code || ':' || (completed_at IS NOT NULL) FROM yumpoo.work_item "
-                        + "WHERE title='父需求'").query(String.class).single()).isEqualTo("DONE:true");
+                        + "WHERE title='父需求'").query(String.class).single()).isEqualTo("DONE:false");
         assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_assignee WHERE user_id=:id")
                 .param("id", member.userId()).query(Long.class).single()).isEqualTo(1);
         assertThat(jdbc.sql("SELECT title FROM yumpoo.work_item ORDER BY project_sort_key")
@@ -150,7 +150,7 @@ class WorkItemImportHttpIT {
         assertThat(jdbc.sql("SELECT status_code FROM yumpoo.work_item WHERE title='父需求'")
                 .query(String.class).single()).isEqualTo("IN_PROGRESS");
         assertThat(jdbc.sql("SELECT status_code || ':' || (completed_at IS NOT NULL) FROM yumpoo.work_item "
-                        + "WHERE title='子任务'").query(String.class).single()).isEqualTo("DONE:true");
+                        + "WHERE title='子任务'").query(String.class).single()).isEqualTo("DONE:false");
         assertThat(count("work_item_relation WHERE deleted_at IS NULL")).isZero();
         assertThat(count("work_item_relation WHERE deleted_at IS NOT NULL")).isEqualTo(1);
         assertThat(count("outbox_event WHERE event_type LIKE 'workitem.work_item%'")).isZero();
