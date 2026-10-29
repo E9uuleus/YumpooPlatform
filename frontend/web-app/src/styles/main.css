@@ -263,6 +263,11 @@ code {
   cursor: default;
 }
 
+/* 工具按钮的弹层打开时隐藏悬停提示；切换 tooltip 的 disabled 会让弹层吞掉第一次外部点击。 */
+.yp-tooltip--suppressed {
+  display: none !important;
+}
+
 .app-topbar__divider {
   width: 1px;
   height: 20px;
