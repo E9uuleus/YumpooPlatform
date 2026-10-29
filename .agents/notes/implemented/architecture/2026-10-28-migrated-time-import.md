@@ -39,7 +39,11 @@ Status: implemented
 
 数据库迁移 V84 扩展了 `ck_work_item_time_session_subject` 与 `ck_work_item_time_share_subject` 的取值，属于 breaking 迁移，在 `contracts/migrations/rollback-safety-exceptions.json` 登记例外，晋升到 `main` 的 PR 须加 `release:breaking-migration` 标签。回退到旧版本前必须先删除 `time_category = 'MIGRATED'` 的会话与份额记录，否则旧版本解析枚举会失败。
 
+恢复演练采用[部署手册](../../../../deployment/windows/RUNBOOK.md#1-github-release-自动发布)规定的完整恢复路径：先保留升级后的数据库及附件，再将升级前一致备份恢复到独立空目标，并使用对应的旧发布包验证。恢复到备份时间点意味着之后的业务写入不在恢复结果中，必须先停止写入并由发布负责人决定如何保留、核对和重放这些数据；删除迁入记录不能替代完整恢复验证。晋升标签只确认破坏性迁移及恢复准备，不会使 Server Rollback 绕过版本元数据限制。
+
 `TimeCategory` 响应枚举的扩展会被 openapi-diff 判为不兼容，已在 `tools/openapi/breaking-change-exceptions.json` 按精确哈希登记，本记录是它的依据。
+
+发布级例外以 `server-v2026.10.24.3` 的 main 规范为基线。对完整晋升规范仅在临时副本移除 `TimeCategory.MIGRATED`，openapi-diff 2.1.6 全量检查通过，确认不兼容项仅为该响应枚举扩展；既有开发基线例外保留，新增 main 基线的精确哈希对，不泛化豁免枚举变化。桌面 1.1.3 的原生计时状态 IPC 只接收标题、会话与工作项标识，不解析工时分类；业务页面从服务器加载并识别只读的迁入工时。项目侧栏的新壳能力由桌面 1.1.4 交付，与此 API 枚举兼容性分开处理。
 
 ## Alternatives considered
 
