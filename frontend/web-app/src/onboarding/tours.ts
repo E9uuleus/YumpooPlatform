@@ -59,7 +59,7 @@ export const TOURS: Record<TourId, TourDefinition> = {
       { target: at('context-nav'), placement: 'right-start', title: '工作台导航', description: '仪表板、我的工时、管理项目、归档项目，以及你参与的项目列表；「项目」右侧的 + 可以直接创建项目，顶部的搜索按钮可以快速查找项目。', since: 2,
         fallback: { target: at('context-nav-expand'), placement: 'right-start', description: '点这里展开工作台菜单：仪表板、我的工时、管理项目、归档项目和你参与的项目都在里面。' } },
       { target: at('project-catalog-tabs'), placement: 'bottom-start', title: '最近与内容', description: '“最近”是你最近打开的项目，可置顶常用项目；“内容”是全部项目目录。' },
-      { target: at('project-filter'), placement: 'bottom', title: '搜索与筛选', description: '按名称或编码搜索，按最后修改时间、负责人和你的角色筛选。' },
+      { target: at('project-filter'), placement: 'bottom', title: '搜索与筛选', description: '按名称或编码搜索，按项目状态、最后修改时间、负责人和你的角色筛选。' },
       { target: at('project-create'), placement: 'bottom-end', title: '创建项目', description: '新建一个项目，开始组织工作项与成员。' },
     ],
   },
