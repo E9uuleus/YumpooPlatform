@@ -4,6 +4,8 @@ import com.yumpoo.platform.workitem.application.MigratedTimeLayoutPlanner.DayPla
 import com.yumpoo.platform.workitem.application.MigratedTimeLayoutPlanner.Existing;
 import com.yumpoo.platform.workitem.application.MigratedTimeLayoutPlanner.Outcome;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -131,5 +133,45 @@ class MigratedTimeLayoutPlannerTest {
     void honoursACustomWorkdayStart() {
         var result = MigratedTimeLayoutPlanner.plan(DAY, ZONE, TODAY, 60, 480, 1020, List.of(busy("08:00", "08:30")));
         assertThat(spans(result)).containsExactly("08:30-09:30");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"2026-03-08", "2026-11-01"})
+    void startsAtTheConfiguredLocalTimeOnDaylightSavingTransitions(String date) {
+        var day = LocalDate.parse(date);
+        var zone = ZoneId.of("America/New_York");
+        var result = MigratedTimeLayoutPlanner.plan(day, zone, day.plusDays(1), 60, 540, 1080, List.of());
+
+        assertThat(result.outcome()).isEqualTo(Outcome.IMPORT);
+        assertThat(result.segments()).containsExactly(new MigratedTimeLayoutPlanner.Segment(
+                day.atTime(9, 0).atZone(zone).toInstant(), day.atTime(10, 0).atZone(zone).toInstant()));
+        assertThat(result.issues()).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"2026-03-08", "2026-11-01"})
+    void usesTheLocalWorkdayEndForWarningsOnDaylightSavingTransitions(String date) {
+        var day = LocalDate.parse(date);
+        var zone = ZoneId.of("America/New_York");
+        var occupied = new Existing(day.atTime(0, 0).atZone(zone).toInstant(), day.atTime(10, 0).atZone(zone).toInstant(), false);
+        var onTime = MigratedTimeLayoutPlanner.plan(day, zone, day.plusDays(1), 480, 540, 1080, List.of(occupied));
+        var late = MigratedTimeLayoutPlanner.plan(day, zone, day.plusDays(1), 481, 540, 1080, List.of(occupied));
+
+        assertThat(onTime.segments().getLast().stoppedAt()).isEqualTo(day.atTime(18, 0).atZone(zone).toInstant());
+        assertThat(onTime.issues()).isEmpty();
+        assertThat(codes(late)).containsExactly("PAST_WORKDAY_END");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"2026-03-08", "2026-11-01"})
+    void fitsExactlyUntilLocalMidnightOnDaylightSavingTransitions(String date) {
+        var day = LocalDate.parse(date);
+        var zone = ZoneId.of("America/New_York");
+        var result = MigratedTimeLayoutPlanner.plan(day, zone, day.plusDays(1), 900, 540, 1440, List.of());
+
+        assertThat(result.outcome()).isEqualTo(Outcome.IMPORT);
+        assertThat(result.segments().getLast().stoppedAt()).isEqualTo(day.plusDays(1).atStartOfDay(zone).toInstant());
+        assertThat(result.issues()).isEmpty();
+        assertThat(MigratedTimeLayoutPlanner.plan(day, zone, day.plusDays(1), 901, 540, 1440, List.of()).outcome()).isEqualTo(Outcome.ERROR);
     }
 }

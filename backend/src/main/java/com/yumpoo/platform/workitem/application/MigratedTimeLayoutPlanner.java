@@ -33,7 +33,7 @@ public final class MigratedTimeLayoutPlanner {
         if (!workDate.isBefore(today)) issues.add(new Issue("FUTURE_DATE", null));
         if (minutes == 0) return new DayPlan(Outcome.CLEAR, List.of(), previous, previousMinutes, issues);
 
-        Instant start = dayStart.plus(Duration.ofMinutes(workdayStartMinute));
+        Instant start = workDate.atStartOfDay().plusMinutes(workdayStartMinute).atZone(zone).toInstant();
         var busy = sessions.stream().filter(s -> !previous.contains(s))
                 .map(s -> new Segment(s.startedAt(), endOf(s, dayEnd)))
                 .filter(s -> s.stoppedAt().isAfter(start) && s.startedAt().isBefore(dayEnd))
@@ -57,7 +57,8 @@ public final class MigratedTimeLayoutPlanner {
             issues.add(new Issue("NOT_ENOUGH_FREE_TIME", null));
             return new DayPlan(Outcome.ERROR, List.of(), previous, previousMinutes, issues);
         }
-        if (segments.getLast().stoppedAt().isAfter(dayStart.plus(Duration.ofMinutes(workdayEndMinute)))) issues.add(new Issue("PAST_WORKDAY_END", null));
+        Instant workdayEnd = workDate.atStartOfDay().plusMinutes(workdayEndMinute).atZone(zone).toInstant();
+        if (segments.getLast().stoppedAt().isAfter(workdayEnd)) issues.add(new Issue("PAST_WORKDAY_END", null));
         if (previousMinutes > 0) issues.add(new Issue("REPLACES_PREVIOUS", Long.toString(previousMinutes)));
         return new DayPlan(Outcome.IMPORT, List.copyOf(segments), previous, previousMinutes, issues);
     }
