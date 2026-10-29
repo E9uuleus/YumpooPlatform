@@ -1,6 +1,6 @@
 /** 应用路由名 → 帮助页 slug 或 slug#anchor；顶栏帮助菜单的「本页帮助」据此打开。只做重定向的入口路由不需要映射。 */
 export const ROUTE_HELP: Record<string, string> = {
-  home: 'guide/navigation',
+  home: 'guide/navigation#首页',
   settings: 'guide/navigation#偏好设置',
   workspace: 'guide/projects#管理项目',
   'archived-projects': 'guide/projects#归档与恢复',
