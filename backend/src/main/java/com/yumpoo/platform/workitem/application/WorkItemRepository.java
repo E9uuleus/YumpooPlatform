@@ -14,7 +14,7 @@ import java.util.Set;
 import java.util.UUID;
 
 public interface WorkItemRepository {
-    record WorkItemTitle(UUID id, String title) {}
+    record WorkItemTitle(UUID id, String title, boolean archived) {}
     record RankedWorkItem(UUID id, String rank) {}
     record RankedProjectWorkItem(UUID id, String rank) {}
     record FilterOptionCount(String value, long count) {}

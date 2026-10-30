@@ -53,8 +53,8 @@ class MigratedTimeImportServiceTest {
                 new MemberProjectQuery.Project(project, "交付项目", "P001", "ACTIVE"),
                 new MemberProjectQuery.Project(UUID.randomUUID(), "旧项目", "P002", "ARCHIVED")));
         when(items.findTitles(company, project)).thenReturn(List.of(
-                new WorkItemRepository.WorkItemTitle(itemA, "接口开发"),
-                new WorkItemRepository.WorkItemTitle(itemB, "联调测试")));
+                new WorkItemRepository.WorkItemTitle(itemA, "接口开发", false),
+                new WorkItemRepository.WorkItemTitle(itemB, "联调测试", false)));
         when(memberships.findActiveMemberIds(eq(company), eq(project), any())).thenReturn(Set.of(member, gone));
         when(timers.preferences(company, member)).thenReturn(Optional.empty());
         when(timers.mySessions(eq(company), eq(member), any(), any())).thenReturn(List.of());
@@ -133,27 +133,65 @@ class MigratedTimeImportServiceTest {
     }
 
     @Test
-    void reimportKeepsEarlierRecordsOfWorkItemsItDoesNotWrite() {
-        var oldA = new TimeTrackingModels.Session(UUID.randomUUID(), company, project, itemA, member,
-                DAY.atTime(9, 0).atZone(ZONE).toInstant(), DAY.atTime(10, 0).atZone(ZONE).toInstant(), "MANUAL", 0, null, null, null, null, true);
-        var oldB = new TimeTrackingModels.Session(UUID.randomUUID(), company, project, itemB, member,
-                DAY.atTime(10, 0).atZone(ZONE).toInstant(), DAY.atTime(11, 0).atZone(ZONE).toInstant(), "MANUAL", 0, null, null, null, null, true);
-        when(timers.mySessions(eq(company), eq(member), any(), any())).thenReturn(List.of(
-                new TimeTrackingModels.MySessionRow(oldA, null, null, null, false, false),
-                new TimeTrackingModels.MySessionRow(oldB, null, null, null, false, false)));
-        var rows = List.of(new Row(member, DAY, "交付项目", "接口开发", 60), new Row(member, DAY, "交付项目", "不存在", 30));
+    void reimportOverwritesEveryEarlierMigratedRecordOfTheDay() {
+        var oldA = migratedRecord(itemA, DAY, 9, 10);
+        var oldB = migratedRecord(itemB, DAY, 10, 11);
+        when(timers.mySessions(eq(company), eq(member), any(), any())).thenReturn(rowsOf(oldA, oldB));
+        var rows = List.of(new Row(member, DAY, "交付项目", "接口开发", 90), new Row(member, DAY, "交付项目", "不存在", 30));
         var result = json.readTree(run(actor, new Request(false, rows)).responseJson());
 
-        assertThat(result.path("replacedMinutes").asLong()).isEqualTo(60);
+        assertThat(result.path("replacedMinutes").asLong()).isEqualTo(120);
         var saved = ArgumentCaptor.forClass(TimeTrackingModels.Session.class);
-        verify(timers, times(2)).save(saved.capture());
-        assertThat(saved.getAllValues().getFirst().id()).isEqualTo(oldA.id());
-        assertThat(saved.getAllValues().getFirst().deletedAt()).isEqualTo(NOW);
-        var created = saved.getAllValues().get(1);
+        verify(timers, times(3)).save(saved.capture());
+        assertThat(saved.getAllValues().subList(0, 2)).extracting(TimeTrackingModels.Session::id).containsExactly(oldA.id(), oldB.id());
+        assertThat(saved.getAllValues().subList(0, 2)).allMatch(session -> NOW.equals(session.deletedAt()));
+        var created = saved.getAllValues().get(2);
         assertThat(created.workItemId()).isEqualTo(itemA);
         assertThat(created.startedAt()).isEqualTo(DAY.atTime(9, 0).atZone(ZONE).toInstant());
-        assertThat(created.stoppedAt()).isEqualTo(DAY.atTime(10, 0).atZone(ZONE).toInstant());
-        assertThat(saved.getAllValues()).noneMatch(session -> session.id().equals(oldB.id()));
+        assertThat(created.stoppedAt()).isEqualTo(DAY.atTime(10, 30).atZone(ZONE).toInstant());
+    }
+
+    @Test
+    void rejectsDaysThatAlreadyHoldTheMembersOwnTime() {
+        var crossing = new TimeTrackingModels.Session(UUID.randomUUID(), company, project, itemB, member,
+                DAY.minusDays(1).atTime(23, 30).atZone(ZONE).toInstant(), DAY.atTime(0, 30).atZone(ZONE).toInstant(), "TIMER", 1, null, null);
+        var migrated = migratedRecord(itemA, DAY, 9, 10);
+        when(timers.mySessions(eq(company), eq(member), any(), any())).thenReturn(rowsOf(crossing, migrated));
+        var rows = List.of(new Row(member, DAY, "交付项目", "接口开发", 60), new Row(member, DAY.plusDays(1), "交付项目", "联调测试", 60));
+        var result = json.readTree(run(actor, new Request(false, rows)).responseJson());
+
+        assertThat(result.path("importedDayCount").asInt()).isEqualTo(1);
+        assertThat(result.path("failedDayCount").asInt()).isEqualTo(1);
+        assertThat(result.path("days").get(0).path("issues").get(0).path("code").asText()).isEqualTo("DAY_HAS_TIME");
+        var saved = ArgumentCaptor.forClass(TimeTrackingModels.Session.class);
+        verify(timers, times(1)).save(saved.capture());
+        assertThat(saved.getValue().workItemId()).isEqualTo(itemB);
+        assertThat(saved.getValue().startedAt()).isEqualTo(DAY.plusDays(1).atTime(9, 0).atZone(ZONE).toInstant());
+    }
+
+    @Test
+    void prefersTheOnlyOpenItemOverArchivedNamesakes() {
+        when(items.findTitles(company, project)).thenReturn(List.of(
+                new WorkItemRepository.WorkItemTitle(itemA, "接口开发", false),
+                new WorkItemRepository.WorkItemTitle(UUID.randomUUID(), "接口开发", true),
+                new WorkItemRepository.WorkItemTitle(itemB, "联调测试", false),
+                new WorkItemRepository.WorkItemTitle(UUID.randomUUID(), "联调测试", false)));
+        var rows = List.of(new Row(member, DAY, "交付项目", "接口开发", 60), new Row(member, DAY, "交付项目", "联调测试", 30));
+        var result = json.readTree(run(actor, new Request(false, rows)).responseJson());
+
+        assertThat(result.path("skippedRows")).isEqualTo(json.valueToTree(List.of(new MigratedTimeImportService.SkippedRow(1, "WORK_ITEM_AMBIGUOUS"))));
+        var saved = ArgumentCaptor.forClass(TimeTrackingModels.Session.class);
+        verify(timers, times(1)).save(saved.capture());
+        assertThat(saved.getValue().workItemId()).isEqualTo(itemA);
+    }
+
+    private TimeTrackingModels.Session migratedRecord(UUID item, LocalDate day, int fromHour, int toHour) {
+        return new TimeTrackingModels.Session(UUID.randomUUID(), company, project, item, member,
+                day.atTime(fromHour, 0).atZone(ZONE).toInstant(), day.atTime(toHour, 0).atZone(ZONE).toInstant(), "MANUAL", 0, null, null, null, null, true);
+    }
+
+    private static List<TimeTrackingModels.MySessionRow> rowsOf(TimeTrackingModels.Session... sessions) {
+        return java.util.Arrays.stream(sessions).map(session -> new TimeTrackingModels.MySessionRow(session, null, null, null, false, false)).toList();
     }
 
     @Test

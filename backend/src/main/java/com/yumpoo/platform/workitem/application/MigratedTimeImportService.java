@@ -34,6 +34,9 @@ import static com.yumpoo.platform.workitem.application.TimeTrackingModels.*;
 @Service
 public class MigratedTimeImportService {
     static final int MAX_ROWS = 20000;
+    /** Migrated time goes only into days without the member's own records; a day holding only earlier migrated records is overwritten whole. */
+    private static final DayPlan DAY_HAS_TIME = new DayPlan(Outcome.ERROR, List.of(), List.of(), 0,
+            List.of(new MigratedTimeLayoutPlanner.Issue("DAY_HAS_TIME", null)));
 
     public record Row(UUID userId, LocalDate workDate, String projectName, String workItemTitle, Integer minutes) {}
     public record Request(Boolean dryRun, List<Row> rows) {}
@@ -98,18 +101,14 @@ public class MigratedTimeImportService {
             LocalDate last = perUser.getValue().keySet().stream().max(Comparator.naturalOrder()).orElseThrow();
             var sessions = timers.mySessions(actor.companyId(), userId, first.atStartOfDay(zone).toInstant(), last.plusDays(1).atStartOfDay(zone).toInstant())
                     .stream().map(MySessionRow::session).toList();
-            // Earlier migrated records are replaced only for the work items this import writes on their day; legacy category records name no item and go with the day.
-            var written = new HashMap<LocalDate, Set<UUID>>();
-            perUser.getValue().forEach((date, indexes) -> written.put(date, indexes.stream().map(i -> targets.get(i).workItemId()).collect(Collectors.toSet())));
             var existing = new ArrayList<Existing>();
             for (Session session : sessions) {
-                var writtenItems = written.get(LocalDate.ofInstant(session.startedAt(), zone));
-                var item = new Existing(session.startedAt(), session.stoppedAt(), writtenItems != null && session.migratedImport()
-                        && (session.workItemId() == null || writtenItems.contains(session.workItemId())));
+                var item = new Existing(session.startedAt(), session.stoppedAt(), session.migratedImport());
                 existing.add(item); sessionsOf.put(item, session);
             }
             for (var day : perUser.getValue().entrySet())
-                plans.put(new MemberDay(userId, day.getKey()), MigratedTimeLayoutPlanner.plan(day.getKey(), zone, today, minutes(rows, day.getValue()),
+                plans.put(new MemberDay(userId, day.getKey()), recorded(sessions, day.getKey(), zone) ? DAY_HAS_TIME
+                        : MigratedTimeLayoutPlanner.plan(day.getKey(), zone, today, minutes(rows, day.getValue()),
                         prefs.workdayStartMinute(), prefs.workdayEndMinute(), existing));
         }
 
@@ -138,12 +137,15 @@ public class MigratedTimeImportService {
         return new StoredCommandResult(200, json.writeValueAsString(result), actor.userId(), null);
     }
 
-    /** A row is written only when its project name, work item title and member match one ACTIVE project, one non-deleted item in it and an active membership. */
+    /**
+     * A row is written only when its project name, work item title and member match one ACTIVE project, one non-deleted item in it
+     * and an active membership. Archived items match too, but an archived namesake does not compete with the one open item of that title.
+     */
     private Map<Integer, Target> match(CurrentActor actor, List<Row> rows, List<SkippedRow> skipped) {
         var projectsByName = projects.listForAdministrator(actor).stream().filter(project -> "ACTIVE".equals(project.lifecycle()))
                 .collect(Collectors.groupingBy(MemberProjectQuery.Project::name));
         var userIds = rows.stream().map(Row::userId).collect(Collectors.toSet());
-        var titles = new HashMap<UUID, Map<String, List<UUID>>>();
+        var titles = new HashMap<UUID, Map<String, List<WorkItemRepository.WorkItemTitle>>>();
         var memberIds = new HashMap<UUID, Set<UUID>>();
         var targets = new HashMap<Integer, Target>();
         for (int i = 0; i < rows.size(); i++) {
@@ -151,14 +153,16 @@ public class MigratedTimeImportService {
             var named = projectsByName.getOrDefault(row.projectName().strip(), List.of());
             if (named.size() != 1) { skipped.add(new SkippedRow(i, named.isEmpty() ? "PROJECT_NOT_FOUND" : "PROJECT_AMBIGUOUS")); continue; }
             UUID projectId = named.getFirst().id();
-            var found = titles.computeIfAbsent(projectId, id -> items.findTitles(actor.companyId(), id).stream()
-                    .collect(Collectors.groupingBy(item -> item.title().strip(), Collectors.mapping(WorkItemRepository.WorkItemTitle::id, Collectors.toList()))))
+            var titled = titles.computeIfAbsent(projectId, id -> items.findTitles(actor.companyId(), id).stream()
+                    .collect(Collectors.groupingBy(item -> item.title().strip())))
                     .getOrDefault(row.workItemTitle().strip(), List.of());
+            var open = titled.stream().filter(item -> !item.archived()).toList();
+            var found = titled.size() > 1 && open.size() == 1 ? open : titled;
             if (found.size() != 1) { skipped.add(new SkippedRow(i, found.isEmpty() ? "WORK_ITEM_NOT_FOUND" : "WORK_ITEM_AMBIGUOUS")); continue; }
             if (!memberIds.computeIfAbsent(projectId, id -> memberships.findActiveMemberIds(actor.companyId(), id, userIds)).contains(row.userId())) {
                 skipped.add(new SkippedRow(i, "NOT_PROJECT_MEMBER")); continue;
             }
-            targets.put(i, new Target(projectId, found.getFirst()));
+            targets.put(i, new Target(projectId, found.getFirst().id()));
         }
         return targets;
     }
@@ -216,6 +220,11 @@ public class MigratedTimeImportService {
         }
     }
 
+    /** True when the member already has own records on the day, running timers included; the day's earlier migrated records do not count, they are overwritten. */
+    private static boolean recorded(List<Session> sessions, LocalDate date, ZoneId zone) {
+        Instant dayStart = date.atStartOfDay(zone).toInstant(), dayEnd = date.plusDays(1).atStartOfDay(zone).toInstant();
+        return sessions.stream().anyMatch(s -> !s.migratedImport() && s.startedAt().isBefore(dayEnd) && (s.stoppedAt() == null || s.stoppedAt().isAfter(dayStart)));
+    }
     private static int minutes(List<Row> rows, List<Integer> indexes) { return indexes.stream().mapToInt(i -> rows.get(i).minutes()).sum(); }
     private static boolean active(Map<UUID, MinimalUserSnapshot> members, UUID userId) {
         var member = members.get(userId);

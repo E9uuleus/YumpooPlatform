@@ -16,18 +16,18 @@ public final class MigratedTimeLayoutPlanner {
 
     public enum Outcome { IMPORT, ERROR }
 
-    /** A session of the member that may occupy the day; {@code replaced} marks an earlier migrated record this import overwrites. Running sessions have no {@code stoppedAt}. */
-    public record Existing(Instant startedAt, Instant stoppedAt, boolean replaced) {}
+    /** A session of the member that may occupy the day; {@code stoppedAt} is null while the timer is running. */
+    public record Existing(Instant startedAt, Instant stoppedAt, boolean migrated) {}
     public record Segment(Instant startedAt, Instant stoppedAt) {}
     public record Issue(String code, String detail) {}
-    /** {@code previous} holds the day's replaced records; every other session, earlier migrated ones included, occupies time. */
+    /** {@code previous} holds the day's own migrated sessions, which the plan replaces. */
     public record DayPlan(Outcome outcome, List<Segment> segments, List<Existing> previous, long previousMinutes, List<Issue> issues) {}
 
     public static DayPlan plan(LocalDate workDate, ZoneId zone, LocalDate today, int minutes, int workdayStartMinute,
             int workdayEndMinute, List<Existing> sessions) {
         Instant dayStart = workDate.atStartOfDay(zone).toInstant();
         Instant dayEnd = workDate.plusDays(1).atStartOfDay(zone).toInstant();
-        var previous = sessions.stream().filter(s -> s.replaced() && !s.startedAt().isBefore(dayStart) && s.startedAt().isBefore(dayEnd)).toList();
+        var previous = sessions.stream().filter(s -> s.migrated() && !s.startedAt().isBefore(dayStart) && s.startedAt().isBefore(dayEnd)).toList();
         long previousMinutes = Math.round(previous.stream().mapToLong(s -> Duration.between(s.startedAt(), endOf(s, dayEnd)).toMillis()).sum() / 60000.0);
         var issues = new ArrayList<Issue>();
         // Recorded time may not end in the future, so today and later are rejected outright.
