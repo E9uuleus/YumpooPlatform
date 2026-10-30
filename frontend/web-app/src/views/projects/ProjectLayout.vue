@@ -1,13 +1,11 @@
 <script setup lang="ts">
-import YpNotice from '../../components/yp/YpNotice.vue'
-import { usePageLoad } from '../../brand/page-progress'
-
 import { ProjectLifecycle, type ProjectDetail } from '@yumpoo/api-client'
-
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { projectsApi } from '../../api/client'
+import { usePageLoad } from '../../brand/page-progress'
 import { projectStatus } from '../../components/projects/projectStatus'
+import YpNotice from '../../components/yp/YpNotice.vue'
 import { PROJECT_LIFECYCLE_CHANGED } from '../../composables/projectLifecycleEvents'
 
 const pageLoad = usePageLoad()
@@ -67,8 +65,5 @@ onBeforeUnmount(() => { request++; window.removeEventListener(PROJECT_LIFECYCLE_
 .archived-project-banner {
   align-self: start;
   min-height: 36px;
-  padding: var(--yp-space-2) var(--yp-space-3);
 }
-
-
 </style>

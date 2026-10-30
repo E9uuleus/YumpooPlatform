@@ -3,6 +3,7 @@ import {
   WorkItemImportDuplicateMode,
   WorkItemImportField,
   WorkItemImportOutcome,
+  type WorkItemLabelColorToken,
   type WorkItemImportIssue,
   type WorkItemImportRequest,
   type WorkItemImportResult,
@@ -153,6 +154,7 @@ export interface ImportOption {
   value: string
   label: string
   match: string[]
+  colorToken?: WorkItemLabelColorToken | undefined
 }
 
 export interface ImportCatalog {
@@ -165,9 +167,9 @@ export interface ImportCatalog {
 }
 
 export interface ImportCatalogSource {
-  contents: readonly { id: string; code: string; name: string; active: boolean }[]
-  statuses: readonly { code: string; displayName: string; active: boolean; sortOrder: number }[]
-  priorities: readonly { code: string; displayName: string; active: boolean; sortOrder: number }[]
+  contents: readonly { id: string; code: string; name: string; active: boolean; colorToken?: WorkItemLabelColorToken }[]
+  statuses: readonly { code: string; displayName: string; active: boolean; sortOrder: number; colorToken?: WorkItemLabelColorToken }[]
+  priorities: readonly { code: string; displayName: string; active: boolean; sortOrder: number; colorToken?: WorkItemLabelColorToken }[]
   members: readonly { userId: string; displayName: string; membershipStatus: string; employmentStatus: string; accountStatus: string }[]
 }
 
@@ -177,13 +179,13 @@ const NOT_STARTED = 'NOT_STARTED'
 export function buildImportCatalog(source: ImportCatalogSource): ImportCatalog {
   const bySort = <T extends { sortOrder: number }>(items: readonly T[]): T[] => [...items].sort((left, right) => left.sortOrder - right.sortOrder)
   const statuses = bySort(source.statuses.filter(item => item.active))
-    .map(item => ({ value: item.code, label: item.displayName, match: [item.displayName, item.code] }))
+    .map(item => ({ value: item.code, label: item.displayName, match: [item.displayName, item.code], colorToken: item.colorToken }))
   return {
     contents: source.contents.filter(item => item.active)
-      .map(item => ({ value: item.id, label: item.name, match: [item.name, item.code] })),
+      .map(item => ({ value: item.id, label: item.name, match: [item.name, item.code], colorToken: item.colorToken })),
     statuses,
     priorities: bySort(source.priorities.filter(item => item.active))
-      .map(item => ({ value: item.code, label: item.displayName, match: [item.displayName, item.code] })),
+      .map(item => ({ value: item.code, label: item.displayName, match: [item.displayName, item.code], colorToken: item.colorToken })),
     members: source.members
       .filter(item => item.membershipStatus === 'ACTIVE' && item.employmentStatus === 'ACTIVE' && item.accountStatus === 'ENABLED')
       .map(item => ({ value: item.userId, label: item.displayName, match: [item.displayName] })),
@@ -245,6 +247,21 @@ function matching(options: readonly ImportOption[], text: string): ImportOption[
 /** 名称或编码忽略大小写完全相同即匹配，匹配到多个时取第一个。 */
 export function autoMatch(options: readonly ImportOption[], text: string): string | undefined {
   return matching(options, text)[0]?.value
+}
+
+export function valueOptions(catalog: ImportCatalog, kind: ValueKind): ImportOption[] {
+  return kind === 'content' ? catalog.contents : kind === 'status' ? catalog.statuses
+    : kind === 'priority' ? catalog.priorities : catalog.members
+}
+
+/** 取值的来源：手动选定、按名称或编码自动匹配、匹配不到而用默认值，或同名成员待选。 */
+export type ValueMatch = 'manual' | 'auto' | 'fallback' | 'ambiguous'
+
+export function valueMatch(catalog: ImportCatalog, settings: ImportSettings, kind: ValueKind, key: string): ValueMatch {
+  if (settings.choices[kind].has(key)) return 'manual'
+  const found = matching(valueOptions(catalog, kind), key).length
+  if (found > 1 && kind === 'assignees') return 'ambiguous'
+  return found ? 'auto' : 'fallback'
 }
 
 export interface ImportSettings {
@@ -388,25 +405,18 @@ export function describeIssue(issue: Pick<WorkItemImportIssue, 'code' | 'detail'
   return issue.detail ? `${issue.code}：${issue.detail}` : `未知问题（${issue.code}）`
 }
 
-export interface ImportIssueRow {
-  rowNumber: number
-  title: string
+export interface ImportPreviewRow extends WorkItemImportRow {
   outcome: WorkItemImportOutcome
   messages: string[]
 }
 
-/** 带问题或无法导入的行，标题取自文件，按行号排序。 */
-export function issueRows(result: Pick<WorkItemImportResult, 'rows'>, table: ImportTable, mapping: ColumnMapping): ImportIssueRow[] {
-  const titles = new Map(table.rows.map(row => [row.rowNumber, mapping.title === null ? '' : cellText(row.cells[mapping.title])]))
-  return result.rows
-    .filter(row => row.issues.length > 0 || row.outcome === WorkItemImportOutcome.Error)
-    .map(row => ({
-      rowNumber: row.rowNumber,
-      title: titles.get(row.rowNumber) || '(无标题)',
-      outcome: row.outcome,
-      messages: row.issues.map(issue => describeIssue(issue, row.outcome)),
-    }))
-    .sort((left, right) => left.rowNumber - right.rowNumber)
+/** 预览表的行：按文件顺序，写入值取自请求，结果与说明取自试运行。 */
+export function previewRows(rows: readonly WorkItemImportRow[], result: Pick<WorkItemImportResult, 'rows'>): ImportPreviewRow[] {
+  const outcomes = new Map(result.rows.map(row => [row.rowNumber, row]))
+  return rows.flatMap(row => {
+    const found = outcomes.get(row.rowNumber)
+    return found ? [{ ...row, outcome: found.outcome, messages: found.issues.map(issue => describeIssue(issue, found.outcome)) }] : []
+  })
 }
 
 export function describeResult(result: Pick<WorkItemImportResult, 'createdCount' | 'updatedCount' | 'skippedCount' | 'failedCount'>): string {

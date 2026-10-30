@@ -290,7 +290,6 @@ async function discardReload() {
         v-if="saveError"
         class="dashboard-notice"
         tone="warning"
-
         :title="`更改尚未保存：${saveError}`"
       >
         <template #actions>
