@@ -14,6 +14,7 @@ import java.util.Set;
 import java.util.UUID;
 
 public interface WorkItemRepository {
+    record WorkItemTitle(UUID id, String title) {}
     record RankedWorkItem(UUID id, String rank) {}
     record RankedProjectWorkItem(UUID id, String rank) {}
     record FilterOptionCount(String value, long count) {}
@@ -31,6 +32,8 @@ public interface WorkItemRepository {
 
     long nextSequence(UUID companyId, UUID projectId);
     List<WorkItemImportPlanner.Existing> findImportTargets(UUID companyId, UUID projectId);
+    /** Every work item of the project that is not deleted, archived ones included. */
+    List<WorkItemTitle> findTitles(UUID companyId, UUID projectId);
     boolean insert(WorkItem workItem);
     void replaceAssignees(WorkItem workItem);
     Optional<WorkItemModels.WorkItemLocator> findLocator(UUID companyId, UUID workItemId);

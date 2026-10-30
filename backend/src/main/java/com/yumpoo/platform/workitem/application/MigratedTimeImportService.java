@@ -98,9 +98,14 @@ public class MigratedTimeImportService {
             LocalDate last = perUser.getValue().keySet().stream().max(Comparator.naturalOrder()).orElseThrow();
             var sessions = timers.mySessions(actor.companyId(), userId, first.atStartOfDay(zone).toInstant(), last.plusDays(1).atStartOfDay(zone).toInstant())
                     .stream().map(MySessionRow::session).toList();
+            // Earlier migrated records are replaced only for the work items this import writes on their day; legacy category records name no item and go with the day.
+            var written = new HashMap<LocalDate, Set<UUID>>();
+            perUser.getValue().forEach((date, indexes) -> written.put(date, indexes.stream().map(i -> targets.get(i).workItemId()).collect(Collectors.toSet())));
             var existing = new ArrayList<Existing>();
             for (Session session : sessions) {
-                var item = new Existing(session.startedAt(), session.stoppedAt(), session.migratedImport());
+                var writtenItems = written.get(LocalDate.ofInstant(session.startedAt(), zone));
+                var item = new Existing(session.startedAt(), session.stoppedAt(), writtenItems != null && session.migratedImport()
+                        && (session.workItemId() == null || writtenItems.contains(session.workItemId())));
                 existing.add(item); sessionsOf.put(item, session);
             }
             for (var day : perUser.getValue().entrySet())
@@ -133,7 +138,7 @@ public class MigratedTimeImportService {
         return new StoredCommandResult(200, json.writeValueAsString(result), actor.userId(), null);
     }
 
-    /** A row is written only when its project name, work item title and member match one ACTIVE project, one open item in it and an active membership. */
+    /** A row is written only when its project name, work item title and member match one ACTIVE project, one non-deleted item in it and an active membership. */
     private Map<Integer, Target> match(CurrentActor actor, List<Row> rows, List<SkippedRow> skipped) {
         var projectsByName = projects.listForAdministrator(actor).stream().filter(project -> "ACTIVE".equals(project.lifecycle()))
                 .collect(Collectors.groupingBy(MemberProjectQuery.Project::name));
@@ -146,8 +151,8 @@ public class MigratedTimeImportService {
             var named = projectsByName.getOrDefault(row.projectName().strip(), List.of());
             if (named.size() != 1) { skipped.add(new SkippedRow(i, named.isEmpty() ? "PROJECT_NOT_FOUND" : "PROJECT_AMBIGUOUS")); continue; }
             UUID projectId = named.getFirst().id();
-            var found = titles.computeIfAbsent(projectId, id -> items.findImportTargets(actor.companyId(), id).stream()
-                    .collect(Collectors.groupingBy(item -> item.title().strip(), Collectors.mapping(WorkItemImportPlanner.Existing::id, Collectors.toList()))))
+            var found = titles.computeIfAbsent(projectId, id -> items.findTitles(actor.companyId(), id).stream()
+                    .collect(Collectors.groupingBy(item -> item.title().strip(), Collectors.mapping(WorkItemRepository.WorkItemTitle::id, Collectors.toList()))))
                     .getOrDefault(row.workItemTitle().strip(), List.of());
             if (found.size() != 1) { skipped.add(new SkippedRow(i, found.isEmpty() ? "WORK_ITEM_NOT_FOUND" : "WORK_ITEM_AMBIGUOUS")); continue; }
             if (!memberIds.computeIfAbsent(projectId, id -> memberships.findActiveMemberIds(actor.companyId(), id, userIds)).contains(row.userId())) {
@@ -201,10 +206,13 @@ public class MigratedTimeImportService {
         if (request == null || request.dryRun() == null) throw validation("dryRun", "REQUIRED", "请指定是否仅预览");
         if (request.rows() == null || request.rows().isEmpty() || request.rows().size() > MAX_ROWS)
             throw validation("rows", "INVALID_SIZE", "一次须提交 1 到 20000 条记录");
+        var perDay = new HashMap<List<Object>, Integer>();
         for (Row row : request.rows()) {
             if (row == null || row.userId() == null || row.workDate() == null || row.projectName() == null || row.workItemTitle() == null || row.minutes() == null)
                 throw validation("rows", "REQUIRED", "成员、日期、项目、工作项和分钟数必填");
             if (row.minutes() < 1 || row.minutes() > 1440) throw validation("rows", "INVALID_RANGE", "分钟数须在 1 到 1440 之间");
+            if (perDay.merge(List.of(row.userId(), row.workDate()), row.minutes(), Integer::sum) > 1440)
+                throw validation("rows", "INVALID_RANGE", "同一成员同一天的合计不能超过 1440 分钟");
         }
     }
 

@@ -450,9 +450,9 @@ public class TimeTrackingService {
             Session before=create ? null : timers.find(actor.companyId(),input.sessionId())
                     .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
             if(before!=null) {
-                requireNotMigrated(before);
                 if(!input.workItemId().equals(before.workItemId())) throw new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND);
                 if(!before.userId().equals(actor.userId())) throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
+                requireNotMigrated(before);
                 requireVersion(before.rowVersion(),expectedVersion);
                 if(before.stoppedAt()==null || before.deletedAt()!=null) throw invalid("SESSION_NOT_EDITABLE");
             }

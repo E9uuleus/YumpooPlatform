@@ -52,9 +52,9 @@ class MigratedTimeImportServiceTest {
         when(projects.listForAdministrator(actor)).thenReturn(List.of(
                 new MemberProjectQuery.Project(project, "交付项目", "P001", "ACTIVE"),
                 new MemberProjectQuery.Project(UUID.randomUUID(), "旧项目", "P002", "ARCHIVED")));
-        when(items.findImportTargets(company, project)).thenReturn(List.of(
-                new WorkItemImportPlanner.Existing(itemA, UUID.randomUUID(), "P001-1", "接口开发", "TODO", "NORMAL", List.of()),
-                new WorkItemImportPlanner.Existing(itemB, UUID.randomUUID(), "P001-2", "联调测试", "TODO", "NORMAL", List.of())));
+        when(items.findTitles(company, project)).thenReturn(List.of(
+                new WorkItemRepository.WorkItemTitle(itemA, "接口开发"),
+                new WorkItemRepository.WorkItemTitle(itemB, "联调测试")));
         when(memberships.findActiveMemberIds(eq(company), eq(project), any())).thenReturn(Set.of(member, gone));
         when(timers.preferences(company, member)).thenReturn(Optional.empty());
         when(timers.mySessions(eq(company), eq(member), any(), any())).thenReturn(List.of());
@@ -133,8 +133,35 @@ class MigratedTimeImportServiceTest {
     }
 
     @Test
+    void reimportKeepsEarlierRecordsOfWorkItemsItDoesNotWrite() {
+        var oldA = new TimeTrackingModels.Session(UUID.randomUUID(), company, project, itemA, member,
+                DAY.atTime(9, 0).atZone(ZONE).toInstant(), DAY.atTime(10, 0).atZone(ZONE).toInstant(), "MANUAL", 0, null, null, null, null, true);
+        var oldB = new TimeTrackingModels.Session(UUID.randomUUID(), company, project, itemB, member,
+                DAY.atTime(10, 0).atZone(ZONE).toInstant(), DAY.atTime(11, 0).atZone(ZONE).toInstant(), "MANUAL", 0, null, null, null, null, true);
+        when(timers.mySessions(eq(company), eq(member), any(), any())).thenReturn(List.of(
+                new TimeTrackingModels.MySessionRow(oldA, null, null, null, false, false),
+                new TimeTrackingModels.MySessionRow(oldB, null, null, null, false, false)));
+        var rows = List.of(new Row(member, DAY, "交付项目", "接口开发", 60), new Row(member, DAY, "交付项目", "不存在", 30));
+        var result = json.readTree(run(actor, new Request(false, rows)).responseJson());
+
+        assertThat(result.path("replacedMinutes").asLong()).isEqualTo(60);
+        var saved = ArgumentCaptor.forClass(TimeTrackingModels.Session.class);
+        verify(timers, times(2)).save(saved.capture());
+        assertThat(saved.getAllValues().getFirst().id()).isEqualTo(oldA.id());
+        assertThat(saved.getAllValues().getFirst().deletedAt()).isEqualTo(NOW);
+        var created = saved.getAllValues().get(1);
+        assertThat(created.workItemId()).isEqualTo(itemA);
+        assertThat(created.startedAt()).isEqualTo(DAY.atTime(9, 0).atZone(ZONE).toInstant());
+        assertThat(created.stoppedAt()).isEqualTo(DAY.atTime(10, 0).atZone(ZONE).toInstant());
+        assertThat(saved.getAllValues()).noneMatch(session -> session.id().equals(oldB.id()));
+    }
+
+    @Test
     void rejectsRowsOutsideTheMinuteRange() {
         assertThatThrownBy(() -> run(actor, new Request(true, List.of(new Row(member, DAY, "交付项目", "接口开发", 0)))))
+                .isInstanceOfSatisfying(ApplicationException.class, e -> assertThat(e.fieldViolations()).extracting(v -> v.code()).containsExactly("INVALID_RANGE"));
+        assertThatThrownBy(() -> run(actor, new Request(true, List.of(
+                new Row(member, DAY, "交付项目", "接口开发", 800), new Row(member, DAY, "交付项目", "联调测试", 700)))))
                 .isInstanceOfSatisfying(ApplicationException.class, e -> assertThat(e.fieldViolations()).extracting(v -> v.code()).containsExactly("INVALID_RANGE"));
     }
 }
