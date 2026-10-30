@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const api = vi.hoisted(() => ({ getCurrentTimeTracker: vi.fn(), getTimeTrackingSummaries: vi.fn(), startTimeTracker: vi.fn(), switchTimeTracker: vi.fn(), stopTimeTracker: vi.fn(), stopAllTimeTrackers: vi.fn(), updateTimeTrackingPreferences: vi.fn() }))
 vi.mock('../api/client', () => ({ timeTrackingApi: api }))
-vi.mock('@yumpoo/api-client', () => ({ readCsrfToken: () => 'csrf' }))
+vi.mock('@yumpoo/api-client', async importOriginal => ({ ...await importOriginal<object>(), readCsrfToken: () => 'csrf' }))
 vi.mock('element-plus', () => ({ ElMessage: { error: vi.fn(), warning: vi.fn() }, ElMessageBox: { confirm: vi.fn(async () => undefined) } }))
 import { activateTimeTracker, cancelTimerExit, timerExitPhase, timerExitPrompt, chooseTimerExit, confirmTimerExit, timerMutation, useTimeTracker } from './useTimeTracker'
 
