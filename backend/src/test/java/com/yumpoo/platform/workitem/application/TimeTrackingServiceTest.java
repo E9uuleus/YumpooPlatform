@@ -432,6 +432,18 @@ class TimeTrackingServiceTest {
     }
 
     @Test
+    void migratedWorkItemRecordsCannotBeEditedOrDeleted() {
+        var fixture = new TimerFixture(false);
+        var record = new TimeTrackingModels.Session(UUID.randomUUID(), fixture.company, fixture.targetProject, fixture.targetItem, fixture.user,
+                TimerFixture.NOW.minusSeconds(7200), TimerFixture.NOW.minusSeconds(3600), "MANUAL", 0, null, null, null, null, true);
+        when(fixture.timers.find(fixture.company, record.id())).thenReturn(Optional.of(record));
+        var input = new TimeTrackingService.Input(null, record.id(), record.startedAt(), record.stoppedAt().plusSeconds(60), null, null, null, null, null, null);
+        for (String action : List.of("edit", "delete"))
+            assertReadOnly(() -> fixture.service.ownSession(fixture.actor, action, record.id(), input, 0, UUID.randomUUID(), new RequestHash("d".repeat(64))));
+        fixture.verifyNoWrites();
+    }
+
+    @Test
     void migratedRecordsAreListedAsReadOnly() {
         var fixture = new TimerFixture(false);
         var migrated = migratedSession(fixture);

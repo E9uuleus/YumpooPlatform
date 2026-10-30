@@ -2,8 +2,9 @@ package com.yumpoo.platform.workitem.application;
 
 import com.yumpoo.platform.audit.api.SecurityAuditAppendPort;
 import com.yumpoo.platform.audit.api.SecurityAuditDraft;
-import com.yumpoo.platform.catalog.api.ProjectAccessSnapshot;
-import com.yumpoo.platform.catalog.api.ProjectConnectionTargetQuery;
+import com.yumpoo.platform.catalog.api.CompanyProjectQuery;
+import com.yumpoo.platform.catalog.api.MemberProjectQuery;
+import com.yumpoo.platform.catalog.api.ProjectActiveMembershipQuery;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.foundation.application.idempotency.*;
@@ -11,7 +12,7 @@ import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.MinimalUserSnapshot;
 import com.yumpoo.platform.identityaccess.api.MinimalUserSnapshotQuery;
 import com.yumpoo.platform.identityaccess.api.PlatformRoleCode;
-import com.yumpoo.platform.workitem.application.MigratedTimeImportService.Entry;
+import com.yumpoo.platform.workitem.application.MigratedTimeImportService.Row;
 import com.yumpoo.platform.workitem.application.MigratedTimeImportService.Request;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -30,10 +31,13 @@ class MigratedTimeImportServiceTest {
     private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
     private static final LocalDate DAY = LocalDate.of(2026, 10, 20);
     private final UUID company = UUID.randomUUID(), admin = UUID.randomUUID(), member = UUID.randomUUID(), gone = UUID.randomUUID();
+    private final UUID project = UUID.randomUUID(), itemA = UUID.randomUUID(), itemB = UUID.randomUUID();
     private final CurrentActor actor = new CurrentActor(admin, company, 0, Set.of(PlatformRoleCode.COMPANY_ADMIN));
     private final TimeTrackingRepository timers = mock(TimeTrackingRepository.class);
     private final TimeShareMaintainer shares = mock(TimeShareMaintainer.class);
-    private final ProjectConnectionTargetQuery projects = mock(ProjectConnectionTargetQuery.class);
+    private final CompanyProjectQuery projects = mock(CompanyProjectQuery.class);
+    private final WorkItemRepository items = mock(WorkItemRepository.class);
+    private final ProjectActiveMembershipQuery memberships = mock(ProjectActiveMembershipQuery.class);
     private final MinimalUserSnapshotQuery users = mock(MinimalUserSnapshotQuery.class);
     private final SecurityAuditAppendPort audits = mock(SecurityAuditAppendPort.class);
     private final ObjectMapper json = new ObjectMapper();
@@ -45,10 +49,17 @@ class MigratedTimeImportServiceTest {
         when(users.findByUserIds(eq(company), any())).thenReturn(Map.of(
                 member, new MinimalUserSnapshot(member, company, "成员", "ACTIVE", "ENABLED"),
                 gone, new MinimalUserSnapshot(gone, company, "离职", "LEFT", "ENABLED")));
+        when(projects.listForAdministrator(actor)).thenReturn(List.of(
+                new MemberProjectQuery.Project(project, "交付项目", "P001", "ACTIVE"),
+                new MemberProjectQuery.Project(UUID.randomUUID(), "旧项目", "P002", "ARCHIVED")));
+        when(items.findTitles(company, project)).thenReturn(List.of(
+                new WorkItemRepository.WorkItemTitle(itemA, "接口开发", false),
+                new WorkItemRepository.WorkItemTitle(itemB, "联调测试", false)));
+        when(memberships.findActiveMemberIds(eq(company), eq(project), any())).thenReturn(Set.of(member, gone));
         when(timers.preferences(company, member)).thenReturn(Optional.empty());
         when(timers.mySessions(eq(company), eq(member), any(), any())).thenReturn(List.of());
-        when(shares.rebuild(eq(company), eq(member), any(), any())).thenReturn(Set.of());
-        service = new MigratedTimeImportService(timers, shares, projects, users, executor, audits, json, Clock.fixed(NOW, ZoneOffset.UTC));
+        when(shares.rebuild(eq(company), eq(member), any(), any())).thenReturn(Set.of(project));
+        service = new MigratedTimeImportService(timers, shares, projects, items, memberships, users, executor, audits, json, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     private StoredCommandResult run(CurrentActor who, Request request) {
@@ -58,56 +69,137 @@ class MigratedTimeImportServiceTest {
     @Test
     void onlyAdministratorsMayImport() {
         var plainMember = new CurrentActor(member, company, 0, Set.of());
-        assertThatThrownBy(() -> run(plainMember, new Request(true, null, List.of(new Entry(member, DAY, 60)))))
+        assertThatThrownBy(() -> run(plainMember, new Request(true, List.of(new Row(member, DAY, "交付项目", "接口开发", 60)))))
                 .isInstanceOfSatisfying(ApplicationException.class, e -> assertThat(e.errorCode()).isEqualTo(StandardErrorCode.ACCESS_DENIED));
     }
 
     @Test
-    void dryRunLaysOutDaysWithoutWriting() {
-        var result = json.readTree(run(actor, new Request(true, null, List.of(new Entry(member, DAY, 120), new Entry(gone, DAY, 60)))).responseJson());
+    void dryRunMatchesWorkItemsAndListsRowsThatCannotBeImported() {
+        var result = json.readTree(run(actor, new Request(true, List.of(
+                new Row(member, DAY, "交付项目", "接口开发", 60), new Row(member, DAY, "交付项目", "联调测试", 60),
+                new Row(member, DAY, "旧项目", "接口开发", 30), new Row(member, DAY, "交付项目", "不存在", 30),
+                new Row(gone, DAY, "交付项目", "接口开发", 60), new Row(UUID.randomUUID(), DAY, "交付项目", "接口开发", 60)))).responseJson());
         assertThat(result.path("importedDayCount").asInt()).isEqualTo(1);
         assertThat(result.path("failedDayCount").asInt()).isEqualTo(1);
         assertThat(result.path("importedMinutes").asLong()).isEqualTo(120);
-        assertThat(result.path("days").get(0).path("startedAt").asText()).isEqualTo("2026-10-20T01:00:00Z");
-        assertThat(result.path("days").get(0).path("stoppedAt").asText()).isEqualTo("2026-10-20T03:00:00Z");
-        assertThat(result.path("days").get(1).path("outcome").asText()).isEqualTo("ERROR");
-        assertThat(result.path("days").get(1).path("issues").get(0).path("code").asText()).isEqualTo("USER_INVALID");
+        assertThat(result.path("skippedMinutes").asLong()).isEqualTo(120);
+        assertThat(result.path("skippedRows")).isEqualTo(json.valueToTree(List.of(
+                new MigratedTimeImportService.SkippedRow(2, "PROJECT_NOT_FOUND"),
+                new MigratedTimeImportService.SkippedRow(3, "WORK_ITEM_NOT_FOUND"),
+                new MigratedTimeImportService.SkippedRow(5, "NOT_PROJECT_MEMBER"))));
+        var days = new HashMap<String, tools.jackson.databind.JsonNode>();
+        result.path("days").forEach(day -> days.put(day.path("userId").asText(), day));
+        assertThat(days.get(member.toString()).path("startedAt").asText()).isEqualTo("2026-10-20T01:00:00Z");
+        assertThat(days.get(member.toString()).path("stoppedAt").asText()).isEqualTo("2026-10-20T03:00:00Z");
+        assertThat(days.get(gone.toString()).path("outcome").asText()).isEqualTo("ERROR");
+        assertThat(days.get(gone.toString()).path("issues").get(0).path("code").asText()).isEqualTo("USER_INVALID");
         verify(timers, never()).save(any());
         verify(timers, never()).stateVersion(any(), any(), eq(true));
         verifyNoInteractions(audits, shares);
     }
 
     @Test
-    void commitReplacesOldSessionsRebuildsSharesOncePerMemberAndAuditsOnce() {
+    void commitReplacesTheDaysMigratedTimeWithReadOnlyWorkItemRecordsInFileOrder() {
         var old = new TimeTrackingModels.Session(UUID.randomUUID(), company, null, null, member, DAY.atTime(9, 0).atZone(ZONE).toInstant(),
                 DAY.atTime(10, 0).atZone(ZONE).toInstant(), "MANUAL", 0, null, null, TimeCategory.MIGRATED, null);
         when(timers.mySessions(eq(company), eq(member), any(), any())).thenReturn(List.of(new TimeTrackingModels.MySessionRow(old, null, null, null, false, false)));
-        var entries = List.of(new Entry(member, DAY, 90), new Entry(member, DAY.plusDays(1), 0));
-        var result = json.readTree(run(actor, new Request(false, null, entries)).responseJson());
+        var rows = List.of(new Row(member, DAY, "交付项目", "接口开发", 60), new Row(member, DAY, "交付项目", "联调测试", 30));
+        var result = json.readTree(run(actor, new Request(false, rows)).responseJson());
 
         assertThat(result.path("replacedMinutes").asLong()).isEqualTo(60);
         assertThat(result.path("days").get(0).path("issues").get(0).path("code").asText()).isEqualTo("REPLACES_PREVIOUS");
         verify(timers).stateVersion(company, member, true);
         var saved = ArgumentCaptor.forClass(TimeTrackingModels.Session.class);
-        verify(timers, times(2)).save(saved.capture());
+        verify(timers, times(3)).save(saved.capture());
         assertThat(saved.getAllValues().getFirst().id()).isEqualTo(old.id());
         assertThat(saved.getAllValues().getFirst().deletedAt()).isEqualTo(NOW);
-        var created = saved.getAllValues().getLast();
-        assertThat(created.timeCategory()).isEqualTo(TimeCategory.MIGRATED);
-        assertThat(created.source()).isEqualTo("MANUAL");
-        assertThat(created.projectId()).isNull();
+        var first = saved.getAllValues().get(1);
+        var second = saved.getAllValues().get(2);
+        assertThat(first.workItemId()).isEqualTo(itemA);
+        assertThat(first.startedAt()).isEqualTo(DAY.atTime(9, 0).atZone(ZONE).toInstant());
+        assertThat(first.stoppedAt()).isEqualTo(DAY.atTime(10, 0).atZone(ZONE).toInstant());
+        assertThat(second.workItemId()).isEqualTo(itemB);
+        assertThat(second.startedAt()).isEqualTo(DAY.atTime(10, 0).atZone(ZONE).toInstant());
+        assertThat(second.stoppedAt()).isEqualTo(DAY.atTime(10, 30).atZone(ZONE).toInstant());
+        for (var created : List.of(first, second)) {
+            assertThat(created.timeCategory()).isNull();
+            assertThat(created.source()).isEqualTo("MANUAL");
+            assertThat(created.projectId()).isEqualTo(project);
+            assertThat(created.migrated()).isTrue();
+        }
         verify(shares, times(1)).rebuild(eq(company), eq(member), any(), any());
+        verify(timers).advanceProjects(company, Set.of(project));
         verify(audits, times(1)).append(any(SecurityAuditDraft.class));
     }
 
     @Test
-    void rejectsDuplicateDaysAndUnavailableProjects() {
-        assertThatThrownBy(() -> run(actor, new Request(true, null, List.of(new Entry(member, DAY, 60), new Entry(member, DAY, 30)))))
-                .isInstanceOfSatisfying(ApplicationException.class, e -> assertThat(e.fieldViolations()).extracting(v -> v.code()).containsExactly("DUPLICATE_ENTRY"));
-        UUID archived = UUID.randomUUID();
-        when(projects.findByIds(company, Set.of(archived))).thenReturn(Map.of(archived,
-                new ProjectConnectionTargetQuery.ConnectTargetProjectSnapshot(archived, "P", "项目", ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED)));
-        assertThatThrownBy(() -> run(actor, new Request(true, archived, List.of(new Entry(member, DAY, 60)))))
-                .isInstanceOfSatisfying(ApplicationException.class, e -> assertThat(e.fieldViolations()).extracting(v -> v.code()).containsExactly("PROJECT_UNAVAILABLE"));
+    void reimportOverwritesEveryEarlierMigratedRecordOfTheDay() {
+        var oldA = migratedRecord(itemA, DAY, 9, 10);
+        var oldB = migratedRecord(itemB, DAY, 10, 11);
+        when(timers.mySessions(eq(company), eq(member), any(), any())).thenReturn(rowsOf(oldA, oldB));
+        var rows = List.of(new Row(member, DAY, "交付项目", "接口开发", 90), new Row(member, DAY, "交付项目", "不存在", 30));
+        var result = json.readTree(run(actor, new Request(false, rows)).responseJson());
+
+        assertThat(result.path("replacedMinutes").asLong()).isEqualTo(120);
+        var saved = ArgumentCaptor.forClass(TimeTrackingModels.Session.class);
+        verify(timers, times(3)).save(saved.capture());
+        assertThat(saved.getAllValues().subList(0, 2)).extracting(TimeTrackingModels.Session::id).containsExactly(oldA.id(), oldB.id());
+        assertThat(saved.getAllValues().subList(0, 2)).allMatch(session -> NOW.equals(session.deletedAt()));
+        var created = saved.getAllValues().get(2);
+        assertThat(created.workItemId()).isEqualTo(itemA);
+        assertThat(created.startedAt()).isEqualTo(DAY.atTime(9, 0).atZone(ZONE).toInstant());
+        assertThat(created.stoppedAt()).isEqualTo(DAY.atTime(10, 30).atZone(ZONE).toInstant());
+    }
+
+    @Test
+    void rejectsDaysThatAlreadyHoldTheMembersOwnTime() {
+        var crossing = new TimeTrackingModels.Session(UUID.randomUUID(), company, project, itemB, member,
+                DAY.minusDays(1).atTime(23, 30).atZone(ZONE).toInstant(), DAY.atTime(0, 30).atZone(ZONE).toInstant(), "TIMER", 1, null, null);
+        var migrated = migratedRecord(itemA, DAY, 9, 10);
+        when(timers.mySessions(eq(company), eq(member), any(), any())).thenReturn(rowsOf(crossing, migrated));
+        var rows = List.of(new Row(member, DAY, "交付项目", "接口开发", 60), new Row(member, DAY.plusDays(1), "交付项目", "联调测试", 60));
+        var result = json.readTree(run(actor, new Request(false, rows)).responseJson());
+
+        assertThat(result.path("importedDayCount").asInt()).isEqualTo(1);
+        assertThat(result.path("failedDayCount").asInt()).isEqualTo(1);
+        assertThat(result.path("days").get(0).path("issues").get(0).path("code").asText()).isEqualTo("DAY_HAS_TIME");
+        var saved = ArgumentCaptor.forClass(TimeTrackingModels.Session.class);
+        verify(timers, times(1)).save(saved.capture());
+        assertThat(saved.getValue().workItemId()).isEqualTo(itemB);
+        assertThat(saved.getValue().startedAt()).isEqualTo(DAY.plusDays(1).atTime(9, 0).atZone(ZONE).toInstant());
+    }
+
+    @Test
+    void prefersTheOnlyOpenItemOverArchivedNamesakes() {
+        when(items.findTitles(company, project)).thenReturn(List.of(
+                new WorkItemRepository.WorkItemTitle(itemA, "接口开发", false),
+                new WorkItemRepository.WorkItemTitle(UUID.randomUUID(), "接口开发", true),
+                new WorkItemRepository.WorkItemTitle(itemB, "联调测试", false),
+                new WorkItemRepository.WorkItemTitle(UUID.randomUUID(), "联调测试", false)));
+        var rows = List.of(new Row(member, DAY, "交付项目", "接口开发", 60), new Row(member, DAY, "交付项目", "联调测试", 30));
+        var result = json.readTree(run(actor, new Request(false, rows)).responseJson());
+
+        assertThat(result.path("skippedRows")).isEqualTo(json.valueToTree(List.of(new MigratedTimeImportService.SkippedRow(1, "WORK_ITEM_AMBIGUOUS"))));
+        var saved = ArgumentCaptor.forClass(TimeTrackingModels.Session.class);
+        verify(timers, times(1)).save(saved.capture());
+        assertThat(saved.getValue().workItemId()).isEqualTo(itemA);
+    }
+
+    private TimeTrackingModels.Session migratedRecord(UUID item, LocalDate day, int fromHour, int toHour) {
+        return new TimeTrackingModels.Session(UUID.randomUUID(), company, project, item, member,
+                day.atTime(fromHour, 0).atZone(ZONE).toInstant(), day.atTime(toHour, 0).atZone(ZONE).toInstant(), "MANUAL", 0, null, null, null, null, true);
+    }
+
+    private static List<TimeTrackingModels.MySessionRow> rowsOf(TimeTrackingModels.Session... sessions) {
+        return java.util.Arrays.stream(sessions).map(session -> new TimeTrackingModels.MySessionRow(session, null, null, null, false, false)).toList();
+    }
+
+    @Test
+    void rejectsRowsOutsideTheMinuteRange() {
+        assertThatThrownBy(() -> run(actor, new Request(true, List.of(new Row(member, DAY, "交付项目", "接口开发", 0)))))
+                .isInstanceOfSatisfying(ApplicationException.class, e -> assertThat(e.fieldViolations()).extracting(v -> v.code()).containsExactly("INVALID_RANGE"));
+        assertThatThrownBy(() -> run(actor, new Request(true, List.of(
+                new Row(member, DAY, "交付项目", "接口开发", 800), new Row(member, DAY, "交付项目", "联调测试", 700)))))
+                .isInstanceOfSatisfying(ApplicationException.class, e -> assertThat(e.fieldViolations()).extracting(v -> v.code()).containsExactly("INVALID_RANGE"));
     }
 }

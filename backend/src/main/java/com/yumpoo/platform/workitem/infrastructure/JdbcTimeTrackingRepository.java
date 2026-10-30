@@ -199,14 +199,14 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
     }
     public void save(Session s) {
         jdbc.sql("""
-            INSERT INTO yumpoo.work_item_time_session(id,company_id,project_id,work_item_id,user_id,started_at,stopped_at,source,row_version,deleted_at,change_reason,time_category,category_project_id)
-            VALUES (:id,:c,:p,:w,:u,:start,:stop,:source,:v,:deleted,:reason,:category,:cp)
+            INSERT INTO yumpoo.work_item_time_session(id,company_id,project_id,work_item_id,user_id,started_at,stopped_at,source,row_version,deleted_at,change_reason,time_category,category_project_id,migrated)
+            VALUES (:id,:c,:p,:w,:u,:start,:stop,:source,:v,:deleted,:reason,:category,:cp,:migrated)
             ON CONFLICT (id) DO UPDATE SET started_at=EXCLUDED.started_at,stopped_at=EXCLUDED.stopped_at,
                 row_version=EXCLUDED.row_version,deleted_at=EXCLUDED.deleted_at,change_reason=EXCLUDED.change_reason
             """).param("id", s.id()).param("c", s.companyId()).param("p", s.projectId()).param("w", s.workItemId())
                 .param("u", s.userId()).param("start", Timestamp.from(s.startedAt())).param("stop", timestamp(s.stoppedAt()))
                 .param("source", s.source()).param("v", s.rowVersion()).param("deleted", timestamp(s.deletedAt()))
-                .param("reason", s.changeReason()).param("category", s.timeCategory()==null ? null : s.timeCategory().name()).param("cp",s.categoryProjectId()).update();
+                .param("reason", s.changeReason()).param("category", s.timeCategory()==null ? null : s.timeCategory().name()).param("cp",s.categoryProjectId()).param("migrated", s.migrated()).update();
     }
     public void advanceProjects(UUID companyId, Collection<UUID> ids) {
         ids.stream().distinct().sorted().forEach(id -> jdbc.sql("INSERT INTO yumpoo.work_item_time_revision(company_id,project_id,revision) VALUES (:c,:p,1) ON CONFLICT(company_id,project_id) DO UPDATE SET revision=work_item_time_revision.revision+1")
@@ -276,6 +276,6 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
     private static Instant instant(ResultSet rs, String key) throws SQLException { Timestamp t=rs.getTimestamp(key); return t==null ? null : t.toInstant(); }
     static Session map(ResultSet rs, int n) throws SQLException {
         return new Session(rs.getObject("id",UUID.class),rs.getObject("company_id",UUID.class),rs.getObject("project_id",UUID.class),rs.getObject("work_item_id",UUID.class),rs.getObject("user_id",UUID.class),instant(rs,"started_at"),instant(rs,"stopped_at"),rs.getString("source"),rs.getLong("row_version"),instant(rs,"deleted_at"),rs.getString("change_reason"),
-                Optional.ofNullable(rs.getString("time_category")).map(TimeCategory::valueOf).orElse(null),rs.getObject("category_project_id",UUID.class));
+                Optional.ofNullable(rs.getString("time_category")).map(TimeCategory::valueOf).orElse(null),rs.getObject("category_project_id",UUID.class),rs.getBoolean("migrated"));
     }
 }

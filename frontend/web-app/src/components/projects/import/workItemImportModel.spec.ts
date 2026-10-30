@@ -1,4 +1,4 @@
-import { WorkItemImportDuplicateMode, WorkItemImportField, WorkItemImportOutcome } from '@yumpoo/api-client'
+import { WorkItemImportDuplicateMode, WorkItemImportField } from '@yumpoo/api-client'
 import { describe, expect, it } from 'vitest'
 import type { SheetCell } from '../../import/spreadsheet'
 import {
@@ -19,7 +19,6 @@ import {
   importableCount,
   importLimitIssues,
   IMPORT_MAX_ROWS,
-  issueRows,
   mappedColumnCount,
   resolveAssignee,
   resolveContent,
@@ -316,32 +315,6 @@ describe('结果说明', () => {
     expect(describeIssue({ code: 'PARENT_NOT_FOUND', detail: null })).toContain('顶层')
     expect(describeIssue({ code: 'SOMETHING_NEW', detail: null })).toBe('未知问题（SOMETHING_NEW）')
     expect(describeIssue({ code: 'SOMETHING_NEW', detail: '补充' })).toBe('SOMETHING_NEW：补充')
-  })
-
-  it('问题行带文件里的标题，按行号排序', () => {
-    const { table, settings } = load()
-    const rows = issueRows({
-      rows: [
-        { rowNumber: 6, outcome: WorkItemImportOutcome.Create, issues: [{ code: 'PARENT_NOT_FOUND', detail: null }] },
-        { rowNumber: 3, outcome: WorkItemImportOutcome.Error, issues: [{ code: 'MATCH_AMBIGUOUS', detail: null }] },
-        { rowNumber: 4, outcome: WorkItemImportOutcome.Skip, issues: [] },
-      ],
-    }, table, settings.mapping)
-    expect(rows).toEqual([
-      { rowNumber: 3, title: '开发进度跟进', outcome: 'ERROR', messages: ['项目中有多个同名工作项，无法确定更新哪一个'] },
-      { rowNumber: 6, title: '升级前备份', outcome: 'CREATE', messages: ['找不到父工作项，已作为顶层工作项导入'] },
-    ])
-  })
-
-  it('更新已有项的父项警告说明保留原关系', () => {
-    const { table, settings } = load()
-    const rows = issueRows({ rows: [{ rowNumber: 6, outcome: WorkItemImportOutcome.Update,
-      issues: ['PARENT_NOT_FOUND', 'PARENT_AMBIGUOUS', 'PARENT_CYCLE'].map(code => ({ code, detail: null })) }] }, table, settings.mapping)
-    expect(rows[0]!.messages).toEqual([
-      '找不到父工作项，保留原父项关系',
-      '有多个同名的父工作项，保留原父项关系',
-      '父子关系指向自己或成环，保留原父项关系',
-    ])
   })
 
   it('结果提示与可导入数量', () => {

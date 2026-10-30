@@ -1,9 +1,9 @@
 <script setup lang="ts">
+import YpNotice from '../../components/yp/YpNotice.vue'
 import { Close, Filter, Search } from '@element-plus/icons-vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  ElAlert,
   ElButton,
   ElCheckbox,
   ElDrawer,
@@ -649,13 +649,13 @@ watch(
       <span>{{ entries.length }} 条（最多保留 500 条）</span>
     </div>
   </div>
-  <el-alert
+  <yp-notice
     v-if="warning || histogram.data.value?.partial"
     class="log-notice"
-    type="warning"
-    :title="warning || '直方图为部分结果，请缩小范围重查。'"
-    :closable="false"
-  />
+    tone="warning"
+  >
+    {{ warning || '直方图为部分结果，请缩小范围重查。' }}
+  </yp-notice>
   <inline-problem
     v-if="histogram.error.value"
     :problem="histogram.error.value"
@@ -704,12 +704,12 @@ watch(
     <inline-problem
       v-if="trace.error.value"
       :problem="trace.error.value"
-    /><el-alert
+    /><yp-notice
       v-if="trace.data.value?.partial || trace.data.value?.nextCursor"
-      title="仅显示部分关联记录，可用 Request ID 在历史查询中缩小范围查看。"
-      type="warning"
-      :closable="false"
-    /><operations-log-stream
+      tone="warning"
+    >
+      仅显示部分关联记录，可用 Request ID 在历史查询中缩小范围查看。
+    </yp-notice><operations-log-stream
       :entries="[...(trace.data.value?.items ?? [])].reverse()"
       :relative-to="trace.data.value?.items.at(-1)?.record.time"
     />

@@ -172,6 +172,15 @@ public record WorkItem(
                 deletedAt, deletedByUserId, deleteReason, archived);
     }
 
+    /** Imported items reach DONE without a known completion moment; the import time must not stand in for it. */
+    public WorkItem withoutCompletionTime() {
+        return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo,
+                title, statusCode, statusCategory, priority, assigneeUserIds, reporterUserId,
+                description, notes, timelineStartDate, timelineEndDate, dueDate, dueTime, null, rank,
+                projectSortKey, rowVersion, createdAt, createdByUserId, updatedAt, updatedByUserId,
+                deletedAt, deletedByUserId, deleteReason, archived);
+    }
+
     public WorkItem reorder(String nextRank, UUID actorUserId, Instant now) {
         Objects.requireNonNull(actorUserId, "actorUserId must not be null");
         Objects.requireNonNull(now, "now must not be null");

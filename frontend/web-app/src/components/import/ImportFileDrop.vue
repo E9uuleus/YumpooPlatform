@@ -129,7 +129,7 @@ const open = (): void => {
 
 .import-drop__error {
   margin: 0;
-  color: var(--yp-status-red-foreground);
+  color: var(--yp-status-red);
   font-size: 13px;
 }
 </style>

@@ -1,3 +1,4 @@
+import YpNotice from '../../components/yp/YpNotice.vue'
 import {
   AccountStatus,
   AuthenticationClientType,
@@ -12,7 +13,7 @@ import {
   type MemberPage,
 } from '@yumpoo/api-client'
 import { flushPromises, mount } from '@vue/test-utils'
-import { ElAlert, ElButton, ElDialog, ElInput, ElMessageBox, ElRadioGroup } from 'element-plus'
+import { ElButton, ElDialog, ElInput, ElMessageBox, ElRadioGroup } from 'element-plus'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useSession } from '../../composables/useSession'
 import IdentityMembersView from './IdentityMembersView.vue'
@@ -176,10 +177,10 @@ describe('成员版本冲突', () => {
     await flushPromises()
     await wrapper.findAll('button').find(item => item.text() === '更改角色')?.trigger('click')
     await flushPromises()
-    expect(wrapper.findComponent(ElAlert).exists()).toBe(false)
+    expect(wrapper.findComponent(YpNotice).exists()).toBe(false)
     wrapper.findComponent(ElRadioGroup).vm.$emit('update:modelValue', nextTier)
     await flushPromises()
-    expect(wrapper.findComponent(ElAlert).props('title')).toBe('该成员的登录会话将失效')
+    expect(wrapper.findComponent(YpNotice).props('title')).toBe('该成员的登录会话将失效')
     wrapper.unmount()
   })
 
@@ -202,7 +203,7 @@ describe('成员版本冲突', () => {
       .find(button => button.text() === '当前角色')
     expect(submit).toBeDefined()
     expect(submit?.props('disabled')).toBe(true)
-    expect(wrapper.findComponent(ElAlert).exists()).toBe(false)
+    expect(wrapper.findComponent(YpNotice).exists()).toBe(false)
     submit?.vm.$emit('click')
     await flushPromises()
     expect(api.changeMemberPlatformRole).not.toHaveBeenCalled()

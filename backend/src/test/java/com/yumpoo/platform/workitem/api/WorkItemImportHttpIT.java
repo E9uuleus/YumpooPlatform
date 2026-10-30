@@ -8,6 +8,7 @@ import com.yumpoo.platform.identityaccess.application.session.SessionService;
 import com.yumpoo.platform.identityaccess.application.verification.IdentityAcceptanceFixtureProvisioner;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
 import com.yumpoo.platform.workitem.application.WorkItemLabelRepository;
+import com.yumpoo.platform.workitem.application.WorkItemRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -55,6 +56,7 @@ class WorkItemImportHttpIT {
     @Autowired private ObjectMapper json;
     @Autowired private PlatformTransactionManager transactionManager;
     @Autowired private WorkItemLabelRepository labels;
+    @Autowired private WorkItemRepository items;
 
     private ActorFixture owner;
     private ActorFixture member;
@@ -107,7 +109,7 @@ class WorkItemImportHttpIT {
         assertThat(result.path("rows").get(2).path("issues").get(0).path("code").asText())
                 .isEqualTo("PARENT_FLATTENED");
         assertThat(jdbc.sql("SELECT status_code || ':' || (completed_at IS NOT NULL) FROM yumpoo.work_item "
-                        + "WHERE title='父需求'").query(String.class).single()).isEqualTo("DONE:true");
+                        + "WHERE title='父需求'").query(String.class).single()).isEqualTo("DONE:false");
         assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_assignee WHERE user_id=:id")
                 .param("id", member.userId()).query(Long.class).single()).isEqualTo(1);
         assertThat(jdbc.sql("SELECT title FROM yumpoo.work_item ORDER BY project_sort_key")
@@ -150,7 +152,7 @@ class WorkItemImportHttpIT {
         assertThat(jdbc.sql("SELECT status_code FROM yumpoo.work_item WHERE title='父需求'")
                 .query(String.class).single()).isEqualTo("IN_PROGRESS");
         assertThat(jdbc.sql("SELECT status_code || ':' || (completed_at IS NOT NULL) FROM yumpoo.work_item "
-                        + "WHERE title='子任务'").query(String.class).single()).isEqualTo("DONE:true");
+                        + "WHERE title='子任务'").query(String.class).single()).isEqualTo("DONE:false");
         assertThat(count("work_item_relation WHERE deleted_at IS NULL")).isZero();
         assertThat(count("work_item_relation WHERE deleted_at IS NOT NULL")).isEqualTo(1);
         assertThat(count("outbox_event WHERE event_type LIKE 'workitem.work_item%'")).isZero();
@@ -184,6 +186,17 @@ class WorkItemImportHttpIT {
         }
         assertThat(count("work_item")).isEqualTo(4);
         assertThat(count("work_item_relation WHERE deleted_at IS NULL")).isEqualTo(1);
+    }
+
+    @Test
+    void migratedTimeTitleLookupIncludesArchivedItems() throws Exception {
+        ok(post(owner, request(false, "CREATE", List.of("STATUS"),
+                row(1, "已归档项", "NOT_STARTED", null, null),
+                row(2, "进行中项", "NOT_STARTED", null, null))));
+        jdbc.sql("UPDATE yumpoo.work_item SET archived=true WHERE title='已归档项'").update();
+
+        assertThat(items.findTitles(COMPANY_ID, PROJECT_ID)).extracting(item -> item.title() + ":" + item.archived())
+                .containsExactlyInAnyOrder("已归档项:true", "进行中项:false");
     }
 
     private ObjectNode request(boolean dryRun, String mode, List<String> fields, ObjectNode... rows) {

@@ -36,3 +36,10 @@ describe('富文本编辑器 CSP 约束', () => {
     }
   })
 })
+
+describe('提醒条约束', () => {
+  it('提醒条统一使用 YpNotice，不直接使用 el-alert', () => {
+    const offenders = Object.entries(editorSources).filter(([, source]) => /<el-alert\b|\bElAlert\b/u.test(source)).map(([path]) => path)
+    expect(offenders).toEqual([])
+  })
+})

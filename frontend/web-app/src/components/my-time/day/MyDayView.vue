@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import YpNotice from '../../yp/YpNotice.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, toRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElAlert, ElButton, ElMessage, ElPopover } from 'element-plus'
+import { ElButton, ElMessage, ElPopover } from 'element-plus'
 import { TimeSessionFillMode } from '@yumpoo/api-client'
 import type { SubjectOption } from '../../timer/timeCategories'
 import { useTimeTracker } from '../../../composables/useTimeTracker'
@@ -150,20 +151,22 @@ onBeforeUnmount(() => {
         <TimePreferencesPopover />
       </template>
     </DayHeader>
-    <el-alert
+    <yp-notice
       v-if="problem"
       class="my-day__alert"
-      :title="problem"
-      type="error"
-      :closable="false"
+      tone="danger"
     >
-      <el-button
-        text
-        @click="load()"
-      >
-        重试
-      </el-button>
-    </el-alert>
+      {{ problem }}
+
+      <template #actions>
+        <el-button
+          text
+          @click="load()"
+        >
+          重试
+        </el-button>
+      </template>
+    </yp-notice>
     <div
       v-loading="loading && !page"
       class="my-day__body"

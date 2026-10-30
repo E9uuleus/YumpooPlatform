@@ -1,4 +1,4 @@
-/** 浏览器端读取 csv / xlsx / xls 的第一个工作表；SheetJS 体积大，只在读取时加载。 */
+/** 浏览器端读取 csv / xlsx / xls；SheetJS 体积大，只在读取时加载。 */
 export type SheetCell = string | number | Date | null
 
 export const SPREADSHEET_MAX_BYTES = 5 * 1024 * 1024
@@ -35,8 +35,11 @@ export function decodeCsv(buffer: ArrayBuffer): string {
   }
 }
 
-/** 只读第一个工作表，保留原始单元格；日期单元格读成 Date，空单元格是 null。 */
-export async function readSpreadsheet(file: File): Promise<SheetCell[][]> {
+export interface WorkbookSheet { name: string; rows: SheetCell[][] }
+
+type Xlsx = typeof import('xlsx')
+
+async function openWorkbook(file: File): Promise<{ XLSX: Xlsx; book: import('xlsx').WorkBook }> {
   const invalid = validateSpreadsheetFile(file)
   if (invalid) throw new SpreadsheetError(invalid)
   const buffer = await file.arrayBuffer()
@@ -49,10 +52,23 @@ export async function readSpreadsheet(file: File): Promise<SheetCell[][]> {
   } catch {
     throw new SpreadsheetError('无法读取该文件，请确认它是有效的表格文件。')
   }
-  const sheet = book.Sheets[book.SheetNames[0] ?? '']
-  if (!sheet) throw new SpreadsheetError('文件里没有工作表。')
-  const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: true, defval: null, blankrows: true })
-  return trimTrailingBlanks(rows.map(row => row.map(normalizeCell)))
+  if (!book.SheetNames.length) throw new SpreadsheetError('文件里没有工作表。')
+  return { XLSX, book }
+}
+
+const sheetRows = (XLSX: Xlsx, sheet: import('xlsx').WorkSheet): SheetCell[][] =>
+  trimTrailingBlanks(XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: true, defval: null, blankrows: true }).map(row => row.map(normalizeCell)))
+
+/** 读取全部工作表，保留原始单元格；日期单元格读成 Date，空单元格是 null。 */
+export async function readWorkbook(file: File): Promise<WorkbookSheet[]> {
+  const { XLSX, book } = await openWorkbook(file)
+  return book.SheetNames.map(name => ({ name, rows: sheetRows(XLSX, book.Sheets[name]!) }))
+}
+
+/** 只读第一个工作表，规则同 readWorkbook。 */
+export async function readSpreadsheet(file: File): Promise<SheetCell[][]> {
+  const { XLSX, book } = await openWorkbook(file)
+  return sheetRows(XLSX, book.Sheets[book.SheetNames[0]!]!)
 }
 
 /** 去掉尾部全空的行与列（工作表范围常比内容大），其余行补齐到同一宽度；中间的空行保留，行号不变。 */

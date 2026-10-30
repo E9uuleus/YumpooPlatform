@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ElAlert, ElButton } from 'element-plus'
+import YpNotice from './yp/YpNotice.vue'
+import { ElButton } from 'element-plus'
 import { computed, ref } from 'vue'
 import {
   problemMessage,
@@ -33,17 +34,12 @@ async function copyRequestId(): Promise<void> {
 </script>
 
 <template>
-  <el-alert
+  <yp-notice
     class="inline-error"
-    type="error"
-    :closable="false"
-    :title="title ?? message"
-    show-icon
+    tone="danger"
+    :title="title"
   >
-    <p
-      v-if="title"
-      class="problem-message"
-    >
+    <p class="problem-message">
       {{ message }}
     </p>
     <div
@@ -65,5 +61,5 @@ async function copyRequestId(): Promise<void> {
     >
       建议等待 {{ retryAfter }} 秒后重试。
     </p>
-  </el-alert>
+  </yp-notice>
 </template>

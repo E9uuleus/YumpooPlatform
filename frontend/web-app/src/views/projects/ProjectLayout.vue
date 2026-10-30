@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { usePageLoad } from '../../brand/page-progress'
-
 import { ProjectLifecycle, type ProjectDetail } from '@yumpoo/api-client'
-import { ElAlert } from 'element-plus'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { projectsApi } from '../../api/client'
+import { usePageLoad } from '../../brand/page-progress'
 import { projectStatus } from '../../components/projects/projectStatus'
+import YpNotice from '../../components/yp/YpNotice.vue'
 import { PROJECT_LIFECYCLE_CHANGED } from '../../composables/projectLifecycleEvents'
 
 const pageLoad = usePageLoad()
@@ -33,23 +32,20 @@ onBeforeUnmount(() => { request++; window.removeEventListener(PROJECT_LIFECYCLE_
     class="project-workspace"
     :class="{ 'project-workspace--archived': project && projectStatus(project) !== 'ACTIVE' }"
   >
-    <el-alert
+    <yp-notice
       v-if="project?.lifecycle === ProjectLifecycle.Archived"
       class="archived-project-banner"
-      type="error"
-      effect="dark"
-      :closable="false"
-      show-icon
-      title="项目已归档，当前为只读浏览。仅负责人和企业管理员可访问或恢复，归档项目不计入统计。"
-    />
-    <el-alert
+      tone="danger"
+    >
+      项目已归档，当前为只读浏览。仅负责人和企业管理员可访问或恢复，归档项目不计入统计。
+    </yp-notice>
+    <yp-notice
       v-else-if="project?.endedAt"
       class="ended-project-banner"
-      type="info"
-      :closable="false"
-      show-icon
-      title="项目已结束，内容为只读，仍计入统计。负责人或公司管理员可以在「设置」中重新打开。"
-    />
+      tone="info"
+    >
+      项目已结束，内容为只读，仍计入统计。负责人或公司管理员可以在「设置」中重新打开。
+    </yp-notice>
     <router-view :key="route.name === 'project-statistics' ? String(route.params.projectId) : 'project-page'" />
   </section>
 </template>
@@ -67,16 +63,7 @@ onBeforeUnmount(() => { request++; window.removeEventListener(PROJECT_LIFECYCLE_
 }
 
 .archived-project-banner {
-  --el-color-error: var(--yp-status-red);
-  --el-color-white: var(--yp-status-red-foreground);
-
   align-self: start;
   min-height: 36px;
-  padding: var(--yp-space-2) var(--yp-space-3);
 }
-
-.archived-project-banner :deep(.el-alert__title) {
-  line-height: 20px;
-}
-
 </style>

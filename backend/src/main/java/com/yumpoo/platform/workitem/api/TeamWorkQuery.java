@@ -27,7 +27,7 @@ public interface TeamWorkQuery {
     List<TimeEntry> ownTimeEntries(CurrentActor actor, List<UUID> projectIds, LocalDate from, LocalDate to, ZoneId zone, Instant asOf);
     TaskPage ownCurrentTasks(CurrentActor actor, List<UUID> projectIds, LocalDate today, int offset, int limit);
 
-    record TimeEntry(UUID userId, UUID workItemId, UUID projectId, String itemNo, String title, LocalDate date, long durationMs) {}
+    record TimeEntry(UUID userId, UUID workItemId, UUID projectId, String itemNo, String title, LocalDate date, long durationMs, long migratedDurationMs) {}
     /** timeCategory is the code of a fixed non-project category, e.g. MEETING. */
     record CategoryEntry(UUID userId, String timeCategory, UUID projectId, LocalDate date, long durationMs) {}
     /** A null user groups open work without assignees; `todo` is the initial status only, `other` the TODO statuses members added. */

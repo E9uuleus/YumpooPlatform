@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import YpNotice from '../yp/YpNotice.vue'
 import { computed, ref } from 'vue'
-import { ElAlert, ElButton, ElIcon, ElMessage } from 'element-plus'
+import { ElButton, ElIcon, ElMessage } from 'element-plus'
 import { ArrowDown, ArrowRight, Download } from '@element-plus/icons-vue'
 import type { TeamTimesheet } from '@yumpoo/api-client'
 import YpAssignee from '../yp/YpAssignee.vue'
@@ -64,19 +65,21 @@ async function exportExcel() {
       v-loading="loading"
       class="team-body"
     >
-      <el-alert
+      <yp-notice
         v-if="error"
-        :title="sheet ? `刷新失败，当前显示上次数据。${error}` : error"
-        type="error"
-        :closable="false"
+        tone="danger"
       >
-        <el-button
-          text
-          @click="emit('retry')"
-        >
-          重试
-        </el-button>
-      </el-alert>
+        {{ sheet ? `刷新失败，当前显示上次数据。${error}` : error }}
+
+        <template #actions>
+          <el-button
+            text
+            @click="emit('retry')"
+          >
+            重试
+          </el-button>
+        </template>
+      </yp-notice>
       <p class="team-summary">
         合计 <strong>{{ shortHours(model.totalMs) }}</strong> 小时 · 有工时项目 <strong>{{ projectCount }}</strong><template v-if="sheet">
           · 统计至 {{ formatTimestamp(sheet.asOf, timezone) }}

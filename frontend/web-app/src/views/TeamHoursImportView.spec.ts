@@ -1,18 +1,18 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { MigratedTimeImportOutcome, type MigratedTimeImportResult } from '@yumpoo/api-client'
+import { MigratedTimeImportOutcome, type MigratedTimeImportRow, type MigratedTimeImportResult } from '@yumpoo/api-client'
 
 const api = vi.hoisted(() => ({ getTeamDashboardOptions: vi.fn(), importMigratedTime: vi.fn() }))
-const sheet = vi.hoisted(() => ({ readSpreadsheet: vi.fn() }))
+const sheet = vi.hoisted(() => ({ readWorkbook: vi.fn() }))
 const push = vi.hoisted(() => vi.fn())
 vi.mock('../api/client', () => ({ teamDashboardApi: api }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
 vi.mock('@yumpoo/api-client', async importOriginal => ({ ...await importOriginal<typeof import('@yumpoo/api-client')>(), readCsrfToken: () => 'csrf' }))
-vi.mock('../components/import/spreadsheet', async importOriginal => ({ ...await importOriginal<typeof import('../components/import/spreadsheet')>(), readSpreadsheet: sheet.readSpreadsheet }))
+vi.mock('../components/import/spreadsheet', async importOriginal => ({ ...await importOriginal<typeof import('../components/import/spreadsheet')>(), readWorkbook: sheet.readWorkbook }))
 vi.mock('element-plus', async importOriginal => ({ ...await importOriginal<typeof import('element-plus')>(), ElMessage: { success: vi.fn(), error: vi.fn() } }))
 import TeamHoursImportView from './TeamHoursImportView.vue'
 
-const preview = (): MigratedTimeImportResult => ({ dryRun: true, importedDayCount: 1, clearedDayCount: 0, failedDayCount: 1, importedMinutes: 450, replacedMinutes: 0,
+const preview = (): MigratedTimeImportResult => ({ dryRun: true, importedDayCount: 1, failedDayCount: 1, importedMinutes: 450, replacedMinutes: 0, skippedMinutes: 60, skippedRows: [{ index: 2, code: 'WORK_ITEM_NOT_FOUND' }],
   days: [{ userId: 'u1', workDate: new Date('2026-09-01'), minutes: 450, outcome: MigratedTimeImportOutcome.Import, segmentCount: 1, issues: [] },
     { userId: 'u1', workDate: new Date('2026-09-02'), minutes: 600, outcome: MigratedTimeImportOutcome.Error, segmentCount: 0, issues: [{ code: 'NOT_ENOUGH_FREE_TIME', detail: null }] }] })
 
@@ -41,7 +41,7 @@ describe('迁入工时页面', () => {
   })
 
   it('有错误的表格不能进入下一步', async () => {
-    sheet.readSpreadsheet.mockResolvedValue([['姓名', '2026-09-01'], ['张三', 30]])
+    sheet.readWorkbook.mockResolvedValue([{ name: '张三', rows: [['责任人', '日期', '标题', '花费工时', '工作量单位', '所属项目'], ['张三', '2026-09-01', '开发', 30, '人时', '交付']] }])
     const wrapper = mountPage()
     await flushPromises()
     await upload(wrapper)
@@ -51,7 +51,11 @@ describe('迁入工时页面', () => {
   })
 
   it('匹配在职成员后预览，再按自然日提交并回到成员工时', async () => {
-    sheet.readSpreadsheet.mockResolvedValue([['姓名', '2026-09-01', '2026-09-02'], ['张三', 7.5, 10], ['李四', 8, null]])
+    sheet.readWorkbook.mockResolvedValue([
+      { name: '张三', rows: [['责任人', '日期', '标题', '花费工时', '工作量单位', '所属项目'],
+        ['张三', '2026-09-01', '开发', 7.5, '人时', '交付'], [null, '2026-09-02', '开发', 10, '人时', '交付'], [null, null, '不存在', 1, '人时', '交付']] },
+      { name: '李四', rows: [['责任人', '日期', '标题', '花费工时', '工作量单位', '所属项目'], ['李四', '2026-09-01', '开发', 8, '人时', '交付']] },
+    ])
     const wrapper = mountPage()
     await flushPromises()
     await upload(wrapper)
@@ -60,10 +64,13 @@ describe('迁入工时页面', () => {
     await flushPromises()
     const dry = api.importMigratedTime.mock.calls[0]![0]
     expect(dry.migratedTimeImportRequest.dryRun).toBe(true)
-    expect(dry.migratedTimeImportRequest.categoryProjectId).toBeNull()
-    expect(dry.migratedTimeImportRequest.entries.map((entry: { userId: string; minutes: number; workDate: Date }) => [entry.userId, entry.minutes, entry.workDate.toISOString().slice(0, 10)]))
-      .toEqual([['u1', 450, '2026-09-01'], ['u1', 600, '2026-09-02']])
+    expect(dry.migratedTimeImportRequest).not.toHaveProperty('categoryProjectId')
+    expect(dry.migratedTimeImportRequest.rows.map((row: MigratedTimeImportRow) => [row.userId, row.workDate.toISOString().slice(0, 10), row.projectName, row.workItemTitle, row.minutes]))
+      .toEqual([['u1', '2026-09-01', '交付', '开发', 450], ['u1', '2026-09-02', '交付', '开发', 600], ['u1', '2026-09-02', '交付', '不存在', 60]])
+    expect(wrapper.text()).toContain('项目中没有该工作项')
+    expect(wrapper.text()).toContain('请先执行工作项导入')
     expect(wrapper.text()).toContain('当天空闲时间不够，未写入')
+    expect(wrapper.text()).toContain('11未迁入小时')
     await button(wrapper, '迁入').trigger('click')
     await flushPromises()
     const commit = api.importMigratedTime.mock.calls[1]![0]

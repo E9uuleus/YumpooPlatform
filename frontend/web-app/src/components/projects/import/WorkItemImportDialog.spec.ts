@@ -85,7 +85,8 @@ describe('导入工作项弹窗', () => {
     await button('下一步').click()
     await flushPromises()
     expect(document.body.textContent).toContain('工时不在这里导入')
-    expect(document.body.textContent).toContain('已映射 4 · 不导入 0')
+    expect(document.body.querySelector('.wi-stat-chips')?.textContent).toContain('已映射 4')
+    expect(document.body.querySelector('.wi-stat-chips')?.textContent).toContain('不导入 0')
     expect(button('下一步').disabled).toBe(true)
 
     expect(document.body.querySelector('.is-unresolved')?.closest('li')?.textContent).toContain('李刚')
@@ -147,9 +148,26 @@ describe('导入工作项弹窗', () => {
     await button('下一步').click()
     await flushPromises()
     expect(button('导入 0 项').disabled).toBe(true)
-    await [...document.body.querySelectorAll<HTMLButtonElement>('button')].find(item => item.textContent?.includes('问题列表'))!.click()
+    expect(document.body.querySelector('.wi-preview')?.textContent).toContain('项目中有多个同名工作项，无法确定更新哪一个')
+    expect([...document.body.querySelectorAll('.wi-preview__no')].map(cell => cell.textContent)).toContain('3')
+
+    const issueFilter = () => document.body.querySelector<HTMLInputElement>('.wi-preview__toolbar input[type="checkbox"]')!
+    issueFilter().click()
     await flushPromises()
-    expect(document.body.querySelector('.wi-issues')?.textContent).toContain('项目中有多个同名工作项，无法确定更新哪一个')
-    expect(document.body.querySelector('.wi-issues')?.textContent).toContain('第 3 行')
+    expect(document.body.querySelectorAll('.wi-preview__no')).toHaveLength(1)
+
+    api.importWorkItems.mockResolvedValue(result({
+      rows: [
+        { rowNumber: 2, outcome: 'CREATE', issues: [] },
+        { rowNumber: 3, outcome: 'CREATE', issues: [] },
+      ] as WorkItemImportResult['rows'],
+    }))
+    await document.body.querySelectorAll<HTMLButtonElement>('.yp-choice-card')[0]!.click()
+    await flushPromises()
+    expect(issueFilter().checked).toBe(true)
+    expect(issueFilter().disabled).toBe(false)
+    issueFilter().click()
+    await flushPromises()
+    expect(document.body.querySelectorAll('.wi-preview__no')).toHaveLength(2)
   })
 })

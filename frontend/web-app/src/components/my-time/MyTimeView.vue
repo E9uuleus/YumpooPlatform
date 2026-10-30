@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import YpNotice from '../yp/YpNotice.vue'
 import { usePageLoad } from '../../brand/page-progress'
 
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElAlert, ElButton, ElIcon } from 'element-plus'
+import { ElButton, ElIcon } from 'element-plus'
 import { ArrowLeft, ArrowRight, Calendar } from '@element-plus/icons-vue'
 import type { TeamTimesheet } from '@yumpoo/api-client'
 import { myWorkApi } from '../../api/client'
@@ -157,19 +158,21 @@ defineExpose({ refresh: load, loading, ready })
       v-loading="loading && !row"
       class="my-time__body"
     >
-      <el-alert
+      <yp-notice
         v-if="error"
-        :title="row ? `刷新失败，当前显示上次数据。${error}` : error"
-        type="error"
-        :closable="false"
+        tone="danger"
       >
-        <el-button
-          text
-          @click="load"
-        >
-          重试
-        </el-button>
-      </el-alert>
+        {{ row ? `刷新失败，当前显示上次数据。${error}` : error }}
+
+        <template #actions>
+          <el-button
+            text
+            @click="load"
+          >
+            重试
+          </el-button>
+        </template>
+      </yp-notice>
       <div
         class="my-time__stats"
         data-tour="my-time-stats"

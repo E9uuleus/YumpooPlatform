@@ -1,9 +1,9 @@
 <script setup lang="ts">
+import YpNotice from '../../yp/YpNotice.vue'
 import { computed, ref, watch } from 'vue'
 import { ElButton } from 'element-plus'
 import { Close } from '@element-plus/icons-vue'
 import { workItemLabelColorValue } from '../../projects/workItemLabelColors'
-import { isMigratedCategory } from '../../timer/timeCategories'
 import { companyDateTime } from '../../timer/timeFormat'
 import ItemPicker from './ItemPicker.vue'
 import TimeField from './TimeField.vue'
@@ -117,30 +117,35 @@ function save() { if (!problem.value) emit('save', { start: start.value, end: en
     >
       {{ problem }}
     </p>
-    <p
+    <yp-notice
       v-if="share.maxParallel > 1"
       class="block-popover__note"
+      size="small"
     >
       与其他 {{ share.maxParallel - 1 }} 项并行 · 当天计入 {{ durationLabel(share.allocatedMs) }}
-    </p>
-    <p
+    </yp-notice>
+    <yp-notice
       v-if="running"
       class="block-popover__note"
+      size="small"
     >
       正在计时，停止后才能调整时段或归属。
-    </p>
-    <p
-      v-else-if="isMigratedCategory(block.timeCategory)"
+    </yp-notice>
+    <yp-notice
+      v-else-if="block.migrated"
       class="block-popover__note"
+      size="small"
     >
       迁入工时由管理员按日迁入，排出的时段不代表实际工作时间，成员不能修改。
-    </p>
-    <p
+    </yp-notice>
+    <yp-notice
       v-else-if="!block.canEdit"
       class="block-popover__note"
+      size="small"
+      tone="warning"
     >
       这条记录所属的项目已归档、工作项已删除，或你已没有写权限，不能修改。
-    </p>
+    </yp-notice>
 
     <ItemPicker
       v-if="view === 'reassign'"
@@ -244,7 +249,7 @@ function save() { if (!problem.value) emit('save', { start: start.value, end: en
 .block-popover__fixed{color:var(--yp-text-primary);font:13px var(--yp-font-mono);font-variant-numeric:tabular-nums}
 .block-popover__duration{margin-left:auto;color:var(--yp-text-primary);font:600 13px var(--yp-font-mono);font-variant-numeric:tabular-nums}
 .block-popover__problem{margin:0;color:var(--yp-status-red);font-size:12px}
-.block-popover__note{margin:0;padding:6px 8px;border-radius:var(--yp-radius-sm);background:var(--yp-bg-sunken);color:var(--yp-text-secondary);font-size:12px;line-height:18px}
+.block-popover__note { margin: 0; }
 .block-popover__foot{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 .block-popover__foot .el-button+.el-button{margin-left:0}
 .block-popover__foot.is-confirm span{flex:1;color:var(--yp-text-primary);font-size:13px}

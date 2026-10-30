@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import YpNotice from '../yp/YpNotice.vue'
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElAlert, ElButton, ElIcon } from 'element-plus'
+import { ElButton, ElIcon } from 'element-plus'
 import { ArrowRight } from '@element-plus/icons-vue'
 import type { TeamMemberTask, TeamWorkload } from '@yumpoo/api-client'
 import YpAssignee from '../yp/YpAssignee.vue'
@@ -74,19 +75,21 @@ const labelStyle = (token: string | null | undefined) => ({ backgroundColor: wor
       v-loading="loading"
       class="team-body"
     >
-      <el-alert
+      <yp-notice
         v-if="error"
-        :title="workload ? `刷新失败，当前显示上次数据。${error}` : error"
-        type="error"
-        :closable="false"
+        tone="danger"
       >
-        <el-button
-          text
-          @click="emit('retry')"
-        >
-          重试
-        </el-button>
-      </el-alert>
+        {{ workload ? `刷新失败，当前显示上次数据。${error}` : error }}
+
+        <template #actions>
+          <el-button
+            text
+            @click="emit('retry')"
+          >
+            重试
+          </el-button>
+        </template>
+      </yp-notice>
       <div class="team-groups">
         <div
           v-for="(row, index) in visible"
@@ -147,12 +150,12 @@ const labelStyle = (token: string | null | undefined) => ({ backgroundColor: wor
               class="team-workload__tasks"
             >
               <div class="team-workload__tasks-inner">
-                <el-alert
+                <yp-notice
                   v-if="tasks.get(row.key)?.error"
-                  :title="tasks.get(row.key)!.error"
-                  type="error"
-                  :closable="false"
-                />
+                  tone="danger"
+                >
+                  {{ tasks.get(row.key)!.error }}
+                </yp-notice>
                 <div
                   v-loading="tasks.get(row.key)?.loading && !tasks.get(row.key)?.items.length"
                   class="team-tasks-wrap work-item-accent-bar"

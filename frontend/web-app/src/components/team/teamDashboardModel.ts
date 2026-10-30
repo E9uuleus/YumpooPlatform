@@ -1,7 +1,7 @@
 import { WorkItemLabelColorToken, type TeamTimesheet } from '@yumpoo/api-client'
 import { formatDateOnly } from '../../design-system/dates'
 import { workItemLabelColorValue } from '../projects/workItemLabelColors'
-import { categoryKey, categoryOf, isMigratedCategory, NON_PROJECT_COLOR, NON_PROJECT_KEY, NON_PROJECT_LABEL, timeCategory } from '../timer/timeCategories'
+import { categoryKey, isMigratedCategory, NON_PROJECT_COLOR, NON_PROJECT_KEY, NON_PROJECT_LABEL, timeCategory } from '../timer/timeCategories'
 
 export type PeriodKind = 'WEEK' | 'MONTH' | 'QUARTER'
 /** Inclusive company-calendar dates as `YYYY-MM-DD`. */
@@ -106,8 +106,8 @@ export function hoursMinutes(ms: number): string {
 }
 
 /** `subjectKey` is the work item id or a category key; unlinked category rows group under the 未关联项目 pseudo project. */
-export interface TimesheetItemRow { key: string; subjectKey: string; projectId: string; projectName: string; itemNo: string; title: string; label: string; totalMs: number; days: Record<string, number> }
-export interface TimesheetRow { key: string; userId: string; name: string; active: boolean; totalMs: number; days: Record<string, number>; children: TimesheetItemRow[] }
+export interface TimesheetItemRow { key: string; subjectKey: string; projectId: string; projectName: string; itemNo: string; title: string; label: string; totalMs: number; days: Record<string, number>; migrated: Record<string, number> }
+export interface TimesheetRow { key: string; userId: string; name: string; active: boolean; totalMs: number; days: Record<string, number>; migrated: Record<string, number>; children: TimesheetItemRow[] }
 /** `migrated` marks time imported per day from the old platform; its clock slots are arranged, not worked. */
 export interface DayItem { key: string; itemNo: string; title: string; ms: number; migrated: boolean }
 
@@ -131,25 +131,26 @@ export interface DayProject { projectId: string; projectName: string; totalMs: n
 export function buildTimesheet(sheet: TeamTimesheet): { rows: TimesheetRow[]; dayTotals: Record<string, number>; totalMs: number } {
   const items = new Map(sheet.workItems.map(item => [item.id, item]))
   const rows = new Map<string, TimesheetRow>(sheet.members.map(member => [member.userId,
-    { key: member.userId, userId: member.userId, name: member.displayName, active: member.active, totalMs: 0, days: {}, children: [] }]))
+    { key: member.userId, userId: member.userId, name: member.displayName, active: member.active, totalMs: 0, days: {}, migrated: {}, children: [] }]))
   const dayTotals: Record<string, number> = {}
   let totalMs = 0
-  function add(userId: string, subjectKey: string, day: Date, durationMs: number, describe: () => Omit<TimesheetItemRow, 'key' | 'subjectKey' | 'totalMs' | 'days'>) {
+  function add(userId: string, subjectKey: string, day: Date, durationMs: number, migratedMs: number, describe: () => Omit<TimesheetItemRow, 'key' | 'subjectKey' | 'totalMs' | 'days' | 'migrated'>) {
     const row = rows.get(userId)
     if (!row) return
     const date = fromApiDate(day)
     let child = row.children.find(c => c.subjectKey === subjectKey)
-    if (!child) row.children.push(child = { key: `${row.userId}:${subjectKey}`, subjectKey, ...describe(), totalMs: 0, days: {} })
+    if (!child) row.children.push(child = { key: `${row.userId}:${subjectKey}`, subjectKey, ...describe(), totalMs: 0, days: {}, migrated: {} })
     for (const target of [row, child]) { target.totalMs += durationMs; target.days[date] = (target.days[date] ?? 0) + durationMs }
+    if (migratedMs) for (const target of [row, child]) target.migrated[date] = (target.migrated[date] ?? 0) + migratedMs
     dayTotals[date] = (dayTotals[date] ?? 0) + durationMs
     totalMs += durationMs
   }
-  for (const entry of sheet.entries) add(entry.userId, entry.workItemId, entry.date, entry.durationMs, () => {
+  for (const entry of sheet.entries) add(entry.userId, entry.workItemId, entry.date, entry.durationMs, entry.migratedDurationMs ?? 0, () => {
     const item = items.get(entry.workItemId)
     return { projectId: item?.projectId ?? '', projectName: item?.projectName ?? '', itemNo: item?.itemNo ?? '',
       title: item?.title ?? '已删除的工作项', label: item ? `${item.itemNo} ${item.title}` : '已删除的工作项' }
   })
-  for (const entry of sheet.categoryEntries ?? []) add(entry.userId, categoryKey(entry.timeCategory, entry.projectId), entry.date, entry.durationMs, () => {
+  for (const entry of sheet.categoryEntries ?? []) add(entry.userId, categoryKey(entry.timeCategory, entry.projectId), entry.date, entry.durationMs, isMigratedCategory(entry.timeCategory) ? entry.durationMs : 0, () => {
     const label = timeCategory(entry.timeCategory)?.label ?? '其他'
     return { projectId: entry.projectId ?? NON_PROJECT_KEY, projectName: entry.projectName ?? NON_PROJECT_LABEL, itemNo: '', title: label, label }
   })
@@ -159,16 +160,9 @@ export function buildTimesheet(sheet: TeamTimesheet): { rows: TimesheetRow[]; da
   return { rows: sorted, dayTotals, totalMs }
 }
 
-export const isMigratedSubject = (subjectKey: string): boolean => isMigratedCategory(categoryOf(subjectKey)?.code)
-
 /** Per day, the milliseconds of a member's time that came from a migrated import. */
 export function migratedDays(row: TimesheetRow | undefined): Record<string, number> {
-  const days: Record<string, number> = {}
-  for (const item of row?.children ?? []) {
-    if (!isMigratedSubject(item.subjectKey)) continue
-    for (const [day, ms] of Object.entries(item.days)) days[day] = (days[day] ?? 0) + ms
-  }
-  return days
+  return row?.migrated ?? {}
 }
 
 /** One member's work on one day, grouped by project, larger totals first. */
@@ -180,7 +174,7 @@ export function dayBreakdown(row: TimesheetRow, day: string): DayProject[] {
     let project = projects.get(item.projectId)
     if (!project) projects.set(item.projectId, project = { projectId: item.projectId, projectName: item.projectName || '未知项目', totalMs: 0, items: [] })
     project.totalMs += ms
-    project.items.push({ key: item.key, itemNo: item.itemNo, title: item.title, ms, migrated: isMigratedSubject(item.subjectKey) })
+    project.items.push({ key: item.key, itemNo: item.itemNo, title: item.title, ms, migrated: (item.migrated[day] ?? 0) > 0 })
   }
   const list = [...projects.values()].sort((a, b) => b.totalMs - a.totalMs || a.projectName.localeCompare(b.projectName, 'zh-CN'))
   list.forEach(project => project.items.sort((a, b) => b.ms - a.ms))

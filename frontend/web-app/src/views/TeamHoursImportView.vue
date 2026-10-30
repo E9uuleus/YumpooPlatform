@@ -1,23 +1,24 @@
 <script setup lang="ts">
+import YpNotice from '../components/yp/YpNotice.vue'
 import { usePageLoad } from '../brand/page-progress'
 
 import { computed, onBeforeUnmount, ref, type DefineComponent } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElAlert, ElButton, ElMessage, ElOption as ElOptionRaw, ElSelect as ElSelectRaw, ElTable, ElTableColumn } from 'element-plus'
+import { ElButton, ElMessage, ElOption as ElOptionRaw, ElSelect as ElSelectRaw, ElTable, ElTableColumn } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import {
-  MigratedTimeImportOutcome, readCsrfToken, TeamDashboardProjectLifecycleEnum,
+  MigratedTimeImportOutcome, readCsrfToken,
   type MigratedTimeImportRequest, type MigratedTimeImportResult, type TeamDashboardOptions,
 } from '@yumpoo/api-client'
 import { teamDashboardApi } from '../api/client'
 import { problemMessage, toApiProblem } from '../api/problems'
 import ImportFileDrop from '../components/import/ImportFileDrop.vue'
 import ImportSteps from '../components/import/ImportSteps.vue'
-import { readSpreadsheet } from '../components/import/spreadsheet'
+import { readWorkbook } from '../components/import/spreadsheet'
 import YpModulePage from '../components/yp/YpModulePage.vue'
 import {
-  buildEntries, candidatesFor, defaultChoice, describeIssue, duplicateTargets, hoursLabel, isInformational, parseHoursMatrix,
-  type MatrixMember, type MemberChoice, type ParsedMatrix,
+  candidatesFor, defaultChoice, describeIssue, duplicateTargets, hoursLabel, importRows, isInformational, MIGRATED_ISSUE_LABELS, parseHoursDetail,
+  requestRow, type DetailMember, type MemberChoice, type ParsedDetail,
 } from '../components/team/hoursImportModel'
 import { fromApiDate } from '../components/team/teamDashboardModel'
 
@@ -35,7 +36,6 @@ const step = ref(0)
 const options = ref<TeamDashboardOptions>(), optionsError = ref('')
 const candidates = computed(() => (options.value?.members ?? []).filter(member => member.active)
   .map(member => ({ userId: member.userId, displayName: member.displayName.trim() })))
-const projects = computed(() => (options.value?.projects ?? []).filter(project => project.lifecycle === TeamDashboardProjectLifecycleEnum.Active))
 async function loadOptions(): Promise<void> {
   optionsError.value = ''
   try { options.value = await teamDashboardApi.getTeamDashboardOptions() } catch (reason) { optionsError.value = problemMessage(await toApiProblem(reason)) }
@@ -43,26 +43,25 @@ async function loadOptions(): Promise<void> {
 void pageLoad.track(loadOptions)
 
 const fileName = ref(''), reading = ref(false), readError = ref('')
-const matrix = ref<ParsedMatrix>()
+const detail = ref<ParsedDetail>()
 const choices = ref<MemberChoice[]>([])
-const projectId = ref('')
-const members = computed<MatrixMember[]>(() => matrix.value?.members ?? [])
+const members = computed<DetailMember[]>(() => detail.value?.members ?? [])
 const dateRange = computed(() => {
-  const dates = [...(matrix.value?.dates ?? [])].sort()
+  const dates = detail.value?.dates ?? []
   return dates.length ? `${dates[0]} 至 ${dates[dates.length - 1]}（${dates.length} 天）` : ''
 })
-const shownErrors = computed(() => (matrix.value?.errors ?? []).slice(0, SHOWN_ERRORS))
-const canMatch = computed(() => Boolean(matrix.value) && !matrix.value!.errors.length && Boolean(options.value))
+const shownErrors = computed(() => (detail.value?.errors ?? []).slice(0, SHOWN_ERRORS))
+const canMatch = computed(() => Boolean(detail.value) && !detail.value!.errors.length && Boolean(options.value))
 
 async function onFile(file: File): Promise<void> {
   reading.value = true
   readError.value = ''
-  matrix.value = undefined
+  detail.value = undefined
   choices.value = []
   fileName.value = file.name
   try {
-    const parsed = parseHoursMatrix(await readSpreadsheet(file))
-    if (parsed.ok) matrix.value = parsed.matrix
+    const parsed = parseHoursDetail(await readWorkbook(file))
+    if (parsed.ok) detail.value = parsed.detail
     else readError.value = parsed.message
   } catch (reason) {
     readError.value = reason instanceof Error && reason.message ? reason.message : '无法读取该文件。'
@@ -84,7 +83,7 @@ function choose(index: number, value: string): void {
   next[index] = value === SKIP ? null : value
   choices.value = next
 }
-function memberHint(member: MatrixMember, index: number): string {
+function memberHint(member: DetailMember, index: number): string {
   const choice = choices.value[index]
   if (choice === undefined) return `平台有 ${candidatesFor(member.name, candidates.value).length} 位同名成员，请选择`
   if (choice === null) return candidatesFor(member.name, candidates.value).length ? '已选择跳过' : '平台没有同名成员，将跳过'
@@ -92,11 +91,11 @@ function memberHint(member: MatrixMember, index: number): string {
 }
 const repeated = computed(() => duplicateTargets(choices.value))
 const unresolved = computed(() => choices.value.filter(choice => choice === undefined).length)
-const targets = computed(() => buildEntries(members.value, choices.value))
+const targets = computed(() => detail.value ? importRows(detail.value, choices.value) : [])
 const migrating = computed(() => members.value.filter((_, index) => choices.value[index]).length)
 const matchProblem = computed(() => {
   if (unresolved.value) return `还有 ${unresolved.value} 位同名成员没有选择。`
-  if (repeated.value.length) return '有多个姓名选择了同一位成员，同一成员同一天只能迁入一次。'
+  if (repeated.value.length) return '有多个姓名选择了同一位成员，请为每个姓名选择不同的成员。'
   if (!targets.value.length) return '没有可迁入的成员，请至少为一位成员选择平台成员。'
   return ''
 })
@@ -105,7 +104,7 @@ const result = ref<MigratedTimeImportResult>()
 const previewing = ref(false), previewError = ref(''), submitting = ref(false)
 let previewToken = 0
 let attempt: { body: string; key: string } | undefined
-const request = (dryRun: boolean): MigratedTimeImportRequest => ({ dryRun, categoryProjectId: projectId.value || null, entries: targets.value })
+const request = (dryRun: boolean): MigratedTimeImportRequest => ({ dryRun, rows: targets.value.map(requestRow) })
 
 async function toPreview(): Promise<void> {
   step.value = 2
@@ -127,11 +126,19 @@ function back(): void { ++previewToken; previewing.value = false; step.value -= 
 
 const names = computed(() => new Map(members.value.flatMap((member, index) => choices.value[index] ? [[choices.value[index]!, member.name] as const] : [])))
 const replacedDays = computed(() => result.value?.days.filter(day => day.issues.some(issue => issue.code === 'REPLACES_PREVIOUS')).length ?? 0)
+/** 不会写入的小时：对应不到工作项的行，加上有问题而整天不写入的日期。 */
+const notImportedMinutes = computed(() => (result.value?.skippedMinutes ?? 0)
+  + (result.value?.days ?? []).filter(day => day.outcome === MigratedTimeImportOutcome.Error).reduce((sum, day) => sum + day.minutes, 0))
 const issueRows = computed(() => (result.value?.days ?? []).flatMap(day => day.issues.filter(issue => !isInformational(issue)).map((issue, index) => ({
   key: `${day.userId}:${fromApiDate(day.workDate)}:${index}`, member: names.value.get(day.userId) ?? '未知成员', date: fromApiDate(day.workDate),
   level: day.outcome === MigratedTimeImportOutcome.Error ? '错误' : '警告', text: describeIssue(issue),
 }))))
-const writable = computed(() => (result.value?.importedDayCount ?? 0) + (result.value?.clearedDayCount ?? 0))
+const skippedList = computed(() => (result.value?.skippedRows ?? []).map(skipped => {
+  const row = targets.value[skipped.index]!
+  return { key: skipped.index, member: row.name, date: row.date, project: row.projectName || '（空）', title: row.title,
+    hours: hoursLabel(row.minutes), reason: MIGRATED_ISSUE_LABELS[skipped.code] ?? skipped.code }
+}))
+const writable = computed(() => result.value?.importedDayCount ?? 0)
 
 async function submit(): Promise<void> {
   if (submitting.value || !result.value || !writable.value) return
@@ -145,7 +152,7 @@ async function submit(): Promise<void> {
   try {
     const done = await teamDashboardApi.importMigratedTime({ xXSRFTOKEN: csrf, idempotencyKey: attempt.key, migratedTimeImportRequest: body })
     const parts = [`已迁入 ${done.importedDayCount} 天、${hoursLabel(done.importedMinutes)} 小时`]
-    if (done.clearedDayCount) parts.push(`清除 ${done.clearedDayCount} 天`)
+    if (done.skippedRows.length) parts.push(`${done.skippedRows.length} 条工时对应不到工作项，未迁入`)
     if (done.failedDayCount) parts.push(`${done.failedDayCount} 天因问题未写入`)
     ElMessage.success(parts.join('，'))
     await router.push({ name: 'team', params: { view: 'timesheet' } })
@@ -171,26 +178,28 @@ onBeforeUnmount(() => { ++previewToken })
       </el-button>
     </template>
     <div class="hours-import">
-      <p class="hours-import__note">
-        迁入工时用于导入原平台的历史工时，表格的行为成员、列为日期，单元格为当天的小时数。原平台只有每天的时长，系统会从成员的上班时间开始，依次排进当天的空闲时段，所以排出的时段不代表实际工作时间。迁入的记录在个人工时日历、我的一天和团队工时表中标为「迁入工时」，成员不能修改。同一成员同一天再次迁入会覆盖上次的结果，单元格填 0 可以清除。
-      </p>
+      <yp-notice class="hours-import__note">
+        迁入工时用于导入原平台导出的「工时花费报表」：每位成员一个明细工作表，每行是成员某天在某个工作项上花费的工时，汇总表会被忽略。系统按「所属项目」和「标题」找到 Yumpoo 中同名的项目和工作项，把工时记到该工作项上；找不到的工时不会迁入，请先执行工作项导入。原平台只有每天的时长，系统会从成员的上班时间开始，按表格顺序把当天各工作项的工时依次排进空闲时段，所以排出的时段不代表实际工作时间。迁入的记录在个人工时日历、我的一天和团队工时表中标为「迁入工时」，成员不能修改。迁入只写入成员当天没有自己工时的日期：当天已有成员填报或计时的工时时，这一天不迁入；当天只有之前迁入的工时时，整天覆盖。
+      </yp-notice>
       <import-steps
         :steps="STEPS"
         :current="step"
       />
-      <el-alert
+      <yp-notice
         v-if="optionsError"
-        type="error"
-        :title="`成员与项目列表加载失败。${optionsError}`"
-        :closable="false"
+        tone="danger"
       >
-        <el-button
-          text
-          @click="loadOptions"
-        >
-          重试
-        </el-button>
-      </el-alert>
+        {{ `成员与项目列表加载失败。${optionsError}` }}
+
+        <template #actions>
+          <el-button
+            text
+            @click="loadOptions"
+          >
+            重试
+          </el-button>
+        </template>
+      </yp-notice>
 
       <section
         v-if="step === 0"
@@ -207,46 +216,43 @@ onBeforeUnmount(() => { ++previewToken })
         >
           正在读取 {{ fileName }}…
         </p>
-        <el-alert
+        <yp-notice
           v-if="readError"
-          type="error"
-          :title="readError"
-          :closable="false"
-        />
-        <template v-if="matrix">
+          tone="danger"
+        >
+          {{ readError }}
+        </yp-notice>
+        <template v-if="detail">
           <dl class="hours-import__facts">
             <div><dt>文件</dt><dd>{{ fileName }}</dd></div>
-            <div><dt>表头行</dt><dd>第 {{ matrix.headerRow }} 行</dd></div>
-            <div><dt>日期列</dt><dd>{{ dateRange || '无' }}</dd></div>
+            <div><dt>明细表</dt><dd>{{ detail.sheets.join('、') }}</dd></div>
+            <div><dt>日期</dt><dd>{{ dateRange || '无' }}</dd></div>
             <div><dt>成员</dt><dd>{{ members.length }} 位</dd></div>
-            <div v-if="matrix.ignoredColumns.length">
-              <dt>已忽略的列</dt><dd>{{ matrix.ignoredColumns.join('、') }}</dd>
-            </div>
-            <div v-if="matrix.ignoredRows.length">
-              <dt>已忽略的行</dt><dd>{{ matrix.ignoredRows.join('、') }}</dd>
+            <div><dt>工时记录</dt><dd>{{ detail.rows.length }} 条</dd></div>
+            <div v-if="detail.ignoredSheets.length">
+              <dt>已忽略的工作表</dt><dd>{{ detail.ignoredSheets.join('、') }}</dd>
             </div>
           </dl>
-          <el-alert
-            v-if="matrix.errors.length"
-            type="error"
-            :closable="false"
-            :title="`发现 ${matrix.errors.length} 个问题，请修正文件后重新上传`"
+          <yp-notice
+            v-if="detail.errors.length"
+            tone="danger"
+            :title="`发现 ${detail.errors.length} 个问题，请修正文件后重新上传`"
           >
             <ul class="hours-import__errors">
               <li
                 v-for="(error, index) in shownErrors"
                 :key="index"
               >
-                {{ error.message }}
+                {{ error }}
               </li>
             </ul>
             <p
-              v-if="matrix.errors.length > shownErrors.length"
+              v-if="detail.errors.length > shownErrors.length"
               class="hours-import__muted"
             >
-              另有 {{ matrix.errors.length - shownErrors.length }} 个问题未列出。
+              另有 {{ detail.errors.length - shownErrors.length }} 个问题未列出。
             </p>
-          </el-alert>
+          </yp-notice>
         </template>
         <footer class="hours-import__footer">
           <el-button
@@ -271,7 +277,7 @@ onBeforeUnmount(() => { ++previewToken })
           :data="members"
           border
           max-height="420"
-          row-key="rowNumber"
+          row-key="name"
         >
           <el-table-column
             label="表格姓名"
@@ -284,7 +290,7 @@ onBeforeUnmount(() => { ++previewToken })
             align="right"
           >
             <template #default="{ row }">
-              {{ hoursLabel((row as MatrixMember).totalMinutes) }}
+              {{ hoursLabel((row as DetailMember).totalMinutes) }}
             </template>
           </el-table-column>
           <el-table-column
@@ -293,7 +299,7 @@ onBeforeUnmount(() => { ++previewToken })
             align="right"
           >
             <template #default="{ row }">
-              {{ (row as MatrixMember).days.length }}
+              {{ (row as DetailMember).days }}
             </template>
           </el-table-column>
           <el-table-column
@@ -305,7 +311,7 @@ onBeforeUnmount(() => { ++previewToken })
                 :model-value="selected($index)"
                 filterable
                 placeholder="请选择平台成员"
-                :aria-label="`${(row as MatrixMember).name} 对应的平台成员`"
+                :aria-label="`${(row as DetailMember).name} 对应的平台成员`"
                 @update:model-value="(value: string) => choose($index, value)"
               >
                 <el-option
@@ -320,37 +326,19 @@ onBeforeUnmount(() => { ++previewToken })
                 />
               </el-select>
               <span
-                v-if="memberHint(row as MatrixMember, $index)"
+                v-if="memberHint(row as DetailMember, $index)"
                 class="hours-import__hint"
                 :class="{ 'is-warning': choices[$index] === undefined }"
-              >{{ memberHint(row as MatrixMember, $index) }}</span>
+              >{{ memberHint(row as DetailMember, $index) }}</span>
             </template>
           </el-table-column>
         </el-table>
-        <div class="hours-import__project">
-          <label id="hours-import-project">关联项目（可选）</label>
-          <el-select
-            v-model="projectId"
-            clearable
-            filterable
-            placeholder="不关联项目"
-            aria-labelledby="hours-import-project"
-          >
-            <el-option
-              v-for="project in projects"
-              :key="project.id"
-              :value="project.id"
-              :label="`${project.name}（${project.code}）`"
-            />
-          </el-select>
-          <span class="hours-import__muted">选择后，这批迁入工时统一计入该项目的团队项目工时。</span>
-        </div>
-        <el-alert
+        <yp-notice
           v-if="matchProblem"
-          type="warning"
-          :title="matchProblem"
-          :closable="false"
-        />
+          tone="warning"
+        >
+          {{ matchProblem }}
+        </yp-notice>
         <footer class="hours-import__footer">
           <span class="hours-import__muted">{{ migrating }} / {{ members.length }} 位成员将迁入</span>
           <el-button @click="back">
@@ -372,12 +360,12 @@ onBeforeUnmount(() => { ++previewToken })
         class="hours-import__panel"
         aria-label="预览并迁入"
       >
-        <el-alert
+        <yp-notice
           v-if="previewError"
-          type="error"
-          :title="previewError"
-          :closable="false"
-        />
+          tone="danger"
+        >
+          {{ previewError }}
+        </yp-notice>
         <template v-if="result">
           <ul
             class="hours-import__stats"
@@ -386,7 +374,7 @@ onBeforeUnmount(() => { ++previewToken })
             <li><strong>{{ result.importedDayCount }}</strong><span>迁入天数</span></li>
             <li><strong>{{ hoursLabel(result.importedMinutes) }}</strong><span>合计小时</span></li>
             <li><strong>{{ replacedDays }}</strong><span>覆盖天数</span></li>
-            <li><strong>{{ result.clearedDayCount }}</strong><span>清除天数</span></li>
+            <li><strong>{{ hoursLabel(notImportedMinutes) }}</strong><span>未迁入小时</span></li>
             <li :class="{ 'is-problem': result.failedDayCount }">
               <strong>{{ result.failedDayCount }}</strong><span>问题天数</span>
             </li>
@@ -397,6 +385,52 @@ onBeforeUnmount(() => { ++previewToken })
           >
             将覆盖原有迁入工时共 {{ hoursLabel(result.replacedMinutes) }} 小时。
           </p>
+          <template v-if="skippedList.length">
+            <yp-notice
+              tone="warning"
+              :title="`${skippedList.length} 条工时（${hoursLabel(result.skippedMinutes)} 小时）对应不到工作项，不会迁入`"
+            >
+              所属项目或工作项不存在时，请先执行工作项导入：在对应项目的工作项表格中点 <strong>新增工作项 ▾ → 导入工作项</strong>（项目不存在时先新建同名项目）；成员不在项目中时，请先把成员加入项目。处理后重新迁入同一份文件即可补上，已迁入的工时不会重复计入。
+            </yp-notice>
+            <el-table
+              :data="skippedList"
+              border
+              max-height="320"
+              row-key="key"
+            >
+              <el-table-column
+                label="成员"
+                prop="member"
+                min-width="100"
+              />
+              <el-table-column
+                label="日期"
+                prop="date"
+                width="110"
+              />
+              <el-table-column
+                label="所属项目"
+                prop="project"
+                min-width="160"
+              />
+              <el-table-column
+                label="标题"
+                prop="title"
+                min-width="220"
+              />
+              <el-table-column
+                label="小时"
+                prop="hours"
+                width="70"
+                align="right"
+              />
+              <el-table-column
+                label="原因"
+                prop="reason"
+                min-width="160"
+              />
+            </el-table>
+          </template>
           <template v-if="issueRows.length">
             <p class="hours-import__muted">
               有问题的日期不会写入；警告只是提醒，该日仍会迁入。
@@ -459,16 +493,7 @@ onBeforeUnmount(() => { ++previewToken })
   margin: 0 auto;
 }
 
-.hours-import__note {
-  margin: 0;
-  padding: var(--yp-space-3) var(--yp-space-4);
-  border-left: 3px solid var(--yp-action-primary);
-  border-radius: var(--yp-radius-sm);
-  background: var(--yp-bg-sunken);
-  color: var(--yp-text-secondary);
-  font-size: 13px;
-  line-height: 22px;
-}
+.hours-import__note { margin: 0; }
 
 .hours-import__panel {
   display: grid;
@@ -522,19 +547,7 @@ onBeforeUnmount(() => { ++previewToken })
 }
 
 .hours-import__hint.is-warning {
-  color: var(--yp-status-red-foreground);
-}
-
-.hours-import__project {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--yp-space-3);
-  font-size: 13px;
-}
-
-.hours-import__project .el-select {
-  width: 280px;
+  color: color-mix(in srgb, var(--yp-status-orange) 62%, var(--yp-text-primary));
 }
 
 .hours-import__stats {
@@ -566,7 +579,7 @@ onBeforeUnmount(() => { ++previewToken })
 }
 
 .hours-import__stats li.is-problem strong {
-  color: var(--yp-status-red-foreground);
+  color: var(--yp-status-red);
 }
 
 .hours-import__footer {

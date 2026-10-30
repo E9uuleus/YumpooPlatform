@@ -101,8 +101,7 @@
 }
 
 .el-card,
-.el-table,
-.el-alert {
+.el-table {
   border-color: var(--yp-border-default);
   border-radius: var(--yp-radius-sm);
 }
@@ -254,7 +253,6 @@
   border-radius: var(--yp-radius-sm);
 }
 
-.el-alert__description,
 .el-form-item__label {
   color: var(--yp-text-secondary);
 }

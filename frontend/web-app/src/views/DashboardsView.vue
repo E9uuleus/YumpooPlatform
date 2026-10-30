@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ElIcon, ElInput, ElButton, ElTooltip, ElDropdown, ElDropdownMenu, ElDropdownItem, ElTag, ElAlert, ElSkeleton, ElDialog, ElDrawer, ElMessage, ElMessageBox } from 'element-plus'
+import YpNotice from '../components/yp/YpNotice.vue'
+import { ElIcon, ElInput, ElButton, ElTooltip, ElDropdown, ElDropdownMenu, ElDropdownItem, ElTag, ElSkeleton, ElDialog, ElDrawer, ElMessage, ElMessageBox } from 'element-plus'
 import { computed, nextTick, ref, watch } from 'vue'
 import { Close, Connection, DataAnalysis, Download, Filter, MoreFilled, Plus, Refresh, FullScreen, Setting, List, CopyDocument, Delete, Edit, RefreshLeft, User } from '@element-plus/icons-vue'
 import { type DashboardFilters, type DashboardWidget, type DashboardChartSelection } from '@yumpoo/api-client'
@@ -285,54 +286,59 @@ async function discardReload() {
       </el-button>
     </div>
     <main class="dashboard-canvas">
-      <el-alert
+      <yp-notice
         v-if="saveError"
         class="dashboard-notice"
-        type="warning"
-        :closable="false"
+        tone="warning"
+        :title="`更改尚未保存：${saveError}`"
       >
-        <template #title>
-          {{ `更改尚未保存：${saveError}` }}
-        </template><el-button
-          text
-          @click="save"
-        >
-          重试保存
-        </el-button><el-button
-          text
-          @click="discardReload"
-        >
-          放弃修改并重新载入
-        </el-button>
-      </el-alert>
-      <el-alert
+        <template #actions>
+          <el-button
+            text
+            @click="save"
+          >
+            重试保存
+          </el-button>
+          <el-button
+            text
+            @click="discardReload"
+          >
+            放弃修改并重新载入
+          </el-button>
+        </template>
+      </yp-notice>
+      <yp-notice
         v-if="error"
         class="dashboard-notice"
-        type="error"
-        :closable="false"
-        :title="snapshot ? `刷新失败，当前显示上次数据。${error}` : error"
+        tone="danger"
       >
-        <el-button
-          text
-          @click="dashboard ? refresh() : load()"
-        >
-          重试
-        </el-button>
-      </el-alert>
-      <el-alert
+        {{ snapshot ? `刷新失败，当前显示上次数据。${error}` : error }}
+
+        <template #actions>
+          <el-button
+            text
+            @click="dashboard ? refresh() : load()"
+          >
+            重试
+          </el-button>
+        </template>
+      </yp-notice>
+      <yp-notice
         v-if="connections.some(p => !p.available)"
         class="dashboard-notice"
-        type="warning"
-        :closable="false"
-        title="部分连接项目已无法访问，已从统计中排除。"
+        tone="warning"
       >
-        <el-button
-          text
-          @click="projectDialog = true"
-        >
-          管理连接
-        </el-button>
-      </el-alert>
+        部分连接项目已无法访问，已从统计中排除。
+
+        <template #actions>
+          <el-button
+            text
+            @click="projectDialog = true"
+          >
+            管理连接
+          </el-button>
+        </template>
+      </yp-notice>
       <div
         v-if="removed"
         class="dashboard-undo"
@@ -535,12 +541,12 @@ async function discardReload() {
             <Plus />
           </el-icon><strong>空白仪表板</strong>
         </button>
-      </div><el-alert
+      </div><yp-notice
         v-if="createError"
-        :title="createError"
-        type="error"
-        :closable="false"
-      /><template #footer>
+        tone="danger"
+      >
+        {{ createError }}
+      </yp-notice><template #footer>
         <el-button @click="createOpen = false">
           取消
         </el-button><el-button

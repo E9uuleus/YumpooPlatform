@@ -92,6 +92,13 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
     }
 
     @Override
+    public List<WorkItemTitle> findTitles(UUID companyId, UUID projectId) {
+        return jdbc.sql("SELECT id, title, archived FROM yumpoo.work_item WHERE company_id=:companyId AND project_id=:projectId AND deleted_at IS NULL")
+                .param("companyId", companyId).param("projectId", projectId)
+                .query((rs, row) -> new WorkItemTitle(rs.getObject("id", UUID.class), rs.getString("title"), rs.getBoolean("archived"))).list();
+    }
+
+    @Override
     public boolean insert(WorkItem item) {
         JdbcClient.StatementSpec statement = jdbc.sql("""
                 INSERT INTO yumpoo.work_item (

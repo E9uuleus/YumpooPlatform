@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import YpNotice from '../yp/YpNotice.vue'
 import { usePageLoad } from '../../brand/page-progress'
 
 import { projectWritable } from './projectStatus'
@@ -289,6 +290,7 @@ let suppressTableClick = false
 let suppressTableClickTimer: number | undefined
 const loadingMoreError = ref<ApiProblem>()
 const editingCell = ref('')
+const createDisabled = computed(() => creatingTop.value || Boolean(editingCell.value) || tableSorting.value)
 const editingNames = ref(new Set<string>())
 const assigneeSearch = ref('')
 const assigneeMatches = ref<ProjectMember[]>()
@@ -3131,11 +3133,12 @@ onBeforeUnmount(() => {
           <div
             v-if="selectedView === 'table' && canCreate"
             class="toolbar-create-group"
+            :class="{ 'is-disabled': createDisabled }"
           >
             <button
               type="button"
               class="toolbar-create"
-              :disabled="creatingTop || Boolean(editingCell) || tableSorting"
+              :disabled="createDisabled"
               @click="createAtTop"
             >
               <el-icon><plus /></el-icon><span>新增工作项</span>
@@ -3143,7 +3146,7 @@ onBeforeUnmount(() => {
             <el-dropdown
               trigger="click"
               placement="bottom-end"
-              :disabled="creatingTop || Boolean(editingCell) || tableSorting"
+              :disabled="createDisabled"
               @command="importOpen = true"
             >
               <button
@@ -3151,7 +3154,7 @@ onBeforeUnmount(() => {
                 class="toolbar-create toolbar-create-more"
                 aria-label="更多新增方式"
                 aria-haspopup="menu"
-                :disabled="creatingTop || Boolean(editingCell) || tableSorting"
+                :disabled="createDisabled"
               >
                 <el-icon><arrow-down /></el-icon>
               </button>
@@ -4101,19 +4104,22 @@ onBeforeUnmount(() => {
         class="detail-panel"
       >
         <template v-if="detail">
-          <div
+          <yp-notice
             v-if="detail.archived"
             class="work-item-archive-notice"
+            tone="warning"
           >
-            <span>此工作项已归档</span>
-            <el-button
-              v-if="detail.capabilities.canDelete"
-              :loading="restoringArchive"
-              @click="restoreArchivedItem"
-            >
-              恢复工作项
-            </el-button>
-          </div>
+            此工作项已归档
+            <template #actions>
+              <el-button
+                v-if="detail.capabilities.canDelete"
+                :loading="restoringArchive"
+                @click="restoreArchivedItem"
+              >
+                恢复工作项
+              </el-button>
+            </template>
+          </yp-notice>
           <div class="detail-heading">
             <small>{{ contentName(detail.contentId) }} · {{ detail.itemNo }}</small>
             <h2>{{ detail.title }}</h2>
@@ -4318,13 +4324,18 @@ onBeforeUnmount(() => {
 :deep(.table-settings-toolbar-button) { width: 36px; justify-content: center; padding: 0; }
 :deep(.table-settings-toolbar-button--unsaved) { width: auto; padding: 0 var(--yp-space-3); }
 .toolbar-count { min-width: 18px; padding: 1px 5px; border-radius: var(--yp-radius-pill); color: var(--yp-priority-foreground); background: var(--yp-action-primary); font-size: 11px; }
-.toolbar-create { display: inline-flex; height: 32px; flex: 0 0 auto; align-items: center; gap: 6px; padding: 0 var(--yp-space-3); border: 0; border-radius: var(--yp-radius-sm); color: var(--yp-text-inverse); background: var(--yp-action-primary); font: inherit; font-weight: 600; cursor: pointer; transition: background var(--yp-motion-fast) var(--yp-ease-standard); }
-.toolbar-create-group { display: inline-flex; flex: 0 0 auto; }
+/* 主操作底色不随主题变化；--yp-text-inverse 在深色主题是深色，文字固定用蓝底前景色。 */
+.toolbar-create-group { display: inline-flex; height: 32px; flex: 0 0 auto; border-radius: var(--yp-radius-md); background: var(--yp-action-primary); box-shadow: 0 1px 2px color-mix(in srgb, var(--yp-action-primary) 35%, transparent); }
+.toolbar-create-group.is-disabled { opacity: .6; box-shadow: none; }
+.toolbar-create { display: inline-flex; height: 32px; align-items: center; gap: 6px; padding: 0 14px 0 12px; border: 0; border-radius: var(--yp-radius-md); color: var(--yp-status-blue-foreground); background: transparent; font: inherit; font-weight: 500; cursor: pointer; transition: background var(--yp-motion-fast) var(--yp-ease-standard); }
+.toolbar-create .el-icon { font-size: 14px; }
 .toolbar-create-group .toolbar-create:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
-.toolbar-create-more { width: 30px; justify-content: center; padding: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 1px solid color-mix(in srgb, var(--yp-text-inverse) 35%, transparent); }
+.toolbar-create-more { position: relative; width: 28px; justify-content: center; padding: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.toolbar-create-more::before { position: absolute; top: 8px; bottom: 8px; left: 0; width: 1px; background: color-mix(in srgb, var(--yp-status-blue-foreground) 40%, transparent); content: ''; }
+.toolbar-create-more .el-icon { font-size: 12px; }
 .toolbar-create:hover:not(:disabled) { background: var(--yp-action-primary-hover); }
 .toolbar-create:active:not(:disabled) { background: var(--yp-action-primary-active); }
-.toolbar-create:disabled { opacity: .6; cursor: not-allowed; }
+.toolbar-create:disabled { cursor: not-allowed; }
 .toolbar-create:focus-visible { outline: 2px solid var(--yp-focus-ring); outline-offset: 2px; }
 .toolbar-search { width: 94px; flex: 0 0 auto; transition: width 100ms cubic-bezier(0, 0, .35, 1); }
 .toolbar-search > .toolbar-button { width: 100%; }
@@ -5586,17 +5597,7 @@ onBeforeUnmount(() => {
   margin: var(--yp-space-1) 0 var(--yp-space-4);
 }
 
-.work-item-archive-notice {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  margin-bottom: 16px;
-  border-radius: 6px;
-  background: var(--yp-bg-sunken);
-  color: var(--yp-text-secondary);
-}
+.work-item-archive-notice { margin-bottom: 16px; }
 
 .detail-heading small {
   color: var(--yp-text-muted);

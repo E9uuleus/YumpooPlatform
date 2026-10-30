@@ -106,8 +106,8 @@ export class TeamDashboardApi extends runtime.BaseAPI {
     }
 
     /**
-     * 仅公司管理员可用。每个条目是一名成员一天的总分钟数，服务端从该成员的上班时间起，把时长依次排进当天的空闲时段，写成只读的 MIGRATED 工时分类记录；同一成员同一天再次迁入覆盖上次的迁入结果，minutes 为 0 表示清除。排布按公司时区计算，当天排不下的天不写入任何记录。dryRun 为 true 时只返回排布结果、不写入；为 false 时在单事务内提交。不发领域事件，整次只写一条安全审计。
-     * 按成员与日期批量迁入或预览历史工时
+     * 仅公司管理员可用。每行是一名成员一天在一个工作项上的分钟数，按项目名称与工作项标题匹配本公司 ACTIVE 项目中未删除的工作项（含已归档；同名时只有一项未归档则取它），成员须是该项目的有效成员；匹配不到的行列入 skippedRows，不写入。匹配到的行按成员与日期汇总，只写入成员当天没有自己记录的日期：当天已有成员自己的计时或补录（含正在运行的计时）时整天不写入，记 DAY_HAS_TIME；当天只有之前迁入的记录时整天覆盖。服务端从该成员的上班时间起把当天时长依次排进空闲时段，再按请求顺序切给各行，写成带 migrated 标记的只读工作项计时记录。同一成员同一天的合计超过 1440 分钟时整次请求返回 422。排布按公司时区计算，当天排不下的天不写入任何记录。dryRun 为 true 时只返回结果、不写入；为 false 时在单事务内提交。不发领域事件，整次只写一条安全审计。
+     * 按成员、日期与工作项批量迁入或预览历史工时
      */
     async importMigratedTimeRaw(requestParameters: ImportMigratedTimeRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<MigratedTimeImportResult>> {
         if (requestParameters['xXSRFTOKEN'] == null) {
@@ -160,8 +160,8 @@ export class TeamDashboardApi extends runtime.BaseAPI {
     }
 
     /**
-     * 仅公司管理员可用。每个条目是一名成员一天的总分钟数，服务端从该成员的上班时间起，把时长依次排进当天的空闲时段，写成只读的 MIGRATED 工时分类记录；同一成员同一天再次迁入覆盖上次的迁入结果，minutes 为 0 表示清除。排布按公司时区计算，当天排不下的天不写入任何记录。dryRun 为 true 时只返回排布结果、不写入；为 false 时在单事务内提交。不发领域事件，整次只写一条安全审计。
-     * 按成员与日期批量迁入或预览历史工时
+     * 仅公司管理员可用。每行是一名成员一天在一个工作项上的分钟数，按项目名称与工作项标题匹配本公司 ACTIVE 项目中未删除的工作项（含已归档；同名时只有一项未归档则取它），成员须是该项目的有效成员；匹配不到的行列入 skippedRows，不写入。匹配到的行按成员与日期汇总，只写入成员当天没有自己记录的日期：当天已有成员自己的计时或补录（含正在运行的计时）时整天不写入，记 DAY_HAS_TIME；当天只有之前迁入的记录时整天覆盖。服务端从该成员的上班时间起把当天时长依次排进空闲时段，再按请求顺序切给各行，写成带 migrated 标记的只读工作项计时记录。同一成员同一天的合计超过 1440 分钟时整次请求返回 422。排布按公司时区计算，当天排不下的天不写入任何记录。dryRun 为 true 时只返回结果、不写入；为 false 时在单事务内提交。不发领域事件，整次只写一条安全审计。
+     * 按成员、日期与工作项批量迁入或预览历史工时
      */
     async importMigratedTime(requestParameters: ImportMigratedTimeRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<MigratedTimeImportResult> {
         const response = await this.importMigratedTimeRaw(requestParameters, initOverrides);

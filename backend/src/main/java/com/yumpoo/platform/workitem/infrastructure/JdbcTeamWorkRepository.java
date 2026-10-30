@@ -33,14 +33,16 @@ public class JdbcTeamWorkRepository implements TeamWorkRepository {
     public List<TimeEntry> timeEntries(UUID companyId, List<UUID> projectIds, List<UUID> userIds, LocalDate from, LocalDate to, ZoneId zone, Instant asOf) {
         var statement = jdbc.sql(DAYS + """
             sessions AS (
-              SELECT s.user_id,s.work_item_id,s.started_at,COALESCE(s.stopped_at,CAST(:asOf AS timestamptz)) AS ended_at,s.concurrency
+              SELECT s.user_id,s.work_item_id,s.started_at,COALESCE(s.stopped_at,CAST(:asOf AS timestamptz)) AS ended_at,s.concurrency,ss.migrated
               FROM yumpoo.work_item_time_share s
+              JOIN yumpoo.work_item_time_session ss ON ss.id=s.session_id
               WHERE s.company_id=:company AND s.project_id IN (:projects)
                 AND s.started_at < CAST(:rangeEnd AS timestamptz)
                 AND COALESCE(s.stopped_at,CAST(:asOf AS timestamptz)) > CAST(:rangeStart AS timestamptz)
             """ + (userIds.isEmpty() ? "" : " AND s.user_id IN (:users)") + """
             )
-            SELECT x.user_id,x.work_item_id,w.project_id,w.item_no,w.title,days.day,FLOOR(SUM(%1$s))::bigint AS duration_ms
+            SELECT x.user_id,x.work_item_id,w.project_id,w.item_no,w.title,days.day,FLOOR(SUM(%1$s))::bigint AS duration_ms,
+                   FLOOR(COALESCE(SUM(%1$s) FILTER (WHERE x.migrated),0))::bigint AS migrated_ms
             FROM sessions x
             JOIN days ON x.started_at < days.day_end AND x.ended_at > days.day_start
             JOIN yumpoo.work_item w ON w.id=x.work_item_id AND w.company_id=:company AND w.deleted_at IS NULL
@@ -55,7 +57,7 @@ public class JdbcTeamWorkRepository implements TeamWorkRepository {
         if (!userIds.isEmpty()) statement = statement.param("users", userIds);
         return statement.query((rs, n) -> new TimeEntry(rs.getObject("user_id", UUID.class), rs.getObject("work_item_id", UUID.class),
                 rs.getObject("project_id", UUID.class), rs.getString("item_no"), rs.getString("title"),
-                rs.getObject("day", LocalDate.class), rs.getLong("duration_ms"))).list();
+                rs.getObject("day", LocalDate.class), rs.getLong("duration_ms"), rs.getLong("migrated_ms"))).list();
     }
 
     /** Non-project category shares, split per company-calendar day like {@link #timeEntries}. */

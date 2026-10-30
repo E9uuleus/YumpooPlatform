@@ -71,7 +71,7 @@ public class TeamDashboardService {
         var withTime = Stream.concat(entries.stream().map(TeamWorkQuery.TimeEntry::userId), categories.stream().map(TeamWorkQuery.CategoryEntry::userId))
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         return new Timesheet(query.from(), query.to(), zone.getId(), asOf, members(actor.companyId(), userIds, withTime),
-                List.copyOf(items.values()), entries.stream().map(e -> new TimesheetEntry(e.userId(), e.workItemId(), e.date(), e.durationMs())).toList(),
+                List.copyOf(items.values()), entries.stream().map(e -> new TimesheetEntry(e.userId(), e.workItemId(), e.date(), e.durationMs(), e.migratedDurationMs())).toList(),
                 Timesheet.categories(categories, names(scope)), CalendarDay.of(calendar.days(query.from(), query.to())));
     }
 

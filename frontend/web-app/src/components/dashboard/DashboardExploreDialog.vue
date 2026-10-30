@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import YpNotice from '../yp/YpNotice.vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { ElIcon, ElAlert, ElButton, ElDialog, ElDropdown, ElDropdownItem, ElDropdownMenu, ElTag, ElTooltip } from 'element-plus'
+import { ElIcon, ElButton, ElDialog, ElDropdown, ElDropdownItem, ElDropdownMenu, ElTag, ElTooltip } from 'element-plus'
 import { Close, DataAnalysis, Grid, Refresh, Setting } from '@element-plus/icons-vue'
 import { type DashboardChartResult, type DashboardChartSelection, type DashboardConnection, type DashboardFilters, type DashboardItemPage, type DashboardWidget } from '@yumpoo/api-client'
 import type { StatisticsSource } from './statisticsSource'
@@ -143,19 +144,21 @@ onBeforeUnmount(() => { ++sequence; if (refreshTimer) clearTimeout(refreshTimer)
             role="status"
           >正在加载…</span>
         </div>
-        <el-alert
+        <yp-notice
           v-if="error"
-          :title="error"
-          type="error"
-          :closable="false"
+          tone="danger"
         >
-          <el-button
-            text
-            @click="load"
-          >
-            重试
-          </el-button>
-        </el-alert>
+          {{ error }}
+
+          <template #actions>
+            <el-button
+              text
+              @click="load"
+            >
+              重试
+            </el-button>
+          </template>
+        </yp-notice>
         <DashboardItemsTable
           ref="table"
           :source="source"

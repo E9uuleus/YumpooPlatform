@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import YpNotice from '../yp/YpNotice.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type { TimerOrbChange, TimerOrbLayout, TimerPreferences, TimerPreferencesChange, TimerWindowMode } from '@yumpoo/preload-contract'
@@ -427,18 +428,21 @@ function keydown(event: KeyboardEvent) {
           </button>
         </div>
       </header>
-      <p
+      <yp-notice
         v-if="error"
         class="panel-problem"
-        role="alert"
+        size="small"
+        tone="danger"
       >
-        {{ error }} <button
-          class="text-button"
-          @click="retry"
-        >
-          重试
-        </button>
-      </p>
+        {{ error }} <template #actions>
+          <button
+            class="text-button"
+            @click="retry"
+          >
+            重试
+          </button>
+        </template>
+      </yp-notice>
       <TimerSettings
         v-if="view === 'settings' && preferences"
         :preferences="preferences"
@@ -535,13 +539,13 @@ function keydown(event: KeyboardEvent) {
             </button>
           </div>
         </div>
-        <p
+        <yp-notice
           v-if="!error && !tracker.connected.value"
-          class="panel-problem is-waiting"
-          role="status"
+          class="panel-problem"
+          size="small"
         >
           等待连接
-        </p>
+        </yp-notice>
         <div class="picker-search">
           <TimerIcon name="search" />
           <input
@@ -744,8 +748,7 @@ button:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:2px
 .text-button{color:var(--yp-timer-accent);border:0;background:transparent;padding:3px;font-size:12px}
 .picker-status{margin:6px 0;color:var(--yp-text-muted);font-size:12px;text-align:center}
 .picker-sentinel{height:1px}
-.panel-problem{margin:0 12px 10px;padding:7px 10px;font-size:11px;color:var(--yp-status-red);background:color-mix(in srgb,var(--yp-status-red) 8%,var(--yp-bg-raised));border-radius:8px}
-.panel-problem.is-waiting{color:var(--yp-text-secondary);background:var(--yp-timer-sunken)}
+.panel-problem{margin:0 12px 10px}
 .saved-feedback{display:flex;align-items:center;gap:7px;color:var(--yp-timer-saved);font-size:13px;font-weight:600}
 .saved-feedback svg{width:22px;height:22px;stroke-dasharray:36;animation:saved-check .42s ease both}
 .spinning{animation:orb-spin 1s linear infinite}
