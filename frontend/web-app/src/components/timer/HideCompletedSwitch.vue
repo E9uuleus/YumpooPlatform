@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import { hideCompleted, setHideCompleted } from '../../composables/useHideCompleted'
 
-/** toolbar 为工作项表格工具栏的写法（文案“隐没已完成”，不显示数量）；默认是选择列表旁的紧凑开关。 */
+/** toolbar 为工作项表格工具栏的写法（不显示数量）；默认是选择列表旁的紧凑开关。 */
 withDefaults(defineProps<{ hiddenCount?: number; toolbar?: boolean; disabled?: boolean }>(), { hiddenCount: 0, toolbar: false, disabled: false })
 const saving = ref(false)
 
@@ -30,7 +30,7 @@ async function toggle() {
         class="hide-completed__track"
         aria-hidden="true"
       />
-      <span>{{ toolbar ? '隐没已完成' : '隐藏已完成' }}</span>
+      <span>隐藏已完成</span>
     </button>
     <small
       v-if="!toolbar && hideCompleted && hiddenCount"

@@ -57,7 +57,7 @@ audience: [developer]
 | [统一项目模型](../../../../../../.agents/notes/implemented/product/2026-09-30-unified-project-model.md) | 去掉产品层，只保留项目 |
 | [项目归档与删除](../../../../../../.agents/notes/implemented/product/2026-10-09-project-archive-and-deletion.md) | 归档可恢复，永久删除有 30 天缓冲期 |
 | [个人表格设置](../../../../../../.agents/notes/implemented/product/2026-10-07-work-item-table-settings.md) | 筛选、排序、分组等只影响自己 |
-| [隐没已完成](../../../../../../.agents/notes/implemented/product/2026-10-19-work-item-hide-completed.md) | 按本人定义淡化已完成工作项 |
+| [隐藏已完成](../../../../../../.agents/notes/implemented/product/2026-10-19-work-item-hide-completed.md) | 按本人定义置灰、加删除线或不显示已完成工作项 |
 | [我的一天与关闭计时器](../../../../../../.agents/notes/implemented/product/2026-10-15-my-day-timeline-and-timer-opt-out.md) | 时间线补录，可以只手动填写 |
 | [工作日历与加班](../../../../../../.agents/notes/implemented/product/2026-10-12-work-calendar-and-overtime.md) | 标准工时与加班由公司日历决定 |
 | [新手引导](../../../../../../.agents/notes/implemented/product/2026-10-11-new-user-onboarding.md) | 页面导览的触发与版本 |

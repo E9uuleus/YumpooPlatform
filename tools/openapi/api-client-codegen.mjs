@@ -138,7 +138,8 @@ function applyStrictTypeScriptCompatibility(sourceRoot) {
   fs.writeFileSync(emptyDetailsPath, emptyDetails, 'utf8')
 
   for (const [model, fields] of [['ProjectCreateRequest', ['initialColors']],
-    ['ProjectInitialColors', ['categories', 'statuses', 'priorities']]]) {
+    ['ProjectInitialColors', ['categories', 'statuses', 'priorities']],
+    ['TimeTrackingPreferences', ['hideCompletedEffect']]]) {
     const modelPath = path.join(sourceRoot, 'models', `${model}.ts`)
     let source = normalizeText(fs.readFileSync(modelPath, 'utf8'))
     for (const field of fields) source = source.replace(

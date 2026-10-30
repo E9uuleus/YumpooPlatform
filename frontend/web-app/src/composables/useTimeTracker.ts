@@ -1,7 +1,7 @@
 import { computed, ref, shallowRef } from 'vue'
 import type { DesktopExitPhase } from '@yumpoo/preload-contract'
 import { ElMessage } from 'element-plus'
-import { readCsrfToken, type CurrentTimeTracker, type TimeTrackingPreferences, type TimeTrackingSummary, type TimeTrackingCommand } from '@yumpoo/api-client'
+import { HideCompletedEffect, readCsrfToken, type CurrentTimeTracker, type TimeTrackingPreferences, type TimeTrackingSummary, type TimeTrackingCommand } from '@yumpoo/api-client'
 import { timeTrackingApi } from '../api/client'
 import { timeProblemMessage } from './timeTrackingProblems'
 import { SHELL_SURFACE } from '../components/desktop/surfaces'
@@ -24,7 +24,7 @@ let channel: BroadcastChannel | undefined
 let cleanup: (() => void) | undefined
 const retries = new Map<string, string>()
 const listeners = new Set<() => void>()
-export const DEFAULT_TIME_PREFERENCES: TimeTrackingPreferences = { timerEnabled: true, workdayStartMinute: 540, workdayEndMinute: 1080, hideCompleted: false }
+export const DEFAULT_TIME_PREFERENCES: TimeTrackingPreferences = { timerEnabled: true, workdayStartMinute: 540, workdayEndMinute: 1080, hideCompleted: false, hideCompletedEffect: HideCompletedEffect.FadeStrikethrough }
 const PREFERENCES_KEY = 'yumpoo.time-tracking.preferences.v1'
 /** Last known preferences, so timer controls do not flash in before the first poll for someone who switched the timer off. */
 const cachedPreferences = shallowRef<TimeTrackingPreferences | undefined>(readCachedPreferences())

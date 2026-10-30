@@ -164,7 +164,7 @@ class TimeTrackingServiceTest {
         var fixture = new TimerFixture(false);
         if (action.equals("start")) when(fixture.timers.running(fixture.company, fixture.user)).thenReturn(List.of());
         when(fixture.timers.preferences(fixture.company, fixture.user))
-                .thenReturn(Optional.of(new TimeTrackingModels.TimeTrackingPreferences(false, 540, 1080, false)));
+                .thenReturn(Optional.of(new TimeTrackingModels.TimeTrackingPreferences(false, 540, 1080, false, TimeTrackingModels.HideCompletedEffect.FADE_STRIKETHROUGH)));
         assertThatThrownBy(() -> fixture.command(action)).isInstanceOfSatisfying(ApplicationException.class, failure -> {
             assertThat(failure.errorCode()).isEqualTo(StandardErrorCode.INVALID_STATE_TRANSITION);
             assertThat(failure.reason()).isEqualTo("TIMER_DISABLED");
@@ -180,8 +180,8 @@ class TimeTrackingServiceTest {
                 fixture.user, TimerFixture.NOW.minusSeconds(600), null, "TIMER", 0, null, null);
         when(fixture.timers.running(fixture.company, fixture.user))
                 .thenReturn(List.of(fixture.session, second), List.of(fixture.session, second), List.of());
-        var disabled = new TimeTrackingModels.TimeTrackingPreferences(false, 480, 1020, false);
-        fixture.service.updatePreferences(fixture.actor, new TimeTrackingModels.TimeTrackingPreferencesCommand(false, 480, 1020, null),
+        var disabled = new TimeTrackingModels.TimeTrackingPreferences(false, 480, 1020, false, TimeTrackingModels.HideCompletedEffect.FADE_STRIKETHROUGH);
+        fixture.service.updatePreferences(fixture.actor, new TimeTrackingModels.TimeTrackingPreferencesCommand(false, 480, 1020, null, null),
                 1, UUID.randomUUID(), new RequestHash("d".repeat(64)));
 
         var ordered = inOrder(fixture.deletion, fixture.timers);
@@ -201,7 +201,7 @@ class TimeTrackingServiceTest {
     @Test
     void unchangedPreferencesKeepTheTimerStateVersion() {
         var fixture = new TimerFixture(false);
-        fixture.service.updatePreferences(fixture.actor, new TimeTrackingModels.TimeTrackingPreferencesCommand(true, 540, 1080, null),
+        fixture.service.updatePreferences(fixture.actor, new TimeTrackingModels.TimeTrackingPreferencesCommand(true, 540, 1080, null, null),
                 1, UUID.randomUUID(), new RequestHash("e".repeat(64)));
         verify(fixture.deletion, never()).lockForProjection(any(), any());
         verify(fixture.timers, never()).savePreferences(any(), any(), any());
@@ -213,7 +213,7 @@ class TimeTrackingServiceTest {
     void invalidPreferencesAreRejectedBeforeLocking(Boolean enabled, Integer start, Integer end) {
         var fixture = new TimerFixture(false);
         assertThatThrownBy(() -> fixture.service.updatePreferences(fixture.actor,
-                new TimeTrackingModels.TimeTrackingPreferencesCommand(enabled, start, end, null), 1, UUID.randomUUID(),
+                new TimeTrackingModels.TimeTrackingPreferencesCommand(enabled, start, end, null, null), 1, UUID.randomUUID(),
                 new RequestHash("f".repeat(64)))).isInstanceOfSatisfying(ApplicationException.class,
                 failure -> assertThat(failure.errorCode()).isEqualTo(StandardErrorCode.VALIDATION_FAILED));
         verify(fixture.timers, never()).stateVersion(fixture.company, fixture.user, true);
