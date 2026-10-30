@@ -9,11 +9,16 @@ import type { DefineComponent } from 'vue'
 
 const ElConfigProvider = ElConfigProviderRaw as unknown as DefineComponent<{
   locale?: Language
+  message?: { showClose?: boolean }
 }>
+const MESSAGE_CONFIG = { showClose: true }
 </script>
 
 <template>
-  <el-config-provider :locale="zhCn">
+  <el-config-provider
+    :locale="zhCn"
+    :message="MESSAGE_CONFIG"
+  >
     <PageProgress />
     <router-view />
     <TimerHost />
