@@ -116,6 +116,7 @@ export * from './GovernanceOverrideResult';
 export * from './GovernanceReasonRequest';
 export * from './GovernanceState';
 export * from './GovernanceTargetType';
+export * from './HideCompletedEffect';
 export * from './ManagedPlatformRole';
 export * from './Member';
 export * from './MemberPage';
