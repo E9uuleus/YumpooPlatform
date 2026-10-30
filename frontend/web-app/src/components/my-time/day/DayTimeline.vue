@@ -76,13 +76,14 @@ const views = computed<BlockView[]>(() => props.blocks.map(original => {
   const duration = durationLabel(end - block.start)
   const split = share.maxParallel
   const splitTitle = split > 1 ? `与其他 ${split - 1} 项并行，当天计入 ${durationLabel(share.allocatedMs)}（实际 ${duration}）` : ''
+  const migrated = Boolean(block.migrated)
   return {
-    block: original, range, duration, split, splitTitle, migrated: Boolean(block.migrated),
+    block: original, range, duration, split, splitTitle, migrated,
     movable: editable && startInDay && endInDay, startHandle: editable && startInDay, endHandle: editable && endInDay,
     tier: height >= 64 ? 'full' : height >= 45 ? 'medium' : 'compact',
     continuesBefore: block.start < props.bounds.start, continuesAfter: end > props.bounds.end,
     label: [`${clock(block.start)}–${block.end === null ? '计时中' : clock(end)}`, block.title, block.projectName ?? '', duration, splitTitle,
-      Boolean(block.migrated) ? MIGRATED_TIME_NOTE : '']
+      migrated ? MIGRATED_TIME_NOTE : '']
       .filter(Boolean).join('，'),
     style: { ...box(range), left: `calc(${place.lane / place.lanes * 100}% + ${GAP_X}px)`, width: `calc(${100 / place.lanes}% - ${2 * GAP_X}px)`,
       '--day-block-color': color(block.colorToken) },

@@ -41,7 +41,7 @@ describe('迁入工时页面', () => {
   })
 
   it('有错误的表格不能进入下一步', async () => {
-    sheet.readWorkbook.mockResolvedValue([{ name: '张三', rows: [['责任人', '日期', '标题', '花费工时', '所属项目'], ['张三', '2026-09-01', '开发', 30, '交付']] }])
+    sheet.readWorkbook.mockResolvedValue([{ name: '张三', rows: [['责任人', '日期', '标题', '花费工时', '工作量单位', '所属项目'], ['张三', '2026-09-01', '开发', 30, '人时', '交付']] }])
     const wrapper = mountPage()
     await flushPromises()
     await upload(wrapper)
@@ -52,9 +52,9 @@ describe('迁入工时页面', () => {
 
   it('匹配在职成员后预览，再按自然日提交并回到成员工时', async () => {
     sheet.readWorkbook.mockResolvedValue([
-      { name: '张三', rows: [['责任人', '日期', '标题', '花费工时', '所属项目'],
-        ['张三', '2026-09-01', '开发', 7.5, '交付'], [null, '2026-09-02', '开发', 10, '交付'], [null, null, '不存在', 1, '交付']] },
-      { name: '李四', rows: [['责任人', '日期', '标题', '花费工时', '所属项目'], ['李四', '2026-09-01', '开发', 8, '交付']] },
+      { name: '张三', rows: [['责任人', '日期', '标题', '花费工时', '工作量单位', '所属项目'],
+        ['张三', '2026-09-01', '开发', 7.5, '人时', '交付'], [null, '2026-09-02', '开发', 10, '人时', '交付'], [null, null, '不存在', 1, '人时', '交付']] },
+      { name: '李四', rows: [['责任人', '日期', '标题', '花费工时', '工作量单位', '所属项目'], ['李四', '2026-09-01', '开发', 8, '人时', '交付']] },
     ])
     const wrapper = mountPage()
     await flushPromises()
@@ -70,6 +70,7 @@ describe('迁入工时页面', () => {
     expect(wrapper.text()).toContain('项目中没有该工作项')
     expect(wrapper.text()).toContain('请先执行工作项导入')
     expect(wrapper.text()).toContain('当天空闲时间不够，未写入')
+    expect(wrapper.text()).toContain('11未迁入小时')
     await button(wrapper, '迁入').trigger('click')
     await flushPromises()
     const commit = api.importMigratedTime.mock.calls[1]![0]

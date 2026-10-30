@@ -126,6 +126,9 @@ function back(): void { ++previewToken; previewing.value = false; step.value -= 
 
 const names = computed(() => new Map(members.value.flatMap((member, index) => choices.value[index] ? [[choices.value[index]!, member.name] as const] : [])))
 const replacedDays = computed(() => result.value?.days.filter(day => day.issues.some(issue => issue.code === 'REPLACES_PREVIOUS')).length ?? 0)
+/** 不会写入的小时：对应不到工作项的行，加上有问题而整天不写入的日期。 */
+const notImportedMinutes = computed(() => (result.value?.skippedMinutes ?? 0)
+  + (result.value?.days ?? []).filter(day => day.outcome === MigratedTimeImportOutcome.Error).reduce((sum, day) => sum + day.minutes, 0))
 const issueRows = computed(() => (result.value?.days ?? []).flatMap(day => day.issues.filter(issue => !isInformational(issue)).map((issue, index) => ({
   key: `${day.userId}:${fromApiDate(day.workDate)}:${index}`, member: names.value.get(day.userId) ?? '未知成员', date: fromApiDate(day.workDate),
   level: day.outcome === MigratedTimeImportOutcome.Error ? '错误' : '警告', text: describeIssue(issue),
@@ -149,7 +152,7 @@ async function submit(): Promise<void> {
   try {
     const done = await teamDashboardApi.importMigratedTime({ xXSRFTOKEN: csrf, idempotencyKey: attempt.key, migratedTimeImportRequest: body })
     const parts = [`已迁入 ${done.importedDayCount} 天、${hoursLabel(done.importedMinutes)} 小时`]
-    if (done.skippedRows.length) parts.push(`${done.skippedRows.length} 条工时找不到工作项，未迁入`)
+    if (done.skippedRows.length) parts.push(`${done.skippedRows.length} 条工时对应不到工作项，未迁入`)
     if (done.failedDayCount) parts.push(`${done.failedDayCount} 天因问题未写入`)
     ElMessage.success(parts.join('，'))
     await router.push({ name: 'team', params: { view: 'timesheet' } })
@@ -176,7 +179,7 @@ onBeforeUnmount(() => { ++previewToken })
     </template>
     <div class="hours-import">
       <yp-notice class="hours-import__note">
-        迁入工时用于导入原平台导出的「工时花费报表」：每位成员一个明细工作表，每行是成员某天在某个工作项上花费的工时，汇总表会被忽略。系统按「所属项目」和「标题」找到 Yumpoo 中同名的项目和工作项，把工时记到该工作项上；找不到的工时不会迁入，请先执行工作项导入。原平台只有每天的时长，系统会从成员的上班时间开始，按表格顺序把当天各工作项的工时依次排进空闲时段，所以排出的时段不代表实际工作时间。迁入的记录在个人工时日历、我的一天和团队工时表中标为「迁入工时」，成员不能修改。同一成员同一天再次迁入会覆盖上次的结果。
+        迁入工时用于导入原平台导出的「工时花费报表」：每位成员一个明细工作表，每行是成员某天在某个工作项上花费的工时，汇总表会被忽略。系统按「所属项目」和「标题」找到 Yumpoo 中同名的项目和工作项，把工时记到该工作项上；找不到的工时不会迁入，请先执行工作项导入。原平台只有每天的时长，系统会从成员的上班时间开始，按表格顺序把当天各工作项的工时依次排进空闲时段，所以排出的时段不代表实际工作时间。迁入的记录在个人工时日历、我的一天和团队工时表中标为「迁入工时」，成员不能修改。同一成员同一天再次迁入，会覆盖上次迁入到相同工作项的记录。
       </yp-notice>
       <import-steps
         :steps="STEPS"
@@ -371,7 +374,7 @@ onBeforeUnmount(() => { ++previewToken })
             <li><strong>{{ result.importedDayCount }}</strong><span>迁入天数</span></li>
             <li><strong>{{ hoursLabel(result.importedMinutes) }}</strong><span>合计小时</span></li>
             <li><strong>{{ replacedDays }}</strong><span>覆盖天数</span></li>
-            <li><strong>{{ hoursLabel(result.skippedMinutes) }}</strong><span>未迁入小时</span></li>
+            <li><strong>{{ hoursLabel(notImportedMinutes) }}</strong><span>未迁入小时</span></li>
             <li :class="{ 'is-problem': result.failedDayCount }">
               <strong>{{ result.failedDayCount }}</strong><span>问题天数</span>
             </li>
@@ -387,7 +390,7 @@ onBeforeUnmount(() => { ++previewToken })
               tone="warning"
               :title="`${skippedList.length} 条工时（${hoursLabel(result.skippedMinutes)} 小时）对应不到工作项，不会迁入`"
             >
-              所属项目或工作项不存在时，请先执行工作项导入：在对应项目的工作项表格中点 <strong>新增工作项 ▾ → 导入工作项</strong>（项目不存在时先新建同名项目）；成员不在项目中时，请先把成员加入项目。处理后重新迁入，会覆盖这些日期上次迁入的结果，不会重复计入。
+              所属项目或工作项不存在时，请先执行工作项导入：在对应项目的工作项表格中点 <strong>新增工作项 ▾ → 导入工作项</strong>（项目不存在时先新建同名项目）；成员不在项目中时，请先把成员加入项目。处理后重新迁入同一份文件即可补上，已迁入的工时不会重复计入。
             </yp-notice>
             <el-table
               :data="skippedList"

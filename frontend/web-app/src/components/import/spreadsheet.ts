@@ -37,8 +37,9 @@ export function decodeCsv(buffer: ArrayBuffer): string {
 
 export interface WorkbookSheet { name: string; rows: SheetCell[][] }
 
-/** 读取全部工作表，保留原始单元格；日期单元格读成 Date，空单元格是 null。 */
-export async function readWorkbook(file: File): Promise<WorkbookSheet[]> {
+type Xlsx = typeof import('xlsx')
+
+async function openWorkbook(file: File): Promise<{ XLSX: Xlsx; book: import('xlsx').WorkBook }> {
   const invalid = validateSpreadsheetFile(file)
   if (invalid) throw new SpreadsheetError(invalid)
   const buffer = await file.arrayBuffer()
@@ -52,16 +53,22 @@ export async function readWorkbook(file: File): Promise<WorkbookSheet[]> {
     throw new SpreadsheetError('无法读取该文件，请确认它是有效的表格文件。')
   }
   if (!book.SheetNames.length) throw new SpreadsheetError('文件里没有工作表。')
-  return book.SheetNames.map(name => ({
-    name,
-    rows: trimTrailingBlanks(XLSX.utils.sheet_to_json<unknown[]>(book.Sheets[name]!, { header: 1, raw: true, defval: null, blankrows: true })
-      .map(row => row.map(normalizeCell))),
-  }))
+  return { XLSX, book }
 }
 
-/** 只读第一个工作表。 */
+const sheetRows = (XLSX: Xlsx, sheet: import('xlsx').WorkSheet): SheetCell[][] =>
+  trimTrailingBlanks(XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: true, defval: null, blankrows: true }).map(row => row.map(normalizeCell)))
+
+/** 读取全部工作表，保留原始单元格；日期单元格读成 Date，空单元格是 null。 */
+export async function readWorkbook(file: File): Promise<WorkbookSheet[]> {
+  const { XLSX, book } = await openWorkbook(file)
+  return book.SheetNames.map(name => ({ name, rows: sheetRows(XLSX, book.Sheets[name]!) }))
+}
+
+/** 只读第一个工作表，规则同 readWorkbook。 */
 export async function readSpreadsheet(file: File): Promise<SheetCell[][]> {
-  return (await readWorkbook(file))[0]!.rows
+  const { XLSX, book } = await openWorkbook(file)
+  return sheetRows(XLSX, book.Sheets[book.SheetNames[0]!]!)
 }
 
 /** 去掉尾部全空的行与列（工作表范围常比内容大），其余行补齐到同一宽度；中间的空行保留，行号不变。 */

@@ -4,7 +4,8 @@ import { toApiDate } from './teamDashboardModel'
 
 /** 原平台导出的「工时花费报表」：每位成员一个明细工作表，每行是成员某天在某个工作项上的工时；汇总表没有明细表头，会被忽略。 */
 export const HEADER_SEARCH_ROWS = 10
-export const DETAIL_HEADERS = { name: '责任人', date: '日期', title: '标题', hours: '花费工时', project: '所属项目' } as const
+export const DETAIL_HEADERS = { name: '责任人', date: '日期', title: '标题', hours: '花费工时', project: '所属项目', unit: '工作量单位' } as const
+export const HOURS_UNIT = '人时'
 export const MAX_DAY_HOURS = 24
 export const MAX_IMPORT_ROWS = 20_000
 
@@ -63,24 +64,27 @@ export function parseHoursDetail(sheets: readonly WorkbookSheet[]): DetailParse 
       if (!title) continue
       const where = `「${sheet.name}」第 ${rowNumber} 行`
       if (date === null) { errors.push(`${where}的日期无法识别。`); continue }
+      const unit = cellText(row[columns.unit])
+      if (unit !== HOURS_UNIT) { errors.push(`${where}的工作量单位「${unit}」不是「${HOURS_UNIT}」，请导出以人时计的报表。`); continue }
       const minutes = hoursToMinutes(cellNumber(row[columns.hours]))
       if (minutes === null) { errors.push(`${where}的花费工时「${cellText(row[columns.hours])}」不是 0 到 ${MAX_DAY_HOURS} 的小时数。`); continue }
       if (minutes > 0) rows.push({ sheet: sheet.name, rowNumber, name, date, projectName: cellText(row[columns.project]), title, minutes })
     }
   }
-  if (!used.length) return { ok: false, message: '没有找到工时明细表。请上传原平台导出的「工时花费报表」，明细表需要包含「责任人、日期、标题、花费工时、所属项目」列。' }
+  if (!used.length) return { ok: false, message: '没有找到工时明细表。请上传原平台导出的「工时花费报表」，明细表需要包含「责任人、日期、标题、花费工时、工作量单位、所属项目」列。' }
   if (!rows.length) errors.push('明细表里没有可迁入的工时。')
   if (rows.length > MAX_IMPORT_ROWS) errors.push(`一次最多迁入 ${MAX_IMPORT_ROWS} 条工时，当前有 ${rows.length} 条，请拆分文件。`)
-  const members = new Map<string, { dates: Set<string>; totalMinutes: number }>()
+  const members = new Map<string, Map<string, number>>()
   for (const row of rows) {
-    const member = members.get(row.name) ?? { dates: new Set<string>(), totalMinutes: 0 }
-    member.dates.add(row.date)
-    member.totalMinutes += row.minutes
-    members.set(row.name, member)
+    const days = members.get(row.name) ?? new Map<string, number>()
+    days.set(row.date, (days.get(row.date) ?? 0) + row.minutes)
+    members.set(row.name, days)
   }
+  for (const [name, days] of members) for (const [date, minutes] of days)
+    if (minutes > MAX_DAY_HOURS * 60) errors.push(`「${name}」${date} 的花费工时合计 ${hoursLabel(minutes)} 小时，超过 ${MAX_DAY_HOURS} 小时。`)
   return { ok: true, detail: {
     sheets: used, ignoredSheets, dates: [...new Set(rows.map(row => row.date))].sort(), rows, errors,
-    members: [...members].map(([name, member]) => ({ name, days: member.dates.size, totalMinutes: member.totalMinutes })),
+    members: [...members].map(([name, days]) => ({ name, days: days.size, totalMinutes: [...days.values()].reduce((sum, minutes) => sum + minutes, 0) })),
   } }
 }
 
