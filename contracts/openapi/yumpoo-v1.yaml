@@ -4419,7 +4419,7 @@ paths:
       tags:
         - Projects
       operationId: reassignProjectOwner
-      summary: 原子重指派 Project 唯一负责人
+      summary: 负责人或 CompanyAdmin 原子重指派 Project 唯一负责人
       security:
         - sessionCookie: []
       parameters:
@@ -13994,14 +13994,14 @@ components:
       additionalProperties: false
       required:
         - newOwnerUserId
-        - reason
       properties:
         newOwnerUserId:
           $ref: "#/components/schemas/Uuid"
         reason:
           type: string
-          minLength: 10
           maxLength: 500
+          nullable: true
+          description: 可选，只写入安全审计。
     Content:
       type: object
       additionalProperties: false
