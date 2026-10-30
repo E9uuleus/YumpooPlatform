@@ -34,6 +34,13 @@ public interface WorkItemRepository {
     List<WorkItemImportPlanner.Existing> findImportTargets(UUID companyId, UUID projectId);
     /** Every work item of the project that is not deleted, archived ones included. */
     List<WorkItemTitle> findTitles(UUID companyId, UUID projectId);
+    /** Archived, non-deleted items of a project, latest change first, with the active parent's title. */
+    List<ArchivedRow> findArchived(UUID companyId, UUID projectId, String query, int offset, int limit);
+
+    long countArchived(UUID companyId, UUID projectId, String query);
+
+    record ArchivedRow(WorkItem item, String parentTitle) {}
+
     boolean insert(WorkItem workItem);
     void replaceAssignees(WorkItem workItem);
     Optional<WorkItemModels.WorkItemLocator> findLocator(UUID companyId, UUID workItemId);

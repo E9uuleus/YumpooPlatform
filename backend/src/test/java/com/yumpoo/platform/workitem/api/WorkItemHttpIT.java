@@ -282,6 +282,12 @@ class WorkItemHttpIT {
         JsonNode archived = ok(response);
         assertThat(archived.path("archived").asBoolean()).isTrue();
         assertThat(archived.path("deleted").asBoolean()).isFalse();
+        String archivedCollection = "/api/v1/projects/" + PROJECT_ID + "/archived-work-items";
+        JsonNode archivedPage = ok(get(archivedCollection, member));
+        assertThat(archivedPage.path("totalElements").asLong()).isEqualTo(1);
+        assertThat(archivedPage.path("items").get(0).path("id").asText()).isEqualTo(parentId);
+        assertThat(archivedPage.path("items").get(0).path("etag").asText())
+                .isEqualTo(response.headers().firstValue("ETag").orElseThrow());
         assertThat(archived.path("statusCode")).isEqualTo(parent.path("statusCode"));
         assertThat(archived.path("capabilities").path("canEditFields").asBoolean()).isFalse();
         assertThat(archived.path("capabilities").path("canDiscuss").asBoolean()).isFalse();
@@ -293,6 +299,7 @@ class WorkItemHttpIT {
         assertThat(mutate("POST", path + "/subitems", member, subitemBody(tasksId, "不允许新增"), null, UUID.randomUUID()).statusCode()).isEqualTo(404);
         JsonNode restored = ok(mutate("POST", path + "/unarchive", member, "", archived.path("etag").asText(), UUID.randomUUID()));
         assertThat(restored.path("archived").asBoolean()).isFalse();
+        assertThat(ok(get(archivedCollection, member)).path("totalElements").asLong()).isZero();
         JsonNode listed = ok(get(collection, member)).path("items").get(0);
         assertThat(listed.path("id").asText()).isEqualTo(parentId);
         assertThat(listed.path("subitemCount").asInt()).isEqualTo(1);

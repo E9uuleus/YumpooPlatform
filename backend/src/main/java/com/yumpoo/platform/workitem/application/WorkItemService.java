@@ -336,6 +336,25 @@ public class WorkItemService {
         return new ProjectWorkItemFilterOptionCursorPage(items, nextCursor);
     }
 
+    public ArchivedWorkItemPage listArchived(CurrentActor actor, UUID projectId, String query, OffsetPageRequest page) {
+        requireActor(actor);
+        ProjectAccessSnapshot project = visible(actor, projectId);
+        String q = query == null || query.isBlank() ? null : query.strip();
+        List<WorkItemRepository.ArchivedRow> rows = workItems.findArchived(project.companyId(), projectId, q,
+                page.page() * page.size(), page.size());
+        long total = workItems.countArchived(project.companyId(), projectId, q);
+        List<WorkItem> items = rows.stream().map(WorkItemRepository.ArchivedRow::item).toList();
+        Map<UUID, MinimalUserSnapshot> people = people(project.companyId(), items);
+        Map<UUID, Long> subitemCounts = relations.countActiveChildren(project.companyId(),
+                items.stream().map(WorkItem::id).toList());
+        return new ArchivedWorkItemPage(rows.stream().map(row -> new ArchivedWorkItem(row.item().id(),
+                        row.item().itemNo(), row.item().title(), row.item().statusCode(),
+                        row.item().statusCategory().name(), row.parentTitle(),
+                        subitemCounts.getOrDefault(row.item().id(), 0L), row.item().updatedAt(),
+                        updatedByDisplayName(row.item(), people), StrongEtag.format(row.item().rowVersion()))).toList(),
+                page.page(), page.size(), total, (int) ((total + page.size() - 1) / page.size()));
+    }
+
     @Transactional(readOnly = true)
     public WorkItemDetail find(CurrentActor actor, UUID workItemId) {
         requireActor(actor);
