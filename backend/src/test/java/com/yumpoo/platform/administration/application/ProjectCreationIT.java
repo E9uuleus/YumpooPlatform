@@ -188,6 +188,34 @@ class ProjectCreationIT {
     }
 
     @Test
+    void projectQueryCanBeLimitedToVisibleIdsWithoutCountDrift() {
+        UUID alpha = create("IDS_ALPHA", "a")
+                .result().resourceId();
+        UUID beta = create("IDS_BETA", "b")
+                .result().resourceId();
+        var all = com.yumpoo.platform.catalog.application.project.ProjectLifecycleFilter.ALL;
+        var firstPage = com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest.of(0, 10);
+
+        var result = projectService.findAll(owner(), new com.yumpoo.platform.catalog.application.project.ProjectSearchCriteria(
+                null, null, null, null, all, null, List.of(beta, UUID.randomUUID())), firstPage);
+        assertThat(result.items()).extracting(project -> project.id()).containsExactly(beta);
+        assertThat(result.totalElements()).isOne();
+        assertThat(projectService.findAll(owner(), new com.yumpoo.platform.catalog.application.project.ProjectSearchCriteria(
+                null, null, null, null, all, null, List.of()), firstPage).items())
+                .extracting(project -> project.id()).contains(alpha, beta);
+
+        CurrentActor outsider = new CurrentActor(ADMIN_ID, COMPANY_ID, 0, Set.of());
+        assertThat(projectService.findAll(outsider, new com.yumpoo.platform.catalog.application.project.ProjectSearchCriteria(
+                null, null, null, null, all, null, List.of(alpha, beta)), firstPage).items()).isEmpty();
+
+        List<UUID> tooMany = java.util.stream.Stream.generate(UUID::randomUUID).limit(51).toList();
+        assertThatThrownBy(() -> new com.yumpoo.platform.catalog.application.project.ProjectSearchCriteria(
+                null, null, null, null, all, null, tooMany))
+                .isInstanceOfSatisfying(ApplicationException.class, error ->
+                        assertThat(error.errorCode()).isEqualTo(StandardErrorCode.VALIDATION_FAILED));
+    }
+
+    @Test
     void ownerAndAdministratorCanArchiveAndRestoreWithoutTemplateDependencies() {
         UUID projectId = create("UP2_LIFECYCLE", "b")
                 .result().resourceId();
