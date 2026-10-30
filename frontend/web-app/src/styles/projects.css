@@ -245,6 +245,34 @@
   white-space: nowrap;
 }
 
+.project-navigation__projects {
+  display: grid;
+  gap: var(--yp-space-1);
+}
+
+.project-navigation__children .project-navigation__pin {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  margin-left: auto;
+  color: var(--yp-text-muted);
+}
+
+/* 置顶或点击后项目移到新位置时平滑过渡；减少动态效果时动效令牌为 0。 */
+.project-navigation-move,
+.project-recent-move {
+  transition: transform var(--yp-motion-overlay) var(--yp-ease-standard);
+}
+
+.project-navigation-enter-active {
+  transition: opacity var(--yp-motion-overlay) var(--yp-ease-standard), transform var(--yp-motion-overlay) var(--yp-ease-standard);
+}
+
+.project-navigation-enter-from {
+  opacity: 0;
+  transform: translateX(-6px);
+}
+
 .app-shell--workspace .global-navigation .project-navigation__more {
   color: var(--yp-text-secondary);
 }
@@ -493,6 +521,21 @@
 
 .project-recent-list > li.pinned {
   background: var(--yp-bg-selected);
+}
+
+.project-recent-list > li.project-recent-list__row--moved {
+  position: relative;
+  z-index: 1;
+  box-shadow: var(--yp-shadow-hover);
+  transition: box-shadow var(--yp-motion-progress) var(--yp-ease-standard), background var(--yp-motion-fast) var(--yp-ease-standard);
+}
+
+.project-recent-list__row--moved .project-recent-list__pin svg {
+  animation: project-pin-pop var(--yp-motion-overlay) var(--yp-ease-standard);
+}
+
+@keyframes project-pin-pop {
+  50% { transform: scale(1.25); }
 }
 
 .project-recent-list__identity {

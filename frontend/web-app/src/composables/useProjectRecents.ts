@@ -64,6 +64,14 @@ function read(scope: string | undefined): ProjectRecentEntry[] {
   }
 }
 
+/** 置顶与最近打开的项目在前（沿用最近记录的顺序），其余保持原有顺序。 */
+export function orderByRecents<T extends { id: string }>(projects: readonly T[], recents: readonly ProjectRecentEntry[]): T[] {
+  const rank = new Map(recents.map((item, index) => [item.id, index]))
+  return projects.map((project, index) => ({ project, index, rank: rank.get(project.id) ?? recents.length }))
+    .sort((left, right) => left.rank - right.rank || left.index - right.index)
+    .map(({ project }) => project)
+}
+
 function isoDate(value: Date | string): string {
   return (value instanceof Date ? value : new Date(value)).toISOString()
 }

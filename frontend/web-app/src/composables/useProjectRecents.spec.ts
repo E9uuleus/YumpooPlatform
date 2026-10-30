@@ -2,7 +2,7 @@ import { ProjectActorAccess, ProjectLifecycle } from '@yumpoo/api-client'
 import { enableAutoUnmount, mount } from '@vue/test-utils'
 import { defineComponent } from 'vue'
 import { afterEach, expect, it } from 'vitest'
-import { useProjectRecents } from './useProjectRecents'
+import { orderByRecents, useProjectRecents, type ProjectRecentEntry } from './useProjectRecents'
 
 enableAutoUnmount(afterEach)
 it('旧最近项目中的退役元数据被忽略，置顶和访问记录保持有效', () => {
@@ -16,4 +16,11 @@ it('旧最近项目中的退役元数据被忽略，置顶和访问记录保持�
   expect(wrapper.vm.items[0]).not.toHaveProperty('project' + 'Type')
   wrapper.vm.togglePinned('p1')
   expect(wrapper.vm.items[0]?.pinned).toBe(false)
+})
+
+it('置顶和最近打开的项目排在前面，其余保持原顺序', () => {
+  const recent = (id: string, openedAt: number, pinned = false) => ({ id, openedAt, pinned }) as ProjectRecentEntry
+  const projects = ['a', 'b', 'c', 'd', 'e'].map(id => ({ id }))
+  expect(orderByRecents(projects, [recent('d', 1, true), recent('b', 9), recent('x', 5)]).map(project => project.id))
+    .toEqual(['d', 'b', 'a', 'c', 'e'])
 })
