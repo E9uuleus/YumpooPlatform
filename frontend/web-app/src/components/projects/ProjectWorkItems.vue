@@ -27,6 +27,8 @@ import WorkItemNameCell from './WorkItemNameCell.vue'
 import WorkItemDraftCell from './WorkItemDraftCell.vue'
 import { useWorkItemInlineCreate } from './useWorkItemInlineCreate'
 import WorkItemUpdatedCell from './WorkItemUpdatedCell.vue'
+import WorkItemTableSkeleton from './WorkItemTableSkeleton.vue'
+import WorkItemKanbanSkeleton from './WorkItemKanbanSkeleton.vue'
 import { ArrowDown, Filter as FilterIcon, Hide, Plus, Search, Sort, Upload, User } from '@element-plus/icons-vue'
 import {
   TimeTrackingState,
@@ -672,6 +674,10 @@ const quickGridStyle = computed(() => {
       ...visibleColumns.value.map(item => `${columnWidth(item.key)}px`), `${TABLE_ADD_COLUMN_MIN_WIDTH}px`].join(' '),
   }
 })
+const TABLE_LEAD_WIDTHS = [TABLE_MENU_COLUMN_WIDTH, TABLE_EXPAND_COLUMN_WIDTH, TABLE_SELECTION_COLUMN_WIDTH]
+const PAGE_SKELETON_TOOLBAR = [104, 72, 64, 60, 56, 88]
+const skeletonColumns = computed(() => visibleColumns.value.map(item => ({ key: item.key, width: columnWidth(item.key), collapsed: isColumnCollapsed(item.key) })))
+const skeletonRowHeight = computed(() => heightOption(tableViewSettings.value.rowHeight).row)
 const hasExplicitSort = computed(() => sortRules.value.length > 0)
 const filteredMembers = computed(() => {
   const query = assigneeSearch.value.trim().toLocaleLowerCase()
@@ -820,6 +826,11 @@ function groupKeyForRow(row: TableDisplayRow): string {
   if (isGroupDisplayRow(row)) return row.group.key
   const anchor = isDraft(row) ? tableItems.value.find(item => item.id === inlineDraft.value?.anchorId) : undefined
   return grouping.keyOf(anchor ?? row)
+}
+const tableInitialLoading = computed(() => (grouped.value ? groupsLoading.value : tableLoading.value) && !displayTableItems.value.length)
+function isGroupPageLoading(group: { key: string }): boolean {
+  const page = grouping.page(group.key)
+  return !page.error && (!groupCountsReady.value || page.loading)
 }
 const displayTableItems = computed<TableDisplayRow[]>(() => {
   const withSubitems = (items: ProjectWorkItemListItem[], group: WorkItemGroup): TableDisplayRow[] => items.flatMap(item =>
@@ -3045,7 +3056,6 @@ onBeforeUnmount(() => {
 
 <template>
   <div
-    v-loading="loading"
     class="project-view-stack project-overview-stack"
     :class="{ 'work-items-embedded': embedded }"
   >
@@ -3053,6 +3063,48 @@ onBeforeUnmount(() => {
       v-if="error"
       :problem="error"
     />
+    <div
+      v-if="loading && !project && !error"
+      class="work-items-page-skeleton"
+    >
+      <div
+        class="work-items-page-skeleton__head work-item-skeleton"
+        aria-hidden="true"
+      >
+        <i class="work-item-skeleton-block work-items-page-skeleton__title" />
+        <div class="work-items-page-skeleton__toolbar">
+          <i
+            v-for="width in PAGE_SKELETON_TOOLBAR"
+            :key="width"
+            class="work-item-skeleton-block"
+            :style="{ width: `${width}px` }"
+          />
+        </div>
+      </div>
+      <div
+        v-if="selectedView === 'kanban'"
+        class="kanban-board"
+      >
+        <section
+          v-for="lane in 4"
+          :key="lane"
+          class="kanban-lane"
+        >
+          <work-item-kanban-skeleton />
+        </section>
+      </div>
+      <work-item-table-skeleton
+        v-else
+        class="work-items-page-skeleton__table"
+        :columns="skeletonColumns"
+        :lead-widths="TABLE_LEAD_WIDTHS"
+        :trailing-width="TABLE_ADD_COLUMN_MIN_WIDTH"
+        :rows="12"
+        :row-height="skeletonRowHeight"
+        header
+        fade
+      />
+    </div>
     <template v-if="project">
       <work-item-import-dialog
         v-if="canCreate"
@@ -3343,7 +3395,6 @@ onBeforeUnmount(() => {
         </template>
         <div
           v-if="selectedView === 'table'"
-          v-loading="tableLoading && !tableItems.length && !grouped"
           :aria-busy="tableLoading || tableSorting || groupsLoading"
           class="table-surface monday-table-surface"
           data-tour="work-item-table"
@@ -3517,20 +3568,24 @@ onBeforeUnmount(() => {
                         <path d="M12.76 10.56a.77.77 0 0 0 0-1.116L8.397 5.233a.84.84 0 0 0-1.157 0 .77.77 0 0 0 0 1.116l3.785 3.653-3.785 3.652a.77.77 0 0 0 0 1.117.84.84 0 0 0 1.157 0l4.363-4.211Z" />
                       </svg>
                       <span class="work-item-group-name">{{ scope.row.group.label }}</span>
-                      <small>{{ groupCountsReady ? scope.row.group.count : '…' }} 个工作项</small>
+                      <small v-if="groupCountsReady">{{ scope.row.group.count }} 个工作项</small>
+                      <i v-else class="work-item-skeleton work-item-skeleton-block work-item-group-count-skeleton" aria-hidden="true" />
                     </button>
                     <el-checkbox v-else-if="scope.row.groupRowKind === 'columns'" :model-value="groupSelection(scope.row.group).checked"
                       :indeterminate="groupSelection(scope.row.group).mixed" :disabled="!grouping.page(scope.row.group.key).items.length"
                       :aria-label="`选择${scope.row.group.label}已加载工作项`" @change="selectGroupRows(scope.row.group, Boolean($event))" />
                     <div v-else-if="scope.row.groupRowKind === 'load'" :ref="element => isGroupDisplayRow(scope.row) && setGroupSentinel(scope.row.group.key, element)"
-                      class="work-item-group-load" :class="{ 'work-item-group-load--complete': scope.row.group.count > 0 && grouping.page(scope.row.group.key).loaded && !grouping.page(scope.row.group.key).nextCursor && !grouping.page(scope.row.group.key).error }">
+                      class="work-item-group-load" :class="{ 'work-item-group-load--complete': scope.row.group.count > 0 && grouping.page(scope.row.group.key).loaded && !grouping.page(scope.row.group.key).nextCursor && !grouping.page(scope.row.group.key).error, 'work-item-group-load--loading': isGroupPageLoading(scope.row.group) }">
                       <template v-if="grouping.page(scope.row.group.key).error">
                         <span>此分组加载失败</span><el-button text size="small" @click="grouping.load(scope.row.group.key)">重试</el-button>
                       </template>
-                      <span v-else-if="scope.row.group.count === 0 && groupCountsReady">暂无工作项</span>
+                      <work-item-table-skeleton v-else-if="isGroupPageLoading(scope.row.group)" :columns="skeletonColumns"
+                        :lead-widths="[TABLE_SELECTION_COLUMN_WIDTH]" :sticky-offset="TABLE_MENU_COLUMN_WIDTH + TABLE_EXPAND_COLUMN_WIDTH"
+                        :trailing-width="TABLE_ADD_COLUMN_MIN_WIDTH" :rows="2" :row-height="skeletonRowHeight" :label="`正在加载分组：${scope.row.group.label}`" />
+                      <span v-else-if="scope.row.group.count === 0">暂无工作项</span>
                       <button v-else-if="!grouping.page(scope.row.group.key).loaded || grouping.page(scope.row.group.key).nextCursor"
-                        class="text-button" :disabled="!groupCountsReady || grouping.page(scope.row.group.key).loading" @click="grouping.load(scope.row.group.key)">
-                        {{ grouping.page(scope.row.group.key).loading || !groupCountsReady ? '正在加载…' : '加载更多工作项' }}
+                        class="text-button" @click="grouping.load(scope.row.group.key)">
+                        加载更多工作项
                       </button>
                     </div>
                   </template>
@@ -3937,6 +3992,24 @@ onBeforeUnmount(() => {
               <template #append>
                 <inline-problem v-if="groupingError" :problem="groupingError" />
                 <button v-if="groupingError" class="text-button" @click="grouping.refresh()">重试加载分组</button>
+                <work-item-table-skeleton
+                  v-if="tableInitialLoading"
+                  :columns="skeletonColumns"
+                  :lead-widths="TABLE_LEAD_WIDTHS"
+                  :trailing-width="TABLE_ADD_COLUMN_MIN_WIDTH"
+                  :rows="10"
+                  :row-height="skeletonRowHeight"
+                  fade
+                />
+                <work-item-table-skeleton
+                  v-else-if="!grouped && tableLoading"
+                  :columns="skeletonColumns"
+                  :lead-widths="TABLE_LEAD_WIDTHS"
+                  :trailing-width="TABLE_ADD_COLUMN_MIN_WIDTH"
+                  :rows="3"
+                  :row-height="skeletonRowHeight"
+                  label="正在加载更多工作项"
+                />
                 <div
                   v-if="!grouped && quickOpen"
                   ref="quickRow"
@@ -3970,7 +4043,7 @@ onBeforeUnmount(() => {
                   </div>
                 </div>
                 <button
-                  v-else-if="!grouped"
+                  v-else-if="!grouped && !tableInitialLoading"
                   class="quick-add monday-quick-add"
                   data-tour="work-item-quick-add"
                   :style="quickGridStyle"
@@ -3983,8 +4056,7 @@ onBeforeUnmount(() => {
                 </button>
                 <div v-if="selectedCount || batchBusy" class="work-item-batch-spacer" aria-hidden="true" />
                 <div ref="tableSentinel" class="cursor-sentinel" aria-hidden="true" />
-                <div v-if="!grouped && tableLoading && tableItems.length" class="incremental-state">正在加载更多工作项…</div>
-                <div v-else-if="!grouped && loadingMoreError" class="incremental-state incremental-state--error">
+                <div v-if="!grouped && loadingMoreError" class="incremental-state incremental-state--error">
                   <span>加载更多失败</span><el-button text @click="loadTable(tableNextCursor, true)">重试</el-button>
                 </div>
               </template>
@@ -4031,6 +4103,7 @@ onBeforeUnmount(() => {
               v-if="lane(status.statusCode).error"
               :problem="lane(status.statusCode).error!"
             />
+            <work-item-kanban-skeleton v-if="lane(status.statusCode).loading && !lane(status.statusCode).items.length" />
             <article
               v-for="item in lane(status.statusCode).items"
               :key="item.id"
@@ -4059,8 +4132,18 @@ onBeforeUnmount(() => {
             <div
               v-if="lane(status.statusCode).nextCursor"
               class="lane-cursor-sentinel incremental-state"
+              :class="{ 'lane-cursor-sentinel--loading': lane(status.statusCode).loading }"
               :data-status="status.statusCode"
-            >{{ lane(status.statusCode).loading ? '正在加载…' : '继续滚动以加载更多' }}</div>
+            >
+              <work-item-kanban-skeleton
+                v-if="lane(status.statusCode).loading"
+                :cards="1"
+                label="正在加载更多工作项"
+              />
+              <template v-else>
+                继续滚动以加载更多
+              </template>
+            </div>
           </section>
         </div>
       </section>
@@ -4187,6 +4270,8 @@ onBeforeUnmount(() => {
 .work-item-group-toggle small { flex: none; font-size: 12px; color: var(--yp-text-secondary); font-weight: 400; }
 .work-item-group-load { position: sticky; left: 33px; flex: none; display: flex; width: fit-content; max-width: min(540px, calc(100vw - 200px)); gap: 8px; align-items: center; min-height: 36px; padding: 0 16px; color: var(--yp-text-secondary); font-size: 12px; }
 .work-item-group-load--complete { min-height: 0; height: 0; padding: 0; }
+.work-item-group-load--loading { --work-item-skeleton-accent: transparent; position: relative; left: auto; display: block; width: auto; max-width: none; min-height: 0; padding: 0; }
+.work-item-group-count-skeleton { flex: none; width: 64px; height: 10px; }
 :deep(.monday-table--grouped.el-table > .el-table__inner-wrapper > .el-table__body-wrapper) { height: 100% !important; }
 :deep(.monday-table--grouped > .el-table__inner-wrapper > .el-table__body-wrapper > .el-scrollbar > .el-scrollbar__wrap > .el-scrollbar__view > table > tbody > tr.work-item-group-collapsed:not(.work-item-group-heading):not(.work-item-group-spacer)),
 :deep(.monday-table--grouped tr.work-item-table-row.work-item-group-collapsed + tr:has(> .el-table__expanded-cell)) { display: none; }
@@ -5340,6 +5425,16 @@ onBeforeUnmount(() => {
 .cursor-sentinel { height: 1px; }
 .incremental-state { display: flex; min-height: 36px; align-items: center; justify-content: center; gap: var(--yp-space-2); color: var(--yp-text-muted); font-size: 12px; }
 .incremental-state--error { color: var(--yp-status-red); }
+.lane-cursor-sentinel--loading { display: block; min-height: 0; }
+.work-items-page-skeleton { display: grid; gap: var(--yp-space-4); overflow: hidden; }
+.work-items-page-skeleton__head { display: grid; gap: var(--yp-space-4); padding: var(--yp-space-2) 0; }
+.work-items-page-skeleton__title { width: 220px; height: 22px; }
+.work-items-page-skeleton__toolbar { display: flex; flex-wrap: wrap; gap: var(--yp-space-3); }
+.work-items-page-skeleton__toolbar .work-item-skeleton-block { height: 30px; border-radius: var(--yp-radius-sm); }
+.work-items-page-skeleton__table { border-top: 1px solid var(--yp-monday-grid-border); }
+/* 新加载的行淡入；backwards 只作用于动画开始前，不会盖过拖动等状态对透明度的设置。 */
+:deep(.monday-table .el-table__body tr.work-item-table-row) { animation: work-item-row-in 180ms var(--yp-ease-standard) backwards; }
+@keyframes work-item-row-in { from { opacity: 0; } }
 :deep(.monday-table .work-item-table-row--dragging td) {
   pointer-events: none;
 }

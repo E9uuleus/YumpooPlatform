@@ -1557,6 +1557,40 @@ describe('项目级工作项首页', () => {
     }), expect.objectContaining({ signal: expect.any(AbortSignal) }))
   })
 
+  it('首屏与追加加载显示与列对齐的骨架而不是加载文字', async () => {
+    let resolveFirst!: (value: ProjectWorkItemCursorPage) => void
+    state.listProjectWorkItems.mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve }))
+    const wrapper = mountView()
+    await flushPromises()
+
+    const initial = wrapper.get('.table-surface .work-item-table-skeleton')
+    expect(initial.attributes('role')).toBe('status')
+    expect(initial.findAll('.work-item-table-skeleton__row')).toHaveLength(10)
+    expect(wrapper.find('.monday-quick-add').exists()).toBe(false)
+    expect(wrapper.find('.table-surface .el-loading-mask').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('正在加载')
+
+    resolveFirst({ items: [item()], nextCursor: 'cursor-1' })
+    await flushPromises()
+    expect(wrapper.find('.work-item-table-skeleton').exists()).toBe(false)
+
+    let resolveMore!: (value: ProjectWorkItemCursorPage) => void
+    state.listProjectWorkItems.mockImplementationOnce(() => new Promise(resolve => { resolveMore = resolve }))
+    const loading = (wrapper.vm as unknown as { loadTable: (cursor: string, append: boolean) => Promise<void> })
+      .loadTable('cursor-1', true)
+    await nextTick()
+    const more = wrapper.get('.work-item-table-skeleton')
+    expect(more.attributes('aria-label')).toBe('正在加载更多工作项')
+    expect(more.findAll('.work-item-table-skeleton__row')).toHaveLength(3)
+    expect(wrapper.text()).not.toContain('正在加载更多工作项')
+
+    resolveMore({ items: [item('item-2')], nextCursor: null })
+    await loading
+    await flushPromises()
+    expect(wrapper.find('.work-item-table-skeleton').exists()).toBe(false)
+    expect(wrapper.findAll('.work-item-link')).toHaveLength(2)
+  })
+
   it('连续拖动使用最新 ETag，且只提交当前可见相邻项', async () => {
     const first = { ...item('item-1'), title: '第一项' }
     const second = { ...item('item-2'), title: '第二项' }
