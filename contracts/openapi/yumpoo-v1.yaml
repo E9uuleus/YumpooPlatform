@@ -5854,6 +5854,53 @@ paths:
           $ref: "#/components/responses/Conflict"
         "422":
           $ref: "#/components/responses/ValidationFailed"
+  /projects/{projectId}/archived-work-items:
+    get:
+      tags:
+        - WorkItems
+      operationId: listArchivedWorkItems
+      summary: 分页查询 Project 中已归档的工作项
+      description: 返回本 Project 内已归档且未删除的工作项（含单独归档的子项），按 updatedAt 倒序。归档项只读，updatedAt 即归档时刻。随已归档父项一起隐藏的子项不单独列出，计入父项的 subitemCount。项目成员与同企业 CompanyAdmin 可读。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - name: q
+          in: query
+          description: 按标题或编号模糊匹配，忽略大小写。
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: 已归档工作项分页。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArchivedWorkItemPage"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
   /projects/{projectId}/work-item-labels:
     get:
       tags:
@@ -15985,6 +16032,78 @@ components:
           minLength: 1
           maxLength: 500
           nullable: true
+    ArchivedWorkItem:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - itemNo
+        - title
+        - statusCode
+        - statusCategory
+        - parentTitle
+        - subitemCount
+        - updatedAt
+        - updatedByDisplayName
+        - etag
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        itemNo:
+          type: string
+        title:
+          type: string
+        statusCode:
+          type: string
+        statusCategory:
+          $ref: "#/components/schemas/WorkItemStatusCategory"
+        parentTitle:
+          type: string
+          nullable: true
+          description: 父项标题；顶层工作项为 null。
+        subitemCount:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 随它一起隐藏、恢复后一起回到表格的子项数。
+        updatedAt:
+          type: string
+          format: date-time
+          description: 归档时刻（归档项只读）。
+        updatedByDisplayName:
+          type: string
+          description: 归档人。
+        etag:
+          type: string
+          description: 取消归档时作为 If-Match。
+    ArchivedWorkItemPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+        - size
+        - totalElements
+        - totalPages
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ArchivedWorkItem"
+        page:
+          type: integer
+          minimum: 0
+        size:
+          type: integer
+          minimum: 1
+          maximum: 100
+        totalElements:
+          type: integer
+          format: int64
+          minimum: 0
+        totalPages:
+          type: integer
+          minimum: 0
     WorkItemImportDuplicateMode:
       type: string
       description: 标题与项目内已有工作项相同时的处理：全部新增、跳过已有、更新已有。

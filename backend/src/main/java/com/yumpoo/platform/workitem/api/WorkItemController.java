@@ -24,6 +24,7 @@ import com.yumpoo.platform.workitem.application.WorkItemCommands.Restore;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.Transition;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.Update;
 import com.yumpoo.platform.workitem.application.WorkItemModels.WorkItemDetail;
+import com.yumpoo.platform.workitem.application.WorkItemModels.ArchivedWorkItemPage;
 import com.yumpoo.platform.workitem.application.WorkItemModels.WorkItemPage;
 import com.yumpoo.platform.workitem.application.WorkItemModels.ProjectWorkItemCursorPage;
 import com.yumpoo.platform.workitem.application.WorkItemModels.ProjectWorkItemFilterOptionCursorPage;
@@ -99,6 +100,15 @@ public final class WorkItemController {
                                 .withAssigneeSet(assigneeSetUserIds)
                                 .withConnections(connectedColumnIds, unconnectedColumnIds, incomingProjectIds), httpRequest),
                         view, CursorPageRequest.of(cursor, limit)));
+    }
+
+    @GetMapping("/projects/{projectId}/archived-work-items")
+    ResponseEntity<ArchivedWorkItemPage> listArchived(@PathVariable UUID projectId,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(service.listArchived(actors.requiredActive(), projectId, q, OffsetPageRequest.of(page, size)));
     }
 
     @GetMapping("/projects/{projectId}/work-items/filter-options")

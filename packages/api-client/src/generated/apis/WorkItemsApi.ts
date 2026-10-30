@@ -14,6 +14,7 @@
 
 import * as runtime from '../runtime';
 import type {
+  ArchivedWorkItemPage,
   ConnectCandidateField,
   ConnectCandidatePage,
   ConnectCandidateSort,
@@ -68,6 +69,8 @@ import type {
   WorkItemViewType,
 } from '../models/index';
 import {
+    ArchivedWorkItemPageFromJSON,
+    ArchivedWorkItemPageToJSON,
     ConnectCandidateFieldFromJSON,
     ConnectCandidateFieldToJSON,
     ConnectCandidatePageFromJSON,
@@ -322,6 +325,13 @@ export interface LinkWorkItemConnectionRequest {
     xXSRFTOKEN: string;
     idempotencyKey: string;
     workItemConnectionLinkRequest: WorkItemConnectionLinkRequest;
+}
+
+export interface ListArchivedWorkItemsRequest {
+    projectId: string;
+    q?: string;
+    page?: number;
+    size?: number;
 }
 
 export interface ListConnectColumnsRequest {
@@ -2065,6 +2075,57 @@ export class WorkItemsApi extends runtime.BaseAPI {
      */
     async linkWorkItemConnection(requestParameters: LinkWorkItemConnectionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemConnection> {
         const response = await this.linkWorkItemConnectionRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 返回本 Project 内已归档且未删除的工作项（含单独归档的子项），按 updatedAt 倒序。归档项只读，updatedAt 即归档时刻。随已归档父项一起隐藏的子项不单独列出，计入父项的 subitemCount。项目成员与同企业 CompanyAdmin 可读。
+     * 分页查询 Project 中已归档的工作项
+     */
+    async listArchivedWorkItemsRaw(requestParameters: ListArchivedWorkItemsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ArchivedWorkItemPage>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling listArchivedWorkItems().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        if (requestParameters['q'] != null) {
+            queryParameters['q'] = requestParameters['q'];
+        }
+
+        if (requestParameters['page'] != null) {
+            queryParameters['page'] = requestParameters['page'];
+        }
+
+        if (requestParameters['size'] != null) {
+            queryParameters['size'] = requestParameters['size'];
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/projects/{projectId}/archived-work-items`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ArchivedWorkItemPageFromJSON(jsonValue));
+    }
+
+    /**
+     * 返回本 Project 内已归档且未删除的工作项（含单独归档的子项），按 updatedAt 倒序。归档项只读，updatedAt 即归档时刻。随已归档父项一起隐藏的子项不单独列出，计入父项的 subitemCount。项目成员与同企业 CompanyAdmin 可读。
+     * 分页查询 Project 中已归档的工作项
+     */
+    async listArchivedWorkItems(requestParameters: ListArchivedWorkItemsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ArchivedWorkItemPage> {
+        const response = await this.listArchivedWorkItemsRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

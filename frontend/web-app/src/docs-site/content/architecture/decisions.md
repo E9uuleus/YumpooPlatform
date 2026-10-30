@@ -63,6 +63,7 @@ audience: [developer]
 | [新手引导](../../../../../../.agents/notes/implemented/product/2026-10-11-new-user-onboarding.md) | 页面导览的触发与版本 |
 | [快捷工时与偏好设置](../../../../../../.agents/notes/implemented/product/2026-10-19-desktop-quick-time-and-preferences.md) | 托盘小窗按时长补录 |
 | [Canvas 氛围动效](../../../../../../.agents/notes/implemented/product/2026-09-30-canvas-ambient-motion.md) | 动效只用在非工作界面 |
+| [已归档工作项](../../../../../../.agents/notes/implemented/product/2026-10-30-archived-work-items.md) | 工具栏抽屉查看与恢复归档的工作项 |
 | [工作项表格骨架加载](../../../../../../.agents/notes/implemented/product/2026-10-30-work-item-table-skeleton-loading.md) | 加载时显示与列对齐的骨架和扫光 |
 | [菜单项目排序](../../../../../../.agents/notes/implemented/product/2026-10-30-sidebar-project-order.md) | 置顶 → 最近打开 → 其余按名称 |
 

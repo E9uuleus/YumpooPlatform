@@ -48,6 +48,12 @@ public final class WorkItemModels {
         public WorkItemPage { items = List.copyOf(items); }
     }
 
+    /** Archived items are read-only, so updatedAt and updatedByDisplayName record when and by whom the item was archived. */
+    public record ArchivedWorkItem(UUID id, String itemNo, String title, String statusCode, String statusCategory,
+            String parentTitle, long subitemCount, Instant updatedAt, String updatedByDisplayName, String etag) {}
+
+    public record ArchivedWorkItemPage(List<ArchivedWorkItem> items, int page, int size, long totalElements, int totalPages) {}
+
     public record ProjectWorkItemListItem(UUID id, UUID projectId, UUID contentId,
             String contentName, String contentColorToken, String itemNo, String title, String statusCode,
             String statusCategory, String priority, UUID assigneeUserId,
