@@ -178,7 +178,7 @@ public class ProjectService {
         boolean archived = project.lifecycle() == ProjectLifecycle.ARCHIVED;
         boolean running = !archived && !project.ended();
         boolean deletion = project.deletionRequestedAt() != null;
-        return new ProjectCapabilities(owner && running, steward && running, admin && running,
+        return new ProjectCapabilities(owner && running, steward && running, steward && running,
                 steward && !archived, steward && archived && !deletion, false, admin && !archived,
                 steward && archived && !deletion, steward && archived && deletion,
                 steward && running, steward && !archived && project.ended());

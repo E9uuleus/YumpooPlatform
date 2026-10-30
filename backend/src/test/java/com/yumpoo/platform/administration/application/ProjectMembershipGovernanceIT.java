@@ -103,10 +103,9 @@ class ProjectMembershipGovernanceIT {
                 .param("id",projectId).param("user",MEMBER).query(String.class).optional()).isEmpty();
     }
 
-    @Test void adminRequiresReasonAndReassignmentKeepsOldOwnerActive() {
-        assertThatThrownBy(()->governance.add(memberCommand(admin(),MEMBER,null,null,"1")))
-                .isInstanceOfSatisfying(ApplicationException.class,e->assertThat(e.errorCode())
-                        .isEqualTo(StandardErrorCode.VALIDATION_FAILED));
+    @Test void reasonsAreOptionalAndOwnerCanReassign() {
+        var added=execute("admin-add",()->governance.add(memberCommand(admin(),MEMBER,null,null,"1")));
+        assertThat(added.result().httpStatus()).isEqualTo(201);
         assertThatThrownBy(()->governance.add(memberCommand(owner(),LEFT,null,null,"2")))
                 .isInstanceOfSatisfying(ApplicationException.class,e->assertThat(e.errorCode())
                         .isEqualTo(StandardErrorCode.VALIDATION_FAILED));
@@ -116,7 +115,7 @@ class ProjectMembershipGovernanceIT {
                         .isEqualTo(StandardErrorCode.INVALID_STATE_TRANSITION));
 
         var changed=execute("reassign",()->governance.reassignOwner(new ProjectOwnerReassignmentCommand(
-                admin(),projectId,0,NEXT_OWNER,"负责人治理重指派测试理由",UUID.randomUUID(),
+                owner(),projectId,0,NEXT_OWNER,null,UUID.randomUUID(),
                 new RequestHash("4".repeat(64)),"WEB","test")));
         assertThat(changed.result().etag()).isEqualTo("\"1\"");
         assertThat(jdbc.sql("SELECT owner_user_id FROM yumpoo.project WHERE id=:id")
@@ -124,7 +123,7 @@ class ProjectMembershipGovernanceIT {
         assertThat(jdbc.sql("SELECT status FROM yumpoo.project_membership WHERE project_id=:id AND user_id=:user")
                 .param("id",projectId).param("user",OWNER).query(String.class).single()).isEqualTo("ACTIVE");
         assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.outbox_event WHERE event_type IN ('catalog.project_member_added','catalog.project_owner_reassigned')")
-                .query(Integer.class).single()).isEqualTo(2);
+                .query(Integer.class).single()).isEqualTo(3);
     }
 
     @Test void staleVersionsAndArchivedWritesFail() {
