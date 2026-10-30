@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import YpNotice from '../components/yp/YpNotice.vue'
 import { ArrowRight, FolderOpened, Grid, Menu as MenuIcon, Search, User } from '@element-plus/icons-vue'
 import { reactive, ref } from 'vue'
 import StatusScene from '../components/motion/StatusScene.vue'
@@ -176,13 +177,12 @@ function togglePreviewGroup(id: string): void {
         </div>
       </header>
 
-      <el-alert
+      <yp-notice
         title="验收提示"
-        description="请在 1440×900、1280×800、960×768 和小于 960px 的窗口宽度检查焦点、对比度与横向表格。"
-        type="info"
-        show-icon
-        :closable="false"
-      />
+        tone="info"
+      >
+        请在 1440×900、1280×800、960×768 和小于 960px 的窗口宽度检查焦点、对比度与横向表格。
+      </yp-notice>
 
       <connect-columns-preview />
 
@@ -511,12 +511,11 @@ function togglePreviewGroup(id: string): void {
         size="min(560px, 100vw)"
       >
         <div class="page-stack">
-          <el-alert
-            title="未保存变更会在关闭前确认"
-            type="warning"
-            show-icon
-            :closable="false"
-          />
+          <yp-notice
+            tone="warning"
+          >
+            未保存变更会在关闭前确认
+          </yp-notice>
           <el-form label-position="top">
             <el-form-item label="负责人">
               <el-input v-model="project.owner" />

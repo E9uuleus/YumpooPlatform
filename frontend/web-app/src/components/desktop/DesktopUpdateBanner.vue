@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ElAlert, ElButton } from 'element-plus'
+import YpNotice from '../yp/YpNotice.vue'
+import { ElButton } from 'element-plus'
 import { onBeforeUnmount, ref } from 'vue'
 import type { DesktopUpdateState } from '@yumpoo/preload-contract'
 
@@ -29,12 +30,10 @@ async function restart(): Promise<void> {
 </script>
 
 <template>
-  <el-alert
+  <yp-notice
     v-if="state?.phase === 'ready' && state.version && state.version !== dismissedVersion"
     class="desktop-update-banner"
-    type="success"
-    :closable="false"
-    show-icon
+    tone="success"
     :title="`Yumpoo Desktop ${state.version} 已下载并通过校验`"
   >
     <p class="desktop-update-banner__text">
@@ -47,7 +46,7 @@ async function restart(): Promise<void> {
     >
       无法开始更新，请稍后再试。
     </p>
-    <div class="desktop-update-banner__actions">
+    <template #actions>
       <el-button
         type="primary"
         size="small"
@@ -62,8 +61,8 @@ async function restart(): Promise<void> {
       >
         稍后
       </el-button>
-    </div>
-  </el-alert>
+    </template>
+  </yp-notice>
 </template>
 
 <style scoped>
@@ -80,9 +79,4 @@ async function restart(): Promise<void> {
   color: var(--el-color-danger);
 }
 
-.desktop-update-banner__actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
 </style>

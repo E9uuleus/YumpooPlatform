@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import YpNotice from '../../yp/YpNotice.vue'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { ElButton, ElCheckbox, ElIcon, ElInput, ElPopover, ElTooltip } from 'element-plus'
 import { InfoFilled, Search } from '@element-plus/icons-vue'
@@ -220,28 +221,27 @@ async function connect() {
               没有匹配的项目
             </p>
           </div>
-          <div
+          <yp-notice
             class="connect-setup__two-way"
-            role="note"
+            size="small"
+            title="将创建双向连接"
           >
-            <svg
-              viewBox="0 0 16 16"
-              aria-hidden="true"
-            ><path d="M2.5 5.5h10m-2.5-2.5 2.5 2.5-2.5 2.5M13.5 10.5h-10m2.5-2.5-2.5 2.5 2.5 2.5" /></svg>
-            <span><strong>将创建双向连接</strong>所选项目的表格会自动出现「{{ projectName }}」列</span>
-            <el-tooltip
-              :content="`两边的成员都能在各自的表格中查看、关联和维护这些连接；从对方项目新建工作项需要是「${projectName}」的成员。`"
-              placement="top"
-            >
-              <el-icon
-                class="connect-setup__info"
-                tabindex="0"
-                aria-label="双向连接说明"
+            所选项目的表格会自动出现「{{ projectName }}」列
+            <template #actions>
+              <el-tooltip
+                :content="`两边的成员都能在各自的表格中查看、关联和维护这些连接；从对方项目新建工作项需要是「${projectName}」的成员。`"
+                placement="top"
               >
-                <info-filled />
-              </el-icon>
-            </el-tooltip>
-          </div>
+                <el-icon
+                  class="connect-setup__info"
+                  tabindex="0"
+                  aria-label="双向连接说明"
+                >
+                  <info-filled />
+                </el-icon>
+              </el-tooltip>
+            </template>
+          </yp-notice>
           <footer>
             <span
               class="connect-setup__count"
@@ -288,10 +288,6 @@ async function connect() {
 .connect-setup__skeleton { display: grid; gap: 8px; padding: 8px; }
 .connect-setup__skeleton span { height: 28px; border-radius: var(--yp-radius-sm); background: linear-gradient(90deg, var(--yp-bg-sunken), var(--yp-bg-hover), var(--yp-bg-sunken)); background-size: 200% 100%; animation: connect-setup-shimmer 1.2s linear infinite; }
 .connect-setup__empty { margin: 16px 0; color: var(--yp-text-muted); font-size: 13px; text-align: center; }
-.connect-setup__two-way { display: flex; align-items: flex-start; gap: 8px; padding: 10px; border-radius: var(--yp-radius-sm); background: var(--yp-bg-sunken); color: var(--yp-text-secondary); font-size: 12px; line-height: 1.6; }
-.connect-setup__two-way > svg { width: 16px; height: 16px; flex-shrink: 0; margin-top: 2px; fill: none; stroke: var(--yp-link); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-.connect-setup__two-way span { flex: 1; min-width: 0; }
-.connect-setup__two-way strong { display: block; color: var(--yp-text-primary); font-size: 12.5px; font-weight: 600; }
 .connect-setup__info { flex-shrink: 0; margin-top: 2px; color: var(--yp-text-muted); font-size: 14px; cursor: help; }
 .connect-setup__projects footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .connect-setup__count { color: var(--yp-text-muted); font-size: 12px; }

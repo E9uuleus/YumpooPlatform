@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import YpNotice from '../../yp/YpNotice.vue'
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { ElButton, ElDialog, ElDropdown, ElDropdownItem, ElDropdownMenu, ElIcon, ElInput, ElMessage, ElMessageBox, ElPopover } from 'element-plus'
 import { Calendar, Close as CloseIcon, CollectionTag, Flag, List, MoreFilled, Refresh as RefreshIcon, User, UserFilled } from '@element-plus/icons-vue'
@@ -255,18 +256,21 @@ const updatedText = (value: WorkItemDetail) => formatRelativeTime(value.updatedA
         动态
       </button>
     </div>
-    <p
+    <yp-notice
       v-else-if="card.available === false"
       class="connected-item-card__notice"
+      size="small"
+      tone="warning"
     >
       连接对端已不可访问，恢复项目后可重新查看。
-    </p>
-    <p
+    </yp-notice>
+    <yp-notice
       v-else-if="!card.canOpen || item.forbidden.value"
       class="connected-item-card__notice"
+      size="small"
     >
       你无权访问「{{ card.projectName }}」，仅显示连接摘要。
-    </p>
+    </yp-notice>
     <dl
       v-if="card.available !== false && (tab === 'fields' || !full)"
       class="connected-item-card__fields"
@@ -526,7 +530,7 @@ const updatedText = (value: WorkItemDetail) => formatRelativeTime(value.updatedA
 .connected-item-card__tabs { display: flex; gap: 20px; margin: -4px 0 12px; border-bottom: 1px solid var(--yp-border-subtle); }
 .connected-item-card__tabs button { padding: 8px 0; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--yp-text-secondary); font: inherit; font-size: 14px; cursor: pointer; }
 .connected-item-card__tabs button[aria-selected="true"] { border-bottom-color: var(--yp-action-primary); color: var(--yp-text-primary); font-weight: 500; }
-.connected-item-card__notice { margin: 0 0 12px; padding: 10px 12px; border-radius: var(--yp-radius-sm); background: var(--yp-bg-sunken); color: var(--yp-text-secondary); font-size: 12px; }
+.connected-item-card__notice { margin: 0 0 12px; }
 .connected-item-card__fields { display: grid; gap: 8px; margin: 0; }
 .connected-item-card__row { display: grid; grid-template-columns: 150px minmax(0, 1fr); align-items: center; gap: 16px; }
 .connected-item-card__row dt { display: flex; align-items: center; gap: 10px; color: var(--yp-text-secondary); font-size: 14px; }

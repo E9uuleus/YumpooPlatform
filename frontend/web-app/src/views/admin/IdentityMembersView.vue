@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import YpNotice from '../../components/yp/YpNotice.vue'
 import { usePageLoad } from '../../brand/page-progress'
 
 import {
@@ -19,7 +20,6 @@ import {
   ElIcon,
   ElRadio,
   ElRadioGroup,
-  ElAlert,
   ElInput,
   ElMessage,
   ElMessageBox,
@@ -647,14 +647,13 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
             </el-icon>
           </el-radio>
         </el-radio-group>
-        <el-alert
+        <yp-notice
           v-if="roleChanged"
           title="该成员的登录会话将失效"
-          description="保存后对方需要重新登录，新角色才会生效。"
-          type="warning"
-          show-icon
-          :closable="false"
-        />
+          tone="warning"
+        >
+          保存后对方需要重新登录，新角色才会生效。
+        </yp-notice>
         <div class="role-dialog__field">
           <label for="role-change-reason">变更理由<span aria-hidden="true">*</span></label>
           <el-input
