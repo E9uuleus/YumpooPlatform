@@ -3,7 +3,7 @@ import { ElButton, ElMessage } from 'element-plus'
 import { computed, ref } from 'vue'
 import type { OperationsLogEntry } from '@yumpoo/api-client'
 import YpEmptyState from '../yp/YpEmptyState.vue'
-import { time, moduleLabel, EVENT_LABELS } from './operationsPresentation'
+import { time, moduleLabel, EVENT_LABELS, failureCategory, fieldErrorItems, STAGE_LABELS } from './operationsPresentation'
 const props = defineProps<{
   entries: OperationsLogEntry[]
   filters?: boolean
@@ -49,6 +49,12 @@ function fields(entry: OperationsLogEntry) {
     .filter(([key]) => ['status', 'durationMs', 'attempt', 'outcome', 'job'].includes(key))
     .slice(0, 3)
 }
+/** 失败 HTTP 请求（访问日志 status ≥ 400）的分类；其他记录返回空串。 */
+function failure(entry: OperationsLogEntry): string {
+  const status = Number(entry.record.fields.status)
+  return entry.record.fields.route && status >= 400
+    ? failureCategory(status, entry.record.fields.errorCode as string | undefined) : ''
+}
 async function copy(value: string) {
   try {
     await navigator.clipboard.writeText(value)
@@ -83,6 +89,10 @@ async function copy(value: string) {
           :title="entry.record.module"
         >{{ moduleLabel(entry.record.module) }}</span>
         <span
+          v-if="failure(entry)"
+          class="ops-log-failure"
+        >{{ failure(entry) }}</span>
+        <span
           class="ops-log-message"
           :title="entry.record.event ?? undefined"
         ><b>{{ eventLabel(entry) }}</b><span
@@ -91,7 +101,7 @@ async function copy(value: string) {
         > · {{ entry.record.fields.method }} {{ entry.record.fields.route }}</span><span
           v-if="entry.record.fields.errorCode"
           class="ops-log-cause"
-        > · {{ entry.record.fields.errorCode }}<template v-if="entry.record.fields.reason"> / {{ entry.record.fields.reason }}</template></span><span
+        > · {{ entry.record.fields.errorCode }}<template v-if="entry.record.fields.reason"> / {{ entry.record.fields.reason }}</template><template v-if="entry.record.fields.fieldErrors"> · {{ entry.record.fields.fieldErrors }}</template></span><span
           v-if="entry.record.error"
           class="ops-log-cause"
         > · {{ entry.record.error.msg }}</span></span>
@@ -145,6 +155,39 @@ async function copy(value: string) {
             前后 5 分钟
           </el-button>
         </div>
+        <dl
+          v-if="failure(entry)"
+          class="ops-definition ops-log-diagnosis"
+        >
+          <dt>失败分类</dt>
+          <dd>{{ failure(entry) }}（HTTP {{ entry.record.fields.status }}）</dd>
+          <template v-if="entry.record.fields.stage">
+            <dt>阶段</dt>
+            <dd>{{ STAGE_LABELS[String(entry.record.fields.stage)] ?? entry.record.fields.stage }}</dd>
+          </template>
+          <template v-if="entry.record.fields.errorCode">
+            <dt>错误码</dt>
+            <dd>{{ entry.record.fields.errorCode }}</dd>
+          </template>
+          <template v-if="entry.record.fields.reason">
+            <dt>原因</dt>
+            <dd>{{ entry.record.fields.reason }}</dd>
+          </template>
+          <template v-if="fieldErrorItems(entry.record.fields.fieldErrors).length">
+            <dt>字段</dt>
+            <dd>
+              <span
+                v-for="item in fieldErrorItems(entry.record.fields.fieldErrors)"
+                :key="item"
+                class="ops-log-diagnosis__field"
+              >{{ item }}</span>
+            </dd>
+          </template>
+          <template v-if="Number(entry.record.fields.status) >= 500">
+            <dt>异常</dt>
+            <dd>堆栈记录在同一请求的 ERROR 日志中，点「请求追踪」查看。</dd>
+          </template>
+        </dl>
         <dl class="ops-definition">
           <dt>原始消息</dt>
           <dd>{{ entry.record.msg }}</dd>
@@ -365,4 +408,7 @@ pre {
     gap: var(--yp-space-2);
   }
 }
+.ops-log-failure { flex: none; padding: 0 6px; border-radius: var(--yp-radius-pill); background: color-mix(in srgb, var(--yp-status-red) 14%, transparent); color: var(--yp-status-red); font-size: 12px; line-height: 20px; }
+.ops-log-diagnosis { margin-bottom: var(--yp-space-3); padding-bottom: var(--yp-space-3); border-bottom: 1px solid var(--yp-border-subtle); }
+.ops-log-diagnosis__field { display: block; font-family: var(--yp-font-mono); }
 </style>

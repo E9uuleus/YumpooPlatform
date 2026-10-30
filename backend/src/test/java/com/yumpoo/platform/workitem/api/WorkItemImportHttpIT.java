@@ -143,9 +143,9 @@ class WorkItemImportHttpIT {
         assertThat(skipped.path("rows").get(0).path("itemNo").asText()).isEqualTo("IMPORT_WORK-1");
         assertThat(count("work_item")).isEqualTo(itemsBefore + 1);
 
-        JsonNode updated = ok(post(owner, request(false, "UPDATE", List.of("STATUS", "PARENT"),
+        JsonNode updated = ok(post(owner, request(false, "UPDATE", List.of("STATUS", "PARENT", "NOTES"),
                 row(1, "父需求", "IN_PROGRESS", null, null),
-                row(2, "子任务", "DONE", null, null))));
+                row(2, "子任务", "DONE", null, null).put("notes", "导入更新备注"))));
 
         assertThat(updated.path("updatedCount").asInt()).isEqualTo(2);
         assertThat(count("work_item")).isEqualTo(itemsBefore + 1);
@@ -153,6 +153,8 @@ class WorkItemImportHttpIT {
                 .query(String.class).single()).isEqualTo("IN_PROGRESS");
         assertThat(jdbc.sql("SELECT status_code || ':' || (completed_at IS NOT NULL) FROM yumpoo.work_item "
                         + "WHERE title='子任务'").query(String.class).single()).isEqualTo("DONE:false");
+        assertThat(jdbc.sql("SELECT notes FROM yumpoo.work_item WHERE title='子任务'")
+                .query(String.class).single()).isEqualTo("导入更新备注");
         assertThat(count("work_item_relation WHERE deleted_at IS NULL")).isZero();
         assertThat(count("work_item_relation WHERE deleted_at IS NOT NULL")).isEqualTo(1);
         assertThat(count("outbox_event WHERE event_type LIKE 'workitem.work_item%'")).isZero();

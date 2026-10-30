@@ -17,6 +17,7 @@ import {
   emptyMapping,
   fieldOfColumn,
   importableCount,
+  importFieldLabel,
   importLimitIssues,
   IMPORT_MAX_ROWS,
   mappedColumnCount,
@@ -241,6 +242,12 @@ describe('buildImportRequest', () => {
     const loaded = load()
     return { ...loaded, settings: { ...loaded.settings, choices: setChoice(loaded.settings.choices, 'assignees', '李刚', 'u-li-g1') } }
   }
+
+  it('字段路径使用请求下标还原文件行号和字段名', () => {
+    const { table, catalog, settings } = resolved()
+    const request = buildImportRequest(table, catalog, settings, WorkItemImportDuplicateMode.Update, false)
+    expect(importFieldLabel(request, 'rows[1].notes')).toBe('第 3 行 · 备注')
+  })
 
   it('标题去缩进，字段值按映射转换，父需求原样带父项标题', () => {
     const { table, catalog, settings } = resolved()
