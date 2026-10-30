@@ -12,7 +12,7 @@ Status: implemented
 - System Log 使用内部 `userId` UUID 关联请求，允许 `APP_MANAGER` 读取统一映射处理后的异常。堆栈限制长度和帧数；每段 throwable 的前 8 帧不按包名过滤，以保留容器、过滤器内的真实抛出点，此后照旧滤掉 `org.apache.`、Spring Web 过滤器、Spring Security Web 与反射帧，单段上限 40 帧不变。文件及浏览器都不接受原始 Throwable 的无界输出。会话详情在 SQL 中按公司过滤，采样器的跨公司会话端口只返回汇总数量。
 - 凭据、请求正文、SQL 明细、电子邮件、手机号、IP 和文件路径需脱敏；URL 保留端点，移除 userinfo 和查询数据，保留之后的故障原因。pgJDBC 关闭服务器明细输出。三种日志输出共用映射规则，规则预编译，缓冲映射在写锁外执行。
 - 管理读取保留 INFO 访问日志及安全路由；仅 `logs/tail` 与 `alerts/summary` 两个正常轮询请求使用 DEBUG。失败、慢请求不因轮询而降级。规则变更与确认操作使用 CSRF 和安全审计，规则修改另外要求条件版本；不为每次日志读取写数据库审计以免形成反馈循环。
-- 应用层拒绝在同一条访问日志中附带稳定 `errorCode` 和 `reason`，403 使用 WARN，保留 `requestId`、方法及模板路由供运维追踪。界面摘要展示拒绝码与原因；不记录请求正文、人工操作理由或任意异常消息。最近认证过期可通过 `RECENT_AUTHENTICATION_REQUIRED` 定位，数据库安全审计仍独立保存。
+- 应用层拒绝在同一条访问日志中附带稳定 `errorCode` 和 `reason`，403 使用 WARN，保留 `requestId`、方法及模板路由供运维追踪。界面摘要展示拒绝码与原因；不记录请求正文、人工操作理由或任意异常消息。最近认证过期可通过 `RECENT_AUTHENTICATION_REQUIRED` 定位，数据库安全审计仍独立保存。被拒绝的请求还记录 fieldErrors（字段路径:错误码，最多 10 项，不含字段值与提示文本）和接口声明的处理阶段 stage；Bean Validation 产生的 422 同样记录 errorCode，见[错误分类与诊断](../architecture/2026-10-30-error-classification-and-diagnostics.md)。
 - 文件检索只允许配置的活动文件及规定归档，拒绝任意路径及符号链接，限制扫描预算和并发。无 `fileKey` 的 Windows 文件以创建时间、大小不回退及前缀内容验证快照；滚动或替换使游标结果显式 partial。
 
 - `RequestIdFilter` 同时处理异步与错误派发：沿用首次派发的 requestId，不重写响应头，并从请求属性恢复 `userId`、`clientType` 到 MDC；访问日志与业务耗时只在首次派发记录；响应已提交的失败照旧抛出，不把截断的下载记成成功。

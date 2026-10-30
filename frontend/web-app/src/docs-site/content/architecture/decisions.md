@@ -27,6 +27,7 @@ audience: [developer]
 | [并行计时](../../../../../../.agents/notes/implemented/architecture/2026-10-14-parallel-time-tracking.md) | 多项同时计时按项数平均计入 |
 | [收件箱](../../../../../../.agents/notes/implemented/architecture/2026-09-25-notification-inbox.md) | 通知由事件投影到收件箱 |
 | [运维中心](../../../../../../.agents/notes/implemented/architecture/2026-09-26-operations-center.md) | 指标采样、运行日志与告警的边界 |
+| [错误分类与诊断](../../../../../../.agents/notes/implemented/architecture/2026-10-30-error-classification-and-diagnostics.md) | 输入问题与内部错误分开记录，提示可复制诊断信息 |
 | [定时任务](../../../../../../.agents/notes/implemented/architecture/2026-10-12-scheduled-jobs.md) | 独立调度线程与可配置计划 |
 | [工作项连接](../../../../../../.agents/notes/implemented/architecture/2026-09-30-work-item-connections.md) | 跨项目双向连接 |
 
