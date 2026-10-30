@@ -98,6 +98,13 @@
       "newSha256": "a78ed408312be3a9f4e1e25d7ed849eb0e160dfe43b198dbffae6750b7f7083d",
       "reason": "以 server-v2026.10.24.3 的 main 规范复核完整晋升增量：仅在临时规范移除 TimeCategory.MIGRATED 后，openapi-diff 2.1.6 全量检查通过，确认唯一不兼容项为已决策的响应枚举扩展。桌面 1.1.3 的原生计时 IPC 不接收该枚举，业务页面随服务器更新；历史工时始终只读。新增独立发布级例外，保留原开发基线例外。",
       "agentNote": ".agents/notes/implemented/architecture/2026-10-28-migrated-time-import.md"
+    },
+    {
+      "id": "2026-10-29-migrated-time-work-items",
+      "oldSha256": "a78ed408312be3a9f4e1e25d7ed849eb0e160dfe43b198dbffae6750b7f7083d",
+      "newSha256": "f493452e62e7dc819cfaf14239c22e7fa1efd229b93abe770cab1691c3c6a88a",
+      "reason": "迁入工时请求改为按成员、日期、项目名称与工作项标题的明细行，取消 categoryProjectId、entries 与清除结果；响应新增 skippedRows、skippedMinutes，移除 clearedDayCount 与 CLEAR。仅把迁入接口还原为基线的临时规范相对基线 openapi-diff 通过，其余变更（TimeTrackingSession.migrated、TeamTimesheetEntry.migratedDurationMs 可选响应字段）兼容；前端与服务端同版本发布。",
+      "agentNote": ".agents/notes/implemented/architecture/2026-10-28-migrated-time-import.md"
     }
   ]
 }

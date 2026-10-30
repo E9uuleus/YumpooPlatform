@@ -19,6 +19,13 @@ import {
     MigratedTimeImportDayToJSON,
     MigratedTimeImportDayToJSONTyped,
 } from './MigratedTimeImportDay';
+import type { MigratedTimeImportSkippedRow } from './MigratedTimeImportSkippedRow';
+import {
+    MigratedTimeImportSkippedRowFromJSON,
+    MigratedTimeImportSkippedRowFromJSONTyped,
+    MigratedTimeImportSkippedRowToJSON,
+    MigratedTimeImportSkippedRowToJSONTyped,
+} from './MigratedTimeImportSkippedRow';
 
 /**
  *
@@ -43,12 +50,6 @@ export interface MigratedTimeImportResult {
      * @type {number}
      * @memberof MigratedTimeImportResult
      */
-    clearedDayCount: number;
-    /**
-     *
-     * @type {number}
-     * @memberof MigratedTimeImportResult
-     */
     failedDayCount: number;
     /**
      *
@@ -57,17 +58,29 @@ export interface MigratedTimeImportResult {
      */
     importedMinutes: number;
     /**
-     * 被覆盖或清除的原有迁入工时分钟数。
+     * 被覆盖的原有迁入工时分钟数。
      * @type {number}
      * @memberof MigratedTimeImportResult
      */
     replacedMinutes: number;
+    /**
+     * skippedRows 的分钟合计，这些行不写入。
+     * @type {number}
+     * @memberof MigratedTimeImportResult
+     */
+    skippedMinutes: number;
     /**
      *
      * @type {Array<MigratedTimeImportDay>}
      * @memberof MigratedTimeImportResult
      */
     days: Array<MigratedTimeImportDay>;
+    /**
+     *
+     * @type {Array<MigratedTimeImportSkippedRow>}
+     * @memberof MigratedTimeImportResult
+     */
+    skippedRows: Array<MigratedTimeImportSkippedRow>;
 }
 
 /**
@@ -76,11 +89,12 @@ export interface MigratedTimeImportResult {
 export function instanceOfMigratedTimeImportResult(value: object): value is MigratedTimeImportResult {
     if (!('dryRun' in value) || value['dryRun'] === undefined) return false;
     if (!('importedDayCount' in value) || value['importedDayCount'] === undefined) return false;
-    if (!('clearedDayCount' in value) || value['clearedDayCount'] === undefined) return false;
     if (!('failedDayCount' in value) || value['failedDayCount'] === undefined) return false;
     if (!('importedMinutes' in value) || value['importedMinutes'] === undefined) return false;
     if (!('replacedMinutes' in value) || value['replacedMinutes'] === undefined) return false;
+    if (!('skippedMinutes' in value) || value['skippedMinutes'] === undefined) return false;
     if (!('days' in value) || value['days'] === undefined) return false;
+    if (!('skippedRows' in value) || value['skippedRows'] === undefined) return false;
     return true;
 }
 
@@ -96,11 +110,12 @@ export function MigratedTimeImportResultFromJSONTyped(json: any, ignoreDiscrimin
 
         'dryRun': json['dryRun'],
         'importedDayCount': json['importedDayCount'],
-        'clearedDayCount': json['clearedDayCount'],
         'failedDayCount': json['failedDayCount'],
         'importedMinutes': json['importedMinutes'],
         'replacedMinutes': json['replacedMinutes'],
+        'skippedMinutes': json['skippedMinutes'],
         'days': ((json['days'] as Array<any>).map(MigratedTimeImportDayFromJSON)),
+        'skippedRows': ((json['skippedRows'] as Array<any>).map(MigratedTimeImportSkippedRowFromJSON)),
     };
 }
 
@@ -117,10 +132,11 @@ export function MigratedTimeImportResultToJSONTyped(value?: MigratedTimeImportRe
 
         'dryRun': value['dryRun'],
         'importedDayCount': value['importedDayCount'],
-        'clearedDayCount': value['clearedDayCount'],
         'failedDayCount': value['failedDayCount'],
         'importedMinutes': value['importedMinutes'],
         'replacedMinutes': value['replacedMinutes'],
+        'skippedMinutes': value['skippedMinutes'],
         'days': ((value['days'] as Array<any>).map(MigratedTimeImportDayToJSON)),
+        'skippedRows': ((value['skippedRows'] as Array<any>).map(MigratedTimeImportSkippedRowToJSON)),
     };
 }

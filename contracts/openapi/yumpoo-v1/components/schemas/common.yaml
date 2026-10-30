@@ -747,6 +747,11 @@ components:
           type: integer
           format: int64
           minimum: 1
+        migratedDurationMs:
+          type: integer
+          format: int64
+          minimum: 0
+          description: durationMs 中来自迁入工时的部分。服务端总是返回。
     TeamTimesheetCategoryEntry:
       type: object
       additionalProperties: false

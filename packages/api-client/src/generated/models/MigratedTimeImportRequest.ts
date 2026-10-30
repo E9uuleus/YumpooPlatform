@@ -12,13 +12,13 @@
  */
 
 import { mapValues } from '../runtime';
-import type { MigratedTimeImportEntry } from './MigratedTimeImportEntry';
+import type { MigratedTimeImportRow } from './MigratedTimeImportRow';
 import {
-    MigratedTimeImportEntryFromJSON,
-    MigratedTimeImportEntryFromJSONTyped,
-    MigratedTimeImportEntryToJSON,
-    MigratedTimeImportEntryToJSONTyped,
-} from './MigratedTimeImportEntry';
+    MigratedTimeImportRowFromJSON,
+    MigratedTimeImportRowFromJSONTyped,
+    MigratedTimeImportRowToJSON,
+    MigratedTimeImportRowToJSONTyped,
+} from './MigratedTimeImportRow';
 
 /**
  *
@@ -33,17 +33,11 @@ export interface MigratedTimeImportRequest {
      */
     dryRun: boolean;
     /**
-     * 可选的关联项目，必须是本公司 ACTIVE 状态的项目。
-     * @type {string}
+     * 按文件顺序；同一成员同一天匹配到的行按此顺序依次排入空档。
+     * @type {Array<MigratedTimeImportRow>}
      * @memberof MigratedTimeImportRequest
      */
-    categoryProjectId?: string | null;
-    /**
-     * (userId, workDate) 不得重复。
-     * @type {Array<MigratedTimeImportEntry>}
-     * @memberof MigratedTimeImportRequest
-     */
-    entries: Array<MigratedTimeImportEntry>;
+    rows: Array<MigratedTimeImportRow>;
 }
 
 /**
@@ -51,7 +45,7 @@ export interface MigratedTimeImportRequest {
  */
 export function instanceOfMigratedTimeImportRequest(value: object): value is MigratedTimeImportRequest {
     if (!('dryRun' in value) || value['dryRun'] === undefined) return false;
-    if (!('entries' in value) || value['entries'] === undefined) return false;
+    if (!('rows' in value) || value['rows'] === undefined) return false;
     return true;
 }
 
@@ -66,8 +60,7 @@ export function MigratedTimeImportRequestFromJSONTyped(json: any, ignoreDiscrimi
     return {
 
         'dryRun': json['dryRun'],
-        'categoryProjectId': json['categoryProjectId'] == null ? undefined : json['categoryProjectId'],
-        'entries': ((json['entries'] as Array<any>).map(MigratedTimeImportEntryFromJSON)),
+        'rows': ((json['rows'] as Array<any>).map(MigratedTimeImportRowFromJSON)),
     };
 }
 
@@ -83,7 +76,6 @@ export function MigratedTimeImportRequestToJSONTyped(value?: MigratedTimeImportR
     return {
 
         'dryRun': value['dryRun'],
-        'categoryProjectId': value['categoryProjectId'],
-        'entries': ((value['entries'] as Array<any>).map(MigratedTimeImportEntryToJSON)),
+        'rows': ((value['rows'] as Array<any>).map(MigratedTimeImportRowToJSON)),
     };
 }

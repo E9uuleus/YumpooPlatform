@@ -18,7 +18,6 @@
  */
 export enum MigratedTimeImportOutcome {
     Import = 'IMPORT',
-    Clear = 'CLEAR',
     Error = 'ERROR',
     UnknownDefaultOpenApi = '11184809'
 }

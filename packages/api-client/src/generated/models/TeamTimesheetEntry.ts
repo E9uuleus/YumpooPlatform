@@ -42,6 +42,12 @@ export interface TeamTimesheetEntry {
      * @memberof TeamTimesheetEntry
      */
     durationMs: number;
+    /**
+     * durationMs 中来自迁入工时的部分。服务端总是返回。
+     * @type {number}
+     * @memberof TeamTimesheetEntry
+     */
+    migratedDurationMs?: number;
 }
 
 /**
@@ -69,6 +75,7 @@ export function TeamTimesheetEntryFromJSONTyped(json: any, ignoreDiscriminator: 
         'workItemId': json['workItemId'],
         'date': (new Date(json['date'])),
         'durationMs': json['durationMs'],
+        'migratedDurationMs': json['migratedDurationMs'] == null ? undefined : json['migratedDurationMs'],
     };
 }
 
@@ -87,5 +94,6 @@ export function TeamTimesheetEntryToJSONTyped(value?: TeamTimesheetEntry | null,
         'workItemId': value['workItemId'],
         'date': value['date'].toISOString().substring(0,10),
         'durationMs': value['durationMs'],
+        'migratedDurationMs': value['migratedDurationMs'],
     };
 }
