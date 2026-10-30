@@ -1903,3 +1903,75 @@ components:
           minLength: 1
           maxLength: 500
           nullable: true
+    ArchivedWorkItem:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - itemNo
+        - title
+        - statusCode
+        - statusCategory
+        - parentTitle
+        - subitemCount
+        - updatedAt
+        - updatedByDisplayName
+        - etag
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        itemNo:
+          type: string
+        title:
+          type: string
+        statusCode:
+          type: string
+        statusCategory:
+          $ref: "#/components/schemas/WorkItemStatusCategory"
+        parentTitle:
+          type: string
+          nullable: true
+          description: 父项标题；顶层工作项为 null。
+        subitemCount:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 随它一起隐藏、恢复后一起回到表格的子项数。
+        updatedAt:
+          type: string
+          format: date-time
+          description: 归档时刻（归档项只读）。
+        updatedByDisplayName:
+          type: string
+          description: 归档人。
+        etag:
+          type: string
+          description: 取消归档时作为 If-Match。
+    ArchivedWorkItemPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+        - size
+        - totalElements
+        - totalPages
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ArchivedWorkItem"
+        page:
+          type: integer
+          minimum: 0
+        size:
+          type: integer
+          minimum: 1
+          maximum: 100
+        totalElements:
+          type: integer
+          format: int64
+          minimum: 0
+        totalPages:
+          type: integer
+          minimum: 0

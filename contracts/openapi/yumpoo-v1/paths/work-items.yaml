@@ -1242,6 +1242,54 @@ paths:
           $ref: "#/components/responses/Conflict"
         "422":
           $ref: "#/components/responses/ValidationFailed"
+  /projects/{projectId}/archived-work-items:
+    get:
+      tags:
+        - WorkItems
+      operationId: listArchivedWorkItems
+      summary: 分页查询 Project 中已归档的工作项
+      description: 返回本 Project 内已归档且未删除的工作项（含单独归档的子项），按 updatedAt 倒序。归档项只读，updatedAt 即归档时刻。随已归档父项一起隐藏的子项不单独列出，计入父项的 subitemCount。项目成员与同企业 CompanyAdmin 可读。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - name: q
+          in: query
+          description: 按标题或编号模糊匹配，忽略大小写。
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: 已归档工作项分页。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArchivedWorkItemPage"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+
   /projects/{projectId}/work-item-labels:
     get:
       tags:

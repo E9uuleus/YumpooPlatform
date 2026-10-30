@@ -92,6 +92,36 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
     }
 
     @Override
+    public List<ArchivedRow> findArchived(UUID companyId, UUID projectId, String query, int offset, int limit) {
+        Map<String, Object> parameters = baseProjectParameters(companyId, projectId);
+        parameters.put("offset", offset);
+        parameters.put("limit", limit);
+        JdbcClient.StatementSpec statement = jdbc.sql("SELECT " + COLUMNS
+                + ", (SELECT parent.title FROM yumpoo.work_item_relation relation "
+                + "JOIN yumpoo.work_item parent ON parent.company_id=relation.company_id AND parent.id=relation.left_work_item_id "
+                + "WHERE relation.company_id=:companyId AND relation.relation_type='PARENT_CHILD' "
+                + "AND relation.right_work_item_id=yumpoo.work_item.id AND relation.deleted_at IS NULL) AS parent_title "
+                + "FROM yumpoo.work_item" + archivedWhere(query, parameters)
+                + " ORDER BY updated_at DESC, id DESC LIMIT :limit OFFSET :offset");
+        return bind(statement, parameters)
+                .query((rs, row) -> new ArchivedRow(map(rs, row), rs.getString("parent_title"))).list();
+    }
+
+    @Override
+    public long countArchived(UUID companyId, UUID projectId, String query) {
+        Map<String, Object> parameters = baseProjectParameters(companyId, projectId);
+        return bind(jdbc.sql("SELECT count(*) FROM yumpoo.work_item" + archivedWhere(query, parameters)), parameters)
+                .query(Long.class).single();
+    }
+
+    private static String archivedWhere(String query, Map<String, Object> parameters) {
+        String where = " WHERE company_id=:companyId AND project_id=:projectId AND deleted_at IS NULL AND archived";
+        if (query == null) return where;
+        parameters.put("titleQuery", "%" + escapeLike(query.toLowerCase(Locale.ROOT)) + "%");
+        return where + " AND (lower(title) LIKE :titleQuery ESCAPE '\\' OR lower(item_no) LIKE :titleQuery ESCAPE '\\')";
+    }
+
+    @Override
     public List<WorkItemTitle> findTitles(UUID companyId, UUID projectId) {
         return jdbc.sql("SELECT id, title, archived FROM yumpoo.work_item WHERE company_id=:companyId AND project_id=:projectId AND deleted_at IS NULL")
                 .param("companyId", companyId).param("projectId", projectId)
