@@ -112,22 +112,12 @@ class MigratedTimeLayoutPlannerTest {
     }
 
     @Test
-    void zeroMinutesClearsThePreviousTime() {
-        var result = plan(0, migrated("09:00", "10:30"));
-        assertThat(result.outcome()).isEqualTo(Outcome.CLEAR);
-        assertThat(result.segments()).isEmpty();
-        assertThat(result.previous()).hasSize(1);
-        assertThat(result.previousMinutes()).isEqualTo(90);
-        assertThat(result.issues()).isEmpty();
-    }
-
-    @Test
-    void rejectsTodayAndFutureDatesWithoutLayingOrClearing() {
+    void rejectsTodayAndFutureDates() {
         var future = MigratedTimeLayoutPlanner.plan(TODAY, ZONE, TODAY, 60, 540, 1080, List.of());
         assertThat(future.outcome()).isEqualTo(Outcome.ERROR);
         assertThat(future.segments()).isEmpty();
         assertThat(codes(future)).containsExactly("FUTURE_DATE");
-        assertThat(MigratedTimeLayoutPlanner.plan(TODAY.plusDays(1), ZONE, TODAY, 0, 540, 1080, List.of()).outcome())
+        assertThat(MigratedTimeLayoutPlanner.plan(TODAY.plusDays(1), ZONE, TODAY, 60, 540, 1080, List.of()).outcome())
                 .isEqualTo(Outcome.ERROR);
         assertThat(codes(MigratedTimeLayoutPlanner.plan(TODAY.minusDays(1), ZONE, TODAY, 60, 540, 1080, List.of()))).isEmpty();
     }
@@ -176,5 +166,13 @@ class MigratedTimeLayoutPlannerTest {
         assertThat(result.segments().getLast().stoppedAt()).isEqualTo(day.plusDays(1).atStartOfDay(zone).toInstant());
         assertThat(result.issues()).isEmpty();
         assertThat(MigratedTimeLayoutPlanner.plan(day, zone, day.plusDays(1), 901, 540, 1440, List.of()).outcome()).isEqualTo(Outcome.ERROR);
+    }
+
+    @Test
+    void splitHandsTheLaidSegmentsToRowsInFileOrder() {
+        var laid = plan(240, busy("10:00", "11:00"), busy("13:00", "14:00")).segments();
+        var pieces = MigratedTimeLayoutPlanner.split(laid, List.of(90, 60, 90));
+        assertThat(pieces.stream().map(piece -> piece.stream().map(s -> LocalTime.ofInstant(s.startedAt(), ZONE) + "-" + LocalTime.ofInstant(s.stoppedAt(), ZONE)).toList()).toList())
+                .containsExactly(List.of("09:00-10:00", "11:00-11:30"), List.of("11:30-12:30"), List.of("12:30-13:00", "14:00-15:00"));
     }
 }

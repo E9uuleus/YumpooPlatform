@@ -360,7 +360,7 @@ public class TimeTrackingService {
     private Set<UUID> editableSessionIds(CurrentActor actor,List<MySessionRow> rows) {
         var projects=access.findVisible(actor,rows.stream().map(row -> row.session().projectId()).filter(Objects::nonNull).distinct().toList());
         return rows.stream().filter(row -> row.session().stoppedAt()!=null && row.session().deletedAt()==null
-                && row.session().timeCategory()!=TimeCategory.MIGRATED
+                && !row.session().migratedImport()
                 && (row.session().timeCategory()!=null || !row.archived() && !row.itemDeleted() && projects.containsKey(row.session().projectId())
                 && canWrite(projects.get(row.session().projectId()))))
                 .map(row -> row.session().id()).collect(java.util.stream.Collectors.toSet());
@@ -450,6 +450,7 @@ public class TimeTrackingService {
             Session before=create ? null : timers.find(actor.companyId(),input.sessionId())
                     .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
             if(before!=null) {
+                requireNotMigrated(before);
                 if(!input.workItemId().equals(before.workItemId())) throw new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND);
                 if(!before.userId().equals(actor.userId())) throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
                 requireVersion(before.rowVersion(),expectedVersion);
@@ -596,7 +597,7 @@ public class TimeTrackingService {
         long[] share=allocated.getOrDefault(s.id(),new long[2]);
         return new TimeTrackingSession(s.id(),disclose ? s.projectId() : null,disclose ? s.workItemId() : null,
                 s.userId(),displayName,s.startedAt(),s.stoppedAt(),s.source(),Math.max(0,Duration.between(s.startedAt(),s.stoppedAt()==null ? now : s.stoppedAt()).toMillis()),
-                s.rowVersion(),StrongEtag.format(s.rowVersion()),writable && s.userId().equals(actor.userId()) && s.stoppedAt()!=null && s.deletedAt()==null,s.deletedAt()!=null,s.changeReason(),share[0],(int)share[1],itemNo,itemTitle,s.timeCategory(),s.categoryProjectId());
+                s.rowVersion(),StrongEtag.format(s.rowVersion()),writable && !s.migratedImport() && s.userId().equals(actor.userId()) && s.stoppedAt()!=null && s.deletedAt()==null,s.deletedAt()!=null,s.changeReason(),share[0],(int)share[1],itemNo,itemTitle,s.timeCategory(),s.categoryProjectId(),s.migratedImport());
     }
     private static String reason(Input input) {
         String reason=input.reason()==null || input.reason().isBlank() ? null : input.reason().strip();
@@ -614,7 +615,7 @@ public class TimeTrackingService {
             throw validation("timeCategory","TIME_CATEGORY_RESERVED","该工时分类由系统写入，不能选择");
     }
     private static void requireNotMigrated(Session session) {
-        if(session.timeCategory()==TimeCategory.MIGRATED) throw invalid("MIGRATED_TIME_READ_ONLY");
+        if(session.migratedImport()) throw invalid("MIGRATED_TIME_READ_ONLY");
     }
     /** Categories may name a project only among the actor's writable ones; categories take no project lock. */
     private void requireCategoryProjects(CurrentActor actor,Collection<TimeSubject> subjects) {

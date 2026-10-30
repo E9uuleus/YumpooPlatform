@@ -50,7 +50,7 @@ class WorkHoursAnomalyScheduledJobTest {
         when(projects.listForScheduler(companyId)).thenReturn(List.of(new MemberProjectQuery.Project(projectId, "交付", "P001", "ACTIVE")));
         var recorded = new HashSet<LocalDate>();
         when(work.timeEntriesForScheduler(eq(companyId), eq(List.of(projectId)), any(), any(), eq(zone), eq(now)))
-                .thenAnswer(call -> List.of(new TeamWorkQuery.TimeEntry(userId, UUID.randomUUID(), projectId, "P001-1", "任务", call.getArgument(2), 13 * 3_600_000L)));
+                .thenAnswer(call -> List.of(new TeamWorkQuery.TimeEntry(userId, UUID.randomUUID(), projectId, "P001-1", "任务", call.getArgument(2), 13 * 3_600_000L, 0)));
         when(repository.recordAlert(eq(companyId), eq(userId), any(), anyLong(), eq(720), eq(now)))
                 .thenAnswer(call -> recorded.add(call.getArgument(2)) ? Optional.of(UUID.randomUUID()) : Optional.empty());
         var job = new WorkHoursAnomalyScheduledJob(repository, projects, work, company, events, new ObjectMapper(), Clock.fixed(now, zone));
@@ -83,8 +83,8 @@ class WorkHoursAnomalyScheduledJobTest {
         when(repository.setting(companyId)).thenReturn(Optional.of(new WorkHoursAlertRepository.Setting(600, 1)));
         when(projects.listForScheduler(companyId)).thenReturn(List.of(new MemberProjectQuery.Project(projectId, "交付", "P001", "ACTIVE")));
         when(work.timeEntriesForScheduler(companyId, List.of(projectId), day, day, zone, now)).thenReturn(List.of(
-                new TeamWorkQuery.TimeEntry(user1, UUID.randomUUID(), projectId, "P001-1", "任务 1", day, 11 * 3_600_000L),
-                new TeamWorkQuery.TimeEntry(user2, UUID.randomUUID(), projectId, "P001-2", "任务 2", day, 9 * 3_600_000L)));
+                new TeamWorkQuery.TimeEntry(user1, UUID.randomUUID(), projectId, "P001-1", "任务 1", day, 11 * 3_600_000L, 0),
+                new TeamWorkQuery.TimeEntry(user2, UUID.randomUUID(), projectId, "P001-2", "任务 2", day, 9 * 3_600_000L, 0)));
         when(repository.recordAlert(companyId, user1, day, 11 * 3_600_000L, 600, now)).thenReturn(Optional.of(alertId), Optional.empty());
         var job = new WorkHoursAnomalyScheduledJob(repository, projects, work, company, events, new ObjectMapper(), Clock.fixed(now, ZoneOffset.UTC));
         String triggerKey = "scheduled:WORK_HOURS_ANOMALY:" + planned.getEpochSecond();

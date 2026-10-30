@@ -9,30 +9,40 @@ import java.util.UUID;
 public final class TimeTrackingModels {
     private TimeTrackingModels() {}
 
-    /** Exactly one of workItemId (with its projectId) and timeCategory is set. */
+    /** Exactly one of workItemId (with its projectId) and timeCategory is set; {@code migrated} marks work item records written by the migrated-time import. */
     public record Session(UUID id, UUID companyId, UUID projectId, UUID workItemId,
             UUID userId, Instant startedAt, Instant stoppedAt, String source,
-            long rowVersion, Instant deletedAt, String changeReason, TimeCategory timeCategory, UUID categoryProjectId) {
+            long rowVersion, Instant deletedAt, String changeReason, TimeCategory timeCategory, UUID categoryProjectId, boolean migrated) {
         public Session(UUID id, UUID companyId, UUID projectId, UUID workItemId, UUID userId, Instant startedAt,
                 Instant stoppedAt, String source, long rowVersion, Instant deletedAt, String changeReason) {
-            this(id,companyId,projectId,workItemId,userId,startedAt,stoppedAt,source,rowVersion,deletedAt,changeReason,null,null);
+            this(id,companyId,projectId,workItemId,userId,startedAt,stoppedAt,source,rowVersion,deletedAt,changeReason,null,null,false);
+        }
+        public Session(UUID id, UUID companyId, UUID projectId, UUID workItemId, UUID userId, Instant startedAt, Instant stoppedAt,
+                String source, long rowVersion, Instant deletedAt, String changeReason, TimeCategory timeCategory, UUID categoryProjectId) {
+            this(id,companyId,projectId,workItemId,userId,startedAt,stoppedAt,source,rowVersion,deletedAt,changeReason,timeCategory,categoryProjectId,false);
         }
         public static Session create(UUID companyId, UUID projectId, TimeSubject subject, UUID userId,
                 Instant startedAt, Instant stoppedAt, String source) {
             return new Session(UUID.randomUUID(),companyId,projectId,subject.workItemId(),userId,startedAt,stoppedAt,source,0,null,null,subject.timeCategory(),subject.categoryProjectId());
         }
+        /** A work item record of the migrated-time import. */
+        public static Session createMigrated(UUID companyId, UUID projectId, UUID workItemId, UUID userId, Instant startedAt, Instant stoppedAt) {
+            return new Session(UUID.randomUUID(),companyId,projectId,workItemId,userId,startedAt,stoppedAt,"MANUAL",0,null,null,null,null,true);
+        }
         public TimeSubject subject() { return TimeSubject.of(workItemId,timeCategory,categoryProjectId); }
         /** The same session at its next row version; project, work item and category never change in place. */
         public Session next(Instant start, Instant stop, Instant deleted, String reason) {
-            return new Session(id,companyId,projectId,workItemId,userId,start,stop,source,rowVersion+1,deleted,reason,timeCategory,categoryProjectId);
+            return new Session(id,companyId,projectId,workItemId,userId,start,stop,source,rowVersion+1,deleted,reason,timeCategory,categoryProjectId,migrated);
         }
+        /** Written by the migrated-time import, as a legacy MIGRATED category record or a flagged work item record; members cannot change either. */
+        public boolean migratedImport() { return migrated || timeCategory==TimeCategory.MIGRATED; }
     }
 
     public record TimeTrackingSession(UUID id, UUID projectId, UUID workItemId,
             UUID userId, String displayName, Instant startedAt, Instant stoppedAt,
             String source, long durationMs, long rowVersion, String etag,
             boolean canEdit, boolean deleted, String changeReason, long allocatedDurationMs, int parallelItemCount,
-            String workItemNo, String workItemTitle, TimeCategory timeCategory, UUID categoryProjectId) {}
+            String workItemNo, String workItemTitle, TimeCategory timeCategory, UUID categoryProjectId, boolean migrated) {}
 
     public record RunningSession(UUID userId, Instant startedAt) {}
 

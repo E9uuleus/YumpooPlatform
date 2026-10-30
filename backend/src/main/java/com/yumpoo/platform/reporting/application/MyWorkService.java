@@ -47,7 +47,7 @@ public class MyWorkService {
         var categories = work.ownCategoryEntries(actor, from, to, zone, asOf);
         var self = users.findByUserIds(actor.companyId(), List.of(actor.userId())).get(actor.userId());
         return new Timesheet(from, to, zone.getId(), asOf, List.of(new Member(actor.userId(), self.displayName(), self.activeAndEnabled())),
-                List.copyOf(items.values()), entries.stream().map(e -> new TimesheetEntry(e.userId(), e.workItemId(), e.date(), e.durationMs())).toList(),
+                List.copyOf(items.values()), entries.stream().map(e -> new TimesheetEntry(e.userId(), e.workItemId(), e.date(), e.durationMs(), e.migratedDurationMs())).toList(),
                 Timesheet.categories(categories, scope.entrySet().stream().collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().name()))), CalendarDay.of(calendar.days(from, to)));
     }
 
