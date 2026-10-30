@@ -2453,7 +2453,8 @@ describe('项目级工作项首页', () => {
     expect(document.body.style.getPropertyValue('--yp-work-items-drawer-width')).toBe('560px')
 
     // 详情抽屉不带深色蒙版且包含左侧关闭按钮与拖动手柄
-    const drawer = wrapper.findComponent({ name: 'ElDrawer' })
+    const drawer = wrapper.findAllComponents({ name: 'ElDrawer' })
+      .find(candidate => candidate.props('title') === '工作项详情')!
     expect(drawer.props('modal')).toBe(false)
     expect(drawer.props('modalPenetrable')).toBe(true)
     expect(drawer.props('appendToBody')).toBe(true)
@@ -2541,7 +2542,8 @@ describe('项目级工作项首页', () => {
     expect(await guard()).toBe(false)
     expect(confirm).toHaveBeenCalledTimes(1)
     draft.busy = false
-    const drawer = wrapper.findComponent({ name: 'ElDrawer' })
+    const drawer = wrapper.findAllComponents({ name: 'ElDrawer' })
+      .find(candidate => candidate.props('title') === '工作项详情')!
     const done = vi.fn()
     confirm.mockResolvedValueOnce('confirm' as never)
     await (drawer.props('beforeClose') as (done: () => void) => Promise<void>)(done)

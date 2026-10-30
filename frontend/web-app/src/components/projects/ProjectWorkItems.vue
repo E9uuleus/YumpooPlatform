@@ -17,6 +17,7 @@ import { createWorkItemColumnFlip, measureWorkItemColumns, visibleWorkItemColumn
 import WorkItemRowActions from './WorkItemRowActions.vue'
 import WorkItemBatchBar from './WorkItemBatchBar.vue'
 import WorkItemImportDialog from './import/WorkItemImportDialog.vue'
+import WorkItemArchivedDrawer from './WorkItemArchivedDrawer.vue'
 import WorkItemParentPicker from './WorkItemParentPicker.vue'
 import { useWorkItemBatchActions, type WorkItemSelection } from './useWorkItemBatchActions'
 import { useWorkItemCellPopover } from './useWorkItemCellPopover'
@@ -27,7 +28,7 @@ import WorkItemNameCell from './WorkItemNameCell.vue'
 import WorkItemDraftCell from './WorkItemDraftCell.vue'
 import { useWorkItemInlineCreate } from './useWorkItemInlineCreate'
 import WorkItemUpdatedCell from './WorkItemUpdatedCell.vue'
-import { ArrowDown, Filter as FilterIcon, Hide, Plus, Search, Sort, Upload, User } from '@element-plus/icons-vue'
+import { ArrowDown, Box, Filter as FilterIcon, Hide, Plus, Search, Sort, Upload, User } from '@element-plus/icons-vue'
 import {
   TimeTrackingState,
   WorkItemViewType,
@@ -199,6 +200,7 @@ const quickTitle = ref('')
 const quickCreating = ref(false)
 const creatingTop = ref(false)
 const importOpen = ref(false)
+const archivedOpen = ref(false)
 /** Row whose name cell opens for editing as soon as it renders: the item the toolbar button just created. */
 const autoEditId = ref('')
 const quickRow = ref<HTMLElement>()
@@ -693,6 +695,8 @@ const canCreate = computed(() => Boolean(project.value
   && activeContents.value.length
   && (project.value.actorAccess === ProjectActorAccess.Owner
     || project.value.actorAccess === ProjectActorAccess.Member)))
+const canRestoreArchived = computed(() => Boolean(project.value && projectWritable(project.value)
+  && (project.value.actorAccess === ProjectActorAccess.Owner || project.value.actorAccess === ProjectActorAccess.Member)))
 const { draft: inlineDraft, rows: displayWorkItemRows, isDraft, start: createBelow, save: saveInlineDraft, cancel: cancelInlineDraft } = useWorkItemInlineCreate({
   contextId: () => projectId.value,
   items: () => tableItems.value,
@@ -1128,6 +1132,18 @@ async function restoreArchivedItem(): Promise<void> {
     }
   }
   finally { restoringArchive.value = false }
+}
+
+/** 抽屉里点标题：关闭抽屉，用现有详情抽屉打开（详情里同样可以恢复）。 */
+async function openArchived(workItemId: string): Promise<void> {
+  if (!await beforeDraftLeave()) return
+  archivedOpen.value = false
+  await setViewQuery({ ...route.query, workItemId })
+}
+
+async function onArchivedRestored(ids: string[]): Promise<void> {
+  void connect.refreshCells(ids)
+  await onRelationsChanged([...ids, ...visibleExpandedIds.value])
 }
 
 function onSubitemSortChange(parentId: string, rules: ProjectWorkItemSubitemSortRule[]): void {
@@ -3065,6 +3081,15 @@ onBeforeUnmount(() => {
         :default-content-id="defaultContentId"
         @imported="onWorkItemsImported"
       />
+      <work-item-archived-drawer
+        v-if="!embedded"
+        v-model="archivedOpen"
+        :project-id="projectId"
+        :statuses="labelCatalog?.statuses ?? []"
+        :can-restore="canRestoreArchived"
+        @open="openArchived"
+        @restored="onArchivedRestored"
+      />
       <template v-if="!embedded">
         <connect-column-delete-dialog
           :column="connect.deletingColumn"
@@ -3314,6 +3339,13 @@ onBeforeUnmount(() => {
           <work-item-completed-menu :statuses="workflowStatuses" :codes="tableViewSettings.completedStatusCodes"
             :disabled="selectedView === 'kanban'" :editable="tableSettingsState === 'ready'"
             @update="codes => updateTableSettings({ completedStatusCodes: codes })" />
+          <button
+            v-if="!embedded"
+            class="toolbar-button"
+            @click="archivedOpen = true"
+          >
+            <el-icon><box /></el-icon><span>已归档</span>
+          </button>
           <button v-if="timerEnabled" class="toolbar-button" @click="openSmallTimer">◷ 小计时器</button>
           <work-item-table-settings-menu
             :settings="tableViewSettings"

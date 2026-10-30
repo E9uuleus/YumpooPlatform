@@ -132,7 +132,7 @@ async function remove(archive: boolean): Promise<void> {
     if (props.beforeRemove && !await props.beforeRemove()) return
     const action = archive ? '归档' : '删除'
     await ElMessageBox.confirm(
-      `确定${action}“${props.item.title}”？${archive ? '归档后将从列表隐藏，可通过工作项链接恢复。' : '工作项将移出列表，历史记录将保留。'}${props.item.subitemCount ? '其子工作项将随父项从主表隐藏，父子关系保留。' : ''}`,
+      `确定${action}“${props.item.title}”？${archive ? '归档后将从列表隐藏，可在「已归档」中恢复。' : '工作项将移出列表，历史记录将保留。'}${props.item.subitemCount ? '其子工作项将随父项从主表隐藏，父子关系保留。' : ''}`,
       `${action}工作项`, { confirmButtonText: action, cancelButtonText: '取消', type: 'warning' },
     )
     const common = { workItemId: props.item.id, xXSRFTOKEN: csrf(), ifMatch: props.item.etag, idempotencyKey: crypto.randomUUID() }
