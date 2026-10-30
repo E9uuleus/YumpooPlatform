@@ -6,6 +6,7 @@ import {
   readCsrfToken,
   type Content,
   type ProjectMember,
+  type WorkItemImportRequest,
   type WorkItemImportResult,
   type WorkItemPriorityLabel,
   type WorkItemStatusLabel,
@@ -21,7 +22,7 @@ import {
 } from 'element-plus'
 import { computed, ref, shallowRef, watch, type Component, type DefineComponent } from 'vue'
 import { workItemsApi } from '../../../api/client'
-import { localProblem, toApiProblem, type ApiProblem } from '../../../api/problems'
+import { localProblem, problemKind, toApiProblem, type ApiProblem, type ProblemKind } from '../../../api/problems'
 import InlineProblem from '../../InlineProblem.vue'
 import ImportFileDrop from '../../import/ImportFileDrop.vue'
 import ImportSteps from '../../import/ImportSteps.vue'
@@ -49,6 +50,7 @@ import {
   fieldOfColumn,
   IMPORT_FIELD_LABELS,
   importableCount,
+  importFieldLabel,
   importLimitIssues,
   mappedColumnCount,
   mappedOptionalFields,
@@ -105,6 +107,26 @@ const previewing = ref(false)
 const previewProblem = ref<ApiProblem>()
 const submitting = ref(false)
 const submitProblem = ref<ApiProblem>()
+/** 最近一次提交的请求，用来把字段路径换回文件行号。 */
+const submittedRequest = shallowRef<WorkItemImportRequest>()
+const SUBMIT_FAILURES: Record<ProblemKind, { title: string; hint: string }> = {
+  input: { title: '导入未保存：有内容需要修正', hint: '本次导入未保存，列映射和预览已保留。请按上面列出的行修正文件，重新上传后再导入。' },
+  conflict: { title: '导入未保存：项目数据在预览后发生了变化', hint: '本次导入未保存，列映射已保留。请重新预览，确认结果后再导入。' },
+  denied: { title: '导入未保存：没有导入权限', hint: '本次导入未保存。请确认你仍是项目成员，且项目没有结束或归档。' },
+  internal: { title: '导入未保存：系统内部错误', hint: '本次导入未保存，列映射和预览已保留。这不是文件内容的问题，可以稍后重试；反复出现时请点「复制诊断信息」发给管理员。' },
+  network: { title: '导入未保存：网络连接异常', hint: '本次导入未保存，列映射和预览已保留。请检查网络后重试。' },
+}
+/** 已知业务原因的可操作说明。 */
+const SUBMIT_REASONS: Record<string, string> = {
+  PROJECT_ORDER_DENSE: '项目的手动排序空间不足，无法一次插入这么多新工作项，可以减少行数分批导入。',
+  PARENT_CHILD_CONSTRAINT_VIOLATION: '父子关系与项目里刚发生的修改冲突。',
+  PROJECT_ARCHIVED: '项目已归档，不能导入。',
+  PROJECT_ENDED: '项目已结束，不能导入。',
+}
+const submitKind = computed(() => submitProblem.value ? problemKind(submitProblem.value) : undefined)
+const submitReason = computed(() => submitProblem.value?.kind === 'response'
+  ? SUBMIT_REASONS[submitProblem.value.error.details.reason ?? ''] : undefined)
+const submitFieldLabel = (field: string): string => importFieldLabel(submittedRequest.value!, field)
 let previewSeq = 0
 let readSeq = 0
 let commitKey: string | undefined
@@ -350,6 +372,8 @@ async function submit(): Promise<void> {
     return
   }
   commitKey ??= crypto.randomUUID()
+  const request = buildImportRequest(table.value, catalog.value, settings.value, duplicateMode.value, false)
+  submittedRequest.value = request
   submitting.value = true
   submitProblem.value = undefined
   try {
@@ -357,7 +381,7 @@ async function submit(): Promise<void> {
       projectId: props.projectId,
       xXSRFTOKEN: csrf,
       idempotencyKey: commitKey,
-      workItemImportRequest: buildImportRequest(table.value, catalog.value, settings.value, duplicateMode.value, false),
+      workItemImportRequest: request,
     })
     const message = describeResult(result)
     if (result.failedCount > 0) ElMessage.warning(message)
@@ -369,6 +393,12 @@ async function submit(): Promise<void> {
   } finally {
     submitting.value = false
   }
+}
+
+function previewAgain(): void {
+  commitKey = undefined
+  submitProblem.value = undefined
+  void runPreview()
 }
 
 function close(done?: () => void): void {
@@ -513,7 +543,9 @@ function close(done?: () => void): void {
               <el-icon
                 class="wi-map__arrow"
                 aria-hidden="true"
-              ><right /></el-icon>
+              >
+                <right />
+              </el-icon>
               <span
                 class="wi-map__target"
                 role="cell"
@@ -551,7 +583,9 @@ function close(done?: () => void): void {
                 <el-icon
                   class="wi-map__arrow"
                   aria-hidden="true"
-                ><right /></el-icon>
+                >
+                  <right />
+                </el-icon>
                 <span role="cell">
                   <el-select
                     :model-value="columnTarget(index)"
@@ -688,7 +722,9 @@ function close(done?: () => void): void {
                 <el-icon
                   class="wi-map__arrow"
                   aria-hidden="true"
-                ><right /></el-icon>
+                >
+                  <right />
+                </el-icon>
                 <el-select
                   :model-value="currentChoice(group.kind, value.key)"
                   :class="{ 'is-unresolved': value.match === 'ambiguous' }"
@@ -815,7 +851,9 @@ function close(done?: () => void): void {
                 <el-icon
                   class="wi-stat__icon"
                   aria-hidden="true"
-                ><component :is="stat.icon" /></el-icon>
+                >
+                  <component :is="stat.icon" />
+                </el-icon>
                 <span class="wi-stat__label">{{ stat.label }}</span>
                 <b class="wi-stat__value">{{ stat.value }}</b>
               </button>
@@ -967,9 +1005,23 @@ function close(done?: () => void): void {
             </div>
           </template>
           <inline-problem
-            v-if="submitProblem"
+            v-if="submitProblem && submitKind"
             :problem="submitProblem"
-          />
+            :title="SUBMIT_FAILURES[submitKind].title"
+            :field-label="submitFieldLabel"
+          >
+            <p v-if="submitReason">
+              {{ submitReason }}
+            </p>
+            <p>{{ SUBMIT_FAILURES[submitKind].hint }}</p>
+            <el-button
+              v-if="submitKind === 'conflict'"
+              size="small"
+              @click="previewAgain"
+            >
+              重新预览
+            </el-button>
+          </inline-problem>
         </section>
       </template>
     </div>

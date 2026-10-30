@@ -468,6 +468,22 @@ code {
   word-break: break-all;
 }
 
+.problem-fields {
+  margin: var(--yp-space-1) 0 0;
+  padding-left: var(--yp-space-5);
+}
+
+.problem-diagnostics {
+  margin: var(--yp-space-2) 0 0;
+  padding: var(--yp-space-2) var(--yp-space-3);
+  border-radius: var(--yp-radius-sm);
+  background: var(--yp-bg-sunken);
+  color: var(--yp-text-secondary);
+  font: 12px/1.6 var(--yp-font-mono);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
 .table-surface {
   overflow: hidden;
   border: 1px solid var(--yp-border-default);
