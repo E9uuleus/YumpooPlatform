@@ -102,7 +102,7 @@
     {
       "id": "2026-10-29-migrated-time-work-items",
       "oldSha256": "a78ed408312be3a9f4e1e25d7ed849eb0e160dfe43b198dbffae6750b7f7083d",
-      "newSha256": "acae49072efc8c219b3e7c02271140c29a17d3d69f0e1107254a4e412e61a141",
+      "newSha256": "d6fe02c13ccca4715bc48687b0712d100e91073f354e822c312c70767e358860",
       "reason": "迁入工时请求改为按成员、日期、项目名称与工作项标题的明细行，取消 categoryProjectId、entries 与清除结果；响应新增 skippedRows、skippedMinutes，移除 clearedDayCount 与 CLEAR。仅把迁入接口还原为基线的临时规范相对基线 openapi-diff 通过，其余变更（TimeTrackingSession.migrated、TeamTimesheetEntry.migratedDurationMs 可选响应字段）兼容；前端与服务端同版本发布。",
       "agentNote": ".agents/notes/implemented/architecture/2026-10-28-migrated-time-import.md"
     }

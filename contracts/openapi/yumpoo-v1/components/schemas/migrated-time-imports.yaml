@@ -60,7 +60,7 @@ components:
         code:
           type: string
           minLength: 1
-          description: 稳定问题代码，例如 USER_INVALID、NOT_ENOUGH_FREE_TIME、PAST_WORKDAY_END、FUTURE_DATE、REPLACES_PREVIOUS。
+          description: 稳定问题代码，例如 USER_INVALID、DAY_HAS_TIME、NOT_ENOUGH_FREE_TIME、PAST_WORKDAY_END、FUTURE_DATE、REPLACES_PREVIOUS。
         detail:
           type: string
           nullable: true
