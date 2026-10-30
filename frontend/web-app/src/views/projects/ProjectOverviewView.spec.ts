@@ -1591,6 +1591,20 @@ describe('项目级工作项首页', () => {
     expect(wrapper.findAll('.work-item-link')).toHaveLength(2)
   })
 
+  it('被取代的首屏请求不会让后续重新加载一直停在骨架', async () => {
+    state.listProjectWorkItems.mockImplementationOnce(() => new Promise(() => undefined))
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.find('.work-item-table-skeleton').exists()).toBe(true)
+
+    await (wrapper.vm as unknown as { resetCurrentData: () => Promise<void> }).resetCurrentData()
+    await flushPromises()
+
+    expect(state.listProjectWorkItems).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('.work-item-table-skeleton').exists()).toBe(false)
+    expect(wrapper.findAll('.work-item-link')).toHaveLength(1)
+  })
+
   it('连续拖动使用最新 ETag，且只提交当前可见相邻项', async () => {
     const first = { ...item('item-1'), title: '第一项' }
     const second = { ...item('item-2'), title: '第二项' }

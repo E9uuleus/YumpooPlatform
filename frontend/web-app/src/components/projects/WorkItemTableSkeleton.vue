@@ -203,8 +203,8 @@ function shape(column: WorkItemSkeletonColumn): string {
 
 .work-item-table-skeleton__cell--block { padding: 0; }
 .work-item-table-skeleton__cell--block .work-item-skeleton-block {
-  width: 100%;
-  height: 100%;
+  width: calc(100% - 2px);
+  height: calc(100% - 2px);
   border-radius: 0;
   background: var(--work-item-skeleton-block-strong);
 }

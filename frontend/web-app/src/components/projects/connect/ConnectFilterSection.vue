@@ -95,13 +95,20 @@ function cannotAdd(selected: Set<string>, id: string, available = true) {
 </template>
 
 <style scoped>
-.connect-filters { display: grid; gap: var(--yp-space-3); padding: var(--yp-space-3) 0; border-top: 1px solid var(--yp-border-subtle); }
+.connect-filters { display: grid; gap: var(--yp-space-2); padding-top: var(--yp-space-4); border-top: 1px solid var(--yp-border-subtle); }
 .connect-filters h4, .connect-filters p { margin: 0; }
+.connect-filters h4 { color: var(--yp-text-secondary); font-size: 12px; font-weight: 600; letter-spacing: .02em; }
+.connect-filters p { padding: 0 8px; font-size: 13px; }
 .connect-filters p, .connect-filters small { color: var(--yp-text-muted); }
-.connect-filters__column { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--yp-space-3); align-items: center; }
+.connect-filters__column {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--yp-space-4); align-items: center;
+  min-height: 32px; padding: 0 8px; border-radius: var(--yp-radius-sm);
+  transition: background-color var(--yp-motion-fast) var(--yp-ease-standard);
+}
+.connect-filters__column:hover { background: var(--yp-bg-hover); }
 .connect-filters__column > span { overflow-wrap: anywhere; }
 .connect-filters .el-checkbox { margin-right: 0; }
-.connect-filters__incoming { display: grid; gap: var(--yp-space-2); }
+.connect-filters__incoming { display: grid; gap: 2px; padding: 0 8px; }
 .connect-filters__incoming :deep(.el-checkbox__label) { display: flex; flex: 1; gap: var(--yp-space-2); }
 .connect-filters__incoming :deep(.el-checkbox) { min-height: 32px; height: auto; }
 .connect-filters__incoming :deep(.el-checkbox__label) > span { white-space: normal; overflow-wrap: anywhere; }

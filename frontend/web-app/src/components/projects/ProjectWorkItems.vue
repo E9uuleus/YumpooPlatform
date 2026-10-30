@@ -591,6 +591,10 @@ const columnSettingsKind = ref<'status' | 'priority' | 'content'>()
 const columnSettingsAnchor = ref<HTMLElement>()
 const assigneeFilterOpen = ref(false)
 const filterPopoverOpen = ref(false)
+const activeFilterCount = computed(() => filters.statuses.size + filters.priorities.size + filters.contents.size
+  + filters.connectedColumnIds.size + filters.unconnectedColumnIds.size + filters.incomingProjectIds.size
+  + (filters.dueRange.length ? 1 : 0) + (filters.updatedAfter ? 1 : 0) + (filters.timeState ? 1 : 0)
+  + (filters.timeMin !== '' || filters.timeMax !== '' ? 1 : 0))
 const groupFieldByColumn: Partial<Record<BuiltInColumnKey, GroupField>> = {
   assignee: 'ASSIGNEE', status: 'STATUS', priority: 'PRIORITY', content: 'CONTENT', dueDate: 'DUE_DATE',
 }
@@ -1601,6 +1605,9 @@ async function loadWorkspace(): Promise<void> {
   const revision = ++loadRevision
   activeController?.abort()
   activeController = new AbortController()
+  // 被取代的请求不会回写加载状态，否则新的表格加载会被当成仍在进行而跳过。
+  tableLoading.value = false
+  tableSorting.value = false
   const requestedProjectId = projectId.value
   loading.value = true
   error.value = undefined
@@ -2892,6 +2899,7 @@ async function resetCurrentData(): Promise<void> {
   }
   const revision = ++loadRevision
   activeController?.abort(); activeController = new AbortController()
+  tableLoading.value = false; tableSorting.value = false
   error.value = undefined; tableItems.value = []; tableNextCursor.value = null
   Object.keys(lanes).forEach(key => delete lanes[key])
   Object.keys(subitems).forEach(key => delete subitems[key])
@@ -3260,36 +3268,43 @@ onBeforeUnmount(() => {
 
           <el-popover v-model:visible="filterPopoverOpen" placement="bottom-start" :width="560" trigger="click" popper-class="work-items-popover work-items-filter-popover" @show="loadFilterOptions">
             <template #reference>
-              <button class="toolbar-button" :class="{ active: filters.connectedColumnIds.size || filters.unconnectedColumnIds.size || filters.incomingProjectIds.size || filters.statuses.size || filters.priorities.size || filters.contents.size || filters.dueRange.length || filters.timeState || filters.timeMin || filters.timeMax || filters.updatedAfter }">
-                <el-icon><filter-icon /></el-icon><span>筛选</span>
+              <button class="toolbar-button" :class="{ active: activeFilterCount }">
+                <el-icon><filter-icon /></el-icon><span>筛选</span><span v-if="activeFilterCount" class="toolbar-button__count">{{ activeFilterCount }}</span>
               </button>
             </template>
             <div class="filter-popover">
-              <header><strong>快速筛选</strong><button class="text-button" @click="clearFilters">清除全部</button></header>
+              <header class="filter-popover__header">
+                <strong>快速筛选</strong>
+                <span v-if="activeFilterCount" class="filter-popover__count" :aria-label="`已选 ${activeFilterCount} 个条件`">{{ activeFilterCount }}</span>
+                <button class="text-button filter-popover__clear" :disabled="!activeFilterCount && !filters.assignees.size" @click="clearFilters">清除全部</button>
+              </header>
+              <section class="filter-section">
+                <h4>工作项名称</h4>
+                <el-input v-model="searchInput" clearable placeholder="名称或编号" :prefix-icon="Search" @input="scheduleSearch" />
+              </section>
               <div class="filter-columns">
-                <section>
-                  <h4>工作项名称</h4>
-                  <el-input v-model="searchInput" clearable placeholder="名称或编号" @input="scheduleSearch" />
-                </section>
-                <section>
-                  <h4>状态</h4>
+                <section class="filter-section">
+                  <h4>状态<small v-if="filters.statuses.size">已选 {{ filters.statuses.size }}</small></h4>
                   <button v-for="status in workflowStatuses" :key="status.statusCode" class="filter-value" :aria-pressed="filters.statuses.has(status.statusCode)" @click="toggleSet(filters.statuses, status.statusCode, !filters.statuses.has(status.statusCode))">
                     <span class="filter-checkbox" :class="{ checked: filters.statuses.has(status.statusCode) }" aria-hidden="true" />
-                    <span>{{ status.displayName }}</span><small>{{ countBy('statusCode', status.statusCode) }}</small>
+                    <span class="filter-swatch" :style="{ background: workItemLabelColorValue(status.colorToken) }" aria-hidden="true" />
+                    <span class="filter-value__label">{{ status.displayName }}</span><small :class="{ 'filter-value__count--zero': !countBy('statusCode', status.statusCode) }">{{ countBy('statusCode', status.statusCode) }}</small>
                   </button>
                 </section>
-                <section>
-                  <h4>优先级</h4>
+                <section class="filter-section">
+                  <h4>优先级<small v-if="filters.priorities.size">已选 {{ filters.priorities.size }}</small></h4>
                   <button v-for="priority in priorityOptions" :key="priority.code" class="filter-value" :aria-pressed="filters.priorities.has(priority.code)" @click="toggleSet(filters.priorities, priority.code, !filters.priorities.has(priority.code))">
                     <span class="filter-checkbox" :class="{ checked: filters.priorities.has(priority.code) }" aria-hidden="true" />
-                    <span>{{ priority.displayName }}</span><small>{{ countBy('priority', priority.code) }}</small>
+                    <span class="filter-swatch" :style="{ background: workItemLabelColorValue(priority.colorToken) }" aria-hidden="true" />
+                    <span class="filter-value__label">{{ priority.displayName }}</span><small :class="{ 'filter-value__count--zero': !countBy('priority', priority.code) }">{{ countBy('priority', priority.code) }}</small>
                   </button>
                 </section>
-                <section>
-                  <h4>工作项类别</h4>
+                <section class="filter-section">
+                  <h4>工作项类别<small v-if="filters.contents.size">已选 {{ filters.contents.size }}</small></h4>
                   <button v-for="content in catalog?.items ?? []" :key="content.id" class="filter-value" :aria-pressed="filters.contents.has(content.id)" @click="toggleSet(filters.contents, content.id, !filters.contents.has(content.id))">
                     <span class="filter-checkbox" :class="{ checked: filters.contents.has(content.id) }" aria-hidden="true" />
-                    <span>{{ content.name }}</span><small>{{ countBy('contentId', content.id) }}</small>
+                    <span class="filter-swatch" :style="{ background: workItemLabelColorValue(content.colorToken) }" aria-hidden="true" />
+                    <span class="filter-value__label">{{ content.name }}</span><small :class="{ 'filter-value__count--zero': !countBy('contentId', content.id) }">{{ countBy('contentId', content.id) }}</small>
                   </button>
                 </section>
               </div>
@@ -3320,11 +3335,15 @@ onBeforeUnmount(() => {
                   </el-select>
                 </div>
                 <div class="filter-field">
-                  <span class="filter-field-label">累计时长（秒）</span>
+                  <span class="filter-field-label">累计时长</span>
                   <div class="filter-duration-range">
-                    <el-input v-model="filters.timeMin" aria-label="最少累计秒数" type="number" min="0" placeholder="最少" @change="syncUrl()" />
+                    <el-input v-model="filters.timeMin" aria-label="最少累计秒数" type="number" min="0" placeholder="最少" @change="syncUrl()">
+                      <template #suffix>秒</template>
+                    </el-input>
                     <span aria-hidden="true">—</span>
-                    <el-input v-model="filters.timeMax" aria-label="最多累计秒数" type="number" min="0" placeholder="最多" @change="syncUrl()" />
+                    <el-input v-model="filters.timeMax" aria-label="最多累计秒数" type="number" min="0" placeholder="最多" @change="syncUrl()">
+                      <template #suffix>秒</template>
+                    </el-input>
                   </div>
                 </div>
               </div>
@@ -4093,7 +4112,6 @@ onBeforeUnmount(() => {
           <section
             v-for="status in workflowStatuses"
             :key="status.statusCode"
-            v-loading="lane(status.statusCode).loading"
             class="kanban-lane"
             @dragover.prevent
             @drop.prevent="status.active && dropInto(status.statusCode)"
@@ -4436,23 +4454,74 @@ onBeforeUnmount(() => {
 .empty-avatar { display: inline-grid; width: 28px; height: 28px; place-items: center; border: 1px dashed var(--yp-border-default); border-radius: 50%; }
 .filter-popover > header, .sort-popover > header { display: flex; align-items: center; justify-content: space-between; }
 .text-button { width: auto; color: var(--yp-action-primary); }
-.filter-popover { min-width: 0; max-height: min(720px, calc(100dvh - 96px)); overflow-y: auto; overflow-x: hidden; }
-.filter-columns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--yp-space-4); min-width: 0; }
-.filter-columns section:first-child { grid-column: 1 / -1; }
-.filter-columns section { min-width: 0; }
-.filter-columns h4 { margin: 0 0 var(--yp-space-2); color: var(--yp-text-secondary); }
-.filter-value { min-width: 0; }
-.filter-value > span { min-width: 0; overflow-wrap: anywhere; }
-.filter-checkbox { flex: 0 0 auto; width: 14px; height: 14px; border: 1px solid var(--yp-border-default); border-radius: 3px; display: inline-grid; place-items: center; box-sizing: border-box; }
-.filter-checkbox.checked { background: var(--yp-action-primary); border-color: var(--yp-action-primary); color: white; }
-.filter-checkbox.checked::after { content: "✓"; font-size: 11px; line-height: 1; }
-.filter-value small { flex: 0 0 auto; }
-.filter-dates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--yp-space-4); min-width: 0; padding-top: var(--yp-space-4); border-top: 1px solid var(--yp-border-subtle); }
+.toolbar-button__count {
+  display: inline-grid; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; place-items: center;
+  border-radius: var(--yp-radius-pill); background: var(--yp-action-primary); color: var(--yp-text-inverse);
+  font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1;
+}
+.filter-popover {
+  gap: var(--yp-space-4); min-width: 0; max-height: min(720px, calc(100dvh - 96px));
+  overflow: hidden auto; padding: 0 var(--yp-space-5) var(--yp-space-5);
+}
+.filter-popover__header {
+  position: sticky; z-index: 1; top: 0; display: flex; align-items: center; gap: var(--yp-space-2);
+  margin: 0 calc(-1 * var(--yp-space-5)); padding: var(--yp-space-4) var(--yp-space-5) var(--yp-space-3);
+  border-bottom: 1px solid var(--yp-border-subtle); background: var(--yp-bg-raised);
+}
+.filter-popover__header strong { color: var(--yp-text-primary); font-size: 15px; font-weight: 600; }
+.filter-popover__count {
+  display: inline-grid; min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; place-items: center;
+  border-radius: var(--yp-radius-pill); background: var(--yp-action-primary); color: var(--yp-text-inverse);
+  font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.filter-popover__clear { margin-left: auto; padding: 4px 8px; }
+.filter-popover__clear:disabled { color: var(--yp-text-muted); background: transparent; cursor: default; }
+.filter-section { display: grid; align-content: start; gap: 2px; min-width: 0; }
+.filter-section h4 {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--yp-space-2);
+  margin: 0 0 var(--yp-space-2); color: var(--yp-text-secondary); font-size: 12px; font-weight: 600; letter-spacing: .02em;
+}
+.filter-section h4 small { color: var(--yp-action-primary); font-size: 12px; font-weight: 500; letter-spacing: 0; }
+.filter-columns {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--yp-space-4) var(--yp-space-5); min-width: 0;
+  padding-top: var(--yp-space-4); border-top: 1px solid var(--yp-border-subtle);
+}
+.filter-value {
+  min-width: 0; min-height: 32px; gap: 10px; padding: 5px 8px;
+  transition: background-color var(--yp-motion-fast) var(--yp-ease-standard);
+}
+.filter-value[aria-pressed='true'] { background: var(--yp-bg-selected); }
+.filter-value[aria-pressed='true'] .filter-value__label { font-weight: 500; }
+.filter-value__label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.filter-swatch { flex: none; width: 8px; height: 8px; border-radius: 50%; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--yp-text-primary) 12%, transparent); }
+.filter-value small {
+  flex: 0 0 auto; min-width: 24px; padding: 1px 6px; box-sizing: border-box; border-radius: var(--yp-radius-pill);
+  background: var(--yp-bg-sunken); font-size: 12px; font-variant-numeric: tabular-nums; text-align: center;
+}
+.filter-value small.filter-value__count--zero { opacity: .55; }
+.filter-checkbox {
+  position: relative; flex: 0 0 auto; width: 16px; height: 16px; box-sizing: border-box;
+  border: 1px solid var(--yp-border-strong, var(--yp-border-default)); border-radius: 4px; background: var(--yp-bg-surface);
+  transition: background-color var(--yp-motion-fast) var(--yp-ease-standard), border-color var(--yp-motion-fast) var(--yp-ease-standard);
+}
+.filter-value:hover .filter-checkbox:not(.checked) { border-color: var(--yp-action-primary); }
+.filter-checkbox.checked { border-color: var(--yp-action-primary); background: var(--yp-action-primary); }
+.filter-checkbox.checked::after {
+  position: absolute; top: 2px; left: 5px; width: 4px; height: 8px; box-sizing: border-box;
+  border: solid var(--yp-text-inverse); border-width: 0 2px 2px 0; content: '';
+  transform: rotate(45deg); animation: filter-check-in var(--yp-motion-fast) var(--yp-ease-standard);
+}
+@keyframes filter-check-in { from { opacity: 0; transform: rotate(45deg) scale(.4); } }
+.filter-dates {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--yp-space-4) var(--yp-space-5); min-width: 0;
+  padding-top: var(--yp-space-4); border-top: 1px solid var(--yp-border-subtle);
+}
 .filter-field { display: grid; gap: var(--yp-space-2); min-width: 0; }
-.filter-field-label { color: var(--yp-text-secondary); font-weight: 500; }
+.filter-field-label { color: var(--yp-text-secondary); font-size: 12px; font-weight: 600; letter-spacing: .02em; }
 .filter-field :deep(.el-date-editor), .filter-field :deep(.el-select), .filter-field :deep(.el-input) { width: 100%; min-width: 0; box-sizing: border-box; }
-.filter-duration-range { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: var(--yp-space-2); min-width: 0; }
-:global(.work-items-filter-popover.el-popover) { width: min(680px, calc(100vw - 32px)) !important; box-sizing: border-box; }
+.filter-field :deep(.el-input__suffix) { color: var(--yp-text-muted); font-size: 12px; }
+.filter-duration-range { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: var(--yp-space-2); min-width: 0; color: var(--yp-text-muted); }
+:global(.work-items-filter-popover.el-popover) { width: min(680px, calc(100vw - 32px)) !important; box-sizing: border-box; padding: 0; overflow: hidden; }
 @media (max-width: 560px) {
   .filter-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .filter-dates { grid-template-columns: minmax(0, 1fr); }
