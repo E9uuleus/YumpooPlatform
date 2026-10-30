@@ -382,7 +382,7 @@ function logLink(alert: OperationsAlert) {
     >
       <yp-empty-state
         title="没有活跃告警"
-        description="内置规则每 15 秒评估一次，恢复需连续正常 1 分钟。"
+        description=""
       />
     </section>
   </template>
@@ -456,7 +456,7 @@ function logLink(alert: OperationsAlert) {
       :problem="ruleQuery.error.value"
     />
     <p class="ops-muted rules-hint">
-      比例使用百分比；磁盘以剩余比例低于阈值触发，其他规则以达到阈值触发。恢复需连续正常 1 分钟。每次保存都会写入安全审计。
+      比例使用百分比；磁盘以剩余比例低于阈值触发，其他规则以达到阈值触发。
     </p>
     <section class="ops-card flush">
       <el-table

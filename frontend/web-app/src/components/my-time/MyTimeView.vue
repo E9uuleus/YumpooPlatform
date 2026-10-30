@@ -152,7 +152,6 @@ defineExpose({ refresh: load, loading, ready })
       >
         本月
       </el-button>
-      <span class="my-time__note">按公司时区（{{ timezone }}）切分自然日，跨日计时按实际时长拆分，运行中的计时实时累加。</span>
     </div>
     <div
       v-loading="loading && !row"
@@ -193,10 +192,11 @@ defineExpose({ refresh: load, loading, ready })
           />计时中</template></small><strong>{{ hoursMinutes(shownToday) }}</strong>
         </div>
       </div>
-      <p class="my-time__note">
-        并行计时按项数平均计入，每日合计为实际时长。<template v-if="hasMigrated">
-          {{ MIGRATED_LEGEND }}。
-        </template>
+      <p
+        v-if="hasMigrated"
+        class="my-time__note"
+      >
+        {{ MIGRATED_LEGEND }}。
       </p>
       <div
         class="my-time__board"

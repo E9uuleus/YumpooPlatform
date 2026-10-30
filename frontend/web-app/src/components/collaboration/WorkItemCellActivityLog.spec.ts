@@ -99,7 +99,7 @@ describe('WorkItemCellActivityLog', () => {
     wrapper.unmount()
   })
 
-  it('渲染替换值、切点提示并加载更早动态', async () => {
+  it('渲染替换值并加载更早动态', async () => {
     api.list.mockResolvedValueOnce(page([
       entry('46000000-0000-4000-8000-000000000011', WorkItemCellActivityChangeType.Changed,
         WorkItemCellActivityColumn.Priority),
@@ -110,7 +110,7 @@ describe('WorkItemCellActivityLog', () => {
     const wrapper = mount(WorkItemCellActivityLog, { props: { workItemId: 'item-1' }, global })
     await flushPromises()
 
-    expect(wrapper.text()).toContain('单元格动态从 2026年9月1日 16:00 开始记录')
+    expect(wrapper.text()).not.toContain('开始记录')
     expect(wrapper.text()).toContain('优先级')
     expect(wrapper.text()).toContain('低')
     expect(wrapper.text()).toContain('高')

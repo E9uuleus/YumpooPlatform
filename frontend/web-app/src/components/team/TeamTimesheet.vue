@@ -330,14 +330,6 @@ async function exportExcel() {
       >
         {{ MIGRATED_LEGEND }}
       </p>
-      <p class="team-note">
-        <template v-if="overtime">
-          仅统计公司工作日历中休息日与法定节假日的工时，日历在「公司管理 → 工作日历」维护。点击工时数字查看当日工作项。
-        </template>
-        <template v-else>
-          按公司时区（{{ timezone }}）切分自然日，跨日计时按实际时长拆分；运行中的计时统计到刷新时刻。点击工时数字查看当日工作项。
-        </template>
-      </p>
     </div>
     <DayBreakdownPopover
       v-if="active"

@@ -41,9 +41,6 @@ watch(() => [props.projectId, Boolean(props.catalog)], () => { if (!props.catalo
         还没有连接。在工作项表格右上角「+」中添加连接列。
       </div>
       <template v-else>
-        <p class="project-connections-overview__intro">
-          连接在工作项表格中管理，这里只做概览。
-        </p>
         <h3>本项目的连接列</h3>
         <div
           v-for="column in catalog.items"

@@ -234,7 +234,6 @@ onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTi
     <project-workspace-header
       section="catalog"
       title="管理项目"
-      description="查看你负责或参与的进行中项目、负责人和协作角色。"
     />
     <inline-problem
       v-if="error"

@@ -29,9 +29,6 @@ watch([query, archived], () => { clearTimeout(timer); timer = setTimeout(() => v
     class="dashboard-dialog"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <p class="dialog-intro">
-      选择要汇总的项目。此设置只影响你的仪表板。
-    </p>
     <el-input
       v-model="query"
       placeholder="搜索项目名称或编码"

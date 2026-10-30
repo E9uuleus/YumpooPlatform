@@ -112,7 +112,7 @@ const sides: Array<{ value: TimerDockSide; label: string }> = [{ value: 'left', 
       </button>
     </section>
     <p class="settings-hint">
-      右键悬浮球、侧边栏或托盘图标可打开快捷菜单；设置会保存在本机。
+      右键悬浮球、侧边栏或托盘图标可打开快捷菜单。
     </p>
   </div>
 </template>

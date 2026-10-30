@@ -60,7 +60,7 @@ describe('ActivityTimeline', () => {
     const wrapper = mount(ActivityTimeline, { props: { projectId: 'project-1' } })
     await flushPromises()
 
-    expect(wrapper.text()).toContain('动态从 2026-08-30 16:00 开始记录')
+    expect(wrapper.text()).not.toContain('开始记录')
     expect(wrapper.text()).toContain('<img src=x> 创建了事项')
     expect(wrapper.find('img').exists()).toBe(false)
     expect(wrapper.text()).toContain('2026-08-30')

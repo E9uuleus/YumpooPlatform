@@ -231,9 +231,6 @@ async function exportExcel() {
           </tfoot>
         </table>
       </div>
-      <p class="team-note">
-        按公司时区（{{ timezone }}）切分自然日，并行计时按项数平均计入。展开项目可查看成员，以及关联到该项目的出差、学习、商务、会议；未关联项目的这类工时列在最后。
-      </p>
     </div>
   </section>
 </template>
