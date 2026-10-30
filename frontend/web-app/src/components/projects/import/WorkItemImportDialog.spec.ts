@@ -150,5 +150,24 @@ describe('导入工作项弹窗', () => {
     expect(button('导入 0 项').disabled).toBe(true)
     expect(document.body.querySelector('.wi-preview')?.textContent).toContain('项目中有多个同名工作项，无法确定更新哪一个')
     expect([...document.body.querySelectorAll('.wi-preview__no')].map(cell => cell.textContent)).toContain('3')
+
+    const issueFilter = () => document.body.querySelector<HTMLInputElement>('.wi-preview__toolbar input[type="checkbox"]')!
+    issueFilter().click()
+    await flushPromises()
+    expect(document.body.querySelectorAll('.wi-preview__no')).toHaveLength(1)
+
+    api.importWorkItems.mockResolvedValue(result({
+      rows: [
+        { rowNumber: 2, outcome: 'CREATE', issues: [] },
+        { rowNumber: 3, outcome: 'CREATE', issues: [] },
+      ] as WorkItemImportResult['rows'],
+    }))
+    await document.body.querySelectorAll<HTMLButtonElement>('.yp-choice-card')[0]!.click()
+    await flushPromises()
+    expect(issueFilter().checked).toBe(true)
+    expect(issueFilter().disabled).toBe(false)
+    issueFilter().click()
+    await flushPromises()
+    expect(document.body.querySelectorAll('.wi-preview__no')).toHaveLength(2)
   })
 })

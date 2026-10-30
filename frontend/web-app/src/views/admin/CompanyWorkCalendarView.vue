@@ -286,9 +286,7 @@ onMounted(() => pageLoad.track(load))
         </el-button>
       </div>
       <p>
-        每天检查前一自然日每位成员的总工时（与团队视图同一口径），超过阈值时向全体公司管理员发送站内提醒「该成员工时数据异常请关注」。执行时间与启用在 <router-link :to="{ name: 'company-scheduled-jobs' }">
-          定时任务
-        </router-link> 中设置，默认停用。
+        每天检查前一自然日每位成员的总工时（与团队视图同一口径），超过阈值时向全体公司管理员发送站内提醒「该成员工时数据异常请关注」。执行时间与启用在 <router-link :to="{ name: 'company-scheduled-jobs' }">定时任务</router-link> 中设置，默认停用。
       </p>
     </article>
     <el-dialog

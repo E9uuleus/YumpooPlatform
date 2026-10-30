@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import YpNotice from '../../yp/YpNotice.vue'
+import { CircleCloseFilled, CirclePlus, RefreshRight, Remove, Right, WarningFilled } from '@element-plus/icons-vue'
 import {
   WorkItemImportDuplicateMode,
   WorkItemImportOutcome,
@@ -13,8 +13,8 @@ import {
 import {
   ElButton,
   ElCheckbox,
-  ElIcon,
   ElDialog,
+  ElIcon,
   ElMessage,
   ElOption as ElOptionRaw,
   ElSelect as ElSelectRaw,
@@ -26,16 +26,18 @@ import InlineProblem from '../../InlineProblem.vue'
 import ImportFileDrop from '../../import/ImportFileDrop.vue'
 import ImportSteps from '../../import/ImportSteps.vue'
 import { cellText, readSpreadsheet, SpreadsheetError } from '../../import/spreadsheet'
-import { CircleCloseFilled, CirclePlus, RefreshRight, Remove, Right, WarningFilled } from '@element-plus/icons-vue'
 import YpAssigneeStack from '../../yp/YpAssigneeStack.vue'
-import { workItemLabelColorStyle } from '../workItemLabelColors'
 import YpChoiceCards from '../../yp/YpChoiceCards.vue'
+import YpNotice from '../../yp/YpNotice.vue'
+import { workItemLabelColorStyle } from '../workItemLabelColors'
 import {
   assignColumn,
   assignField,
   autoMapColumns,
+  BLANK_VALUE,
   buildImportCatalog,
   buildImportRequest,
+  buildImportRows,
   buildImportTable,
   canLeaveMapping,
   collectValues,
@@ -48,27 +50,25 @@ import {
   IMPORT_FIELD_LABELS,
   importableCount,
   importLimitIssues,
-  BLANK_VALUE,
-  buildImportRows,
-  mappedOptionalFields,
-  previewRows,
-  valueMatch,
-  valueOptions,
-  type ImportPreviewRow,
-  type OptionalImportField,
-  type ValueMatch,
   mappedColumnCount,
+  mappedOptionalFields,
   OPTIONAL_IMPORT_FIELDS,
+  previewRows,
   resolveAssignee,
   resolveContent,
   resolvePriority,
   resolveStatus,
   setChoice,
+  valueMatch,
+  valueOptions,
   type ImportField,
   type ImportOption,
+  type ImportPreviewRow,
   type ImportSettings,
   type ImportTable,
+  type OptionalImportField,
   type ValueKind,
+  type ValueMatch,
 } from './workItemImportModel'
 
 const ElSelect = ElSelectRaw as unknown as DefineComponent
@@ -828,7 +828,7 @@ function close(done?: () => void): void {
                 <span class="wi-meta">显示 <b>{{ visibleRows.length }}</b> / {{ previewList.length }} 行</span>
                 <el-checkbox
                   v-model="issuesOnly"
-                  :disabled="!issueCount"
+                  :disabled="!issueCount && !issuesOnly"
                 >
                   只看带说明的行（{{ issueCount }}）
                 </el-checkbox>
