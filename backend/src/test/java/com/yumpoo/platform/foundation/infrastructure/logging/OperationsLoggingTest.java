@@ -30,7 +30,7 @@ class OperationsLoggingTest {
     @TempDir
     Path directory;
 
-    private final LogQueryPort.Filter filter = new LogQueryPort.Filter(null, Set.of(), null, null, null, null);
+    private final LogQueryPort.Filter filter = new LogQueryPort.Filter(null, Set.of(), null, null, null, null, false);
 
     private LoggingEvent event(String text, Throwable cause) {
         Logger logger = (Logger) LoggerFactory.getLogger("com.yumpoo.platform.operations.LogTest");
@@ -145,7 +145,7 @@ class OperationsLoggingTest {
         adapter.start();
         try {
             Logger logger = (Logger) LoggerFactory.getLogger("com.yumpoo.platform.operations.LogTest");
-            var noMatch = new LogQueryPort.Filter(Set.of("WARN"), Set.of(), null, null, null, null);
+            var noMatch = new LogQueryPort.Filter(Set.of("WARN"), Set.of(), null, null, null, null, false);
             var before = adapter.tail(null, null, noMatch, 10);
             logger.info("tail watermark test");
             var after = adapter.tail(before.bootId(), Long.parseLong(before.nextAfterSeq()), noMatch, 10);
@@ -294,7 +294,7 @@ class OperationsLoggingTest {
                 line(from.plusSeconds(2), "plain secret-value")
         );
         var adapter = new LogQueryAdapter(new MockEnvironment().withProperty("logging.file.name", file.toString()));
-        var keyword = new LogQueryPort.Filter(null, Set.of(), "SECRET-VALUE", null, null, null);
+        var keyword = new LogQueryPort.Filter(null, Set.of(), "SECRET-VALUE", null, null, null, false);
         assertThat(adapter.search(from, to, keyword, null, 10).items())
             .extracting(e -> e.record().msg())
             .containsExactly("plain secret-value");

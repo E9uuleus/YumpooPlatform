@@ -112,6 +112,7 @@ public class OperationsController {
         @RequestParam(required = false) String requestId,
         @RequestParam(required = false) String event,
         @RequestParam(required = false) String userId,
+        @RequestParam(defaultValue = "false") boolean failed,
         @RequestParam(required = false) String cursor,
         @RequestParam(defaultValue = "100") int limit
     ) {
@@ -121,7 +122,7 @@ public class OperationsController {
             logs.search(
                 from == null ? end.minusSeconds(900) : from,
                 end,
-                filter(levels, modules, q, requestId, event, userId),
+                filter(levels, modules, q, requestId, event, userId, failed),
                 cursor,
                 limit
             )
@@ -138,10 +139,11 @@ public class OperationsController {
         @RequestParam(required = false) String requestId,
         @RequestParam(required = false) String event,
         @RequestParam(required = false) String userId,
+        @RequestParam(defaultValue = "false") boolean failed,
         @RequestParam(defaultValue = "100") int limit
     ) {
         access.requireManager();
-        return response(logs.tail(bootId, afterSeq, filter(levels, modules, q, requestId, event, userId), limit));
+        return response(logs.tail(bootId, afterSeq, filter(levels, modules, q, requestId, event, userId, failed), limit));
     }
 
     @GetMapping("/admin/operations/logs/histogram")
@@ -153,10 +155,11 @@ public class OperationsController {
         @RequestParam(required = false) String q,
         @RequestParam(required = false) String requestId,
         @RequestParam(required = false) String event,
-        @RequestParam(required = false) String userId
+        @RequestParam(required = false) String userId,
+        @RequestParam(defaultValue = "false") boolean failed
     ) {
         access.requireManager();
-        return response(logs.histogram(from, to, filter(levels, modules, q, requestId, event, userId)));
+        return response(logs.histogram(from, to, filter(levels, modules, q, requestId, event, userId, failed)));
     }
 
     @GetMapping("/admin/operations/alerts/summary")
@@ -244,9 +247,10 @@ public class OperationsController {
         String q,
         String requestId,
         String event,
-        String userId
+        String userId,
+        boolean failed
     ) {
-        return new LogQueryPort.Filter(levels == null ? null : csv(levels), csv(modules), q, requestId, event, userId);
+        return new LogQueryPort.Filter(levels == null ? null : csv(levels), csv(modules), q, requestId, event, userId, failed);
     }
 
     private static <T> ResponseEntity<T> response(T body) {
