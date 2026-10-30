@@ -212,7 +212,8 @@ public class WorkItemImportService {
                         WorkItemImportPlanner.normalizePriority(planned.row().priority()), null, null,
                         planned.row().notes(), null, null, planned.row().dueDate(), (LocalTime) null,
                         rank, sortKeys[index], actor.userId(), now)
-                        .assign(planned.row().assigneeUserIds(), actor.userId(), now);
+                        .assign(planned.row().assigneeUserIds(), actor.userId(), now)
+                        .withoutCompletionTime();
             } catch (IllegalArgumentException exception) {
                 throw validation("rows", "INVALID_WORK_ITEM", exception.getMessage());
             }
@@ -274,6 +275,7 @@ public class WorkItemImportService {
                 WorkItem moved = current.move(status.code(),
                         WorkItemStatusCategory.valueOf(status.statusCategory()), rank,
                         actor.userId(), now);
+                if (current.statusCategory() != WorkItemStatusCategory.DONE) moved = moved.withoutCompletionTime();
                 current = workItems.transition(moved, current.rowVersion())
                         .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
             }
