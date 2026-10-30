@@ -4,7 +4,6 @@ import { computed, ref, watch } from 'vue'
 import { ElButton } from 'element-plus'
 import { Close } from '@element-plus/icons-vue'
 import { workItemLabelColorValue } from '../../projects/workItemLabelColors'
-import { isMigratedCategory } from '../../timer/timeCategories'
 import { companyDateTime } from '../../timer/timeFormat'
 import ItemPicker from './ItemPicker.vue'
 import TimeField from './TimeField.vue'
@@ -133,7 +132,7 @@ function save() { if (!problem.value) emit('save', { start: start.value, end: en
       正在计时，停止后才能调整时段或归属。
     </yp-notice>
     <yp-notice
-      v-else-if="isMigratedCategory(block.timeCategory)"
+      v-else-if="block.migrated"
       class="block-popover__note"
       size="small"
     >
