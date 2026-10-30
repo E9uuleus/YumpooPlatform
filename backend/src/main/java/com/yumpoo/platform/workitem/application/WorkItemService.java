@@ -71,6 +71,8 @@ import static com.yumpoo.platform.workitem.application.WorkItemRelationRepositor
 
 @Service
 public class WorkItemService {
+    private static final String INVALID_WORK_ITEM_MESSAGE =
+            "工作项字段不符合要求，请检查标题（1～300 字）、备注（最多 16384 字）、处理人（最多 20 位且不重复）、截止时间与时间线日期";
     private static final String CREATED = "workitem.work_item_created";
     private static final String FIELDS_CHANGED = "workitem.work_item_fields_changed";
     private static final String ASSIGNED = "workitem.work_item_assigned";
@@ -500,7 +502,7 @@ public class WorkItemService {
                     draft.dueTime().resolve(draft.dueDate(), null), rank,
                     projectSortKey, actor.userId(), now).assign(draft.assigneeUserIds(), actor.userId(), now);
         } catch (IllegalArgumentException exception) {
-            throw validation("body", "INVALID_WORK_ITEM", exception.getMessage());
+            throw validation("body", "INVALID_WORK_ITEM", INVALID_WORK_ITEM_MESSAGE);
         }
         if (!workItems.insert(item)) throw new IllegalStateException("work item insert failed");
         appendCreated(item, actor);
@@ -561,7 +563,7 @@ public class WorkItemService {
                     command.actor().userId(), clock.instant());
             candidate = candidate.assign(assignees, command.actor().userId(), candidate.updatedAt());
         } catch (IllegalArgumentException exception) {
-            throw validation("body", "INVALID_WORK_ITEM", exception.getMessage());
+            throw validation("body", "INVALID_WORK_ITEM", INVALID_WORK_ITEM_MESSAGE);
         }
         List<String> changedFields = changed(before, candidate);
         if (changedFields.isEmpty()) {
@@ -1085,7 +1087,7 @@ public class WorkItemService {
                     command.actor().userId(), clock.instant());
             candidate = candidate.assign(assignees, command.actor().userId(), candidate.updatedAt());
         } catch (IllegalArgumentException exception) {
-            throw validation("body", "INVALID_WORK_ITEM", exception.getMessage());
+            throw validation("body", "INVALID_WORK_ITEM", INVALID_WORK_ITEM_MESSAGE);
         }
         List<String> changedFields = changed(before, candidate);
         if (changedFields.isEmpty())
@@ -1706,7 +1708,7 @@ public class WorkItemService {
         try {
             return sanitizer.sanitizeDescription(untrustedHtml);
         } catch (IllegalArgumentException exception) {
-            throw validation("description", "INVALID_DESCRIPTION", exception.getMessage());
+            throw validation("description", "INVALID_DESCRIPTION", "描述格式无效或超过长度上限");
         }
     }
 

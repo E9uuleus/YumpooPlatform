@@ -10,7 +10,6 @@ import com.yumpoo.platform.catalog.api.ProjectActiveMembershipQuery;
 import com.yumpoo.platform.catalog.api.ProjectFactWriteGuard;
 import com.yumpoo.platform.catalog.api.ProjectFactWriteSnapshot;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
-import com.yumpoo.platform.foundation.application.error.FieldViolation;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.foundation.application.idempotency.IdempotencyCommand;
 import com.yumpoo.platform.foundation.application.idempotency.IdempotencyExecutionResult;
@@ -214,15 +213,19 @@ public class WorkItemImportService {
                         rank, sortKeys[index], actor.userId(), now)
                         .assign(planned.row().assigneeUserIds(), actor.userId(), now)
                         .withoutCompletionTime();
-            } catch (IllegalArgumentException exception) {
-                throw validation("rows", "INVALID_WORK_ITEM", exception.getMessage());
+                if (!workItems.insert(item)) throw new IllegalStateException("work item insert failed");
+            } catch (IllegalArgumentException | IllegalStateException exception) {
+                throw rowFailure(planned, exception);
             }
-            if (!workItems.insert(item)) throw new IllegalStateException("work item insert failed");
             createdByRow.put(planned.index(), item);
         }
 
         for (PlannedRow planned : updates) {
-            update(command, project, planned, locked.get(planned.target().id()), statusByCode);
+            try {
+                update(command, project, planned, locked.get(planned.target().id()), statusByCode);
+            } catch (IllegalArgumentException | IllegalStateException exception) {
+                throw rowFailure(planned, exception);
+            }
         }
         if (writeRelations(project, actor, plan, dbParent, createdByRow))
             timeTracking.advanceProjects(project.companyId(), List.of(project.projectId()));
@@ -251,41 +254,37 @@ public class WorkItemImportService {
         WorkItemImportModels.Row row = planned.row();
         Instant now = clock.instant();
         WorkItem current = before;
-        try {
-            WorkItem candidate = before.updateFields(before.title(),
-                    fields.contains(Field.PRIORITY)
-                            ? WorkItemImportPlanner.normalizePriority(row.priority()) : before.priority(),
-                    before.assigneeUserId(), before.description(),
-                    fields.contains(Field.NOTES) ? row.notes() : before.notes(),
-                    before.timelineStartDate(), before.timelineEndDate(),
-                    fields.contains(Field.DUE_DATE) ? row.dueDate() : before.dueDate(),
+        WorkItem candidate = before.updateFields(before.title(),
+                fields.contains(Field.PRIORITY)
+                        ? WorkItemImportPlanner.normalizePriority(row.priority()) : before.priority(),
+                before.assigneeUserId(), before.description(),
+                fields.contains(Field.NOTES) ? row.notes() : before.notes(),
+                before.timelineStartDate(), before.timelineEndDate(),
+                fields.contains(Field.DUE_DATE) ? row.dueDate() : before.dueDate(),
+                actor.userId(), now);
+        if (fields.contains(Field.ASSIGNEES))
+            candidate = candidate.assign(row.assigneeUserIds(), actor.userId(), now);
+        if (fieldsChanged(before, candidate)) {
+            if (!before.assigneeUserIds().equals(candidate.assigneeUserIds()))
+                workItems.replaceAssignees(candidate);
+            current = workItems.update(candidate, before.rowVersion())
+                    .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
+        }
+        if (fields.contains(Field.STATUS) && !statusCode(planned).equals(current.statusCode())) {
+            WorkItemLabelModels.StatusLabel status = statusByCode.get(statusCode(planned));
+            String rank = core.allocateRank(project.companyId(), project.projectId(),
+                    status.code(), WorkItemRankPlacement.START, null, current.id()).rank();
+            WorkItem moved = current.move(status.code(),
+                    WorkItemStatusCategory.valueOf(status.statusCategory()), rank,
                     actor.userId(), now);
-            if (fields.contains(Field.ASSIGNEES))
-                candidate = candidate.assign(row.assigneeUserIds(), actor.userId(), now);
-            if (fieldsChanged(before, candidate)) {
-                if (!before.assigneeUserIds().equals(candidate.assigneeUserIds()))
-                    workItems.replaceAssignees(candidate);
-                current = workItems.update(candidate, before.rowVersion())
-                        .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
-            }
-            if (fields.contains(Field.STATUS) && !statusCode(planned).equals(current.statusCode())) {
-                WorkItemLabelModels.StatusLabel status = statusByCode.get(statusCode(planned));
-                String rank = core.allocateRank(project.companyId(), project.projectId(),
-                        status.code(), WorkItemRankPlacement.START, null, current.id()).rank();
-                WorkItem moved = current.move(status.code(),
-                        WorkItemStatusCategory.valueOf(status.statusCategory()), rank,
-                        actor.userId(), now);
-                if (current.statusCategory() != WorkItemStatusCategory.DONE) moved = moved.withoutCompletionTime();
-                current = workItems.transition(moved, current.rowVersion())
-                        .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
-            }
-            if (fields.contains(Field.CONTENT) && !row.contentId().equals(current.contentId())) {
-                WorkItem changed = current.changeContent(row.contentId(), actor.userId(), now);
-                current = workItems.changeContent(changed, current.rowVersion())
-                        .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
-            }
-        } catch (IllegalArgumentException | IllegalStateException exception) {
-            throw validation("rows", "INVALID_WORK_ITEM", exception.getMessage());
+            if (current.statusCategory() != WorkItemStatusCategory.DONE) moved = moved.withoutCompletionTime();
+            current = workItems.transition(moved, current.rowVersion())
+                    .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
+        }
+        if (fields.contains(Field.CONTENT) && !row.contentId().equals(current.contentId())) {
+            WorkItem changed = current.changeContent(row.contentId(), actor.userId(), now);
+            current = workItems.changeContent(changed, current.rowVersion())
+                    .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
         }
     }
 
@@ -384,7 +383,8 @@ public class WorkItemImportService {
         }
     }
 
-    private static ApplicationException validation(String field, String code, String message) {
-        return ApplicationException.validation(new FieldViolation(field, code, message));
+    /** The planner has already rejected every invalid input, so a domain rejection while writing is a defect: it surfaces as an internal error naming the file row. */
+    private static IllegalStateException rowFailure(PlannedRow planned, RuntimeException cause) {
+        return new IllegalStateException("work item import row " + planned.row().rowNumber() + " failed to commit", cause);
     }
 }
