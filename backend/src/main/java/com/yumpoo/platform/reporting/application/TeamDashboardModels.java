@@ -16,7 +16,7 @@ public final class TeamDashboardModels {
     public record Options(List<Project> projects, List<Member> members, String timezone) {}
     public record TimesheetQuery(LocalDate from, LocalDate to, List<UUID> projectIds, List<UUID> userIds) {}
     public record TimesheetWorkItem(UUID id, UUID projectId, String projectName, String itemNo, String title) {}
-    public record TimesheetEntry(UUID userId, UUID workItemId, LocalDate date, long durationMs) {}
+    public record TimesheetEntry(UUID userId, UUID workItemId, LocalDate date, long durationMs, long migratedDurationMs) {}
     /** Category time; projectId/projectName are set only when the linked project is in the caller's scope. */
     public record TimesheetCategoryEntry(UUID userId, String timeCategory, UUID projectId, String projectName, LocalDate date, long durationMs) {}
     public record CalendarDay(LocalDate date, CalendarDayType dayType, String note, int standardMinutes) {

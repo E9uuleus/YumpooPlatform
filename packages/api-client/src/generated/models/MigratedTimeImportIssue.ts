@@ -19,7 +19,7 @@ import { mapValues } from '../runtime';
  */
 export interface MigratedTimeImportIssue {
     /**
-     * 稳定问题代码，例如 USER_INVALID、NOT_ENOUGH_FREE_TIME、PAST_WORKDAY_END、FUTURE_DATE、REPLACES_PREVIOUS。
+     * 稳定问题代码，例如 USER_INVALID、DAY_HAS_TIME、NOT_ENOUGH_FREE_TIME、PAST_WORKDAY_END、FUTURE_DATE、REPLACES_PREVIOUS。
      * @type {string}
      * @memberof MigratedTimeImportIssue
      */

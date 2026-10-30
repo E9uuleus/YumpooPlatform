@@ -1,44 +1,38 @@
-import type { MigratedTimeImportEntry, MigratedTimeImportIssue } from '@yumpoo/api-client'
-import { cellDate, cellNumber, cellText, type SheetCell } from '../import/spreadsheet'
+import type { MigratedTimeImportIssue, MigratedTimeImportRow } from '@yumpoo/api-client'
+import { cellDate, cellNumber, cellText, type SheetCell, type WorkbookSheet } from '../import/spreadsheet'
 import { toApiDate } from './teamDashboardModel'
 
-/** 迁入工时矩阵：行是成员、列是日期、单元格是当天的小时数。 */
+/** 原平台导出的「工时花费报表」：每位成员一个明细工作表，每行是成员某天在某个工作项上的工时；汇总表没有明细表头，会被忽略。 */
 export const HEADER_SEARCH_ROWS = 10
-export const NAME_HEADERS: readonly string[] = ['成员', '姓名', '人员', '处理人']
-export const TOTAL_ROW_LABELS: readonly string[] = ['合计', '总计', '小计']
+export const DETAIL_HEADERS = { name: '责任人', date: '日期', title: '标题', hours: '花费工时', project: '所属项目', unit: '工作量单位' } as const
+export const HOURS_UNIT = '人时'
 export const MAX_DAY_HOURS = 24
-export const MAX_IMPORT_ENTRIES = 20_000
+export const MAX_IMPORT_ROWS = 20_000
 
-export interface MatrixDay { date: string; minutes: number }
-export interface MatrixMember {
-  name: string
-  /** 表格中的行号，从 1 开始。 */
+export interface DetailRow {
+  sheet: string
+  /** 工作表中的行号，从 1 开始。 */
   rowNumber: number
-  days: MatrixDay[]
-  totalMinutes: number
+  name: string
+  date: string
+  projectName: string
+  title: string
+  minutes: number
 }
-export interface MatrixError { rowNumber: number; message: string }
-export interface ParsedMatrix {
-  headerRow: number
-  nameColumn: number
+export interface DetailMember { name: string; days: number; totalMinutes: number }
+export interface ParsedDetail {
+  sheets: string[]
+  ignoredSheets: string[]
   dates: string[]
-  ignoredColumns: string[]
-  ignoredRows: string[]
-  members: MatrixMember[]
-  errors: MatrixError[]
+  rows: DetailRow[]
+  members: DetailMember[]
+  errors: string[]
 }
-export type MatrixParse = { ok: true; matrix: ParsedMatrix } | { ok: false; message: string }
+export type DetailParse = { ok: true; detail: ParsedDetail } | { ok: false; message: string }
+
+type DetailColumns = Record<keyof typeof DETAIL_HEADERS, number>
 
 const compact = (text: string): string => text.replace(/\s+/gu, '')
-
-/** `A`、`B`、…、`AA`，与表格软件的列名一致。 */
-export function columnLabel(index: number): string {
-  let label = ''
-  for (let value = index + 1; value > 0; value = Math.floor((value - 1) / 26)) label = String.fromCharCode(65 + (value - 1) % 26) + label
-  return label
-}
-
-const hasDate = (row: SheetCell[]): boolean => row.some((cell, index) => index > 0 && cellDate(cell) !== null)
 
 /** 小时数换算成分钟；超过 24 小时、负数或非数字返回 null。 */
 export function hoursToMinutes(hours: number | null): number | null {
@@ -46,70 +40,52 @@ export function hoursToMinutes(hours: number | null): number | null {
   return Math.round(hours * 60)
 }
 
-export function parseHoursMatrix(rows: readonly SheetCell[][]): MatrixParse {
-  const headerIndex = rows.slice(0, HEADER_SEARCH_ROWS).findIndex(hasDate)
-  if (headerIndex < 0) return { ok: false, message: `前 ${HEADER_SEARCH_ROWS} 行里没有找到日期表头，请确认表格的列是日期。` }
-  const header = rows[headerIndex]!
-  const found = header.findIndex(cell => NAME_HEADERS.includes(compact(cellText(cell))))
-  const nameColumn = found < 0 ? 0 : found
-  const errors: MatrixError[] = []
-  const headerRow = headerIndex + 1
+function detailColumns(row: readonly SheetCell[]): DetailColumns | null {
+  const headers = row.map(cell => compact(cellText(cell)))
+  const columns = Object.fromEntries(Object.entries(DETAIL_HEADERS).map(([key, label]) => [key, headers.indexOf(label)])) as DetailColumns
+  return Object.values(columns).every(column => column >= 0) ? columns : null
+}
 
-  const dateColumns: { column: number; date: string }[] = []
-  const ignoredColumns: string[] = []
-  const firstColumn = new Map<string, number>()
-  header.forEach((cell, column) => {
-    if (column === nameColumn) return
-    const date = cellDate(cell)
-    if (date === null) {
-      const text = cellText(cell)
-      if (text) ignoredColumns.push(text)
-      else if (rows.slice(headerIndex + 1).some(row => cellText(row[column]) !== '')) ignoredColumns.push(`${columnLabel(column)} 列（无表头）`)
-      return
+/** 责任人与日期按成员、日期合并单元格，空白沿用上一行；标题为空的行（周末占位行、末尾合计行）忽略，0 小时的行不迁入。 */
+export function parseHoursDetail(sheets: readonly WorkbookSheet[]): DetailParse {
+  const used: string[] = [], ignoredSheets: string[] = [], rows: DetailRow[] = [], errors: string[] = []
+  for (const sheet of sheets) {
+    const headerIndex = sheet.rows.slice(0, HEADER_SEARCH_ROWS).findIndex(row => detailColumns(row) !== null)
+    if (headerIndex < 0) { ignoredSheets.push(sheet.name); continue }
+    used.push(sheet.name)
+    const columns = detailColumns(sheet.rows[headerIndex]!)!
+    let name = ''
+    let date: string | null = null
+    for (const [offset, row] of sheet.rows.slice(headerIndex + 1).entries()) {
+      const rowNumber = headerIndex + offset + 2
+      name = cellText(row[columns.name]) || name
+      if (cellText(row[columns.date])) date = cellDate(row[columns.date])
+      const title = cellText(row[columns.title])
+      if (!title) continue
+      const where = `「${sheet.name}」第 ${rowNumber} 行`
+      if (date === null) { errors.push(`${where}的日期无法识别。`); continue }
+      const unit = cellText(row[columns.unit])
+      if (unit !== HOURS_UNIT) { errors.push(`${where}的工作量单位「${unit}」不是「${HOURS_UNIT}」，请导出以人时计的报表。`); continue }
+      const minutes = hoursToMinutes(cellNumber(row[columns.hours]))
+      if (minutes === null) { errors.push(`${where}的花费工时「${cellText(row[columns.hours])}」不是 0 到 ${MAX_DAY_HOURS} 的小时数。`); continue }
+      if (minutes > 0) rows.push({ sheet: sheet.name, rowNumber, name, date, projectName: cellText(row[columns.project]), title, minutes })
     }
-    const earlier = firstColumn.get(date)
-    if (earlier !== undefined) {
-      errors.push({ rowNumber: headerRow, message: `日期 ${date} 在 ${columnLabel(earlier)} 列和 ${columnLabel(column)} 列重复。` })
-      return
-    }
-    firstColumn.set(date, column)
-    dateColumns.push({ column, date })
-  })
-
-  const members: MatrixMember[] = []
-  const ignoredRows: string[] = []
-  const seen = new Map<string, number>()
-  let cellCount = 0
-  rows.slice(headerIndex + 1).forEach((row, offset) => {
-    const rowNumber = headerIndex + offset + 2
-    const name = cellText(row[nameColumn])
-    const filled = dateColumns.filter(({ column }) => cellText(row[column]) !== '')
-    if (!name && !filled.length) return
-    if (TOTAL_ROW_LABELS.includes(compact(name))) { ignoredRows.push(name); return }
-    if (!name) { errors.push({ rowNumber, message: `第 ${rowNumber} 行有工时但没有姓名。` }); return }
-    const days: MatrixDay[] = []
-    for (const { column, date } of filled) {
-      const minutes = hoursToMinutes(cellNumber(row[column]))
-      if (minutes === null) {
-        errors.push({ rowNumber, message: `${columnLabel(column)}${rowNumber}（${name}，${date}）「${cellText(row[column])}」不是 0 到 ${MAX_DAY_HOURS} 的小时数。` })
-        continue
-      }
-      days.push({ date, minutes })
-    }
-    const earlier = seen.get(name)
-    if (earlier !== undefined) {
-      errors.push({ rowNumber, message: `成员「${name}」在第 ${earlier} 行和第 ${rowNumber} 行重复。` })
-      return
-    }
-    seen.set(name, rowNumber)
-    cellCount += days.length
-    members.push({ name, rowNumber, days, totalMinutes: days.reduce((sum, day) => sum + day.minutes, 0) })
-  })
-
-  if (!dateColumns.length) errors.push({ rowNumber: headerRow, message: '没有可识别的日期列。' })
-  if (!members.length) errors.push({ rowNumber: headerRow, message: '没有找到成员行。' })
-  if (cellCount > MAX_IMPORT_ENTRIES) errors.push({ rowNumber: headerRow, message: `一次最多迁入 ${MAX_IMPORT_ENTRIES} 个成员日，当前有 ${cellCount} 个，请拆分文件。` })
-  return { ok: true, matrix: { headerRow, nameColumn, dates: dateColumns.map(({ date }) => date), ignoredColumns, ignoredRows, members, errors } }
+  }
+  if (!used.length) return { ok: false, message: '没有找到工时明细表。请上传原平台导出的「工时花费报表」，明细表需要包含「责任人、日期、标题、花费工时、工作量单位、所属项目」列。' }
+  if (!rows.length) errors.push('明细表里没有可迁入的工时。')
+  if (rows.length > MAX_IMPORT_ROWS) errors.push(`一次最多迁入 ${MAX_IMPORT_ROWS} 条工时，当前有 ${rows.length} 条，请拆分文件。`)
+  const members = new Map<string, Map<string, number>>()
+  for (const row of rows) {
+    const days = members.get(row.name) ?? new Map<string, number>()
+    days.set(row.date, (days.get(row.date) ?? 0) + row.minutes)
+    members.set(row.name, days)
+  }
+  for (const [name, days] of members) for (const [date, minutes] of days)
+    if (minutes > MAX_DAY_HOURS * 60) errors.push(`「${name}」${date} 的花费工时合计 ${hoursLabel(minutes)} 小时，超过 ${MAX_DAY_HOURS} 小时。`)
+  return { ok: true, detail: {
+    sheets: used, ignoredSheets, dates: [...new Set(rows.map(row => row.date))].sort(), rows, errors,
+    members: [...members].map(([name, days]) => ({ name, days: days.size, totalMinutes: [...days.values()].reduce((sum, minutes) => sum + minutes, 0) })),
+  } }
 }
 
 export interface MemberCandidate { userId: string; displayName: string }
@@ -138,22 +114,36 @@ export function duplicateTargets(choices: readonly MemberChoice[]): string[] {
   return [...repeated]
 }
 
-/** 请求条目；日期按自然日取 UTC 零点，序列化后仍是同一天。 */
-export function buildEntries(members: readonly MatrixMember[], choices: readonly MemberChoice[]): MigratedTimeImportEntry[] {
-  return members.flatMap((member, index) => {
-    const userId = choices[index]
-    return userId ? member.days.map(day => ({ userId, workDate: toApiDate(day.date), minutes: day.minutes })) : []
+export interface ImportRow extends DetailRow { userId: string }
+
+/** 选定了平台成员的行，保持文件顺序（同一成员同一天按此顺序排入空档）；`choices` 与 `detail.members` 一一对应。 */
+export function importRows(detail: ParsedDetail, choices: readonly MemberChoice[]): ImportRow[] {
+  const users = new Map(detail.members.map((member, index) => [member.name, choices[index]]))
+  return detail.rows.flatMap(row => {
+    const userId = users.get(row.name)
+    return userId ? [{ ...row, userId }] : []
   })
 }
+
+/** 请求行；日期按自然日取 UTC 零点，序列化后仍是同一天。 */
+export const requestRow = (row: ImportRow): MigratedTimeImportRow => ({
+  userId: row.userId, workDate: toApiDate(row.date), projectName: row.projectName, workItemTitle: row.title, minutes: row.minutes,
+})
 
 export const hoursLabel = (minutes: number): string => String(Math.round(minutes / 60 * 100) / 100)
 
 export const MIGRATED_ISSUE_LABELS: Readonly<Record<string, string>> = {
   USER_INVALID: '成员已停用或不属于本公司',
+  DAY_HAS_TIME: '当天已有成员自己的工时，未迁入',
   NOT_ENOUGH_FREE_TIME: '当天空闲时间不够，未写入',
   PAST_WORKDAY_END: '排布后超过下班时间',
   FUTURE_DATE: '只能迁入今天之前的日期，未写入',
   REPLACES_PREVIOUS: '覆盖原有迁入工时',
+  PROJECT_NOT_FOUND: '项目不存在',
+  PROJECT_AMBIGUOUS: '有多个同名项目，无法确定',
+  WORK_ITEM_NOT_FOUND: '项目中没有该工作项',
+  WORK_ITEM_AMBIGUOUS: '项目中有多个同名工作项，无法确定',
+  NOT_PROJECT_MEMBER: '成员不在该项目中',
 }
 
 /** 覆盖提示不算问题，只在统计里计数。 */

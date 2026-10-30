@@ -57,7 +57,7 @@ defineProps<{ anchor: HTMLElement; title: string; totalMs: number; projects: Day
             tag="strong"
             :text="item.title"
           />
-          <small>{{ item.migrated ? MIGRATED_TIME_NOTE : item.itemNo }}</small>
+          <small>{{ [item.itemNo, item.migrated ? MIGRATED_TIME_NOTE : ''].filter(Boolean).join(' · ') }}</small>
         </span>
         <span class="day-breakdown__hours">{{ hoursMinutes(item.ms) }}</span>
       </div>

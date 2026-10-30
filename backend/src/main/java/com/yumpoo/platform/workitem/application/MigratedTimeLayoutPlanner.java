@@ -14,7 +14,7 @@ public final class MigratedTimeLayoutPlanner {
 
     static final Duration MIN_GAP = Duration.ofMinutes(15);
 
-    public enum Outcome { IMPORT, CLEAR, ERROR }
+    public enum Outcome { IMPORT, ERROR }
 
     /** A session of the member that may occupy the day; {@code stoppedAt} is null while the timer is running. */
     public record Existing(Instant startedAt, Instant stoppedAt, boolean migrated) {}
@@ -30,12 +30,11 @@ public final class MigratedTimeLayoutPlanner {
         var previous = sessions.stream().filter(s -> s.migrated() && !s.startedAt().isBefore(dayStart) && s.startedAt().isBefore(dayEnd)).toList();
         long previousMinutes = Math.round(previous.stream().mapToLong(s -> Duration.between(s.startedAt(), endOf(s, dayEnd)).toMillis()).sum() / 60000.0);
         var issues = new ArrayList<Issue>();
-        // Recorded time may not end in the future, so today and later are rejected outright, clearing included.
+        // Recorded time may not end in the future, so today and later are rejected outright.
         if (!workDate.isBefore(today)) {
             issues.add(new Issue("FUTURE_DATE", null));
             return new DayPlan(Outcome.ERROR, List.of(), previous, previousMinutes, issues);
         }
-        if (minutes == 0) return new DayPlan(Outcome.CLEAR, List.of(), previous, previousMinutes, issues);
 
         Instant start = workDate.atStartOfDay().plusMinutes(workdayStartMinute).atZone(zone).toInstant();
         var busy = sessions.stream().filter(s -> !previous.contains(s))
@@ -65,6 +64,33 @@ public final class MigratedTimeLayoutPlanner {
         if (segments.getLast().stoppedAt().isAfter(workdayEnd)) issues.add(new Issue("PAST_WORKDAY_END", null));
         if (previousMinutes > 0) issues.add(new Issue("REPLACES_PREVIOUS", Long.toString(previousMinutes)));
         return new DayPlan(Outcome.IMPORT, List.copyOf(segments), previous, previousMinutes, issues);
+    }
+
+    /** Cuts the laid segments, in order, into consecutive pieces of the given minutes; the segments add up to exactly their sum. */
+    public static List<List<Segment>> split(List<Segment> segments, List<Integer> minutes) {
+        var pieces = new ArrayList<List<Segment>>();
+        int index = 0;
+        Instant cursor = segments.getFirst().startedAt();
+        for (int amount : minutes) {
+            var own = new ArrayList<Segment>();
+            Duration remaining = Duration.ofMinutes(amount);
+            while (remaining.isPositive()) {
+                Segment segment = segments.get(index);
+                Instant end = cursor.plus(remaining);
+                if (end.isBefore(segment.stoppedAt())) {
+                    own.add(new Segment(cursor, end));
+                    cursor = end;
+                    remaining = Duration.ZERO;
+                } else {
+                    own.add(new Segment(cursor, segment.stoppedAt()));
+                    remaining = remaining.minus(Duration.between(cursor, segment.stoppedAt()));
+                    index++;
+                    if (index < segments.size()) cursor = segments.get(index).startedAt();
+                }
+            }
+            pieces.add(List.copyOf(own));
+        }
+        return List.copyOf(pieces);
     }
 
     /** A running session holds the rest of the day. */

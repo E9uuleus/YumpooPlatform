@@ -7,7 +7,7 @@ import { workItemLabelColorValue } from '../../projects/workItemLabelColors'
 import { blockEnd, clampMove, clampResize, durationLabel, FINE_SNAP_MS, formatClock, freeInterval, gaps, HOUR, MIN_BLOCK_MS, MIN_VISUAL_MS, MINUTE,
   PX_PER_MINUTE, rangeInGap, snap, snapDown, SNAP_MS, type BlockLayout, type BlockShare, type DayBlock, type Range } from './dayModel'
 import { draggedItem, type ShelfItem } from './shelfDrag'
-import { isMigratedCategory, MIGRATED_TIME_NOTE, timeCategory } from '../../timer/timeCategories'
+import { MIGRATED_TIME_NOTE, timeCategory } from '../../timer/timeCategories'
 
 /** Space kept around every card, so stacked and side-by-side records read as separate cards. */
 const GAP_Y = 2, GAP_X = 4
@@ -76,13 +76,14 @@ const views = computed<BlockView[]>(() => props.blocks.map(original => {
   const duration = durationLabel(end - block.start)
   const split = share.maxParallel
   const splitTitle = split > 1 ? `与其他 ${split - 1} 项并行，当天计入 ${durationLabel(share.allocatedMs)}（实际 ${duration}）` : ''
+  const migrated = Boolean(block.migrated)
   return {
-    block: original, range, duration, split, splitTitle, migrated: isMigratedCategory(block.timeCategory),
+    block: original, range, duration, split, splitTitle, migrated,
     movable: editable && startInDay && endInDay, startHandle: editable && startInDay, endHandle: editable && endInDay,
     tier: height >= 64 ? 'full' : height >= 45 ? 'medium' : 'compact',
     continuesBefore: block.start < props.bounds.start, continuesAfter: end > props.bounds.end,
     label: [`${clock(block.start)}–${block.end === null ? '计时中' : clock(end)}`, block.title, block.projectName ?? '', duration, splitTitle,
-      isMigratedCategory(block.timeCategory) ? MIGRATED_TIME_NOTE : '']
+      migrated ? MIGRATED_TIME_NOTE : '']
       .filter(Boolean).join('，'),
     style: { ...box(range), left: `calc(${place.lane / place.lanes * 100}% + ${GAP_X}px)`, width: `calc(${100 / place.lanes}% - ${2 * GAP_X}px)`,
       '--day-block-color': color(block.colorToken) },

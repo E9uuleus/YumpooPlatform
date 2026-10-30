@@ -239,6 +239,9 @@ components:
           description: 非项目分类记录的分类；工作项记录为 null。服务端总是返回。
           allOf:
             - $ref: "#/components/schemas/TimeCategory"
+        migrated:
+          type: boolean
+          description: 迁入工时导入写入的记录（含首版的 MIGRATED 分类记录）为 true，只读，时段由系统排布。服务端总是返回。
         userId:
           type: string
           format: uuid

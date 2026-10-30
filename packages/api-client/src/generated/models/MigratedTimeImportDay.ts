@@ -58,13 +58,13 @@ export interface MigratedTimeImportDay {
      */
     outcome: MigratedTimeImportOutcome;
     /**
-     * 排布后的首段起点；CLEAR 与 ERROR 时缺省。
+     * 排布后的首段起点；ERROR 时缺省。
      * @type {Date}
      * @memberof MigratedTimeImportDay
      */
     startedAt?: Date;
     /**
-     * 排布后的末段终点；CLEAR 与 ERROR 时缺省。
+     * 排布后的末段终点；ERROR 时缺省。
      * @type {Date}
      * @memberof MigratedTimeImportDay
      */

@@ -47,7 +47,7 @@ public class TeamWorkAdapter implements TeamWorkQuery {
     }
 
     private static List<TimeEntry> entries(List<TeamWorkRepository.TimeEntry> entries) {
-        return entries.stream().map(e -> new TimeEntry(e.userId(), e.workItemId(), e.projectId(), e.itemNo(), e.title(), e.date(), e.durationMs())).toList();
+        return entries.stream().map(e -> new TimeEntry(e.userId(), e.workItemId(), e.projectId(), e.itemNo(), e.title(), e.date(), e.durationMs(), e.migratedDurationMs())).toList();
     }
     private static List<CategoryEntry> categories(List<TeamWorkRepository.CategoryEntry> entries) {
         return entries.stream().map(e -> new CategoryEntry(e.userId(), e.timeCategory(), e.projectId(), e.date(), e.durationMs())).toList();
