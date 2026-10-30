@@ -6,6 +6,8 @@ export * from './ActivityAudienceType';
 export * from './ActivityItem';
 export * from './ActivityPage';
 export * from './ApiErrorBase';
+export * from './ArchivedWorkItem';
+export * from './ArchivedWorkItemPage';
 export * from './AttachmentCapabilities';
 export * from './AttachmentDeleteRequest';
 export * from './AttachmentDeleteResult';
