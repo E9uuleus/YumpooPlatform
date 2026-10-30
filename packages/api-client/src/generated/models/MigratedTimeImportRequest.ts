@@ -33,7 +33,7 @@ export interface MigratedTimeImportRequest {
      */
     dryRun: boolean;
     /**
-     * 按文件顺序；同一成员同一天匹配到的行按此顺序依次排入空档。
+     * 按文件顺序；同一成员同一天匹配到的行按此顺序依次排入空档。同一成员同一天的合计不得超过 1440 分钟。
      * @type {Array<MigratedTimeImportRow>}
      * @memberof MigratedTimeImportRequest
      */

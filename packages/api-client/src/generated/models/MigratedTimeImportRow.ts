@@ -37,7 +37,7 @@ export interface MigratedTimeImportRow {
      */
     projectName: string;
     /**
-     * 原平台的工作项标题；去掉两端空白后与该项目内未删除、未归档工作项的标题完全相同才匹配。
+     * 原平台的工作项标题；去掉两端空白后与该项目内未删除的工作项（含已归档）的标题完全相同才匹配。
      * @type {string}
      * @memberof MigratedTimeImportRow
      */

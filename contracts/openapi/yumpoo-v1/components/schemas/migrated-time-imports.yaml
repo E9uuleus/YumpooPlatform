@@ -23,7 +23,7 @@ components:
         workItemTitle:
           type: string
           maxLength: 1000
-          description: 原平台的工作项标题；去掉两端空白后与该项目内未删除、未归档工作项的标题完全相同才匹配。
+          description: 原平台的工作项标题；去掉两端空白后与该项目内未删除的工作项（含已归档）的标题完全相同才匹配。
         minutes:
           type: integer
           format: int32
@@ -44,7 +44,7 @@ components:
           maxItems: 20000
           items:
             $ref: "#/components/schemas/MigratedTimeImportRow"
-          description: 按文件顺序；同一成员同一天匹配到的行按此顺序依次排入空档。
+          description: 按文件顺序；同一成员同一天匹配到的行按此顺序依次排入空档。同一成员同一天的合计不得超过 1440 分钟。
     MigratedTimeImportOutcome:
       type: string
       enum:
