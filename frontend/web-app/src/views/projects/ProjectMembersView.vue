@@ -27,6 +27,7 @@ import { projectsApi } from '../../api/client'
 import { isProblemStatus, localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
 import ProjectMemberAddDialog from '../../components/projects/ProjectMemberAddDialog.vue'
+import { confirmOwnerTransfer } from '../../components/projects/projectOwnerTransfer'
 import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHeader.vue'
 import YpAssignee from '../../components/yp/YpAssignee.vue'
 import YpEmptyState from '../../components/yp/YpEmptyState.vue'
@@ -38,10 +39,10 @@ import { formatDateOnly } from '../../design-system/dates'
 const pageLoad = usePageLoad()
 type MemberAction = 'owner' | 'reactivate' | 'remove'
 
-const ACTION_COPY: Record<MemberAction, { menu: string; prompt: (name: string) => string; done: string }> = {
-  owner: { menu: '设为负责人', prompt: name => `将负责人转交给「${name}」`, done: '负责人已转交' },
-  reactivate: { menu: '重新加入项目', prompt: name => `将「${name}」重新加入项目`, done: '成员已重新加入' },
-  remove: { menu: '移出项目', prompt: name => `将「${name}」移出项目`, done: '成员已移出项目' },
+const ACTION_COPY: Record<MemberAction, { menu: string; done: string }> = {
+  owner: { menu: '设为负责人', done: '负责人已转交' },
+  reactivate: { menu: '重新加入项目', done: '成员已重新加入' },
+  remove: { menu: '移出项目', done: '成员已移出项目' },
 }
 
 const route = useRoute()
@@ -64,7 +65,6 @@ const statusOptions = [
   { value: ProjectMembershipStatusFilter.All, label: '全部' },
 ]
 const canManage = computed(() => Boolean(project.value?.capabilities.canManageMembers))
-const governanceReasonRequired = computed(() => project.value?.actorAccess === ProjectActorAccess.CompanyAdmin)
 const searching = computed(() => Boolean(query.value.trim()))
 let sequence = 0
 let timer: ReturnType<typeof setTimeout> | undefined
@@ -119,27 +119,24 @@ function actionsFor(member: ProjectMember): MemberAction[] {
   ]
 }
 
-async function reasonFor(action: string, required: boolean): Promise<string | null | undefined> {
-  try {
-    const response = await ElMessageBox.prompt(
-      `${action}${required ? '；此操作必须记录治理理由。' : '；可选填理由。'}`,
-      action,
-      {
-        inputPlaceholder: required ? '请输入 10～500 字治理理由' : '可选理由',
-        inputPattern: required ? /^(?=[\s\S]{10,500}$)(?=\s*\S)/ : /^(?:|(?=\s*\S)[\s\S]{1,500})$/,
-        inputErrorMessage: required ? '治理理由必须为 10～500 字' : '理由不得超过 500 字',
-      },
-    )
-    return response.value.trim() || null
-  } catch {
-    return undefined
+function confirmAction(member: ProjectMember, action: MemberAction): Promise<unknown> {
+  if (action === 'owner') {
+    return confirmOwnerTransfer(member.displayName, project.value?.actorAccess === ProjectActorAccess.Owner)
   }
+  if (action === 'reactivate') {
+    return ElMessageBox.confirm(`确定将「${member.displayName}」重新加入项目？`, '重新加入项目',
+      { confirmButtonText: '重新加入', cancelButtonText: '取消' })
+  }
+  return ElMessageBox.confirm(`确定将「${member.displayName}」移出项目？移出后对方不能再访问此项目，之后可以重新加入。`,
+    '移出项目', { confirmButtonText: '移出', cancelButtonText: '取消', type: 'warning' })
 }
 
 async function run(member: ProjectMember, action: MemberAction): Promise<void> {
-  const reason = await reasonFor(ACTION_COPY[action].prompt(member.displayName),
-    action === 'owner' || governanceReasonRequired.value)
-  if (reason === undefined) return
+  try {
+    await confirmAction(member, action)
+  } catch {
+    return
+  }
   const csrf = readCsrfToken()
   const detail = project.value
   if (!csrf || !detail) {
@@ -154,20 +151,20 @@ async function run(member: ProjectMember, action: MemberAction): Promise<void> {
       await projectsApi.reassignProjectOwner({
         ...common,
         ifMatch: detail.etag,
-        projectOwnerReassignmentRequest: { newOwnerUserId: member.userId, reason: reason ?? '' },
+        projectOwnerReassignmentRequest: { newOwnerUserId: member.userId },
       })
     } else if (action === 'reactivate') {
       await projectsApi.addProjectMember({
         ...common,
         ifMatch: member.etag,
-        projectMemberAddRequest: { userId: member.userId, reason },
+        projectMemberAddRequest: { userId: member.userId },
       })
     } else {
       await projectsApi.removeProjectMember({
         ...common,
         userId: member.userId,
         ifMatch: member.etag,
-        projectMemberRemoveRequest: { reason },
+        projectMemberRemoveRequest: {},
       })
     }
     ElMessage.success(ACTION_COPY[action].done)
@@ -232,7 +229,7 @@ onBeforeUnmount(() => clearTimeout(timer))
               class="project-page-heading__count"
             >{{ result.totalElements }}</span>
           </h2>
-          <p>负责人和企业管理员可以添加或移出成员，企业管理员可以转交负责人。</p>
+          <p>负责人和公司管理员可以添加、移出成员，或把负责人转交给其他成员。</p>
         </div>
         <el-button
           v-if="canManage"
@@ -366,7 +363,7 @@ onBeforeUnmount(() => clearTimeout(timer))
       v-model="addOpen"
       :project-id="projectId"
       :project-etag="project?.etag ?? ''"
-      :reason-required="governanceReasonRequired"
+      :self-owner="project?.actorAccess === ProjectActorAccess.Owner"
       :can-reassign-owner="Boolean(project?.capabilities.canReassignOwner)"
       @added="onAdded"
       @reassigned="refresh"

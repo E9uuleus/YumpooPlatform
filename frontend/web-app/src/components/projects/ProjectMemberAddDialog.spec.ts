@@ -21,7 +21,7 @@ describe('ProjectMemberAddDialog', () => {
     ], page: 0, size: 20, totalElements: 3, totalPages: 1 })
     api.add.mockResolvedValue({})
     const wrapper = mount(ProjectMemberAddDialog, {
-      props: { modelValue: true, projectId: 'p1', projectEtag: '"0"', reasonRequired: false, canReassignOwner: false },
+      props: { modelValue: true, projectId: 'p1', projectEtag: '"0"', selfOwner: false, canReassignOwner: false },
       global: { stubs: { teleport: true } },
     })
     await flushPromises()
@@ -37,7 +37,7 @@ describe('ProjectMemberAddDialog', () => {
     await flushPromises()
     expect(api.add).toHaveBeenCalledTimes(2)
     expect(api.add.mock.calls[0]![0]).not.toHaveProperty('ifMatch')
-    expect(api.add.mock.calls[1]![0]).toMatchObject({ ifMatch: '"3"', projectMemberAddRequest: { userId: 'u2', reason: null } })
+    expect(api.add.mock.calls[1]![0]).toMatchObject({ ifMatch: '"3"', projectMemberAddRequest: { userId: 'u2' } })
     expect(wrapper.emitted('added')).toEqual([[2]])
   })
 })
