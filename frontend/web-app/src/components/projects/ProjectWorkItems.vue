@@ -3644,7 +3644,7 @@ onBeforeUnmount(() => {
                     @clear="clearColumnSort('title')" @save="saveSortedWorkItemOrder" />
                     <span class="monday-column-resize-handle monday-title-column-resize-handle" data-column-key="title" aria-hidden="true" />
                   </template>
-                  <div v-else class="title-cell" :data-work-item-id="scope.row.id">
+                  <div v-else class="title-cell" data-tour="work-item-row-drag" :data-work-item-id="scope.row.id">
                     <work-item-name-cell
                       class="work-item-link"
                       :item="scope.row as ProjectWorkItemListItem"
@@ -3739,6 +3739,7 @@ onBeforeUnmount(() => {
               >
                 <template #header>
                   <work-item-column-header
+                    data-tour="work-item-column-drag"
                     :state="columnMenuState(column)"
                     :collapsed="isColumnCollapsed(column.key)"
                     :saving="savingSortOrder"
