@@ -95,6 +95,7 @@ describe('结果说明', () => {
     expect(hoursLabel(450)).toBe('7.5')
     expect(hoursLabel(100)).toBe('1.67')
     expect(describeIssue({ code: 'NOT_ENOUGH_FREE_TIME', detail: null })).toBe('当天空闲时间不够，未写入')
+    expect(describeIssue({ code: 'DAY_HAS_TIME', detail: null })).toBe('当天已有成员自己的工时，未迁入')
     expect(describeIssue({ code: 'REPLACES_PREVIOUS', detail: '480' })).toBe('覆盖原有迁入工时（原 8 小时）')
     expect(describeIssue({ code: 'SOMETHING_NEW', detail: null })).toBe('SOMETHING_NEW')
   })

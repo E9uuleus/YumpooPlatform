@@ -134,6 +134,7 @@ export const hoursLabel = (minutes: number): string => String(Math.round(minutes
 
 export const MIGRATED_ISSUE_LABELS: Readonly<Record<string, string>> = {
   USER_INVALID: '成员已停用或不属于本公司',
+  DAY_HAS_TIME: '当天已有成员自己的工时，未迁入',
   NOT_ENOUGH_FREE_TIME: '当天空闲时间不够，未写入',
   PAST_WORKDAY_END: '排布后超过下班时间',
   FUTURE_DATE: '只能迁入今天之前的日期，未写入',
