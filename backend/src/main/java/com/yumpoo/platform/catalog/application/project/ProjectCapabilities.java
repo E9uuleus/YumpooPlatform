@@ -11,15 +11,16 @@ public record ProjectCapabilities(
         boolean canScheduleDeletion,
         boolean canCancelDeletion,
         boolean canEnd,
-        boolean canResume
+        boolean canResume,
+        boolean canLeave
 ) {
     public ProjectCapabilities(boolean update,boolean members,boolean owner,boolean archive,boolean restore,
                                boolean move,boolean override) {
-        this(update,members,owner,archive,restore,move,override,false,false,false,false);
+        this(update,members,owner,archive,restore,move,override,false,false,false,false, false);
     }
     public ProjectCapabilities(boolean canUpdateSettings,
                                boolean canManageMembers, boolean canReassignOwner) {
         this(canUpdateSettings, canManageMembers, canReassignOwner,
-                false, false, false, false, false, false, false, false);
+                false, false, false, false, false, false, false, false, false);
     }
 }

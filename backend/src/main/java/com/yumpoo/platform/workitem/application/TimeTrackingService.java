@@ -515,8 +515,18 @@ public class TimeTrackingService {
     /** Runs inside the archive transaction after the project row lock, matching the project-then-timer_state order of timer commands. */
     @Transactional(propagation=Propagation.MANDATORY)
     public int stopRunningInArchivedProject(CurrentActor actor, UUID projectId) {
+        return stopRunningInProject(actor, projectId, timers.runningUserIds(actor.companyId(), projectId));
+    }
+
+    /** Runs inside the leave transaction after the project row lock; stops only the leaving member's timers in that project. */
+    @Transactional(propagation=Propagation.MANDATORY)
+    public int stopRunningForLeavingMember(CurrentActor actor, UUID projectId) {
+        return stopRunningInProject(actor, projectId, List.of(actor.userId()));
+    }
+
+    private int stopRunningInProject(CurrentActor actor, UUID projectId, List<UUID> userIds) {
         Instant now=now(); int stoppedCount=0; Set<UUID> affected=new TreeSet<>();
-        for(UUID userId:timers.runningUserIds(actor.companyId(),projectId)) {
+        for(UUID userId:userIds) {
             timers.stateVersion(actor.companyId(),userId,true);
             var running=timers.running(actor.companyId(),userId).stream().filter(s -> projectId.equals(s.projectId())).toList();
             if(running.isEmpty()) continue;

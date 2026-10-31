@@ -103,6 +103,22 @@ public final class ProjectMembershipController {
         }
     }
 
+    @PostMapping("/projects/{projectId}/leave")
+    ResponseEntity<String> leave(@PathVariable UUID projectId,
+            @RequestHeader(name=IdempotencyKeyParser.HEADER_NAME,required=false) String idempotencyHeader) {
+        CurrentActor actor=actors.requiredActive(); query.requireVisible(actor,projectId);
+        UUID key=idempotencyKeys.parseRequired(idempotencyHeader);
+        ProjectMemberGovernanceCommand command=new ProjectMemberGovernanceCommand(actor,projectId,actor.userId(),
+                null,null,key,hasher.hash("leaveProject",Map.of("projectId",projectId.toString()),
+                        objectMapper.createObjectNode()),null,null);
+        try { return stored(service.leave(command).result(),projectId,actor.userId()); }
+        catch(RuntimeException failure) {
+            service.recordFailed(actor,"PROJECT_MEMBER_LEAVE_FAILED","PROJECT_MEMBERSHIP",
+                    projectId+":"+actor.userId(),null,key,failure,null,null);
+            throw failure;
+        }
+    }
+
     @PostMapping("/projects/{projectId}/owner-reassignments")
     ResponseEntity<String> reassign(@PathVariable UUID projectId,
             @Valid @RequestBody ProjectOwnerReassignmentRequest body,
