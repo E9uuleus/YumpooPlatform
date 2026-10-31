@@ -463,7 +463,18 @@ function schedulePageScrollbarSync(): void {
   void nextTick(() => {
     pageScrollbarSyncQueued = false
     syncPageScrollbars()
+    fillTableViewport()
   })
+}
+
+function fillTableViewport(): void {
+  if (selectedView.value !== 'table' || grouped.value || groupingSwitching.value
+    || tableLoading.value || tableSorting.value || error.value || loadingMoreError.value || !tableNextCursor.value) return
+  const root = resolveTableScrollElement()?.getBoundingClientRect()
+  const end = tableSentinel.value?.getBoundingClientRect()
+  // 首批数据可能未填满视口，标记持续可见时 IntersectionObserver 不会再次通知。
+  if (root && end && root.height > 0 && end.height > 0 && end.bottom >= root.top && end.top <= root.bottom + 320)
+    void loadTable(tableNextCursor.value, true)
 }
 
 function syncResponsiveTableLayout(): void {
@@ -3015,6 +3026,8 @@ watch([
   tableRef,
   () => selectedView.value,
   () => tableItems.value.length,
+  () => tableNextCursor.value,
+  () => tableSorting.value,
   () => quickOpen.value,
   () => tableLoading.value,
   () => loadingMoreError.value,
