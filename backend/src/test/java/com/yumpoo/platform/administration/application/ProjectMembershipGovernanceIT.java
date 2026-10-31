@@ -64,18 +64,18 @@ class ProjectMembershipGovernanceIT {
     @AfterEach void tearDown(){dropFailureTrigger();clean();}
 
     @Test void memberCanLeaveButOwnerAndReadOnlyAdminCannot() {
-        execute("leave-add",()->governance.add(memberCommand(owner(),MEMBER,null,null,"l")));
+        execute("leave-add",()->governance.add(memberCommand(owner(),MEMBER,null,null,"a")));
         CurrentActor member=new CurrentActor(MEMBER,COMPANY,0,Set.of());
-        var left=execute("leave",()->governance.leave(memberCommand(member,MEMBER,null,null,"m")));
+        var left=execute("leave",()->governance.leave(memberCommand(member,MEMBER,null,null,"b")));
         assertThat(left.result().httpStatus()).isEqualTo(200);
         assertThat(jdbc.sql("SELECT status FROM yumpoo.project_membership WHERE project_id=:id AND user_id=:user")
                 .param("id",projectId).param("user",MEMBER).query(String.class).single()).isEqualTo("REMOVED");
         assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.security_audit_event WHERE action='PROJECT_MEMBER_LEFT'")
                 .query(Integer.class).single()).isOne();
         assertCode(StandardErrorCode.INVALID_STATE_TRANSITION,()->execute("leave-owner",
-                ()->governance.leave(memberCommand(owner(),OWNER,null,null,"n"))));
+                ()->governance.leave(memberCommand(owner(),OWNER,null,null,"c"))));
         assertCode(StandardErrorCode.ACCESS_DENIED,()->execute("leave-admin",
-                ()->governance.leave(memberCommand(admin(),ADMIN,null,null,"o"))));
+                ()->governance.leave(memberCommand(admin(),ADMIN,null,null,"d"))));
     }
 
     @Test void ownerCanListSearchAddRemoveAndReactivateWithoutReason() {
