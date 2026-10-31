@@ -313,6 +313,7 @@ const color = (item: ShelfItem) => ({ '--work-item-accent': workItemLabelColorVa
                       :key="preset"
                       size="small"
                       :disabled="busy"
+                      text
                       @mouseenter="emit('preview', item, preset)"
                       @focus="emit('preview', item, preset)"
                       @click="place(item, preset)"
@@ -391,15 +392,15 @@ const color = (item: ShelfItem) => ({ '--work-item-accent': workItemLabelColorVa
 </template>
 
 <style scoped>
-.item-shelf{display:flex;flex-direction:column;min-height:0;overflow:hidden;border:1px solid var(--yp-border-subtle);border-radius:var(--yp-radius-md);background:var(--yp-bg-surface)}
-.item-shelf__head{display:grid;gap:10px;padding:14px 14px 12px;border-bottom:1px solid var(--yp-border-subtle)}
+.item-shelf{display:flex;flex-direction:column;min-height:0;overflow:hidden;border-radius:var(--yp-radius-md);background:var(--yp-bg-surface)}
+.item-shelf__head{display:grid;gap:10px;padding:14px 14px 12px;}
 .item-shelf__heading{display:flex;align-items:baseline;justify-content:space-between;gap:8px;min-width:0}
 .item-shelf__heading h2{margin:0;color:var(--yp-text-primary);font:600 15px/22px var(--yp-font-heading)}
 .item-shelf__heading small{overflow:hidden;color:var(--yp-text-muted);font-size:12px;white-space:nowrap;text-overflow:ellipsis}
 .item-shelf__filters{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
 .item-shelf__filter{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border:0;border-radius:var(--yp-radius-sm);background:transparent;color:var(--yp-text-primary);font:13px var(--yp-font-family);cursor:pointer;transition:background var(--yp-motion-fast) var(--yp-ease-standard),color var(--yp-motion-fast) var(--yp-ease-standard)}
 .item-shelf__filter:hover,.item-shelf__filter.active{background:var(--yp-bg-hover);color:var(--yp-action-primary)}
-.item-shelf__count{min-width:18px;padding:1px 5px;box-sizing:border-box;border-radius:var(--yp-radius-pill);background:var(--yp-action-primary);color:var(--yp-text-inverse);font-size:11px;line-height:14px;text-align:center}
+.item-shelf__count{min-width:18px;padding:1px 5px;box-sizing:border-box;border-radius:var(--yp-radius-pill);background:var(--yp-action-primary);color:var(--yp-on-solid);font-size:11px;line-height:14px;text-align:center}
 .item-shelf__clear{margin-left:auto;padding:4px 8px;border:0;border-radius:var(--yp-radius-sm);background:transparent;color:var(--yp-action-primary);font:13px var(--yp-font-family);cursor:pointer}
 .item-shelf__clear:hover{background:var(--yp-bg-hover)}
 .item-shelf__body{display:flex;flex-direction:column;gap:16px;min-height:0;overflow:auto;padding:12px 14px 14px;overscroll-behavior:contain}
@@ -410,9 +411,9 @@ const color = (item: ShelfItem) => ({ '--work-item-accent': workItemLabelColorVa
 .item-shelf__empty{margin:0;color:var(--yp-text-muted);font-size:13px;line-height:20px}
 .item-shelf__status{margin:6px 0;color:var(--yp-text-muted);font-size:12px;text-align:center}
 .item-shelf-sentinel{height:1px}
-.item-shelf__row{display:flex;align-items:center;gap:8px;min-height:52px;padding:6px 6px 6px 16px;border:1px solid var(--yp-monday-grid-border);border-radius:var(--yp-radius-sm);background:var(--yp-bg-surface);box-shadow:var(--yp-shadow-card);transition:box-shadow var(--yp-motion-fast) ease-out,border-color var(--yp-motion-fast) ease-out,opacity var(--yp-motion-fast) ease-out}
+.item-shelf__row{display:flex;align-items:center;gap:8px;min-height:52px;padding:6px 6px 6px 16px;border-radius:var(--yp-radius-sm);background:var(--yp-bg-surface);transition:box-shadow var(--yp-motion-fast) ease-out,border-color var(--yp-motion-fast) ease-out,opacity var(--yp-motion-fast) ease-out}
 .item-shelf__row.work-item-accent-bar::before{top:-1px;bottom:-1px;left:-1px}
-.item-shelf__row:hover,.item-shelf__row.is-open{border-color:color-mix(in srgb,var(--work-item-accent) 45%,var(--yp-monday-grid-border));box-shadow:var(--yp-shadow-hover)}
+.item-shelf__row:hover,.item-shelf__row.is-open{background:var(--yp-bg-hover);}
 .item-shelf__row.is-category{min-height:40px}
 .item-shelf__icon{flex:none;color:var(--work-item-accent);font-size:16px}
 .item-shelf__row.is-draggable{cursor:grab}

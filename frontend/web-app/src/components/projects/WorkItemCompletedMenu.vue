@@ -123,7 +123,7 @@ async function changeEffect(value: HideCompletedEffect): Promise<void> {
 .work-item-completed-menu__panel p{margin:0 0 4px;color:var(--yp-text-muted);font-size:12px}
 .work-item-completed-menu__panel .el-checkbox{height:28px;margin-right:0}
 .work-item-completed-menu__panel small{margin-top:4px;color:var(--yp-text-muted);font-size:12px}
-.work-item-completed-menu__panel + .work-item-completed-menu__panel{margin-top:10px;padding-top:10px;border-top:1px solid var(--yp-border-subtle)}
+.work-item-completed-menu__panel + .work-item-completed-menu__panel{margin-top:10px;padding-top:10px;}
 .work-item-completed-menu__panel .el-radio-group{display:flex;flex-direction:column;align-items:flex-start}
 .work-item-completed-menu__panel .el-radio{height:28px;margin-right:0}
 </style>

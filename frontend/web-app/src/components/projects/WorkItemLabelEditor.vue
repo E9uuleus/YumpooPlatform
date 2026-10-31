@@ -154,17 +154,21 @@ function protectedLabel(label: Label): boolean {
         <el-button
           size="small"
           :disabled="protectedLabel(label) || saving === label.code"
+          text
           @click="updateLabel(label, { active: !label.active })"
-        >{{ label.active ? '停用' : '启用' }}</el-button>
+        >
+          {{ label.active ? '停用' : '启用' }}
+        </el-button>
         <el-tooltip :disabled="!label.inUse" content="你不能删除正在使用的标签" placement="top">
           <span>
             <el-button
               size="small"
               type="danger"
-              plain
               :disabled="label.inUse || protectedLabel(label) || saving === label.code"
               @click="deleteLabel(label)"
-            >删除</el-button>
+            >
+              删除
+            </el-button>
           </span>
         </el-tooltip>
       </div>

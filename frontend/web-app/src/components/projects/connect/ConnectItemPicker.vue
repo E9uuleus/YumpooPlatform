@@ -500,7 +500,7 @@ function toggleSort() { sort.value = sort.value === ConnectCandidateSort.Recent 
 .connect-picker__settings:hover { background: var(--yp-bg-hover); color: var(--yp-text-primary); }
 .connect-picker__project { margin: 0; color: var(--yp-text-primary); font-size: 15px; font-weight: 500; }
 .connect-picker__project span { color: var(--yp-text-muted); font-size: 12px; font-weight: 400; }
-.connect-picker__tabs { display: flex; gap: 16px; overflow-x: auto; border-bottom: 1px solid var(--yp-border-subtle); }
+.connect-picker__tabs { display: flex; gap: 16px; overflow-x: auto;  }
 .connect-picker__tabs button { display: inline-flex; flex-shrink: 0; align-items: center; gap: 4px; padding: 6px 0; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--yp-text-secondary); font: inherit; font-size: 13px; cursor: pointer; }
 .connect-picker__tabs button[aria-selected="true"] { border-bottom-color: var(--yp-action-primary); color: var(--yp-text-primary); font-weight: 500; }
 .connect-picker__tabs small { min-width: 16px; padding: 0 4px; border-radius: var(--yp-radius-pill); background: var(--yp-bg-sunken); color: var(--yp-text-muted); font-size: 11px; text-align: center; }
@@ -534,7 +534,7 @@ function toggleSort() { sort.value = sort.value === ConnectCandidateSort.Recent 
 .connect-picker__undo { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: var(--yp-radius-sm); background: var(--yp-bg-tooltip); color: var(--yp-text-tooltip); font-size: 12px; animation: connect-picker-rise var(--yp-motion-popover) var(--yp-ease-standard) both; }
 .connect-picker__undo span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .connect-picker__undo button { flex-shrink: 0; padding: 2px 6px; border: 0; border-radius: var(--yp-radius-xs); background: transparent; color: var(--yp-brand-glow); font: inherit; font-weight: 600; cursor: pointer; }
-.connect-picker__add { display: flex; align-items: center; gap: 6px; margin: 0 -14px -14px; padding: 8px 14px; border-top: 1px solid var(--yp-border-subtle); background: var(--yp-bg-surface); border-radius: 0 0 var(--yp-radius-lg) var(--yp-radius-lg); animation: connect-picker-rise var(--yp-motion-popover) var(--yp-ease-standard) both; }
+.connect-picker__add { display: flex; align-items: center; gap: 6px; margin: 0 -14px -14px; padding: 8px 14px;  background: var(--yp-bg-surface); border-radius: 0 0 var(--yp-radius-lg) var(--yp-radius-lg); animation: connect-picker-rise var(--yp-motion-popover) var(--yp-ease-standard) both; }
 .connect-picker__add-button { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 0; min-height: 34px; padding: 0 8px; border: 0; border-radius: var(--yp-radius-sm); background: transparent; color: var(--yp-text-primary); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
 .connect-picker__add-button:hover:not(:disabled) { background: var(--yp-bg-hover); }
 .connect-picker__add-button:disabled { opacity: .6; cursor: progress; }
@@ -554,5 +554,5 @@ function toggleSort() { sort.value = sort.value === ConnectCandidateSort.Recent 
 </style>
 
 <style>
-.connect-fields-popper.el-popover.el-popper { padding: 12px; border-radius: var(--yp-radius-lg); box-shadow: var(--yp-shadow-popover); }
+.connect-fields-popper.el-popover.el-popper { padding: 12px;   }
 </style>

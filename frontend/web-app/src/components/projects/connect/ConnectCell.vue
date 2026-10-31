@@ -168,5 +168,5 @@ function openCard(connection: WorkItemConnection) { open.value = false; emit('op
 </style>
 
 <style>
-.connect-cell-popper.el-popover.el-popper { max-width: calc(100vw - 32px); padding: 14px; box-sizing: border-box; border-radius: var(--yp-radius-lg); box-shadow: var(--yp-shadow-popover); }
+.connect-cell-popper.el-popover.el-popper { max-width: calc(100vw - 32px); padding: 14px; box-sizing: border-box;   }
 </style>

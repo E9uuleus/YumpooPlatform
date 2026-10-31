@@ -545,7 +545,10 @@ onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTi
             v-if="activeFilters.length"
             #action
           >
-            <el-button @click="clearFilters">
+            <el-button
+              text
+              @click="clearFilters"
+            >
               清除筛选
             </el-button>
           </template>
@@ -690,7 +693,10 @@ onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTi
             v-if="activeFilters.length"
             #action
           >
-            <el-button @click="clearFilters">
+            <el-button
+              text
+              @click="clearFilters"
+            >
               清除筛选
             </el-button>
           </template>

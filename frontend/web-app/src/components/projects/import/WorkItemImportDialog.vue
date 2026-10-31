@@ -1028,6 +1028,7 @@ function close(done?: () => void): void {
             <el-button
               v-if="submitKind === 'conflict'"
               size="small"
+              text
               @click="previewAgain"
             >
               重新预览

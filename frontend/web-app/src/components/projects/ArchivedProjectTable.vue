@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import YpSkeleton from '../yp/YpSkeleton.vue'
 import { usePageLoad } from '../../brand/page-progress'
 
 import { ProjectLifecycleFilter, readCsrfToken, type ProjectActorAccess, type ProjectPage, type ProjectSummary } from '@yumpoo/api-client'
@@ -109,13 +110,19 @@ onBeforeUnmount(() => {
         />
         <el-button
           :loading="loading"
+          text
           @click="load"
         >
           刷新
         </el-button>
       </div>
+      <yp-skeleton
+        v-if="loading && !result?.items.length"
+        variant="table"
+        :rows="6"
+      />
       <div
-        v-if="loading || result?.items.length"
+        v-else-if="loading || result?.items.length"
         v-loading="loading"
         class="table-scroll"
         :aria-busy="loading"

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import YpSkeleton from '../../yp/YpSkeleton.vue'
 import YpNotice from '../../yp/YpNotice.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, toRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -167,7 +168,13 @@ onBeforeUnmount(() => {
         </el-button>
       </template>
     </yp-notice>
+    <yp-skeleton
+      v-if="loading && !page"
+      variant="list"
+      :rows="6"
+    />
     <div
+      v-else
       v-loading="loading && !page"
       class="my-day__body"
     >
@@ -264,5 +271,5 @@ onBeforeUnmount(() => {
 </style>
 
 <style>
-.day-popover.el-popover.el-popper{padding:14px;border-radius:var(--yp-radius-md);box-shadow:var(--yp-shadow-popover)}
+.day-popover.el-popover.el-popper{padding:14px;}
 </style>

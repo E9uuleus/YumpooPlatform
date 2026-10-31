@@ -189,7 +189,7 @@ function run(action: ColumnMenuAction): void {
 
 .work-item-column-menu-popper .work-item-column-menu__submenu.is-open { background: var(--yp-bg-hover); }
 .work-item-column-menu__arrow { width: 14px; height: 14px; margin-left: auto; }
-.work-item-column-submenu.el-popover { padding: 8px; border-radius: 8px; }
+.work-item-column-submenu.el-popover { padding: 8px;  }
 .work-item-column-submenu__list { display: grid; gap: 2px; }
 .work-item-column-submenu__list button { display: flex; min-height: 34px; align-items: center; padding: 0 10px; border: 0; border-radius: 4px; background: transparent; color: var(--yp-text-primary); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
 .work-item-column-submenu__list button:hover:not(:disabled),

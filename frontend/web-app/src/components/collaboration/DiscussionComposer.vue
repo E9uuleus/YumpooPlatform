@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ElInputNumber } from 'element-plus'
 import { EditorContent, type Editor } from '@tiptap/vue-3'
 import { exitSuggestion } from '@tiptap/suggestion'
 import { Picture as PictureIcon, Paperclip } from '@element-plus/icons-vue'
@@ -510,21 +511,21 @@ defineExpose({ closePanel, reset })
             class="discussion-table-form"
             @submit.prevent="insertTable"
           >
-            <label>行数<input
-              v-model.number="rows"
+            <label>行数<el-input-number
+              v-model="rows"
+              size="small"
+              controls-position="right"
               aria-label="表格行数"
-              type="number"
-              min="1"
-              max="20"
-              required
-            ></label><label>列数<input
-              v-model.number="columns"
+              :min="1"
+              :max="20"
+            /></label><label>列数<el-input-number
+              v-model="columns"
+              size="small"
+              controls-position="right"
               aria-label="表格列数"
-              type="number"
-              min="1"
-              max="20"
-              required
-            ></label><button type="submit">
+              :min="1"
+              :max="20"
+            /></label><button type="submit">
               插入表格
             </button>
           </form>

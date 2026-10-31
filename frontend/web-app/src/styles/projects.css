@@ -425,9 +425,8 @@
   margin-right: calc(0px - var(--project-page-inline-gutter));
   margin-bottom: 0;
   margin-left: calc(0px - var(--project-page-inline-gutter));
-  border-bottom: 1px solid var(--yp-border-subtle);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--yp-bg-sunken) 70%, transparent) 0%, color-mix(in srgb, var(--yp-bg-surface) 95%, transparent) 100%);
   content: "";
+  background: var(--yp-bg-sunken);
 }
 
 .project-view-stack {
@@ -441,7 +440,6 @@
 .project-list-surface,
 .project-settings-surface,
 .project-overview-surface {
-  border: 1px solid var(--yp-border-subtle);
   border-radius: var(--yp-radius-md);
   background: var(--yp-bg-surface);
 }
@@ -474,10 +472,8 @@
 
 .project-table-shell {
   overflow: hidden;
-  border: 1px solid var(--yp-border-subtle);
   border-radius: var(--yp-radius-md);
   background: var(--yp-bg-surface);
-  box-shadow: var(--yp-shadow-card);
 }
 
 .project-management-table.el-table {
@@ -551,7 +547,6 @@
   margin: 0;
   padding: var(--yp-space-3) var(--yp-space-4);
   justify-content: flex-end;
-  border-top: 1px solid var(--yp-border-subtle);
 }
 
 .project-filter-grid {
@@ -924,11 +919,11 @@
   height: 34px;
   place-items: center;
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--mark), color-mix(in srgb, var(--mark) 70%, var(--yp-bg-surface)));
   color: var(--yp-status-blue-foreground);
   font-family: var(--yp-font-heading);
   font-size: 14px;
   font-weight: 600;
+  background: var(--mark);
 }
 
 .project-identity-cell__text {
@@ -956,12 +951,11 @@
   height: 24px;
   align-items: center;
   padding: 0 10px;
-  border: 1px solid var(--yp-border-subtle);
   border-radius: var(--yp-radius-pill);
-  background: var(--yp-bg-sunken);
   color: var(--yp-text-secondary);
   font-size: 12px;
   white-space: nowrap;
+  background: var(--yp-fill-neutral);
 }
 
 .project-name-cell__code,
@@ -1301,22 +1295,14 @@
 
 /* 状态与优先级现代弹窗容器 */
 .el-popover.work-items-label-popover {
-  padding: 0 !important;
-  min-width: unset !important;
-  border-radius: 8px !important;
-  border: 1px solid var(--yp-border-subtle) !important;
-  background: var(--yp-bg-surface) !important;
-  box-shadow: var(--yp-shadow-popover) !important;
-  overflow: visible !important;
+  padding: 0;
+  min-width: unset;
+  overflow: visible;
 }
 
 .el-popover.color-picker-popover {
-  padding: 6px !important;
-  min-width: unset !important;
-  border-radius: 6px !important;
-  border: 1px solid var(--yp-border-subtle) !important;
-  background: var(--yp-bg-surface) !important;
-  box-shadow: var(--yp-shadow-popover) !important;
+  padding: 6px;
+  min-width: unset;
 }
 
 .el-dropdown__popper .label-more-dropdown-menu,

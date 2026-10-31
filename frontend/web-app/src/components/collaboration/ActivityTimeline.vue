@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import YpSkeleton from '../yp/YpSkeleton.vue'
 import { usePageLoad } from '../../brand/page-progress'
 import { Refresh } from '@element-plus/icons-vue'
 import type { ActivityItem } from '@yumpoo/api-client'
@@ -173,6 +174,7 @@ onBeforeUnmount(() => clearInterval(clock))
             :icon="Refresh"
             :loading="loading"
             aria-label="刷新动态"
+            text
             @click="load"
           />
         </el-tooltip>
@@ -188,13 +190,18 @@ onBeforeUnmount(() => clearInterval(clock))
       />
       <el-button
         type="primary"
-        plain
         @click="load"
       >
         重试
       </el-button>
     </div>
+    <yp-skeleton
+      v-if="loading && !items.length"
+      variant="list"
+      :rows="6"
+    />
     <div
+      v-else
       v-loading="loading"
       class="activity-timeline__feed"
       aria-live="polite"
@@ -321,7 +328,6 @@ onBeforeUnmount(() => clearInterval(clock))
 .activity-timeline__feed {
   min-height: 200px;
   padding: 0 var(--yp-space-5) var(--yp-space-5);
-  border: 1px solid var(--yp-border-subtle);
   border-radius: var(--yp-radius-md);
   background: var(--yp-bg-surface);
 }

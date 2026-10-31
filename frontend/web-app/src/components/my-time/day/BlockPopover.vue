@@ -204,6 +204,7 @@ function save() { if (!problem.value) emit('save', { start: start.value, end: en
       <el-button
         v-if="editable"
         size="small"
+        text
         @click="view = 'reassign'"
       >
         更换工作项
@@ -212,6 +213,7 @@ function save() { if (!problem.value) emit('save', { start: start.value, end: en
         v-if="editable && share.maxParallel > 1"
         size="small"
         :loading="busy"
+        text
         @click="emit('exclusive')"
       >
         独占此时段
@@ -220,6 +222,7 @@ function save() { if (!problem.value) emit('save', { start: start.value, end: en
         v-if="running && timerEnabled"
         size="small"
         :loading="busy"
+        text
         @click="emit('stop')"
       >
         停止计时
