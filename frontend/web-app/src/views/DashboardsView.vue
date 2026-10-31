@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import YpSkeleton from '../../components/yp/YpSkeleton.vue'
+import YpSkeleton from '../components/yp/YpSkeleton.vue'
 import YpNotice from '../components/yp/YpNotice.vue'
 import { ElIcon, ElInput, ElButton, ElTooltip, ElDropdown, ElDropdownMenu, ElDropdownItem, ElTag, ElDialog, ElDrawer, ElMessage, ElMessageBox } from 'element-plus'
 import { computed, nextTick, ref, watch } from 'vue'
