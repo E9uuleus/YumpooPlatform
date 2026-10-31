@@ -81,6 +81,7 @@ const authentication: CurrentAuthentication = {
 
 describe('项目侧栏导航', () => {
   beforeEach(() => {
+    route.params = { workspaceSlug: 'member' }
     route.name = 'workspace'
     route.meta.shellSection = 'work'
     window.localStorage.clear()
@@ -185,6 +186,34 @@ describe('项目侧栏导航', () => {
     expect(names().slice(0, 4)).toEqual(['项目 14', '项目 5', '项目 2', '项目 1'])
     elsewhere.unmount()
     wrapper.unmount()
+  })
+
+  it('十个置顶项目与当前路由项目一并校验，不会反复补取最后一个置顶项', async () => {
+    route.params.projectId = 'project-99'
+    const pinned = Array.from({ length: 10 }, (_, index) => project(20 + index))
+    window.localStorage.setItem('yumpoo.projects.recents.v1.company-1%3Auser-1', JSON.stringify(pinned.map(item => ({
+      ...item, openedAt: 1, pinned: true,
+    }))))
+    let idRequests = 0
+    api.listProjects.mockImplementation(async (request: { ids?: string[] }) => {
+      if (request.ids && ++idRequests > 3) throw new Error('重复补取')
+      const items = request.ids
+        ? [...pinned, project(99)].filter(item => request.ids!.includes(item.id))
+        : [project(1)]
+      return { items, page: 0, size: items.length, totalElements: 11, totalPages: 1 }
+    })
+    const wrapper = mount(AppShell, { global: { stubs: { RouterView: true } } })
+    try {
+      for (let i = 0; i < 4; i++) await flushPromises()
+      expect(api.listProjects).toHaveBeenCalledWith(expect.objectContaining({
+        ids: ['project-99', ...pinned.map(item => item.id)], size: 11,
+      }))
+      expect(idRequests).toBe(1)
+      expect(wrapper.findAll('#desktop-project-navigation .project-navigation__project').map(item => item.text()))
+        .toEqual(pinned.map(item => item.name))
+    } finally {
+      wrapper.unmount()
+    }
   })
 
   it('移动导航保留管理项目与项目跳转，移除产品入口', async () => {

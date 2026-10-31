@@ -219,7 +219,6 @@ async function loadNavigationProjects(query = sidebarSearchQuery.value.trim()): 
   const activeProjectId = typeof route.params.projectId === 'string' ? route.params.projectId : undefined
   // 最近与置顶只存在本机，由服务端按同样的筛选确认它们仍可见，再与按名称排列的项目合并。
   const recentIds = query ? [] : [...new Set([...(activeProjectId ? [activeProjectId] : []), ...topRecentIds.value])]
-    .slice(0, NAVIGATION_PROJECT_LIMIT)
   try {
     const [projectPage, recentPage] = await Promise.all([
       projectsApi.listProjects({ ...(query ? { query } : {}), ...filters, page: 0, size: NAVIGATION_PROJECT_LIMIT + 1 }),
