@@ -17,7 +17,7 @@ Status: implemented
 - 新加载的表格行以 180ms 淡入，`animation-fill-mode: backwards` 不会盖过拖动源行等状态的透明度。
 - 减少动态效果时只保留静态灰度框架。
 
-扫光只在等待数据时运行，属于加载反馈，与[品牌加载遮罩](2026-09-14-brand-identity-and-loading.md)同类，不属于[非工作面氛围动效](2026-09-30-canvas-ambient-motion.md)所限制的持续装饰动画。品牌遮罩继续用于其他页面；页面级顶部进度条（[页面加载提示分工](2026-10-29-page-loading-progress.md)）与骨架并存。
+扫光只在等待数据时运行，属于加载反馈，与[品牌加载遮罩](2026-09-14-brand-identity-and-loading.md)同类，不属于[非工作面氛围动效](2026-09-30-canvas-ambient-motion.md)所限制的持续装饰动画。其他页面的首次读取改用 `YpSkeleton`（见[视觉契约](2026-10-31-visual-contract.md)），已有数据时的刷新继续用品牌遮罩；页面级顶部进度条（[页面加载提示分工](2026-10-29-page-loading-progress.md)）与骨架并存。
 
 ## Alternatives considered
 
