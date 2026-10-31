@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import YpSkeleton from '../../components/yp/YpSkeleton.vue'
 import YpNotice from '../../components/yp/YpNotice.vue'
 import { usePageLoad } from '../../brand/page-progress'
 
@@ -441,8 +442,14 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
       :problem="error"
     />
 
+    <yp-skeleton
+      v-if="loading && !result?.items.length"
+      variant="table"
+      :rows="8"
+      :columns="5"
+    />
     <div
-      v-if="loading || result?.items.length"
+      v-else-if="loading || result?.items.length"
       class="table-surface table-scroll members-table"
     >
       <el-table
