@@ -51,7 +51,6 @@ const router = useRouter(), session = useSession()
 const timezone = computed(() => session.authentication.value?.company.timezone ?? 'Asia/Shanghai')
 const items = ref<CompanyActivityItem[]>([])
 const nextCursor = ref<string | null>(null)
-const historyStartedAt = ref<Date>()
 const loading = ref(false), loadingMore = ref(false), exporting = ref(false)
 const error = ref<ApiProblem>()
 const dateRange = ref<[Date, Date] | null>(null)
@@ -121,7 +120,6 @@ async function load(): Promise<void> {
     if (sequence !== requestSequence) return
     items.value = page.items
     nextCursor.value = page.nextCursor
-    historyStartedAt.value = page.historyStartedAt
   } catch (reason) {
     if (sequence === requestSequence) error.value = await toApiProblem(reason)
   } finally {
@@ -453,9 +451,6 @@ onBeforeUnmount(() => {
           加载更多
         </el-button>
         <span v-else-if="items.length">已显示全部 {{ items.length }} 条</span>
-        <span v-if="historyStartedAt">
-          活动从 {{ formatTimestamp(historyStartedAt, timezone) }} 开始记录，更早历史未回填。
-        </span>
       </footer>
     </div>
   </section>

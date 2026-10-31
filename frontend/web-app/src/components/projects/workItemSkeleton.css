@@ -1,0 +1,36 @@
+/* Loading placeholders for the work item table, subitems and kanban: grey blocks with one highlight sweeping left to right. */
+.work-item-skeleton {
+  --work-item-skeleton-line: var(--yp-monday-grid-border);
+  --work-item-skeleton-block: color-mix(in srgb, var(--yp-text-muted) 14%, var(--yp-bg-surface));
+  --work-item-skeleton-block-strong: color-mix(in srgb, var(--yp-text-muted) 20%, var(--yp-bg-surface));
+  --work-item-skeleton-shine: color-mix(in srgb, var(--yp-bg-raised) 72%, transparent);
+  position: relative;
+  /* clip, unlike hidden, is not a scroll container, so sticky cells inside keep following the table's horizontal scroll. */
+  overflow: clip;
+}
+
+.work-item-skeleton::after {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, var(--work-item-skeleton-shine) 50%, transparent 70%);
+  content: '';
+  pointer-events: none;
+  transform: translateX(-100%);
+  animation: work-item-skeleton-sweep 1.6s ease-in-out infinite;
+}
+
+.work-item-skeleton-block {
+  display: block;
+  height: 10px;
+  border-radius: var(--yp-radius-pill);
+  background: var(--work-item-skeleton-block);
+}
+
+@keyframes work-item-skeleton-sweep {
+  to { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .work-item-skeleton::after { display: none; }
+}

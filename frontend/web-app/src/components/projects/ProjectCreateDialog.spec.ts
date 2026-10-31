@@ -22,7 +22,7 @@ describe('创建项目弹窗', () => {
     expect(document.body.querySelectorAll('.project-preview__row')).toHaveLength(5)
     expect(document.body.querySelectorAll('.project-create-dialog__labels .structure-color-pill')).toHaveLength(12)
     expect(document.body.textContent).toContain('你（张三）将成为负责人')
-    expect(document.body.textContent).toContain('项目编码创建后由系统生成')
+    expect(document.body.textContent).not.toContain('项目编码创建后由系统生成')
     expect(document.body.textContent).toContain('未命名项目')
     expect(document.body.textContent).toContain('暂无描述')
     expect(wrapper.findAllComponents(ElInput)).toHaveLength(2)

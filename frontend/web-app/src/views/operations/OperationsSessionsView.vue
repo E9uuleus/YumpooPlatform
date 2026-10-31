@@ -148,7 +148,6 @@ watch(page, () => void query.refresh())
     />
     <span
       class="ops-muted ops-toolbar__end"
-      title="仅在页面可见且未编辑输入时自动刷新"
     >{{ query.data.value?.totalElements ?? 0 }} 位成员</span>
   </div>
   <inline-problem

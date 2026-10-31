@@ -15,7 +15,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, provide, readonly, ref,
 import { useRoute, useRouter } from 'vue-router'
 import { operationsApi, projectsApi } from '../api/client'
 import { beginAuthentication } from '../auth/navigation'
-import { useProjectRecents } from '../composables/useProjectRecents'
+import { orderByRecents, useProjectRecents } from '../composables/useProjectRecents'
 import { useReleaseVersion } from '../composables/useReleaseVersion'
 import { PROJECT_LIFECYCLE_CHANGED } from '../composables/projectLifecycleEvents'
 import { PROJECT_SETTINGS_CHANGED } from '../composables/projectSettingsEvents'
@@ -98,6 +98,13 @@ const projectRecentScope = computed(() => {
   return authentication ? `${authentication.company.id}:${authentication.user.id}` : undefined
 })
 const projectRecents = useProjectRecents(() => projectRecentScope.value)
+const NAVIGATION_PROJECT_LIMIT = 10
+/** 置顶 → 最近打开 → 其余按名称，与「管理项目 → 最近」同一顺序。 */
+const displayedNavigationProjects = computed(() => orderByRecents(navigationProjects.value, projectRecents.items.value)
+  .slice(0, NAVIGATION_PROJECT_LIMIT))
+const pinnedProjectIds = computed(() => new Set(projectRecents.items.value.filter(item => item.pinned).map(item => item.id)))
+const topRecentIds = computed(() => projectRecents.items.value.slice(0, NAVIGATION_PROJECT_LIMIT).map(item => item.id))
+let requestedRecentIds = new Set<string>()
 const operationsAlerts = useOperationsQuery((signal) => operationsApi.getOperationsAlertSummary({ signal }), {
   interval: () => 60000,
   enabled: () => session.isPlatformAdmin.value && session.phase.value === 'authenticated',
@@ -208,23 +215,22 @@ let sidebarSearchTimer: ReturnType<typeof setTimeout> | undefined
 async function loadNavigationProjects(query = sidebarSearchQuery.value.trim()): Promise<void> {
   const request = ++navigationRequest
   navigationProjectsFailed.value = false
+  const filters = { lifecycle: ProjectLifecycleFilter.Active, ended: false, actorAccesses: MY_PROJECT_ACCESSES }
+  const activeProjectId = typeof route.params.projectId === 'string' ? route.params.projectId : undefined
+  // 最近与置顶只存在本机，由服务端按同样的筛选确认它们仍可见，再与按名称排列的项目合并。
+  const recentIds = query ? [] : [...new Set([...(activeProjectId ? [activeProjectId] : []), ...topRecentIds.value])]
   try {
-    const projectPage = await projectsApi.listProjects({
-      ...(query ? { query } : {}),
-      lifecycle: ProjectLifecycleFilter.Active,
-      ended: false,
-      actorAccesses: MY_PROJECT_ACCESSES,
-      page: 0,
-      size: 11,
-    })
+    const [projectPage, recentPage] = await Promise.all([
+      projectsApi.listProjects({ ...(query ? { query } : {}), ...filters, page: 0, size: NAVIGATION_PROJECT_LIMIT + 1 }),
+      recentIds.length ? projectsApi.listProjects({ ...filters, ids: recentIds, page: 0, size: recentIds.length }) : undefined,
+    ])
     if (request !== navigationRequest) return
-    navigationProjects.value = projectPage.items.slice(0, 10)
-    hasMoreNavigationProjects.value = projectPage.totalElements > 10
-    if (!query) {
-      const activeProjectId = typeof route.params.projectId === 'string' ? route.params.projectId : undefined
-      const activeProject = projectPage.items.find(project => project.id === activeProjectId)
-      if (activeProject) projectRecents.record(activeProject)
-    }
+    requestedRecentIds = new Set(recentIds)
+    navigationProjects.value = [...new Map([...(recentPage?.items ?? []), ...projectPage.items]
+      .map(project => [project.id, project])).values()]
+    hasMoreNavigationProjects.value = projectPage.totalElements > NAVIGATION_PROJECT_LIMIT
+    const activeProject = recentPage?.items.find(project => project.id === activeProjectId)
+    if (activeProject) projectRecents.record(activeProject)
   } catch {
     if (request !== navigationRequest) return
     navigationProjects.value = []
@@ -298,6 +304,13 @@ watch(
   },
   { immediate: true },
 )
+
+// 在「管理项目 → 最近」中置顶了菜单里还没有的项目时，补取一次。
+watch(topRecentIds, ids => {
+  if (!isWorkspaceSection.value || sidebarSearchQuery.value.trim()) return
+  const loaded = new Set(navigationProjects.value.map(project => project.id))
+  if (ids.some(id => !loaded.has(id) && !requestedRecentIds.has(id))) void loadNavigationProjects()
+})
 
 function lifecycleChanged(): void {
   if (isWorkspaceSection.value) void loadNavigationProjects()
@@ -784,36 +797,57 @@ onBeforeUnmount(() => {
                 <box />
               </el-icon><span>归档项目</span>
             </button>
-            <el-tooltip
-              v-for="project in navigationProjects"
-              :key="project.id"
-              :content="project.name"
-              placement="right"
+            <transition-group
+              tag="div"
+              name="project-navigation"
+              class="project-navigation__projects"
             >
-              <button
-                class="project-navigation__project"
-                type="button"
-                :aria-current="route.params.projectId === project.id ? 'page' : undefined"
-                :class="{ active: route.params.projectId === project.id }"
-                @click="navigateProject(project)"
+              <div
+                v-for="project in displayedNavigationProjects"
+                :key="project.id"
+                class="project-navigation__item"
               >
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 20 20"
-                  fill="none"
-                  aria-hidden="true"
+                <el-tooltip
+                  :content="project.name"
+                  placement="right"
                 >
-                  <path
-                    d="M2.75 5.5c0-.966.784-1.75 1.75-1.75h3.19c.464 0 .91.184 1.238.513L10.165 5.5H15.5c.966 0 1.75.784 1.75 1.75v7.25a1.75 1.75 0 0 1-1.75 1.75h-11a1.75 1.75 0 0 1-1.75-1.75v-9Z"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-                <span class="project-navigation__project-name">{{ project.name }}</span>
-              </button>
-            </el-tooltip>
+                  <button
+                    class="project-navigation__project"
+                    type="button"
+                    :aria-current="route.params.projectId === project.id ? 'page' : undefined"
+                    :class="{ active: route.params.projectId === project.id }"
+                    @click="navigateProject(project)"
+                  >
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 20 20"
+                      fill="none"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M2.75 5.5c0-.966.784-1.75 1.75-1.75h3.19c.464 0 .91.184 1.238.513L10.165 5.5H15.5c.966 0 1.75.784 1.75 1.75v7.25a1.75 1.75 0 0 1-1.75 1.75h-11a1.75 1.75 0 0 1-1.75-1.75v-9Z"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                    <span class="project-navigation__project-name">{{ project.name }}</span>
+                    <svg
+                      v-if="pinnedProjectIds.has(project.id)"
+                      class="project-navigation__pin"
+                      width="12"
+                      height="12"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                      aria-hidden="true"
+                    >
+                      <path d="M7 2.75h6l-.9 4.05 2.4 2.4v1.3h-3.75v5.75L10 17.5l-.75-1.25V10.5H5.5V9.2l2.4-2.4L7 2.75Z" />
+                    </svg>
+                  </button>
+                </el-tooltip>
+              </div>
+            </transition-group>
             <el-tooltip
               v-if="hasMoreNavigationProjects"
               content="查看全部项目"
@@ -1119,35 +1153,56 @@ onBeforeUnmount(() => {
                 <box />
               </el-icon><span>归档项目</span>
             </button>
-            <el-tooltip
-              v-for="project in navigationProjects"
-              :key="project.id"
-              :content="project.name"
-              placement="top"
+            <transition-group
+              tag="div"
+              name="project-navigation"
+              class="project-navigation__projects"
             >
-              <button
-                class="project-navigation__project"
-                type="button"
-                :class="{ active: route.params.projectId === project.id }"
-                @click="navigateProject(project)"
+              <div
+                v-for="project in displayedNavigationProjects"
+                :key="project.id"
+                class="project-navigation__item"
               >
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 20 20"
-                  fill="none"
-                  aria-hidden="true"
+                <el-tooltip
+                  :content="project.name"
+                  placement="top"
                 >
-                  <path
-                    d="M2.75 5.5c0-.966.784-1.75 1.75-1.75h3.19c.464 0 .91.184 1.238.513L10.165 5.5H15.5c.966 0 1.75.784 1.75 1.75v7.25a1.75 1.75 0 0 1-1.75 1.75h-11a1.75 1.75 0 0 1-1.75-1.75v-9Z"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-                <span class="project-navigation__project-name">{{ project.name }}</span>
-              </button>
-            </el-tooltip>
+                  <button
+                    class="project-navigation__project"
+                    type="button"
+                    :class="{ active: route.params.projectId === project.id }"
+                    @click="navigateProject(project)"
+                  >
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 20 20"
+                      fill="none"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M2.75 5.5c0-.966.784-1.75 1.75-1.75h3.19c.464 0 .91.184 1.238.513L10.165 5.5H15.5c.966 0 1.75.784 1.75 1.75v7.25a1.75 1.75 0 0 1-1.75 1.75h-11a1.75 1.75 0 0 1-1.75-1.75v-9Z"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                    <span class="project-navigation__project-name">{{ project.name }}</span>
+                    <svg
+                      v-if="pinnedProjectIds.has(project.id)"
+                      class="project-navigation__pin"
+                      width="12"
+                      height="12"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                      aria-hidden="true"
+                    >
+                      <path d="M7 2.75h6l-.9 4.05 2.4 2.4v1.3h-3.75v5.75L10 17.5l-.75-1.25V10.5H5.5V9.2l2.4-2.4L7 2.75Z" />
+                    </svg>
+                  </button>
+                </el-tooltip>
+              </div>
+            </transition-group>
             <el-tooltip
               v-if="hasMoreNavigationProjects"
               content="查看全部项目"

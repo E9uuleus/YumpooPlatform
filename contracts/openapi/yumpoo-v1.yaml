@@ -3835,6 +3835,16 @@ paths:
           description: 省略时不按结束状态筛选；true 只返回已结束，false 只返回未结束。
           schema:
             type: boolean
+        - name: ids
+          in: query
+          description: 只返回这些 ID 中调用人可见且符合其他筛选的项目；排序、分页与总数规则不变。
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 50
+            items:
+              $ref: "#/components/schemas/Uuid"
         - name: page
           in: query
           schema:

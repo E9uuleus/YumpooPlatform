@@ -136,6 +136,7 @@ export interface ListProjectsRequest {
     updatedSince?: Date;
     lifecycle?: ProjectLifecycleFilter;
     ended?: boolean;
+    ids?: Array<string>;
     page?: number;
     size?: number;
 }
@@ -757,6 +758,10 @@ export class ProjectsApi extends runtime.BaseAPI {
 
         if (requestParameters['ended'] != null) {
             queryParameters['ended'] = requestParameters['ended'];
+        }
+
+        if (requestParameters['ids'] != null) {
+            queryParameters['ids'] = requestParameters['ids'];
         }
 
         if (requestParameters['page'] != null) {

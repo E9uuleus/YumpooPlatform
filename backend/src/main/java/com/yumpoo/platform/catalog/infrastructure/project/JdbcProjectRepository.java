@@ -241,6 +241,7 @@ public class JdbcProjectRepository implements ProjectRepository {
         String predicate = " AND (:allQuery OR p.name ILIKE :query ESCAPE '\\' "
                 + "OR p.project_code ILIKE :query ESCAPE '\\') "
                 + "AND (:allOwners OR p.owner_user_id IN (:ownerUserIds)) "
+                + "AND (:allIds OR p.id IN (:ids)) "
                 + "AND (:allAccesses OR (" + actorAccess + ") IN (:actorAccesses)) "
                 + "AND (:allUpdatedSince OR p.updated_at >= :updatedSince) "
                 + "AND ((:active AND p.lifecycle='ACTIVE') "
@@ -330,6 +331,7 @@ public class JdbcProjectRepository implements ProjectRepository {
                 .replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
         List<UUID> ownerUserIds = criteria.ownerUserIds().isEmpty()
                 ? List.of(new UUID(0, 0)) : criteria.ownerUserIds();
+        List<UUID> ids = criteria.ids().isEmpty() ? List.of(new UUID(0, 0)) : criteria.ids();
         List<String> actorAccesses = criteria.actorAccesses().isEmpty()
                 ? List.of("OWNER")
                 : criteria.actorAccesses().stream().map(access -> switch (access) {
@@ -343,6 +345,8 @@ public class JdbcProjectRepository implements ProjectRepository {
                 .param("query", "%" + normalizedQuery + "%")
                 .param("allOwners", criteria.ownerUserIds().isEmpty())
                 .param("ownerUserIds", ownerUserIds)
+                .param("allIds", criteria.ids().isEmpty())
+                .param("ids", ids)
                 .param("allAccesses", criteria.actorAccesses().isEmpty())
                 .param("actorAccesses", actorAccesses)
                 .param("allUpdatedSince", criteria.updatedSince() == null)

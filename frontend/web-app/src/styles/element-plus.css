@@ -267,7 +267,45 @@
 }
 
 .el-message {
-  background: var(--yp-bg-raised);
-  border-color: var(--yp-border-default);
-  box-shadow: var(--yp-shadow-popover);
+  --el-message-bg-color: var(--yp-message-info-bg);
+  --el-message-text-color: var(--yp-message-fg);
+  --el-message-padding: 12px 12px 12px 16px;
+  --el-message-close-icon-color: var(--yp-message-fg);
+  --el-message-close-hover-color: var(--yp-message-fg);
+  min-width: min(280px, calc(100% - 32px));
+  min-height: 44px;
+  max-width: min(560px, calc(100% - 32px));
+  gap: 10px;
+  border: 0;
+  border-radius: var(--yp-radius-md);
+  box-shadow: var(--yp-shadow-overlay);
+}
+
+.el-message.el-message--success { --el-message-bg-color: var(--yp-message-success-bg); --el-message-text-color: var(--yp-message-fg); }
+.el-message.el-message--warning { --el-message-bg-color: var(--yp-message-warning-bg); --el-message-text-color: var(--yp-message-fg); }
+.el-message.el-message--error { --el-message-bg-color: var(--yp-message-error-bg); --el-message-text-color: var(--yp-message-fg); }
+.el-message.el-message--info,
+.el-message.el-message--primary { --el-message-bg-color: var(--yp-message-info-bg); --el-message-text-color: var(--yp-message-fg); }
+
+.el-message .el-message__icon { font-size: 18px; }
+
+.el-message .el-message__content {
+  flex: 1;
+  color: var(--yp-message-fg);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.el-message .el-message__closeBtn {
+  flex: none;
+  box-sizing: content-box;
+  padding: 3px;
+  border-radius: var(--yp-radius-sm);
+  opacity: .85;
+  transition: background-color var(--yp-motion-fast) var(--yp-ease-standard), opacity var(--yp-motion-fast) var(--yp-ease-standard);
+}
+
+.el-message .el-message__closeBtn:hover {
+  background: color-mix(in srgb, var(--yp-message-fg) 18%, transparent);
+  opacity: 1;
 }

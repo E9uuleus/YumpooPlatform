@@ -35,6 +35,12 @@
 
   --yp-bg-tooltip: #25272c;
   --yp-text-tooltip: #ffffff;
+  /* 轻提示用纯色底白字，四种底色与白字对比度均不低于 4.5:1，三主题共用。 */
+  --yp-message-fg: #ffffff;
+  --yp-message-info-bg: #0067d6;
+  --yp-message-success-bg: #00804a;
+  --yp-message-warning-bg: #b35900;
+  --yp-message-error-bg: #c4314b;
 
   --yp-action-primary: #0073ea;
   --yp-action-primary-hover: #0060b9;

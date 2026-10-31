@@ -54,7 +54,7 @@ function clearAll(): void {
       <strong>新建默认值</strong>
       <button type="button" class="table-settings-link table-settings-panel__action" :disabled="!configured" @click="clearAll">清除全部</button>
     </header>
-    <p class="table-settings-panel__hint">仅对你在本项目新建的工作项生效：表格底部添加、在下方插入、分组末尾添加。分组添加时以所在分组的值为准；子项与复制不使用默认值。</p>
+    <p class="table-settings-panel__hint">仅对你在本项目新建的工作项生效。</p>
     <div class="table-settings-defaults">
       <template v-for="column in columns" :key="column.key">
         <span class="table-settings-defaults__label">{{ column.label }}</span>

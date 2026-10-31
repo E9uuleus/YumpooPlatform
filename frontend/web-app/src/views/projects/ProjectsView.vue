@@ -226,7 +226,15 @@ function projectCreated(project: Project): void {
 onMounted(async () => {
   await pageLoad.track(() => Promise.all([load(), loadReferenceData()]))
 })
-onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTimer) })
+const movedProjectId = ref<string>()
+let movedTimer: ReturnType<typeof setTimeout> | undefined
+function togglePinned(projectId: string): void {
+  projectRecents.togglePinned(projectId)
+  movedProjectId.value = projectId
+  if (movedTimer) clearTimeout(movedTimer)
+  movedTimer = setTimeout(() => { movedProjectId.value = undefined }, 600)
+}
+onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTimer); if (movedTimer) clearTimeout(movedTimer) })
 </script>
 
 <template>
@@ -234,7 +242,6 @@ onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTi
     <project-workspace-header
       section="catalog"
       title="管理项目"
-      description="查看你负责或参与的进行中项目、负责人和协作角色。"
     />
     <inline-problem
       v-if="error"
@@ -562,14 +569,16 @@ onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTi
             <span>最近打开</span>
             <span />
           </div>
-          <ul
+          <transition-group
+            tag="ul"
+            name="project-recent"
             class="project-recent-list"
             aria-label="最近打开的项目"
           >
             <li
               v-for="item in recentProjectItems"
               :key="item.id"
-              :class="{ pinned: item.pinned }"
+              :class="{ pinned: item.pinned, 'project-recent-list__row--moved': movedProjectId === item.id }"
             >
               <button
                 class="project-recent-list__identity"
@@ -613,7 +622,7 @@ onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTi
                 :class="{ active: item.pinned }"
                 :aria-label="item.pinned ? `取消置顶项目 ${item.name}` : `置顶项目 ${item.name}`"
                 :aria-pressed="item.pinned"
-                @click="projectRecents.togglePinned(item.id)"
+                @click="togglePinned(item.id)"
               >
                 <svg
                   width="20"
@@ -631,7 +640,7 @@ onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTi
                 </svg>
               </button>
             </li>
-          </ul>
+          </transition-group>
         </template>
         <yp-empty-state
           v-else
