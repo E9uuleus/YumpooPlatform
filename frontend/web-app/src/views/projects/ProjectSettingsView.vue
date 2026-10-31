@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import YpSkeleton from '../../components/yp/YpSkeleton.vue'
 import { usePageLoad } from '../../brand/page-progress'
 
 import {
@@ -128,31 +129,39 @@ onMounted(() => pageLoad.track(load))
 </script>
 
 <template>
-  <div class="project-view-stack">
-    <project-workspace-header
-      section="settings"
-      :project="project"
-      title="项目设置"
-    />
-    <inline-problem
-      v-if="error"
-      :problem="error"
-    />
-    <div
-      v-if="project"
-      class="project-settings-layout"
+<div class="project-view-stack">
+  <project-workspace-header
+    section="settings"
+    :project="project"
+    title="项目设置"
+    @changed="load(false)"
+  />
+  <inline-problem
+    v-if="error"
+    :problem="error"
+  />
+  <yp-skeleton
+    v-if="!project && !error"
+    variant="form"
+    :rows="3"
+    label="正在加载项目设置"
+  />
+  <div
+    v-else-if="project"
+    class="project-settings"
+  >
+    <section
+      class="project-identity"
+      aria-label="项目概要"
     >
-      <aside
-        class="project-identity-card"
-        aria-label="项目概要"
-      >
-        <span
-          class="project-identity-card__mark"
-          :style="{ '--mark': mark }"
-          aria-hidden="true"
-        >{{ project.name.slice(0, 1) }}</span>
+      <span
+        class="project-identity__mark"
+        :style="{ '--mark': mark }"
+        aria-hidden="true"
+      >{{ project.name.slice(0, 1) }}</span>
+      <div class="project-identity__main">
         <h2>{{ project.name }}</h2>
-        <div class="project-identity-card__tags">
+        <div class="project-identity__tags">
           <code title="用于工作项编号，不可修改">{{ project.code }}</code>
           <yp-status-tag
             domain="project-lifecycle"
@@ -160,110 +169,107 @@ onMounted(() => pageLoad.track(load))
             size="small"
           />
         </div>
-        <dl class="project-identity-card__facts">
-          <dt>负责人</dt><dd>
+      </div>
+      <dl class="project-identity__facts">
+        <div>
+          <dt>负责人</dt>
+          <dd>
             <yp-assignee
               :user-id="project.ownerUserId"
               :display-name="project.ownerDisplayName"
               size="table"
             />
           </dd>
-          <dt>访问</dt><dd>{{ businessLabel(project.actorAccess) }}</dd>
-          <dt>创建</dt><dd>{{ formatTime(project.createdAt) }}</dd>
-          <dt>更新</dt><dd>{{ formatTime(project.updatedAt) }}</dd>
-          <template v-if="project.endedAt">
-            <dt>结束</dt><dd>{{ formatTime(project.endedAt) }}</dd>
-          </template>
-          <template v-if="project.archivedAt">
-            <dt>归档</dt><dd>{{ formatTime(project.archivedAt) }}</dd>
-          </template>
-        </dl>
-      </aside>
-      <div class="unified-project-settings">
-        <section class="unified-project-settings__section">
-          <h2>基本信息</h2>
-          <el-form
-            ref="formRef"
-            label-position="top"
-            :model="form"
-            :rules="rules"
-            :disabled="saving || !project.capabilities.canUpdateSettings"
-            @submit.prevent="save"
-          >
-            <el-form-item
-              label="项目名称"
-              prop="name"
-            >
-              <el-input
-                v-model="form.name"
-                maxlength="80"
-                show-word-limit
-                aria-label="项目名称"
-              />
-            </el-form-item>
-            <el-form-item label="项目描述">
-              <el-input
-                v-model="form.description"
-                type="textarea"
-                :rows="3"
-                maxlength="500"
-                show-word-limit
-                aria-label="项目描述"
-              />
-            </el-form-item>
-          </el-form>
-          <div class="action-row">
-            <span
-              v-if="dirty"
-              class="muted-text"
-            >存在未保存的更改</span><el-button
-              type="primary"
-              :disabled="!project.capabilities.canUpdateSettings || !dirty || saving"
-              :loading="saving"
-              @click="save"
-            >
-              保存设置
-            </el-button>
-          </div>
-        </section>
-        <section
-          class="unified-project-settings__section"
-          aria-labelledby="project-connections-title"
+        </div>
+        <div><dt>访问</dt><dd>{{ businessLabel(project.actorAccess) }}</dd></div>
+        <div><dt>创建</dt><dd>{{ formatTime(project.createdAt) }}</dd></div>
+        <div><dt>更新</dt><dd>{{ formatTime(project.updatedAt) }}</dd></div>
+        <div v-if="project.endedAt"><dt>结束</dt><dd>{{ formatTime(project.endedAt) }}</dd></div>
+        <div v-if="project.archivedAt"><dt>归档</dt><dd>{{ formatTime(project.archivedAt) }}</dd></div>
+      </dl>
+    </section>
+    <section
+      class="project-settings__section"
+      aria-labelledby="project-basic-title"
+    >
+      <h2 id="project-basic-title">
+        基本信息
+      </h2>
+      <el-form
+        ref="formRef"
+        label-position="top"
+        :model="form"
+        :rules="rules"
+        :disabled="saving || !project.capabilities.canUpdateSettings"
+        @submit.prevent="save"
+      >
+        <el-form-item
+          label="项目名称"
+          prop="name"
         >
-          <h2 id="project-connections-title">
-            连接
-          </h2>
-          <project-connections-overview :project-id="projectId" />
-        </section>
-        <project-lifecycle-actions
-          :project="project"
-          @changed="load(false)"
-          @problem="problem => error = problem"
-        />
+          <el-input
+            v-model="form.name"
+            maxlength="80"
+            show-word-limit
+            aria-label="项目名称"
+          />
+        </el-form-item>
+        <el-form-item label="项目描述">
+          <el-input
+            v-model="form.description"
+            type="textarea"
+            :rows="3"
+            maxlength="500"
+            show-word-limit
+            aria-label="项目描述"
+          />
+        </el-form-item>
+      </el-form>
+      <div class="action-row">
+        <span
+          v-if="dirty"
+          class="muted-text"
+        >存在未保存的更改</span><el-button
+          type="primary"
+          :disabled="!project.capabilities.canUpdateSettings || !dirty || saving"
+          :loading="saving"
+          @click="save"
+        >
+          保存设置
+        </el-button>
       </div>
-    </div>
+    </section>
+    <section
+      class="project-settings__section"
+      aria-labelledby="project-connections-title"
+    >
+      <h2 id="project-connections-title">
+        连接
+      </h2>
+      <project-connections-overview :project-id="projectId" />
+    </section>
+    <project-lifecycle-actions
+      :project="project"
+      @changed="load(false)"
+      @problem="problem => error = problem"
+    />
   </div>
+</div>
 </template>
 
 <style scoped>
-.project-settings-layout { display: grid; grid-template-columns: 260px minmax(0, 760px); align-items: start; gap: var(--yp-space-6); }
-.project-identity-card { position: sticky; top: var(--yp-space-4); display: grid; gap: var(--yp-space-3); padding: var(--yp-space-5);
-  border: 1px solid color-mix(in srgb, var(--yp-border-subtle) 80%, transparent); border-radius: var(--yp-radius-xl);
-  background: color-mix(in srgb, var(--yp-bg-surface) 76%, transparent); box-shadow: var(--yp-shadow-card); backdrop-filter: blur(14px) saturate(1.3); }
-.project-identity-card__mark { display: grid; width: 48px; height: 48px; place-items: center; border-radius: 14px;
-  background: linear-gradient(135deg, var(--mark), color-mix(in srgb, var(--mark) 70%, var(--yp-bg-surface)));
-  color: var(--yp-status-blue-foreground); font: 600 20px/1 var(--yp-font-heading); }
-.project-identity-card h2 { margin: 0; font-size: var(--yp-type-card-title-size); font-weight: 600; line-height: var(--yp-type-card-title-line); overflow-wrap: anywhere; }
-.project-identity-card__tags { display: flex; flex-wrap: wrap; align-items: center; gap: var(--yp-space-2); }
-.project-identity-card__tags code { padding: 2px var(--yp-space-2); border-radius: var(--yp-radius-sm); background: var(--yp-bg-sunken); color: var(--yp-text-secondary); font: 500 12px/18px var(--yp-font-mono); }
-.project-identity-card__facts { display: grid; grid-template-columns: 48px minmax(0, 1fr); align-items: center; gap: var(--yp-space-2) var(--yp-space-3);
-  margin: var(--yp-space-1) 0 0; padding-top: var(--yp-space-3); border-top: 1px solid var(--yp-border-subtle); font-size: 12px; }
-.project-identity-card__facts dt { color: var(--yp-text-muted); }
-.project-identity-card__facts dd { margin: 0; min-width: 0; color: var(--yp-text-primary); }
-.unified-project-settings { display: grid; gap: var(--yp-space-4); min-width: 0; }
-.unified-project-settings__section { padding: var(--yp-space-5) var(--yp-space-6); border: 1px solid color-mix(in srgb, var(--yp-border-subtle) 80%, transparent);
-  border-radius: var(--yp-radius-xl); background: var(--yp-bg-surface); box-shadow: var(--yp-shadow-card); }
-.unified-project-settings h2 { margin: 0 0 var(--yp-space-4); font-size: var(--yp-type-card-title-size); font-weight: 600; }
-@media (max-width: 960px) { .project-settings-layout { grid-template-columns: minmax(0, 1fr); } .project-identity-card { position: static; } }
-@media (max-width: 720px) { .unified-project-settings__section { padding: var(--yp-space-4); } }
+.project-settings { display: grid; max-width: 880px; gap: var(--yp-space-8); }
+.project-identity { display: grid; grid-template-columns: 48px minmax(0, 1fr); align-items: center; gap: var(--yp-space-4); }
+.project-identity__mark { display: grid; width: 48px; height: 48px; place-items: center; border-radius: var(--yp-radius-md);
+  background: var(--mark); color: var(--yp-on-solid); font: 600 20px/1 var(--yp-font-heading); }
+.project-identity__main { display: grid; min-width: 0; gap: var(--yp-space-1); }
+.project-identity h2 { margin: 0; font-size: var(--yp-type-section-title-size); font-weight: 600; line-height: var(--yp-type-section-title-line); overflow-wrap: anywhere; }
+.project-identity__tags { display: flex; flex-wrap: wrap; align-items: center; gap: var(--yp-space-2); }
+.project-identity__tags code { padding: 2px var(--yp-space-2); border-radius: var(--yp-radius-sm); background: var(--yp-fill-neutral); color: var(--yp-text-secondary); font: 500 12px/18px var(--yp-font-mono); }
+.project-identity__facts { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--yp-space-3) var(--yp-space-6); margin: 0; }
+.project-identity__facts > div { display: grid; min-width: 0; gap: 2px; }
+.project-identity__facts dt { color: var(--yp-text-muted); font-size: var(--yp-type-caption-size); }
+.project-identity__facts dd { margin: 0; min-width: 0; color: var(--yp-text-primary); }
+.project-settings__section h2 { margin: 0 0 var(--yp-space-4); font-size: var(--yp-type-card-title-size); font-weight: 600; }
+@media (max-width: 720px) { .project-settings { gap: var(--yp-space-6); } }
 </style>
