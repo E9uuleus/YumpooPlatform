@@ -76,6 +76,21 @@ function isoDate(value: Date | string): string {
   return (value instanceof Date ? value : new Date(value)).toISOString()
 }
 
+function snapshot(project: ProjectRecentSource): Omit<ProjectRecentEntry, 'openedAt' | 'pinned'> {
+  return {
+    id: project.id,
+    code: project.code,
+    name: project.name,
+    lifecycle: project.lifecycle,
+    endedAt: project.endedAt ? isoDate(project.endedAt) : null,
+    ownerUserId: project.ownerUserId,
+    ownerDisplayName: project.ownerDisplayName,
+    actorAccess: project.actorAccess,
+    createdAt: isoDate(project.createdAt),
+    updatedAt: isoDate(project.updatedAt),
+  }
+}
+
 export function useProjectRecents(scope: () => string | undefined) {
   const items = ref<ProjectRecentEntry[]>([])
 
@@ -98,26 +113,17 @@ export function useProjectRecents(scope: () => string | undefined) {
   function record(project: ProjectRecentSource): void {
     const previous = items.value.find(item => item.id === project.id)
     persist([
-      {
-        id: project.id,
-        code: project.code,
-        name: project.name,
-        lifecycle: project.lifecycle,
-        endedAt: project.endedAt ? isoDate(project.endedAt) : null,
-        ownerUserId: project.ownerUserId,
-        ownerDisplayName: project.ownerDisplayName,
-        actorAccess: project.actorAccess,
-        createdAt: isoDate(project.createdAt),
-        updatedAt: isoDate(project.updatedAt),
-        openedAt: Date.now(),
-        pinned: previous?.pinned ?? false,
-      },
+      { ...snapshot(project), openedAt: Date.now(), pinned: previous?.pinned ?? false },
       ...items.value.filter(item => item.id !== project.id),
     ])
   }
 
-  function togglePinned(projectId: string): void {
-    persist(items.value.map(item => item.id === projectId ? { ...item, pinned: !item.pinned } : item))
+  /** 没打开过的项目置顶时以 openedAt 0 记入；取消置顶时一并移除，不算作最近打开。 */
+  function togglePinned(project: ProjectRecentSource): void {
+    const previous = items.value.find(item => item.id === project.id)
+    if (!previous) persist([{ ...snapshot(project), openedAt: 0, pinned: true }, ...items.value])
+    else if (previous.pinned && !previous.openedAt) persist(items.value.filter(item => item.id !== project.id))
+    else persist(items.value.map(item => item.id === project.id ? { ...item, pinned: !item.pinned } : item))
   }
 
   function reconcile(projects: ProjectRecentSource[], removedIds: string[]): void {

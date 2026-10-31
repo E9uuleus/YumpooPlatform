@@ -64,6 +64,17 @@ function toggle(candidate: ProjectMemberCandidate): void {
     : [...selected.value, candidate]
 }
 
+/** 点选使成员进入已选时清空搜索并回到输入框，便于继续搜索下一位；再次点选已选成员只取消选择。 */
+function pick(candidate: ProjectMemberCandidate): void {
+  const adding = !isSelected(candidate)
+  toggle(candidate)
+  if (!adding) return
+  controller?.abort()
+  query.value = ''
+  candidates.value = []
+  searchInput.value?.focus()
+}
+
 async function search(): Promise<void> {
   controller?.abort()
   const name = query.value.trim()
@@ -304,7 +315,7 @@ onBeforeUnmount(() => {
             :class="{ 'is-selected': isSelected(candidate) }"
             :aria-selected="isSelected(candidate)"
             :disabled="submitting || !selectable(candidate)"
-            @click="toggle(candidate)"
+            @click="pick(candidate)"
           >
             <yp-assignee
               :user-id="candidate.userId"

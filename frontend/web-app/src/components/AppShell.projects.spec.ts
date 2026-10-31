@@ -119,7 +119,7 @@ describe('项目侧栏导航', () => {
   })
 
   it('箭头紧跟标题并在管理入口后展示最多十个项目与省略号', async () => {
-    const wrapper = mount(AppShell, { global: { stubs: { RouterView: true } } })
+    const wrapper = mount(AppShell, { attachTo: document.body, global: { stubs: { RouterView: true } } })
     await flushPromises()
 
     expect(api.listProjects).toHaveBeenCalledWith({
@@ -127,7 +127,7 @@ describe('项目侧栏导航', () => {
       ended: false,
       actorAccesses: [ProjectActorAccess.Owner, ProjectActorAccess.Member],
       page: 0,
-      size: 11,
+      size: 20,
     })
     const toggle = wrapper.get('.context-navigation .project-navigation__toggle')
     expect(wrapper.get('.workspace-navigation-heading__identity').text()).toBe('工作台')
@@ -140,6 +140,12 @@ describe('项目侧栏导航', () => {
     expect(projects.every(item => item.find('svg').exists())).toBe(true)
     expect(projects.every(item => item.attributes('title') === undefined)).toBe(true)
     expect(wrapper.findAll('#desktop-project-navigation .project-navigation__more svg circle')).toHaveLength(3)
+    await wrapper.get('#desktop-project-navigation .project-navigation__more').trigger('click')
+    await flushPromises()
+    expect(document.body.querySelector('.project-navigation-more')?.textContent).toContain('项目 11')
+    expect(push).not.toHaveBeenCalledWith(expect.objectContaining({ name: 'workspace' }))
+    await wrapper.findAll('#desktop-project-navigation .project-navigation__item')[2]!.get('.project-pin-button').trigger('click')
+    expect(wrapper.get('#desktop-project-navigation .project-navigation__project').text()).toBe('项目 3')
     expect(wrapper.get('#desktop-project-navigation').text()).not.toContain('产品')
     const archived = wrapper.findAll('#desktop-project-navigation button').find(button => button.text() === '归档项目')!
     await archived.trigger('click')
@@ -172,14 +178,14 @@ describe('项目侧栏导航', () => {
     }))
     const names = () => wrapper.findAll('#desktop-project-navigation .project-navigation__project').map(item => item.text())
     expect(names()).toEqual(['项目 5', '项目 14', '项目 1', '项目 2', '项目 3', '项目 4', '项目 6', '项目 7', '项目 8', '项目 9'])
-    expect(wrapper.findAll('#desktop-project-navigation .project-navigation__pin')).toHaveLength(1)
+    expect(wrapper.findAll('#desktop-project-navigation .project-pin-button--active')).toHaveLength(1)
     expect(wrapper.find('#desktop-project-navigation .project-navigation__more').exists()).toBe(true)
 
     const elsewhere = mount(defineComponent({ setup: () => useProjectRecents(() => 'company-1:user-1'), template: '<div />' }))
-    elsewhere.vm.togglePinned('project-14')
+    elsewhere.vm.togglePinned(elsewhere.vm.items.find(item => item.id === 'project-14')!)
     await flushPromises()
     expect(names().slice(0, 3)).toEqual(['项目 14', '项目 5', '项目 1'])
-    expect(wrapper.findAll('#desktop-project-navigation .project-navigation__pin')).toHaveLength(2)
+    expect(wrapper.findAll('#desktop-project-navigation .project-pin-button--active')).toHaveLength(2)
 
     await wrapper.findAll('#desktop-project-navigation .project-navigation__project')[3]?.trigger('click')
     await flushPromises()
@@ -258,7 +264,7 @@ describe('项目侧栏导航', () => {
       ended: false,
       actorAccesses: [ProjectActorAccess.Owner, ProjectActorAccess.Member],
       page: 0,
-      size: 11,
+      size: 20,
     })
 
     await input.trigger('keydown', { key: 'Escape' })

@@ -16,6 +16,7 @@ import { isProblemStatus, toApiProblem, type ApiProblem } from '../../api/proble
 import InlineProblem from '../../components/InlineProblem.vue'
 import { projectStatus } from '../../components/projects/projectStatus'
 import ProjectCreateDialog from '../../components/projects/ProjectCreateDialog.vue'
+import ProjectPinButton from '../../components/projects/ProjectPinButton.vue'
 import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHeader.vue'
 import { projectColors } from '../../components/team/teamDashboardModel'
 import { MY_PROJECT_ACCESSES } from '../../components/projects/projectScope'
@@ -78,6 +79,9 @@ const projectRecentScope = computed(() => {
 const projectRecents = useProjectRecents(() => projectRecentScope.value)
 watch(projectRecentScope, () => { recentRevision++; verifiedRecentIds.value = new Set(); recentLoading.value = false })
 const recentProjects = projectRecents.items
+watch(() => recentProjects.value.map(item => item.id), (next, previous) => {
+  if (activeView.value === 'recent' && next.some(id => !previous.includes(id))) void selectView('recent')
+})
 const modifiedOptions: Array<{ value: ModifiedPreset; label: string; days: number }> = [
   { value: 'TODAY', label: '今天', days: 1 },
   { value: 'LAST_7_DAYS', label: '最近 7 天', days: 7 },
@@ -132,6 +136,7 @@ const recentProjectItems = computed(() => {
     return since === undefined || new Date(item.updatedAt).getTime() >= since
   })
 })
+const recentColors = computed(() => projectColors(recentProjectItems.value.map(item => item.id)))
 const visibleResultCount = computed(() => activeView.value === 'recent'
   ? recentProjectItems.value.length
   : result.value?.totalElements ?? null)
@@ -226,15 +231,7 @@ function projectCreated(project: Project): void {
 onMounted(async () => {
   await pageLoad.track(() => Promise.all([load(), loadReferenceData()]))
 })
-const movedProjectId = ref<string>()
-let movedTimer: ReturnType<typeof setTimeout> | undefined
-function togglePinned(projectId: string): void {
-  projectRecents.togglePinned(projectId)
-  movedProjectId.value = projectId
-  if (movedTimer) clearTimeout(movedTimer)
-  movedTimer = setTimeout(() => { movedProjectId.value = undefined }, 600)
-}
-onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTimer); if (movedTimer) clearTimeout(movedTimer) })
+onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTimer) })
 </script>
 
 <template>
@@ -553,95 +550,127 @@ onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTi
       <section
         v-else
         id="project-recent-panel"
-        v-loading="recentLoading"
-        class="project-recent-shell"
         role="tabpanel"
         aria-labelledby="project-recent-tab"
       >
-        <template v-if="recentProjectItems.length">
-          <div
-            class="project-recent-list__header"
-            aria-hidden="true"
-          >
-            <span>项目</span>
-            <span>负责人</span>
-            <span>状态</span>
-            <span>最近打开</span>
-            <span />
+        <div
+          v-if="recentLoading || recentProjectItems.length"
+          v-loading="recentLoading"
+          class="project-table-shell"
+          :aria-busy="recentLoading"
+          aria-live="polite"
+        >
+          <div class="table-scroll project-desktop-table">
+            <el-table
+              class="project-management-table project-management-table--catalog"
+              :data="recentProjectItems"
+              row-key="id"
+              @row-click="openProjectFromTable"
+            >
+              <el-table-column
+                fixed="left"
+                label="项目名称"
+                min-width="360"
+              >
+                <template #default="scope">
+                  <div class="project-identity-cell">
+                    <span
+                      class="project-identity-cell__mark"
+                      :style="{ '--mark': recentColors.get(scope.row.id) }"
+                      aria-hidden="true"
+                    >{{ scope.row.name.slice(0, 1) }}</span>
+                    <span class="project-identity-cell__text">
+                      <button
+                        class="project-name-cell__link"
+                        type="button"
+                        @click.stop="openProjectFromTable(scope.row)"
+                      >{{ scope.row.name }}</button>
+                      <small>
+                        <span>负责人 {{ scope.row.ownerDisplayName }}</span>
+                        <span
+                          v-if="scope.row.openedAt"
+                          :title="formatTimestamp(new Date(scope.row.openedAt), companyTimezone)"
+                        >最近打开 {{ formatDateOnly(new Date(scope.row.openedAt), companyTimezone) }}</span>
+                      </small>
+                    </span>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="状态"
+                width="120"
+                align="center"
+              >
+                <template #default="scope">
+                  <yp-status-tag
+                    domain="project-lifecycle"
+                    :status="projectStatus(scope.row as ProjectSummary)"
+                    effect="soft"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="我的角色"
+                width="120"
+                align="center"
+              >
+                <template #default="scope">
+                  <span class="project-role-chip">{{ businessLabel(scope.row.actorAccess) }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column
+                width="64"
+                align="center"
+              >
+                <template #default="scope">
+                  <project-pin-button
+                    :pinned="scope.row.pinned"
+                    :name="scope.row.name"
+                    @toggle="projectRecents.togglePinned(scope.row as ProjectRecentSource)"
+                  />
+                </template>
+              </el-table-column>
+            </el-table>
           </div>
-          <transition-group
-            tag="ul"
-            name="project-recent"
-            class="project-recent-list"
+          <ul
+            class="project-mobile-list"
             aria-label="最近打开的项目"
           >
             <li
               v-for="item in recentProjectItems"
               :key="item.id"
-              :class="{ pinned: item.pinned, 'project-recent-list__row--moved': movedProjectId === item.id }"
+              class="project-mobile-list__item--pinnable"
             >
               <button
-                class="project-recent-list__identity"
+                class="project-mobile-row"
                 type="button"
                 @click="openProject(item)"
               >
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 20 20"
-                  fill="none"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M2.75 5.5c0-.966.784-1.75 1.75-1.75h3.19c.464 0 .91.184 1.238.513L10.165 5.5H15.5c.966 0 1.75.784 1.75 1.75v7.25a1.75 1.75 0 0 1-1.75 1.75h-11a1.75 1.75 0 0 1-1.75-1.75v-9Z"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-                <span><strong>{{ item.name }}</strong></span>
+                <span class="project-mobile-row__header"><span class="project-mobile-row__identity"><strong>{{ item.name }}</strong></span><yp-status-tag
+                  domain="project-lifecycle"
+                  :status="projectStatus(item)"
+                  size="small"
+                  effect="soft"
+                /></span>
+                <span class="project-mobile-row__meta"><yp-assignee
+                  :user-id="item.ownerUserId"
+                  :display-name="item.ownerDisplayName"
+                  size="table"
+                  :show-name="false"
+                /><span>{{ businessLabel(item.actorAccess) }}</span></span>
+                <span
+                  v-if="item.openedAt"
+                  class="project-mobile-row__dates"
+                >最近打开 {{ formatDateOnly(new Date(item.openedAt), companyTimezone) }}</span>
               </button>
-              <yp-assignee
-                :user-id="item.ownerUserId"
-                :display-name="item.ownerDisplayName"
-                size="table"
-                :show-name="false"
+              <project-pin-button
+                :pinned="item.pinned"
+                :name="item.name"
+                @toggle="projectRecents.togglePinned(item)"
               />
-              <yp-status-tag
-                domain="project-lifecycle"
-                :status="projectStatus(item)"
-                effect="soft"
-              />
-              <time
-                :datetime="new Date(item.openedAt).toISOString()"
-                :title="formatTimestamp(new Date(item.openedAt), companyTimezone)"
-              >{{ formatDateOnly(new Date(item.openedAt), companyTimezone) }}</time>
-              <button
-                class="project-recent-list__pin"
-                type="button"
-                :class="{ active: item.pinned }"
-                :aria-label="item.pinned ? `取消置顶项目 ${item.name}` : `置顶项目 ${item.name}`"
-                :aria-pressed="item.pinned"
-                @click="togglePinned(item.id)"
-              >
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 20 20"
-                  :fill="item.pinned ? 'currentColor' : 'none'"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M7 2.75h6l-.9 4.05 2.4 2.4v1.3h-3.75v5.75L10 17.5l-.75-1.25V10.5H5.5V9.2l2.4-2.4L7 2.75Z"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-              </button>
             </li>
-          </transition-group>
-        </template>
+          </ul>
+        </div>
         <yp-empty-state
           v-else
           :reason="recentProjects.length ? 'no-results' : 'empty'"
