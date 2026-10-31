@@ -9,7 +9,7 @@ const api = vi.hoisted(() => ({ getProject: vi.fn(), updateProject: vi.fn(), lis
 const guard = vi.hoisted(() => vi.fn())
 vi.mock('vue-router', () => ({ useRoute: () => ({ params: { projectId: 'project-1' } }), useRouter: () => ({ push: vi.fn() }), onBeforeRouteLeave: guard }))
 vi.mock('../../api/client', () => ({ projectsApi: api, workItemsApi: api }))
-vi.mock('../../composables/useSession', () => ({ useSession: () => ({ authentication: { value: { company: { timezone: 'Asia/Shanghai' } } } }) }))
+vi.mock('../../composables/useSession', () => ({ useSession: () => ({ authentication: { value: { company: { id: 'company-1', timezone: 'Asia/Shanghai' }, user: { id: 'user-1' } } } }) }))
 vi.mock('@yumpoo/api-client', async original => ({ ...await original<typeof import('@yumpoo/api-client')>(), readCsrfToken: () => 'csrf' }))
 enableAutoUnmount(afterEach)
 const project: ProjectDetail = {

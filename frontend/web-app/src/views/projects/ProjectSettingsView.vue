@@ -129,132 +129,136 @@ onMounted(() => pageLoad.track(load))
 </script>
 
 <template>
-<div class="project-view-stack">
-  <project-workspace-header
-    section="settings"
-    :project="project"
-    title="项目设置"
-    @changed="load(false)"
-  />
-  <inline-problem
-    v-if="error"
-    :problem="error"
-  />
-  <yp-skeleton
-    v-if="!project && !error"
-    variant="form"
-    :rows="3"
-    label="正在加载项目设置"
-  />
-  <div
-    v-else-if="project"
-    class="project-settings"
-  >
-    <section
-      class="project-identity"
-      aria-label="项目概要"
-    >
-      <span
-        class="project-identity__mark"
-        :style="{ '--mark': mark }"
-        aria-hidden="true"
-      >{{ project.name.slice(0, 1) }}</span>
-      <div class="project-identity__main">
-        <h2>{{ project.name }}</h2>
-        <div class="project-identity__tags">
-          <code title="用于工作项编号，不可修改">{{ project.code }}</code>
-          <yp-status-tag
-            domain="project-lifecycle"
-            :status="projectStatus(project)"
-            size="small"
-          />
-        </div>
-      </div>
-      <dl class="project-identity__facts">
-        <div>
-          <dt>负责人</dt>
-          <dd>
-            <yp-assignee
-              :user-id="project.ownerUserId"
-              :display-name="project.ownerDisplayName"
-              size="table"
-            />
-          </dd>
-        </div>
-        <div><dt>访问</dt><dd>{{ businessLabel(project.actorAccess) }}</dd></div>
-        <div><dt>创建</dt><dd>{{ formatTime(project.createdAt) }}</dd></div>
-        <div><dt>更新</dt><dd>{{ formatTime(project.updatedAt) }}</dd></div>
-        <div v-if="project.endedAt"><dt>结束</dt><dd>{{ formatTime(project.endedAt) }}</dd></div>
-        <div v-if="project.archivedAt"><dt>归档</dt><dd>{{ formatTime(project.archivedAt) }}</dd></div>
-      </dl>
-    </section>
-    <section
-      class="project-settings__section"
-      aria-labelledby="project-basic-title"
-    >
-      <h2 id="project-basic-title">
-        基本信息
-      </h2>
-      <el-form
-        ref="formRef"
-        label-position="top"
-        :model="form"
-        :rules="rules"
-        :disabled="saving || !project.capabilities.canUpdateSettings"
-        @submit.prevent="save"
-      >
-        <el-form-item
-          label="项目名称"
-          prop="name"
-        >
-          <el-input
-            v-model="form.name"
-            maxlength="80"
-            show-word-limit
-            aria-label="项目名称"
-          />
-        </el-form-item>
-        <el-form-item label="项目描述">
-          <el-input
-            v-model="form.description"
-            type="textarea"
-            :rows="3"
-            maxlength="500"
-            show-word-limit
-            aria-label="项目描述"
-          />
-        </el-form-item>
-      </el-form>
-      <div class="action-row">
-        <span
-          v-if="dirty"
-          class="muted-text"
-        >存在未保存的更改</span><el-button
-          type="primary"
-          :disabled="!project.capabilities.canUpdateSettings || !dirty || saving"
-          :loading="saving"
-          @click="save"
-        >
-          保存设置
-        </el-button>
-      </div>
-    </section>
-    <section
-      class="project-settings__section"
-      aria-labelledby="project-connections-title"
-    >
-      <h2 id="project-connections-title">
-        连接
-      </h2>
-      <project-connections-overview :project-id="projectId" />
-    </section>
-    <project-lifecycle-actions
+  <div class="project-view-stack">
+    <project-workspace-header
+      section="settings"
       :project="project"
+      title="项目设置"
       @changed="load(false)"
-      @problem="problem => error = problem"
     />
+    <inline-problem
+      v-if="error"
+      :problem="error"
+    />
+    <yp-skeleton
+      v-if="!project && !error"
+      variant="form"
+      :rows="3"
+      label="正在加载项目设置"
+    />
+    <div
+      v-else-if="project"
+      class="project-settings"
+    >
+      <section
+        class="project-identity"
+        aria-label="项目概要"
+      >
+        <span
+          class="project-identity__mark"
+          :style="{ '--mark': mark }"
+          aria-hidden="true"
+        >{{ project.name.slice(0, 1) }}</span>
+        <div class="project-identity__main">
+          <h2>{{ project.name }}</h2>
+          <div class="project-identity__tags">
+            <code title="用于工作项编号，不可修改">{{ project.code }}</code>
+            <yp-status-tag
+              domain="project-lifecycle"
+              :status="projectStatus(project)"
+              size="small"
+            />
+          </div>
+        </div>
+        <dl class="project-identity__facts">
+          <div>
+            <dt>负责人</dt>
+            <dd>
+              <yp-assignee
+                :user-id="project.ownerUserId"
+                :display-name="project.ownerDisplayName"
+                size="table"
+              />
+            </dd>
+          </div>
+          <div><dt>访问</dt><dd>{{ businessLabel(project.actorAccess) }}</dd></div>
+          <div><dt>创建</dt><dd>{{ formatTime(project.createdAt) }}</dd></div>
+          <div><dt>更新</dt><dd>{{ formatTime(project.updatedAt) }}</dd></div>
+          <div v-if="project.endedAt">
+            <dt>结束</dt><dd>{{ formatTime(project.endedAt) }}</dd>
+          </div>
+          <div v-if="project.archivedAt">
+            <dt>归档</dt><dd>{{ formatTime(project.archivedAt) }}</dd>
+          </div>
+        </dl>
+      </section>
+      <section
+        class="project-settings__section"
+        aria-labelledby="project-basic-title"
+      >
+        <h2 id="project-basic-title">
+          基本信息
+        </h2>
+        <el-form
+          ref="formRef"
+          label-position="top"
+          :model="form"
+          :rules="rules"
+          :disabled="saving || !project.capabilities.canUpdateSettings"
+          @submit.prevent="save"
+        >
+          <el-form-item
+            label="项目名称"
+            prop="name"
+          >
+            <el-input
+              v-model="form.name"
+              maxlength="80"
+              show-word-limit
+              aria-label="项目名称"
+            />
+          </el-form-item>
+          <el-form-item label="项目描述">
+            <el-input
+              v-model="form.description"
+              type="textarea"
+              :rows="3"
+              maxlength="500"
+              show-word-limit
+              aria-label="项目描述"
+            />
+          </el-form-item>
+        </el-form>
+        <div class="action-row">
+          <span
+            v-if="dirty"
+            class="muted-text"
+          >存在未保存的更改</span><el-button
+            type="primary"
+            :disabled="!project.capabilities.canUpdateSettings || !dirty || saving"
+            :loading="saving"
+            @click="save"
+          >
+            保存设置
+          </el-button>
+        </div>
+      </section>
+      <section
+        class="project-settings__section"
+        aria-labelledby="project-connections-title"
+      >
+        <h2 id="project-connections-title">
+          连接
+        </h2>
+        <project-connections-overview :project-id="projectId" />
+      </section>
+      <project-lifecycle-actions
+        :project="project"
+        @changed="load(false)"
+        @problem="problem => error = problem"
+      />
+    </div>
   </div>
-</div>
 </template>
 
 <style scoped>

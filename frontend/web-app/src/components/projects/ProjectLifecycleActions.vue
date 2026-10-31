@@ -39,7 +39,7 @@ const canOperate = computed(() => {
         </p>
       </div>
       <el-button
-        :type="project.endedAt ? 'primary' : undefined"
+        :type="project.endedAt ? 'primary' : ''"
         :loading="busy"
         @click="toggleEnded"
       >

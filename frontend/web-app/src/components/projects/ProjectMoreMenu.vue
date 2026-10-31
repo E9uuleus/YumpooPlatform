@@ -5,8 +5,8 @@ import {
 import {
   ProjectActorAccess, ProjectLifecycle, readCsrfToken, type ProjectDetail, type ProjectNotificationPreference,
 } from '@yumpoo/api-client'
-import { ElDropdown, ElDropdownItem, ElDropdownMenu, ElIcon, ElMessage, ElMessageBox } from 'element-plus'
-import { computed, ref } from 'vue'
+import { ElDropdown, ElDropdownItem as ElDropdownItemRaw, ElDropdownMenu, ElIcon, ElMessage, ElMessageBox } from 'element-plus'
+import { computed, ref, type DefineComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import { notificationsApi, projectsApi } from '../../api/client'
 import { problemMessage, toApiProblem } from '../../api/problems'
@@ -25,6 +25,7 @@ type Command =
 
 const props = defineProps<{ project: ProjectDetail; section: string }>()
 const emit = defineEmits<{ changed: [] }>()
+const ElDropdownItem = ElDropdownItemRaw as unknown as DefineComponent
 
 const SECTIONS = [
   { section: 'overview', route: 'project-overview', label: '工作项', icon: Grid },
