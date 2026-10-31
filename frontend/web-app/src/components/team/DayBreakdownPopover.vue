@@ -66,7 +66,7 @@ defineProps<{ anchor: HTMLElement; title: string; totalMs: number; projects: Day
 </template>
 
 <style>
-.day-breakdown-popover.el-popover.el-popper{box-sizing:border-box;max-width:calc(100vw - 32px);max-height:min(480px,calc(100vh - 120px));overflow:hidden auto;padding:14px;border-radius:var(--yp-radius-lg);box-shadow:var(--yp-shadow-popover)}
+.day-breakdown-popover.el-popover.el-popper{box-sizing:border-box;max-width:calc(100vw - 32px);max-height:min(480px,calc(100vh - 120px));overflow:hidden auto;padding:14px;}
 .day-breakdown__head{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
 .day-breakdown__head strong{font-size:14px;font-weight:600}
 .day-breakdown__head>span{font:700 16px/1 var(--yp-font-mono)}
@@ -75,7 +75,7 @@ defineProps<{ anchor: HTMLElement; title: string; totalMs: number; projects: Day
 .day-breakdown__project h4{display:flex;align-items:baseline;gap:6px;min-width:0;margin:10px 0 2px;color:var(--day-project);font-family:var(--yp-font-heading);font-size:14px;font-weight:600}
 .day-breakdown__project-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .day-breakdown__project h4 small{flex:none;margin-left:auto;color:var(--yp-text-secondary);font:600 12px/1 var(--yp-font-mono)}
-.day-breakdown__item{display:flex;align-items:center;gap:10px;min-width:0;min-height:38px;padding:0 10px 0 16px;border:1px solid var(--yp-monday-grid-border);background:var(--yp-bg-surface);animation:day-breakdown-rise 260ms var(--yp-ease-standard) backwards;animation-delay:calc(var(--i,0) * 50ms + var(--j,0) * 35ms + 40ms);transition:background-color var(--yp-motion-fast) var(--yp-ease-standard)}
+.day-breakdown__item{display:flex;align-items:center;gap:10px;min-width:0;min-height:38px;padding:0 10px 0 16px;background:var(--yp-bg-sunken);animation:day-breakdown-rise 260ms var(--yp-ease-standard) backwards;animation-delay:calc(var(--i,0) * 50ms + var(--j,0) * 35ms + 40ms);transition:background-color var(--yp-motion-fast) var(--yp-ease-standard)}
 .day-breakdown__item:hover{background:color-mix(in srgb,var(--day-project) 6%,var(--yp-bg-surface))}
 .day-breakdown__item.work-item-accent-bar::before{top:-1px;bottom:-1px;left:-1px}
 .day-breakdown__text{display:flex;flex:1;flex-direction:column;min-width:0;line-height:18px}

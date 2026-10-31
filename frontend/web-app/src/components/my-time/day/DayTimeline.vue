@@ -668,9 +668,9 @@ defineExpose({ scrollToWorkday, pendingEl, discardDraft })
 .day-timeline__now::before{content:'';position:absolute;top:-5px;left:0;width:8px;height:8px;border-radius:50%;background:var(--yp-status-red)}
 .day-timeline__now span{position:absolute;top:-9px;right:0;padding:1px 5px;border-radius:var(--yp-radius-xs);background:var(--yp-status-red);color:var(--yp-text-inverse);font:600 11px/14px var(--yp-font-mono)}
 
-.day-block{--work-item-accent:var(--day-block-color);position:absolute;z-index:2;display:flex;flex-direction:column;gap:1px;box-sizing:border-box;min-width:0;padding:4px 10px 4px 14px;overflow:hidden;border:1px solid color-mix(in srgb,var(--day-block-color) 35%,var(--yp-border-subtle));border-radius:var(--yp-radius-sm);background:color-mix(in srgb,var(--day-block-color) 10%,var(--yp-bg-surface));box-shadow:var(--yp-shadow-card);color:var(--yp-text-primary);font:14px/18px var(--yp-font-family);text-align:left;cursor:pointer;transition:box-shadow var(--yp-motion-fast) ease-out,border-color var(--yp-motion-fast) ease-out}
+.day-block{--work-item-accent:var(--day-block-color);position:absolute;z-index:2;display:flex;flex-direction:column;gap:1px;box-sizing:border-box;min-width:0;padding:4px 10px 4px 14px;overflow:hidden;border:1px solid color-mix(in srgb,var(--day-block-color) 35%,var(--yp-border-subtle));border-radius:var(--yp-radius-sm);background:color-mix(in srgb,var(--day-block-color) 10%,var(--yp-bg-surface));color:var(--yp-text-primary);font:14px/18px var(--yp-font-family);text-align:left;cursor:pointer;transition:box-shadow var(--yp-motion-fast) ease-out,border-color var(--yp-motion-fast) ease-out}
 .day-block.work-item-accent-bar::before{top:-1px;bottom:-1px;left:-1px}
-.day-block:hover{border-color:color-mix(in srgb,var(--day-block-color) 60%,var(--yp-border-subtle));box-shadow:var(--yp-shadow-hover)}
+.day-block:hover{border-color:color-mix(in srgb,var(--day-block-color) 60%,var(--yp-border-subtle));}
 .day-block:focus-visible,.day-block.is-selected{outline:2px solid var(--yp-focus-ring);outline-offset:1px;z-index:3}
 .day-block.is-compact{justify-content:center;padding-block:0}
 .day-block.is-running{border-bottom-style:dashed;background:color-mix(in srgb,var(--day-block-color) 18%,var(--yp-bg-surface))}
