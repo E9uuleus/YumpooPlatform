@@ -76,6 +76,7 @@ onBeforeUnmount(() => observer?.disconnect())
           :icon="Check"
           :disabled="!inbox.unread.value || !list.serverNow.value"
           :loading="marking"
+          text
           @click="readAll"
         >
           全部标为已读
@@ -124,7 +125,10 @@ onBeforeUnmount(() => observer?.disconnect())
           v-if="filter === 'unread'"
           #action
         >
-          <el-button @click="router.push({ query: { ...route.query, filter: 'all' } })">
+          <el-button
+            text
+            @click="router.push({ query: { ...route.query, filter: 'all' } })"
+          >
             查看全部通知
           </el-button>
         </template>
@@ -205,7 +209,6 @@ onBeforeUnmount(() => observer?.disconnect())
 .inbox-date-group__header span { color: var(--yp-text-muted); font-size: var(--yp-type-caption-size); font-variant-numeric: tabular-nums; }
 .inbox-date-group__rows {
   overflow: hidden;
-  border: 1px solid var(--yp-border-subtle);
   border-radius: var(--yp-radius-md);
   background: var(--yp-bg-surface);
 }

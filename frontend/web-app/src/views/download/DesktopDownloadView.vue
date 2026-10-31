@@ -134,7 +134,7 @@ onMounted(() => pageLoad.track(load))
 }
 
 .desktop-download__facts dt {
-  color: var(--el-text-color-secondary);
+  color: var(--yp-text-secondary);
 }
 
 .desktop-download__facts dd {

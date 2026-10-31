@@ -124,7 +124,7 @@ function drop(target: number) {
 .rail-projects__row{display:flex;align-items:center;gap:10px;height:36px;padding:0 8px;border-radius:8px;background:var(--yp-bg-sunken);cursor:grab;transition:opacity .15s}
 .rail-projects__row.is-dragging{opacity:.35}
 .rail-projects__grip{color:var(--yp-text-muted)}
-.rail-projects__badge{display:grid;place-items:center;min-width:22px;height:22px;padding:0 4px;box-sizing:border-box;border-radius:7px;color:#fff;font-size:11.5px;font-weight:500;white-space:nowrap}
+.rail-projects__badge{display:grid;place-items:center;min-width:22px;height:22px;padding:0 4px;box-sizing:border-box;border-radius:7px;color:var(--yp-on-solid);font-size:11.5px;font-weight:500;white-space:nowrap}
 .rail-projects__label{flex:none;width:64px}
 .rail-projects__name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rail-projects__remove{display:grid;place-items:center;padding:0 4px;border:0;background:none;color:var(--yp-text-muted);cursor:pointer}

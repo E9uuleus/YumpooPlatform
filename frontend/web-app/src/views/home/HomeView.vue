@@ -349,29 +349,12 @@ onMounted(() => { void onboarding.ready() })
   gap: var(--yp-space-5);
 }
 
-/* Static aurora wash behind the page so the translucent cards pick up colour. */
-.home-hub::before {
-  position: absolute;
-  z-index: -1;
-  top: calc(0px - var(--yp-space-8));
-  right: 0;
-  left: calc(0px - var(--yp-space-10));
-  height: 560px;
-  background:
-    radial-gradient(60% 70% at 85% 0%, color-mix(in srgb, var(--yp-label-bright-blue) 12%, transparent), transparent 70%),
-    radial-gradient(45% 60% at 10% 35%, color-mix(in srgb, var(--yp-label-aquamarine) 9%, transparent), transparent 70%);
-  content: "";
-  pointer-events: none;
-}
-
 .home-hero {
   position: relative;
   overflow: hidden;
   min-height: 220px;
-  border: 1px solid var(--yp-border-subtle);
   border-radius: var(--yp-radius-xl);
   background: var(--yp-bg-surface);
-  box-shadow: var(--yp-shadow-card);
 }
 
 .home-hero__text {
@@ -416,13 +399,11 @@ onMounted(() => { void onboarding.ready() })
   gap: 6px;
   height: 24px;
   padding: 0 10px;
-  border: 1px solid color-mix(in srgb, var(--yp-bg-surface) 70%, var(--yp-border-subtle));
   border-radius: var(--yp-radius-pill);
-  background: color-mix(in srgb, var(--yp-bg-surface) 60%, transparent);
   color: var(--yp-text-primary);
   font-size: 12px;
   white-space: nowrap;
-  backdrop-filter: blur(8px);
+  background: var(--yp-fill-neutral);
 }
 
 .home-chip--danger {
@@ -534,13 +515,10 @@ onMounted(() => { void onboarding.ready() })
 .home-panel {
   min-width: 0;
   padding: var(--yp-space-4) var(--yp-space-5);
-  border: 1px solid color-mix(in srgb, var(--yp-border-subtle) 80%, transparent);
   border-radius: var(--yp-radius-xl);
-  background: color-mix(in srgb, var(--yp-bg-surface) 76%, transparent);
-  box-shadow: var(--yp-shadow-card);
-  backdrop-filter: blur(14px) saturate(1.3);
   animation: home-rise 360ms var(--yp-ease-standard) backwards;
   animation-delay: 320ms;
+  background: var(--yp-bg-surface);
 }
 
 .home-panel--projects {
@@ -672,11 +650,11 @@ onMounted(() => { void onboarding.ready() })
   height: 34px;
   place-items: center;
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--mark), color-mix(in srgb, var(--mark) 70%, var(--yp-bg-surface)));
   color: var(--yp-status-blue-foreground);
   font-family: var(--yp-font-heading);
   font-size: 14px;
   font-weight: 600;
+  background: var(--mark);
 }
 
 .home-project__overdue {

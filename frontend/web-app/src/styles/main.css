@@ -182,8 +182,12 @@ code {
 }
 
 .module-rail__item:hover,
-.module-rail__item.active,
 .module-rail__expand:hover {
+  color: var(--yp-link);
+  background: var(--yp-bg-hover);
+}
+
+.module-rail__item.active {
   color: var(--yp-link);
   background: var(--yp-bg-selected);
 }
@@ -204,8 +208,7 @@ code {
   min-width: 0;
   padding: 0 var(--yp-space-6);
   border-bottom: 1px solid var(--yp-border-default);
-  background: color-mix(in srgb, var(--yp-bg-surface) 94%, transparent);
-  backdrop-filter: blur(12px);
+  background: var(--yp-bg-surface);
 }
 
 .app-topbar__context,
@@ -297,13 +300,6 @@ code {
 /* 工具按钮的弹层打开时隐藏悬停提示；切换 tooltip 的 disabled 会让弹层吞掉第一次外部点击。 */
 .yp-tooltip--suppressed {
   display: none !important;
-}
-
-.app-topbar__divider {
-  width: 1px;
-  height: 20px;
-  margin: 0 var(--yp-space-1);
-  background: var(--yp-border-subtle);
 }
 
 .app-topbar__actions .user-menu-trigger {
@@ -457,7 +453,6 @@ code {
 
 .page-surface {
   padding: var(--yp-space-4) 0;
-  border-top: 1px solid var(--yp-border-subtle);
   border-radius: 0;
   background: transparent;
 }
@@ -570,7 +565,6 @@ code {
 .form-section {
   margin-bottom: var(--yp-space-6);
   padding: var(--yp-space-5) 0;
-  border-top: 1px solid var(--yp-border-subtle);
   border-radius: 0;
   background: transparent;
 }
