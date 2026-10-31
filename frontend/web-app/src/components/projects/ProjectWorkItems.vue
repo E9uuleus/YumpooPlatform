@@ -3195,8 +3195,8 @@ onBeforeUnmount(() => {
         v-if="!embedded"
         section="overview"
         :project="project"
-      @changed="loadWorkspace"
-        />
+        @changed="loadWorkspace"
+      />
 
       <section class="work-items-home">
         <div v-if="!embedded" class="monday-view-header">
