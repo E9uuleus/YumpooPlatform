@@ -3195,6 +3195,7 @@ onBeforeUnmount(() => {
         v-if="!embedded"
         section="overview"
         :project="project"
+        @changed="loadWorkspace"
       />
 
       <section class="work-items-home">

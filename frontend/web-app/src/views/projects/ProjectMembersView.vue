@@ -211,6 +211,7 @@ onBeforeUnmount(() => clearTimeout(timer))
       section="members"
       :project="project"
       title="项目成员"
+      @changed="refresh"
     />
     <inline-problem
       v-if="error"

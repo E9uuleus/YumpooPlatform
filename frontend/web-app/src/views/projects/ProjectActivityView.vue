@@ -31,6 +31,7 @@ onMounted(() => void pageLoad.track(loadProject))
       section="activity"
       :project="project"
       title="项目动态"
+      @changed="loadProject"
     />
     <inline-problem
       v-if="error"
