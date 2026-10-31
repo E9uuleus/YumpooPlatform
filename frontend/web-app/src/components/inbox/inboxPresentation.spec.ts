@@ -6,6 +6,12 @@ const item: NotificationItem = { id: 'notification', reason: NotificationReason.
   actor: { id: 'author', displayName: '张三' }, subject: { id: 'reader', displayName: '李四' },
   target: { kind: NotificationTargetKind.WorkItemUpdate, accessible: true, projectId: 'project', workItemId: 'item', itemNo: 'YP-12', title: '整理验收', projectName: '平台', excerpt: '你好' } }
 describe('notification presentation', () => {
+  it('负责人看到成员自行退出项目的通知', () => {
+    const left: NotificationItem = { ...item, reason: NotificationReason.ProjectMemberRemoved,
+      actor: { id: 'u2', displayName: '张三' }, subject: { id: 'u2', displayName: '张三' },
+      target: { kind: NotificationTargetKind.Project, accessible: true, projectId: 'project', projectName: '项目甲' } }
+    expect(notificationText(left, 'u1')).toBe('退出了项目 项目甲')
+  })
   it.each([false, true])('does not invent anomaly numbers when details are absent (accessible=%s)', accessible => {
     const anomaly: NotificationItem = { ...item, reason: NotificationReason.WorkHoursAnomaly, actor: null,
       target: { kind: NotificationTargetKind.MemberDay, accessible } }
