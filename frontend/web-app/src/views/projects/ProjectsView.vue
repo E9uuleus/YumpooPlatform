@@ -79,6 +79,9 @@ const projectRecentScope = computed(() => {
 const projectRecents = useProjectRecents(() => projectRecentScope.value)
 watch(projectRecentScope, () => { recentRevision++; verifiedRecentIds.value = new Set(); recentLoading.value = false })
 const recentProjects = projectRecents.items
+watch(() => recentProjects.value.map(item => item.id), (next, previous) => {
+  if (activeView.value === 'recent' && next.some(id => !previous.includes(id))) void selectView('recent')
+})
 const modifiedOptions: Array<{ value: ModifiedPreset; label: string; days: number }> = [
   { value: 'TODAY', label: '今天', days: 1 },
   { value: 'LAST_7_DAYS', label: '最近 7 天', days: 7 },
