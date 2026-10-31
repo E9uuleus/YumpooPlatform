@@ -39,7 +39,22 @@
   --el-transition-duration: var(--yp-motion-fast);
 }
 
+/* 按钮：默认浅灰实底；primary / danger / success / warning 实底白字；都不画描边。
+   工具栏与筛选栏里的非主操作用 text，行内文字链接用 link。 */
 .el-button {
+  --el-button-border-color: transparent;
+  --el-button-bg-color: var(--yp-fill-neutral);
+  --el-button-text-color: var(--yp-text-primary);
+  --el-button-hover-border-color: transparent;
+  --el-button-hover-bg-color: var(--yp-fill-neutral-hover);
+  --el-button-hover-text-color: var(--yp-text-primary);
+  --el-button-active-border-color: transparent;
+  --el-button-active-bg-color: var(--yp-fill-neutral-active);
+  --el-button-active-text-color: var(--yp-text-primary);
+  --el-button-disabled-border-color: transparent;
+  --el-button-disabled-bg-color: var(--yp-fill-neutral);
+  --el-button-disabled-text-color: var(--yp-text-disabled);
+  --el-button-outline-color: var(--yp-focus-ring);
   min-height: var(--yp-control-height);
   border-radius: var(--yp-radius-sm);
   font-family: var(--yp-font-heading);
@@ -53,6 +68,49 @@
 
 .el-button--large {
   min-height: var(--yp-control-height-large);
+}
+
+.el-button--primary,
+.el-button--danger,
+.el-button--success,
+.el-button--warning {
+  --el-button-text-color: var(--yp-on-solid);
+  --el-button-hover-text-color: var(--yp-on-solid);
+  --el-button-active-text-color: var(--yp-on-solid);
+  --el-button-disabled-text-color: var(--yp-on-solid);
+}
+
+.el-button--primary {
+  --el-button-bg-color: var(--yp-action-primary);
+  --el-button-hover-bg-color: var(--yp-action-primary-hover);
+  --el-button-active-bg-color: var(--yp-action-primary-active);
+  --el-button-disabled-bg-color: var(--yp-action-primary);
+}
+
+.el-button--danger {
+  --el-button-bg-color: var(--yp-danger-solid);
+  --el-button-hover-bg-color: var(--yp-danger-solid-hover);
+  --el-button-active-bg-color: var(--yp-danger-solid-active);
+  --el-button-disabled-bg-color: var(--yp-danger-solid);
+}
+
+.el-button--success {
+  --el-button-bg-color: var(--yp-message-success-bg);
+  --el-button-hover-bg-color: color-mix(in srgb, var(--yp-message-success-bg) 86%, var(--yp-text-primary));
+  --el-button-active-bg-color: color-mix(in srgb, var(--yp-message-success-bg) 76%, var(--yp-text-primary));
+  --el-button-disabled-bg-color: var(--yp-message-success-bg);
+}
+
+.el-button--warning {
+  --el-button-bg-color: var(--yp-message-warning-bg);
+  --el-button-hover-bg-color: color-mix(in srgb, var(--yp-message-warning-bg) 86%, var(--yp-text-primary));
+  --el-button-active-bg-color: color-mix(in srgb, var(--yp-message-warning-bg) 76%, var(--yp-text-primary));
+  --el-button-disabled-bg-color: var(--yp-message-warning-bg);
+}
+
+/* 实底按钮禁用时保留底色、整体变淡；浅灰按钮禁用只把文字变浅。 */
+.el-button.is-disabled:is(.el-button--primary, .el-button--danger, .el-button--success, .el-button--warning):not(.is-text, .is-link) {
+  opacity: .5;
 }
 
 .el-button:focus-visible {
@@ -118,22 +176,7 @@
 }
 
 .el-card__header {
-  border-bottom-color: var(--yp-border-subtle);
-}
-
-.home-grid > .el-card + .el-card,
-.overview-grid > .el-card + .el-card,
-.surface-grid > .el-card + .el-card {
-  border-left: 1px solid var(--yp-border-subtle);
-}
-
-@media (max-width: 640px) {
-  .home-grid > .el-card + .el-card,
-  .overview-grid > .el-card + .el-card,
-  .surface-grid > .el-card + .el-card {
-    border-top: 1px solid var(--yp-border-subtle);
-    border-left: 0;
-  }
+  border-bottom: 0;
 }
 
 .el-table {
@@ -168,6 +211,7 @@
 .el-message-box {
   border-radius: var(--yp-radius-xl);
   box-shadow: var(--yp-shadow-overlay);
+  border: 0;
 }
 
 /* 状态迁移说明框也会在 340px 宽的快捷工时小窗里打开。 */
@@ -225,17 +269,28 @@
   background-color: var(--yp-overlay);
 }
 
-.el-popper,
-.el-select__popper,
-.el-dropdown__popper {
+.el-popper.is-light,
+.el-select__popper.el-popper,
+.el-picker__popper.el-popper,
+.el-dropdown__popper.el-popper {
+  border: 0;
   border-radius: var(--yp-radius-md);
+  background: var(--yp-bg-raised);
   box-shadow: var(--yp-shadow-popover);
+}
+
+/* 浮层不画箭头：无描边的浮层上，箭头无法与阴影衔接。 */
+.el-popper.is-light > .el-popper__arrow,
+.el-select__popper > .el-popper__arrow,
+.el-picker__popper > .el-popper__arrow,
+.el-dropdown__popper > .el-popper__arrow {
+  display: none;
 }
 
 .el-popper.is-dark {
   max-width: 240px;
   padding: var(--yp-space-2) var(--yp-space-3);
-  border: 1px solid var(--yp-text-primary);
+  border: 0;
   border-radius: var(--yp-radius-sm);
   color: var(--yp-text-inverse);
   background: var(--yp-text-primary);
@@ -245,12 +300,22 @@
 }
 
 .el-popper.is-dark .el-popper__arrow::before {
-  border-color: var(--yp-text-primary);
+  border: 0;
   background: var(--yp-text-primary);
 }
 
 .el-tag {
+  border-color: transparent;
   border-radius: var(--yp-radius-sm);
+}
+
+/* 筛选条件、已选项等中性标签：浅灰实底深色字。 */
+.el-tag.el-tag--plain,
+.el-tag.el-tag--info {
+  --el-tag-text-color: var(--yp-text-primary);
+  --el-tag-hover-color: var(--yp-text-secondary);
+  color: var(--yp-text-primary);
+  background-color: var(--yp-fill-neutral);
 }
 
 .el-form-item__label {
@@ -308,4 +373,273 @@
 .el-message .el-message__closeBtn:hover {
   background: color-mix(in srgb, var(--yp-message-fg) 18%, transparent);
   opacity: 1;
+}
+
+/* 动作菜单：以工作项表格设置菜单为基准，36px 行、左右 10px、图标距 10px、浅灰悬停。
+   divided 只表示另起一组：用留白分组，菜单内部不画分割线。 */
+.el-dropdown-menu {
+  padding: 6px;
+}
+
+.el-dropdown-menu__item {
+  gap: 10px;
+  min-height: var(--yp-menu-row-height);
+  padding: 0 10px;
+  border-radius: var(--yp-radius-sm);
+  color: var(--yp-text-primary);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.el-dropdown-menu__item + .el-dropdown-menu__item {
+  margin-top: 2px;
+}
+
+.el-dropdown-menu__item:not(.is-disabled):is(:hover, :focus) {
+  color: var(--yp-text-primary);
+  background: var(--yp-bg-hover);
+}
+
+.el-dropdown-menu__item .el-icon {
+  margin-right: 0;
+  color: var(--yp-text-secondary);
+  font-size: 18px;
+}
+
+.el-dropdown-menu__item.is-disabled {
+  color: var(--yp-text-disabled);
+}
+
+.el-dropdown-menu__item.el-dropdown-menu__item--divided {
+  margin: 8px 0 0;
+  border-top: 0;
+}
+
+.el-dropdown-menu__item.yp-menu-item--danger,
+.el-dropdown-menu__item.yp-menu-item--danger:not(.is-disabled):is(:hover, :focus),
+.el-dropdown-menu__item.yp-menu-item--danger .el-icon {
+  color: var(--yp-status-red);
+}
+
+.el-dropdown-menu__item.yp-menu-item--current,
+.el-dropdown-menu__item.yp-menu-item--current:not(.is-disabled):is(:hover, :focus) {
+  color: var(--yp-action-primary);
+  background: var(--yp-bg-selected);
+}
+
+.el-dropdown-menu__item.yp-menu-item--current .el-icon {
+  color: inherit;
+}
+
+.yp-menu-label {
+  padding: 6px 10px 2px;
+  color: var(--yp-text-muted);
+  font-size: var(--yp-type-caption-size);
+  font-weight: 600;
+  line-height: var(--yp-type-caption-line);
+  list-style: none;
+}
+
+.yp-menu-label:not(:first-child) {
+  margin-top: 8px;
+}
+
+.yp-menu-value {
+  margin-left: auto;
+  padding-left: var(--yp-space-4);
+  color: var(--yp-text-secondary);
+  font-size: 12px;
+}
+
+/* 选择列表与动作菜单同一行规格。 */
+.el-select-dropdown__list {
+  padding: 6px;
+}
+
+.el-select-dropdown__item {
+  height: auto;
+  min-height: var(--yp-menu-row-height);
+  padding: 0 32px 0 10px;
+  border-radius: var(--yp-radius-sm);
+  color: var(--yp-text-primary);
+  font-size: 14px;
+  line-height: var(--yp-menu-row-height);
+}
+
+.el-select-dropdown__item + .el-select-dropdown__item {
+  margin-top: 2px;
+}
+
+.el-select-dropdown__item.is-hovering {
+  background: var(--yp-bg-hover);
+}
+
+.el-select-dropdown__item.is-selected {
+  color: var(--yp-action-primary);
+  font-weight: 600;
+}
+
+.el-select-dropdown__item.is-disabled {
+  color: var(--yp-text-disabled);
+}
+
+.el-select-dropdown__header,
+.el-select-dropdown__footer {
+  border: 0;
+}
+
+/* 日期与时间面板：去掉内部分隔线，选中为主色实底白字，范围为选中底色。 */
+.el-picker__popper,
+.el-date-picker,
+.el-date-range-picker {
+  --el-datepicker-border-color: transparent;
+  --el-datepicker-inner-border-color: transparent;
+  --el-datepicker-active-color: var(--yp-action-primary);
+  --el-datepicker-hover-text-color: var(--yp-action-primary);
+  --el-datepicker-inrange-bg-color: var(--yp-bg-selected);
+  --el-datepicker-inrange-hover-bg-color: var(--yp-bg-selected);
+  --el-datepicker-text-color: var(--yp-text-primary);
+}
+
+.el-picker-panel {
+  border-radius: var(--yp-radius-md);
+  color: var(--yp-text-primary);
+  background: var(--yp-bg-raised);
+}
+
+.el-date-picker__header--bordered {
+  border-bottom: 0;
+}
+
+.el-picker-panel__shortcut {
+  border-radius: var(--yp-radius-sm);
+  line-height: 32px;
+}
+
+.el-picker-panel__shortcut:hover {
+  color: var(--yp-text-primary);
+  background: var(--yp-bg-hover);
+}
+
+.el-date-table td .el-date-table-cell__text {
+  border-radius: var(--yp-radius-sm);
+}
+
+.el-date-table td.current:not(.disabled) .el-date-table-cell__text,
+.el-date-table td.start-date .el-date-table-cell__text,
+.el-date-table td.end-date .el-date-table-cell__text,
+.el-month-table td.current:not(.disabled) .el-date-table-cell__text,
+.el-year-table td.current:not(.disabled) .el-date-table-cell__text {
+  color: var(--yp-on-solid);
+}
+
+.el-time-panel {
+  border: 0;
+  box-shadow: none;
+}
+
+.el-time-panel__content::before {
+  border-top: 0;
+  border-bottom: 0;
+}
+
+.el-time-spinner__item.is-active:not(.is-disabled) {
+  color: var(--yp-action-primary);
+}
+
+/* 页签：文字加底部 2px 指示条，不画整条底线。 */
+.el-tabs__nav-wrap::after {
+  display: none;
+}
+
+.el-tabs__active-bar {
+  height: 2px;
+  border-radius: var(--yp-radius-pill) var(--yp-radius-pill) 0 0;
+  background-color: var(--yp-action-primary);
+}
+
+.el-tabs__item {
+  color: var(--yp-text-secondary);
+  font-weight: 500;
+}
+
+.el-tabs__item:hover {
+  color: var(--yp-text-primary);
+}
+
+.el-tabs__item.is-active {
+  color: var(--yp-text-primary);
+  font-weight: 600;
+}
+
+/* 单选按钮组与 YpSegmented 同外观：无外框、无轨道，选中为主色实底白字。 */
+.el-radio-group:has(> .el-radio-button) {
+  gap: 2px;
+}
+
+.el-radio-group .el-radio-button .el-radio-button__inner {
+  display: inline-flex;
+  height: var(--yp-control-height-medium);
+  align-items: center;
+  border: 0;
+  border-radius: var(--yp-radius-sm);
+  outline: 0;
+  color: var(--yp-text-secondary);
+  background: transparent;
+  box-shadow: none;
+  font-weight: 500;
+}
+
+.el-radio-group .el-radio-button .el-radio-button__inner:hover {
+  color: var(--yp-text-primary);
+  background: var(--yp-bg-hover);
+}
+
+.el-radio-group .el-radio-button.is-active .el-radio-button__original-radio:not(:disabled) + .el-radio-button__inner {
+  color: var(--yp-on-solid);
+  background: var(--yp-action-primary);
+  box-shadow: none;
+  font-weight: 600;
+}
+
+.el-radio-group .el-radio-button__original-radio:focus-visible + .el-radio-button__inner {
+  outline: 2px solid var(--yp-focus-ring);
+  outline-offset: 1px;
+}
+
+.el-radio-group .el-radio-button__original-radio:disabled + .el-radio-button__inner {
+  color: var(--yp-text-disabled);
+  background: transparent;
+}
+
+/* 数字输入：保留输入框描边，加减按钮去掉分隔线。 */
+.el-input-number :is(.el-input-number__decrease, .el-input-number__increase),
+.el-input-number.is-controls-right :is(.el-input-number__decrease, .el-input-number__increase) {
+  border: 0;
+  color: var(--yp-text-secondary);
+  background: transparent;
+}
+
+.el-input-number :is(.el-input-number__decrease, .el-input-number__increase):hover {
+  color: var(--yp-text-primary);
+  background: var(--yp-bg-hover);
+}
+
+/* 分页：页码透明，当前页为主色实底白字。 */
+.el-pagination {
+  --el-pagination-button-bg-color: transparent;
+}
+
+.el-pager li {
+  border-radius: var(--yp-radius-sm);
+}
+
+.el-pager li:not(.is-active, .is-disabled):hover {
+  color: var(--yp-text-primary);
+  background: var(--yp-bg-hover);
+}
+
+.el-pager li.is-active {
+  color: var(--yp-on-solid);
+  background: var(--yp-action-primary);
 }

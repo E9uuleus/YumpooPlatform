@@ -134,6 +134,20 @@
   --yp-input-border-hover: color-mix(in srgb, var(--yp-text-primary) 45%, var(--yp-border-strong));
   --yp-input-border-focus: var(--yp-focus-ring);
   --yp-input-radius: var(--yp-radius-sm);
+  /* 实底填色上的前景（主 / 危险按钮、提醒条、选中分段），三主题固定白色；--yp-text-inverse 在深色主题会变深，不能代替。 */
+  --yp-on-solid: #ffffff;
+  --yp-danger-solid: var(--yp-message-error-bg);
+  --yp-danger-solid-hover: #a8293f;
+  --yp-danger-solid-active: #8e2235;
+  /* 默认按钮与中性标签的浅灰实底，由正文色与表面色混合，随主题变化。 */
+  --yp-fill-neutral: color-mix(in srgb, var(--yp-text-primary) 6%, var(--yp-bg-surface));
+  --yp-fill-neutral-hover: color-mix(in srgb, var(--yp-text-primary) 11%, var(--yp-bg-surface));
+  --yp-fill-neutral-active: color-mix(in srgb, var(--yp-text-primary) 16%, var(--yp-bg-surface));
+  --yp-menu-row-height: 36px;
+  /* 骨架灰块与扫光，工作项骨架与 YpSkeleton 共用。 */
+  --yp-skeleton-block: color-mix(in srgb, var(--yp-text-muted) 14%, var(--yp-bg-surface));
+  --yp-skeleton-block-strong: color-mix(in srgb, var(--yp-text-muted) 20%, var(--yp-bg-surface));
+  --yp-skeleton-shine: color-mix(in srgb, var(--yp-bg-raised) 72%, transparent);
 }
 
 :root[data-density='comfortable'] {
