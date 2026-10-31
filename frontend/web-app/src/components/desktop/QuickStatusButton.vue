@@ -153,8 +153,7 @@ async function choose(statusCode: string) {
 
 <style>
 /* A compact menu in the quick panel's own surface; it scrolls instead of leaving a short window. */
-.el-popover.el-popper.quick-status-menu{min-width:0;padding:4px;border:0;border-radius:10px;background:var(--yp-bg-raised);
-  box-shadow:inset 0 0 0 1px var(--yp-timer-hairline),var(--yp-timer-shadow)}
+.el-popover.el-popper.quick-status-menu{min-width:0;padding:4px}
 .quick-status-menu .quick-status-list{display:grid;gap:1px;max-height:calc(50vh - 24px);overflow-y:auto;overscroll-behavior:contain}
 .quick-status-option{display:flex;align-items:center;gap:8px;width:100%;height:28px;padding:0 8px;border:0;border-radius:6px;background:none;
   color:var(--yp-text-primary);font:inherit;font-size:12px;text-align:left;cursor:pointer;transition:background-color .12s}
