@@ -63,6 +63,21 @@ class ProjectMembershipGovernanceIT {
 
     @AfterEach void tearDown(){dropFailureTrigger();clean();}
 
+    @Test void memberCanLeaveButOwnerAndReadOnlyAdminCannot() {
+        execute("leave-add",()->governance.add(memberCommand(owner(),MEMBER,null,null,"a")));
+        CurrentActor member=new CurrentActor(MEMBER,COMPANY,0,Set.of());
+        var left=execute("leave",()->governance.leave(memberCommand(member,MEMBER,null,null,"b")));
+        assertThat(left.result().httpStatus()).isEqualTo(200);
+        assertThat(jdbc.sql("SELECT status FROM yumpoo.project_membership WHERE project_id=:id AND user_id=:user")
+                .param("id",projectId).param("user",MEMBER).query(String.class).single()).isEqualTo("REMOVED");
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.security_audit_event WHERE action='PROJECT_MEMBER_LEFT'")
+                .query(Integer.class).single()).isOne();
+        assertCode(StandardErrorCode.INVALID_STATE_TRANSITION,()->execute("leave-owner",
+                ()->governance.leave(memberCommand(owner(),OWNER,null,null,"c"))));
+        assertCode(StandardErrorCode.ACCESS_DENIED,()->execute("leave-admin",
+                ()->governance.leave(memberCommand(admin(),ADMIN,null,null,"d"))));
+    }
+
     @Test void ownerCanListSearchAddRemoveAndReactivateWithoutReason() {
         assertThat(query.findMembers(owner(),projectId,ProjectMembershipStatus.ALL,
                 new OffsetPageRequest(0,20)).items()).singleElement().satisfies(member -> {
@@ -267,9 +282,10 @@ class ProjectMembershipGovernanceIT {
             jdbc.sql("DELETE FROM yumpoo.project WHERE company_id=:company").param("company",COMPANY).update();});
         jdbc.sql("DELETE FROM yumpoo.security_audit_event WHERE company_id=:company").param("company",COMPANY).update();
         jdbc.sql("DELETE FROM yumpoo.idempotency_record WHERE actor_user_id IN (:ids)")
-                .param("ids",java.util.List.of(ADMIN,OWNER)).update();
+                .param("ids",java.util.List.of(ADMIN,OWNER,MEMBER)).update();
         jdbc.sql("DELETE FROM yumpoo.outbox_consumer_receipt WHERE event_id IN (SELECT event_id FROM yumpoo.outbox_event WHERE company_id=:company)").param("company",COMPANY).update();
         jdbc.sql("DELETE FROM yumpoo.outbox_event WHERE company_id=:company").param("company",COMPANY).update();
+        jdbc.sql("DELETE FROM yumpoo.work_item_timer_state WHERE company_id=:company").param("company",COMPANY).update();
         jdbc.sql("DELETE FROM yumpoo.identity_user WHERE id IN (:ids)")
                 .param("ids",java.util.List.of(ADMIN,OWNER,MEMBER,NEXT_OWNER,LEFT)).update();
     }

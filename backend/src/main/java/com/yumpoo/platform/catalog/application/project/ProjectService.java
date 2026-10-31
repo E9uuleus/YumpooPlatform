@@ -151,7 +151,7 @@ public class ProjectService {
         return new ProjectSummary(project.id(), project.workspaceId(), row.workspaceCode(),
                 row.workspaceName(), project.code(), project.name(),
                 project.lifecycle().name(), project.ownerUserId(), ownerName, access(row),
-                capabilities(actor, project), project.rowVersion(), StrongEtag.format(project.rowVersion()),
+                capabilities(actor, row), project.rowVersion(), StrongEtag.format(project.rowVersion()),
                 project.createdAt(), project.updatedAt(), project.archivedAt(), project.endedAt(), deletion(project));
     }
 
@@ -159,7 +159,7 @@ public class ProjectService {
         Project project = row.project();
         return new ProjectDetail(project.id(), project.workspaceId(), row.workspaceCode(),
                 row.workspaceName(), project.code(), project.name(), project.description(), project.lifecycle().name(), project.ownerUserId(), ownerName, access(row),
-                capabilities(actor, project), project.rowVersion(), StrongEtag.format(project.rowVersion()),
+                capabilities(actor, row), project.rowVersion(), StrongEtag.format(project.rowVersion()),
                 project.createdAt(), project.updatedAt(), project.archivedAt(), project.endedAt(), deletion(project));
     }
 
@@ -171,7 +171,8 @@ public class ProjectService {
         };
     }
 
-    private static ProjectCapabilities capabilities(CurrentActor actor, Project project) {
+    private static ProjectCapabilities capabilities(CurrentActor actor, ProjectQueryRow row) {
+        Project project = row.project();
         boolean owner = project.ownerUserId().equals(actor.userId());
         boolean admin = actor.hasRole(PlatformRoleCode.COMPANY_ADMIN);
         boolean steward = owner || admin;
@@ -181,7 +182,8 @@ public class ProjectService {
         return new ProjectCapabilities(owner && running, steward && running, steward && running,
                 steward && !archived, steward && archived && !deletion, false, admin && !archived,
                 steward && archived && !deletion, steward && archived && deletion,
-                steward && running, steward && !archived && project.ended());
+                steward && running, steward && !archived && project.ended(),
+                row.actorAccess() == ProjectMembershipModels.ActorAccess.MEMBER && running);
     }
 
     private static ProjectDeletion deletion(Project project) {

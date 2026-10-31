@@ -114,6 +114,12 @@ export interface GetProjectRequest {
     projectId: string;
 }
 
+export interface LeaveProjectRequest {
+    projectId: string;
+    xXSRFTOKEN: string;
+    idempotencyKey: string;
+}
+
 export interface ListProjectMemberCandidatesRequest {
     projectId: string;
     name: string;
@@ -586,6 +592,67 @@ export class ProjectsApi extends runtime.BaseAPI {
      */
     async getProject(requestParameters: GetProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectDetail> {
         const response = await this.getProjectRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 只有非负责人的成员可以退出；服务端使用调用者当前的成员版本，不需要 If-Match。退出后停止调用者在该项目中运行中的计时，已有工时、讨论与处理人记录保留。
+     * 项目成员退出进行中的 Project
+     */
+    async leaveProjectRaw(requestParameters: LeaveProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectMember>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling leaveProject().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling leaveProject().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling leaveProject().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/projects/{projectId}/leave`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectMemberFromJSON(jsonValue));
+    }
+
+    /**
+     * 只有非负责人的成员可以退出；服务端使用调用者当前的成员版本，不需要 If-Match。退出后停止调用者在该项目中运行中的计时，已有工时、讨论与处理人记录保留。
+     * 项目成员退出进行中的 Project
+     */
+    async leaveProject(requestParameters: LeaveProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectMember> {
+        const response = await this.leaveProjectRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

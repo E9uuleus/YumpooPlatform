@@ -26,14 +26,16 @@ public class ProjectMembershipGovernanceService {
     private final SecurityAuditAppendPort audits;
     private final ObjectMapper objectMapper;
     private final Clock clock;
+    private final com.yumpoo.platform.workitem.api.ProjectTimerStopPort timers;
 
     public ProjectMembershipGovernanceService(ProjectMembershipQuery query,
             ProjectMembershipCommandPort commands, MinimalUserSnapshotQuery users,
             IdempotentCommandExecutor idempotency, TransactionalEventPort events,
-            SecurityAuditAppendPort audits, ObjectMapper objectMapper, Clock clock) {
+            SecurityAuditAppendPort audits, ObjectMapper objectMapper, Clock clock,
+            com.yumpoo.platform.workitem.api.ProjectTimerStopPort timers) {
         this.query = query; this.commands = commands; this.users = users;
         this.idempotency = idempotency; this.events = events; this.audits = audits;
-        this.objectMapper = objectMapper; this.clock = clock;
+        this.objectMapper = objectMapper; this.clock = clock; this.timers = timers;
     }
 
     public IdempotencyExecutionResult add(ProjectMemberGovernanceCommand command) {
@@ -62,6 +64,23 @@ public class ProjectMembershipGovernanceService {
             appendMemberEvent("catalog.project_member_removed", result.member(), command.actor(), "DIRECT");
             appendAudit("PROJECT_MEMBER_REMOVED", result.member().membershipId(), command.actor(),
                     command.reason(), command.idempotencyKey(), command.clientType(), command.clientVersion(),
+                    null, memberAudit(result.member()));
+            return stored(200, result.member(), result.member().etag());
+        });
+    }
+
+    /** 成员自行退出：版本取自调用者当前的成员关系；负责人由成员服务拒绝，只读访问的公司管理员没有成员关系。 */
+    public IdempotencyExecutionResult leave(ProjectMemberGovernanceCommand command) {
+        return execute(command.actor(), "POST", "leaveProject", command.idempotencyKey(), command.requestHash(), () -> {
+            ProjectAccessSnapshot access = query.requireVisible(command.actor(), command.projectId());
+            if (!access.actorAccess().membershipBacked()) throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
+            ProjectMemberMutationResult result = commands.remove(new ProjectMemberMutation(
+                    command.actor().companyId(), command.projectId(), command.actor().userId(),
+                    access.membershipVersion().getAsLong(), command.actor().userId(), null));
+            timers.stopLeavingMemberTimers(command.actor(), command.projectId());
+            appendMemberEvent("catalog.project_member_removed", result.member(), command.actor(), "DIRECT");
+            appendAudit("PROJECT_MEMBER_LEFT", result.member().membershipId(), command.actor(),
+                    null, command.idempotencyKey(), command.clientType(), command.clientVersion(),
                     null, memberAudit(result.member()));
             return stored(200, result.member(), result.member().etag());
         });
