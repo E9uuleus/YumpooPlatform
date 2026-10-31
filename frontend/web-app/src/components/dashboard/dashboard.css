@@ -114,10 +114,7 @@
 .chart-label-group{grid-column:2/-1;font-size:11px;color:var(--yp-text-muted);line-height:14px}
 .chart-field-hint,.chart-settings-empty{margin:0;font-size:12px;line-height:20px;color:var(--yp-text-secondary)}
 .chart-settings-select-menu.el-popper{padding:4px;}
-.chart-settings-select-menu .el-select-dropdown__list{padding:2px 0}
-.chart-settings-select-menu .el-select-dropdown__item{height:36px;line-height:36px;padding:0 32px 0 12px;margin:2px 0;border-radius:4px;font:14px/36px var(--yp-font-family);color:var(--yp-text-primary)}
-.chart-settings-select-menu .el-select-dropdown__item.is-hovering{background:var(--yp-bg-sunken)}
-.chart-settings-select-menu .el-select-dropdown__item.is-selected{background:var(--yp-bg-selected);color:var(--yp-link);font-weight:500}
+.chart-settings-select-menu .el-select-dropdown__item{padding-right:32px}
 .chart-settings-select-menu .el-select-dropdown__item.is-selected::after{content:'✓';position:absolute;right:12px;font-size:14px}
 .chart-settings-select-menu .el-select-dropdown__item .el-select-dropdown__item-check{display:none}
 @media(max-width:959.98px){.dashboard-header{padding:0 12px 0 16px}.dashboard-toolbar{padding:8px 20px}.dashboard-canvas{padding:20px}.chart-editor.el-dialog{width:calc(100vw - 32px)!important;height:calc(100dvh - 32px);margin-top:16px!important;margin-bottom:16px}.chart-editor-settings{width:320px}.chart-editor-preview{padding:8px}}
