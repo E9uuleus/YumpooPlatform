@@ -49,42 +49,42 @@ function pressed(value: Value): boolean {
   display: inline-flex;
   flex-wrap: wrap;
   gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--yp-border-subtle);
-  border-radius: var(--yp-radius-sm);
-  background: var(--yp-bg-sunken);
 }
 
 .ops-segmented__item {
   display: inline-flex;
+  height: 28px;
+  padding: 0 var(--yp-space-3);
   align-items: center;
   gap: var(--yp-space-1);
-  height: 26px;
-  padding: 0 var(--yp-space-3);
-  border: 1px solid transparent;
-  border-radius: var(--yp-radius-xs);
+  border: 0;
+  border-radius: var(--yp-radius-sm);
   color: var(--yp-text-secondary);
   background: transparent;
   font: 500 var(--yp-type-caption-size) / 1 var(--yp-font-family);
   white-space: nowrap;
   cursor: pointer;
-  transition: background var(--yp-motion-fast) ease-out, color var(--yp-motion-fast) ease-out;
+  transition: background-color var(--yp-motion-fast) ease-out, color var(--yp-motion-fast) ease-out;
 }
 
-.ops-segmented__item:hover {
+.ops-segmented__item:hover:not(.is-on) {
   color: var(--yp-text-primary);
+  background: var(--yp-bg-hover);
 }
 
 .ops-segmented__item.is-on {
-  color: var(--yp-text-primary);
-  background: var(--yp-bg-surface);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--yp-text-primary) 14%, transparent);
+  color: var(--yp-on-solid);
+  background: var(--yp-action-primary);
   font-weight: 600;
 }
 
-.ops-segmented__item[class*='ops-tone-'].is-on {
-  border-color: color-mix(in srgb, var(--ops-tone) 50%, var(--yp-border-default));
-  background: color-mix(in srgb, var(--ops-tone) 12%, var(--yp-bg-surface));
+.ops-segmented__item[class*='ops-tone-']::before {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--ops-tone);
+  content: '';
 }
 
 .ops-segmented__count {
@@ -94,6 +94,6 @@ function pressed(value: Value): boolean {
 }
 
 .is-on .ops-segmented__count {
-  color: var(--yp-text-primary);
+  color: inherit;
 }
 </style>

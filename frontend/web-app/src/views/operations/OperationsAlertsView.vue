@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import YpSkeleton from '../../components/yp/YpSkeleton.vue'
 import { ElOption, ElTabs } from '../../components/operations/elementPlus'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
@@ -9,7 +10,6 @@ import {
   ElInputNumber,
   ElPagination,
   ElSelect,
-  ElSkeleton,
   ElSwitch,
   ElTable,
   ElTableColumn,
@@ -314,7 +314,6 @@ function logLink(alert: OperationsAlert) {
           <yp-status-tag
             domain="operations"
             :status="alert.severity"
-            effect="soft"
             size="small"
           />
           <h3>{{ ruleNames[alert.ruleCode] ?? alert.ruleCode }} · {{ subject(alert) }}</h3>
@@ -403,7 +402,6 @@ function logLink(alert: OperationsAlert) {
           <yp-status-tag
             domain="operations"
             :status="row.severity"
-            effect="soft"
             size="small"
           />
         </template>
@@ -620,32 +618,23 @@ function logLink(alert: OperationsAlert) {
           <yp-status-tag
             domain="operations"
             :status="detail.data.value.alert.severity"
-            effect="soft"
             size="small"
           />
           <yp-status-tag
             domain="operations"
             :status="detail.data.value.alert.status"
-            effect="soft"
             size="small"
           />
           <span class="ops-muted">{{ subject(detail.data.value.alert) }}</span>
         </div>
       </div>
     </template>
-    <div
+    <yp-skeleton
       v-if="detail.loading.value && !detail.data.value"
-      class="alert-detail__loading"
-      role="status"
-    >
-      <p class="ops-muted">
-        正在加载告警详情…
-      </p>
-      <el-skeleton
-        :rows="5"
-        animated
-      />
-    </div>
+      variant="list"
+      :rows="5"
+      label="正在加载告警详情"
+    />
     <div
       v-if="detail.error.value"
       class="alert-detail__error"

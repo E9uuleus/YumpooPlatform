@@ -1089,48 +1089,6 @@
   border-top: 0;
 }
 
-.project-workspace .el-button,
-.project-catalog .el-button,
-.project-create-drawer .el-button,
-.project-filter-popover .el-button {
-  min-height: var(--yp-control-height-medium);
-  border-color: var(--yp-border-subtle);
-  border-radius: 6px;
-  color: var(--yp-text-primary);
-  background: var(--yp-bg-surface);
-  box-shadow: none;
-  transform: none;
-  transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease;
-}
-
-.project-workspace .el-button:hover,
-.project-catalog .el-button:hover,
-.project-create-drawer .el-button:hover,
-.project-filter-popover .el-button:hover {
-  border-color: var(--yp-border-strong);
-  color: var(--yp-text-primary);
-  background: var(--yp-bg-sunken);
-  transform: none;
-}
-
-.project-workspace .el-button--primary,
-.project-catalog .el-button--primary,
-.project-create-drawer .el-button--primary,
-.project-filter-popover .el-button--primary {
-  border-color: var(--yp-action-primary);
-  color: var(--yp-status-blue-foreground);
-  background: var(--yp-action-primary);
-}
-
-.project-workspace .el-button--primary:hover,
-.project-catalog .el-button--primary:hover,
-.project-create-drawer .el-button--primary:hover,
-.project-filter-popover .el-button--primary:hover {
-  border-color: var(--yp-action-primary-hover);
-  color: var(--yp-status-blue-foreground);
-  background: var(--yp-action-primary-hover);
-}
-
 :is(.project-workspace, .project-catalog, .project-create-drawer, .project-filter-popover, .archived-project-table) .el-button.is-link {
   --project-link-color: var(--yp-text-primary);
 

@@ -289,7 +289,6 @@ onBeforeUnmount(() => clearTimeout(timer))
                 v-if="member.membershipStatus === ProjectMembershipStatus.Removed"
                 domain="project-membership"
                 :status="member.membershipStatus"
-                effect="soft"
                 size="small"
               />
             </span>

@@ -194,7 +194,6 @@ watch(page, () => void query.refresh())
           <yp-status-tag
             domain="operations"
             :status="row.presence"
-            effect="soft"
             size="small"
           />
         </template>

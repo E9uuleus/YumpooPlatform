@@ -508,8 +508,8 @@ code {
   margin: var(--yp-space-2) 0 0;
   padding: var(--yp-space-2) var(--yp-space-3);
   border-radius: var(--yp-radius-sm);
-  background: var(--yp-bg-sunken);
-  color: var(--yp-text-secondary);
+  background: color-mix(in srgb, var(--yp-on-solid) 14%, transparent);
+  color: inherit;
   font: 12px/1.6 var(--yp-font-mono);
   white-space: pre-wrap;
   word-break: break-all;
@@ -517,8 +517,6 @@ code {
 
 .table-surface {
   overflow: hidden;
-  border: 1px solid var(--yp-border-default);
-  border-radius: var(--yp-radius-sm);
   background: transparent;
 }
 

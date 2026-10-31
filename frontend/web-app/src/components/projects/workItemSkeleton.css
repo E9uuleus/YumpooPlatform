@@ -1,9 +1,9 @@
 /* Loading placeholders for the work item table, subitems and kanban: grey blocks with one highlight sweeping left to right. */
 .work-item-skeleton {
   --work-item-skeleton-line: var(--yp-monday-grid-border);
-  --work-item-skeleton-block: color-mix(in srgb, var(--yp-text-muted) 14%, var(--yp-bg-surface));
-  --work-item-skeleton-block-strong: color-mix(in srgb, var(--yp-text-muted) 20%, var(--yp-bg-surface));
-  --work-item-skeleton-shine: color-mix(in srgb, var(--yp-bg-raised) 72%, transparent);
+  --work-item-skeleton-block: var(--yp-skeleton-block);
+  --work-item-skeleton-block-strong: var(--yp-skeleton-block-strong);
+  --work-item-skeleton-shine: var(--yp-skeleton-shine);
   position: relative;
   /* clip, unlike hidden, is not a scroll container, so sticky cells inside keep following the table's horizontal scroll. */
   overflow: clip;

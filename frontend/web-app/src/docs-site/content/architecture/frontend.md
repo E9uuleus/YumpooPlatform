@@ -11,6 +11,8 @@ audience: [developer]
 
 - Vue 3（组合式 API、`<script setup>`）+ vue-router + Element Plus。
 - `yp` 设计系统：在 Element Plus 之上的令牌与组件（`--yp-*` CSS 变量），支持浅色、深色、夜间三套主题和舒适、紧凑两种密度。
+- 视觉契约：Element Plus 只提供行为（定位、键盘、选择、弹窗），外观由 `styles/element-plus.css` 全局接管——按钮无描边（主要操作蓝底白字、危险操作红底白字、其余浅灰底，工具栏用 `text`），菜单与选择列表 36px 行、浅灰悬停、组间留白不画线，弹层无描边无箭头，单选按钮组与分段切换选中为蓝底白字。实底上的白字统一用 `--yp-on-solid`。
+- 加载：首次读取且无数据时用 `YpSkeleton`（表格、列表、卡片、表单、图表五种结构，整块一道扫光）；已有数据时刷新沿用品牌遮罩，按钮动作用按钮自身的忙碌状态。
 - 富文本编辑使用 Tiptap；图表使用 ECharts；导出使用 jsPDF 与 ExcelJS。
 
 ## 状态

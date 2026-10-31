@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import YpSkeleton from '../components/yp/YpSkeleton.vue'
 import YpNotice from '../components/yp/YpNotice.vue'
-import { ElIcon, ElInput, ElButton, ElTooltip, ElDropdown, ElDropdownMenu, ElDropdownItem, ElTag, ElSkeleton, ElDialog, ElDrawer, ElMessage, ElMessageBox } from 'element-plus'
+import { ElIcon, ElInput, ElButton, ElTooltip, ElDropdown, ElDropdownMenu, ElDropdownItem, ElTag, ElDialog, ElDrawer, ElMessage, ElMessageBox } from 'element-plus'
 import { computed, nextTick, ref, watch } from 'vue'
 import { Close, Connection, DataAnalysis, Download, Filter, MoreFilled, Plus, Refresh, FullScreen, Setting, List, CopyDocument, Delete, Edit, RefreshLeft, User } from '@element-plus/icons-vue'
 import { type DashboardFilters, type DashboardWidget, type DashboardChartSelection } from '@yumpoo/api-client'
@@ -356,11 +357,11 @@ async function discardReload() {
           @click="removed = undefined"
         />
       </div>
-      <el-skeleton
+      <yp-skeleton
         v-if="loading"
-        animated
-        :rows="12"
-        class="dashboard-skeleton"
+        variant="cards"
+        :rows="8"
+        label="正在加载仪表板"
       />
       <div
         v-else-if="!dashboard || !configuration.projectIds.length"

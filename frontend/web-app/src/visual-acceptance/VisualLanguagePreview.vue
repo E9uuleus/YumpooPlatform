@@ -158,7 +158,6 @@ function togglePreviewGroup(id: string): void {
               <yp-status-tag
                 domain="integration"
                 status="CONFIGURED"
-                effect="soft"
               />
               <span class="muted-text">Light / Dark / Night × Comfortable / Compact</span>
             </div>
@@ -400,7 +399,6 @@ function togglePreviewGroup(id: string): void {
             <yp-status-tag
               domain="integration"
               status="FUTURE_STATUS"
-              effect="soft"
             />
           </div>
           <yp-empty-state reason="no-results">
@@ -471,7 +469,6 @@ function togglePreviewGroup(id: string): void {
               <yp-status-tag
                 domain="integration"
                 status="ENABLED"
-                effect="soft"
               />
             </template>
             <yp-definition-list :items="previewDefinitions" />
