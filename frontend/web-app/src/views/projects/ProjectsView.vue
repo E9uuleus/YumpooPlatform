@@ -476,7 +476,6 @@ onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTi
                   <yp-status-tag
                     domain="project-lifecycle"
                     :status="projectStatus(scope.row as ProjectSummary)"
-                    effect="soft"
                   />
                 </template>
               </el-table-column>
@@ -508,7 +507,6 @@ onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTi
                   domain="project-lifecycle"
                   :status="projectStatus(item)"
                   size="small"
-                  effect="soft"
                 /></span>
                 <span class="project-mobile-row__meta"><yp-assignee
                   :user-id="item.ownerUserId"
@@ -605,7 +603,6 @@ onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTi
                   <yp-status-tag
                     domain="project-lifecycle"
                     :status="projectStatus(scope.row as ProjectSummary)"
-                    effect="soft"
                   />
                 </template>
               </el-table-column>
@@ -650,7 +647,6 @@ onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTi
                   domain="project-lifecycle"
                   :status="projectStatus(item)"
                   size="small"
-                  effect="soft"
                 /></span>
                 <span class="project-mobile-row__meta"><yp-assignee
                   :user-id="item.ownerUserId"

@@ -301,7 +301,6 @@ const postureTone = (severity: string) =>
             <yp-status-tag
               domain="operations"
               :status="component.status"
-              effect="soft"
               size="small"
             />
             <span class="ops-health-row__detail">{{ componentDetail(component.code, component.detail) }}</span>
@@ -320,7 +319,6 @@ const postureTone = (severity: string) =>
             <yp-status-tag
               domain="integration"
               :status="integration.data.value?.oauth.configured ? 'CONFIGURED' : 'INCOMPLETE'"
-              effect="soft"
               size="small"
             />
             <span class="ops-health-row__detail">最近同步成功 {{ time(integration.data.value?.lastSuccessfulRunAt) }}</span>
@@ -382,7 +380,6 @@ const postureTone = (severity: string) =>
               <yp-status-tag
                 domain="operations"
                 :status="check.status"
-                effect="soft"
                 size="small"
               />
             </li>

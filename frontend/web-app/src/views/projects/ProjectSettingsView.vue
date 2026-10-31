@@ -157,7 +157,6 @@ onMounted(() => pageLoad.track(load))
           <yp-status-tag
             domain="project-lifecycle"
             :status="projectStatus(project)"
-            effect="soft"
             size="small"
           />
         </div>

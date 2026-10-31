@@ -188,39 +188,18 @@ async function readAll() {
 .inbox-panel__header .el-button { min-height: 0; font-size: 13px; }
 
 .inbox-panel__filters {
-  --el-radio-button-checked-bg-color: var(--yp-bg-raised);
-  --el-radio-button-checked-text-color: var(--yp-text-primary);
-  --el-radio-button-checked-border-color: transparent;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   margin: 0 16px 12px;
-  padding: 3px;
-  border-radius: var(--yp-radius-md);
-  background: var(--yp-bg-sunken);
 }
 .inbox-panel__filters :deep(.el-radio-button__inner) {
   width: 100%;
-  padding: 6px 0;
-  border: 0 !important;
-  border-radius: var(--yp-radius-sm) !important;
-  outline: none;
-  color: var(--yp-text-secondary);
-  background: transparent;
-  box-shadow: none !important;
+  justify-content: center;
   font-size: var(--yp-type-caption-size);
-  font-weight: 600;
-  transition: color var(--yp-motion-fast) var(--yp-ease-standard), background-color var(--yp-motion-fast) var(--yp-ease-standard);
 }
-.inbox-panel__filters :deep(.el-radio-button__inner:hover) { color: var(--yp-text-primary); }
-.inbox-panel__filters :deep(.el-radio-button.is-active .el-radio-button__inner) {
-  color: var(--yp-text-primary);
-  background: var(--yp-bg-raised);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--yp-text-primary) 14%, transparent) !important;
-}
-.inbox-panel__filters :deep(.el-radio-button__original-radio:focus-visible + .el-radio-button__inner) {
-  outline: 2px solid var(--yp-focus-ring);
-  outline-offset: -2px;
-}
+
+
+
 
 .inbox-panel__list {
   --inbox-surface: var(--yp-bg-raised);

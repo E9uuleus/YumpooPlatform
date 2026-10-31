@@ -314,7 +314,6 @@ function logLink(alert: OperationsAlert) {
           <yp-status-tag
             domain="operations"
             :status="alert.severity"
-            effect="soft"
             size="small"
           />
           <h3>{{ ruleNames[alert.ruleCode] ?? alert.ruleCode }} · {{ subject(alert) }}</h3>
@@ -403,7 +402,6 @@ function logLink(alert: OperationsAlert) {
           <yp-status-tag
             domain="operations"
             :status="row.severity"
-            effect="soft"
             size="small"
           />
         </template>
@@ -620,13 +618,11 @@ function logLink(alert: OperationsAlert) {
           <yp-status-tag
             domain="operations"
             :status="detail.data.value.alert.severity"
-            effect="soft"
             size="small"
           />
           <yp-status-tag
             domain="operations"
             :status="detail.data.value.alert.status"
-            effect="soft"
             size="small"
           />
           <span class="ops-muted">{{ subject(detail.data.value.alert) }}</span>

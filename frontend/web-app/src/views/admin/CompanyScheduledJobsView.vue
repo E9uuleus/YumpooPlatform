@@ -188,7 +188,6 @@ onMounted(() => pageLoad.track(load))
               <yp-status-tag
                 domain="scheduled-job"
                 :status="lastState(scope.row as ScheduledJob)!"
-                effect="soft"
               />
               <span class="numeric">{{ formatTime(scope.row.lastStartedAt) }}</span>
               <span

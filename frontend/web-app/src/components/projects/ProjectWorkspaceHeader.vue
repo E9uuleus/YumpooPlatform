@@ -246,7 +246,6 @@ watch(projectId, () => { preference.value = undefined })
         v-if="project && projectStatus(project) !== 'ACTIVE'"
         domain="project-lifecycle"
         :status="projectStatus(project)"
-        effect="soft"
         size="small"
       />
     </div>

@@ -137,7 +137,6 @@ void pageLoad.track(load)
                 <yp-status-tag
                   domain="project-lifecycle"
                   :status="projectStatus(scope.row as ProjectSummary)"
-                  effect="soft"
                   size="small"
                 />
               </template>

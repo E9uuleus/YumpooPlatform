@@ -54,34 +54,27 @@ const ICONS = { info: InfoFilled, success: CircleCheckFilled, warning: WarningFi
 
 <style scoped>
 .yp-notice {
-  --yp-notice-tone: var(--yp-status-blue);
+  --yp-notice-bg: var(--yp-message-info-bg);
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
   gap: var(--yp-space-2) var(--yp-space-3);
-  padding: var(--yp-space-3) var(--yp-space-4) var(--yp-space-3) calc(var(--yp-space-4) + 3px);
-  border: 1px solid color-mix(in srgb, var(--yp-notice-tone) var(--yp-status-border-mix), var(--yp-border-subtle));
+  padding: 10px var(--yp-space-4);
   border-radius: var(--yp-radius-md);
-  color: var(--yp-text-primary);
-  background: linear-gradient(90deg,
-    color-mix(in srgb, var(--yp-notice-tone) var(--yp-status-surface-mix), var(--yp-bg-surface)),
-    color-mix(in srgb, var(--yp-notice-tone) 4%, var(--yp-bg-surface)));
-  box-shadow: inset 3px 0 0 var(--yp-notice-tone);
+  color: var(--yp-on-solid);
+  background: var(--yp-notice-bg);
   font: 400 var(--yp-type-body-size) / var(--yp-type-body-line) var(--yp-font-family);
 }
 
-.yp-notice--success { --yp-notice-tone: var(--yp-status-green); }
-.yp-notice--warning { --yp-notice-tone: var(--yp-status-orange); }
-.yp-notice--danger { --yp-notice-tone: var(--yp-status-red); }
+.yp-notice--success { --yp-notice-bg: var(--yp-message-success-bg); }
+.yp-notice--warning { --yp-notice-bg: var(--yp-message-warning-bg); }
+.yp-notice--danger { --yp-notice-bg: var(--yp-message-error-bg); }
 
 .yp-notice__icon {
   width: 22px;
   height: 22px;
   flex: none;
-  border-radius: var(--yp-radius-pill);
-  color: var(--yp-notice-tone);
-  background: color-mix(in srgb, var(--yp-notice-tone) 18%, transparent);
-  font-size: 15px;
+  font-size: 18px;
 }
 
 .yp-notice__content {
@@ -93,16 +86,15 @@ const ICONS = { info: InfoFilled, success: CircleCheckFilled, warning: WarningFi
 
 .yp-notice__title {
   margin: 0;
-  color: color-mix(in srgb, var(--yp-notice-tone) 62%, var(--yp-text-primary));
   font-weight: 600;
 }
 
 .yp-notice__body { overflow-wrap: anywhere; }
-.yp-notice__title + .yp-notice__body { color: var(--yp-text-secondary); }
-:slotted(strong) { color: var(--yp-text-primary); font-weight: 600; }
+:slotted(strong) { font-weight: 600; }
 :slotted(p) { margin: 0; }
 :slotted(p:not(:first-child)) { margin-top: var(--yp-space-1); }
 :slotted(ul) { margin: var(--yp-space-1) 0 0; padding-left: 1.25em; }
+:slotted(a) { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 
 .yp-notice__actions {
   display: flex;
@@ -112,13 +104,36 @@ const ICONS = { info: InfoFilled, success: CircleCheckFilled, warning: WarningFi
   margin-left: auto;
 }
 
+/* 实底上的按钮统一白色前景：默认按钮为半透明白底，text / link 按钮为白字。 */
+.yp-notice :deep(.el-button) {
+  --el-button-text-color: var(--yp-on-solid);
+  --el-button-bg-color: color-mix(in srgb, var(--yp-on-solid) 18%, transparent);
+  --el-button-hover-text-color: var(--yp-on-solid);
+  --el-button-hover-bg-color: color-mix(in srgb, var(--yp-on-solid) 28%, transparent);
+  --el-button-active-text-color: var(--yp-on-solid);
+  --el-button-active-bg-color: color-mix(in srgb, var(--yp-on-solid) 34%, transparent);
+  --el-button-disabled-text-color: color-mix(in srgb, var(--yp-on-solid) 60%, transparent);
+  --el-button-disabled-bg-color: color-mix(in srgb, var(--yp-on-solid) 12%, transparent);
+}
+
+.yp-notice :deep(.el-button.is-link),
+.yp-notice :deep(.el-button.is-text) {
+  color: var(--yp-on-solid);
+}
+
+.yp-notice :deep(.el-button.is-link:not(.is-disabled):hover),
+.yp-notice :deep(.el-button.is-text:not(.is-disabled):hover) {
+  color: var(--yp-on-solid);
+  background: color-mix(in srgb, var(--yp-on-solid) 18%, transparent);
+}
+
 .yp-notice--small {
   gap: var(--yp-space-2);
-  padding: 6px var(--yp-space-3) 6px calc(var(--yp-space-3) + 3px);
+  padding: 6px var(--yp-space-3);
   font-size: var(--yp-type-caption-size);
   line-height: var(--yp-type-caption-line);
 }
 
-.yp-notice--small .yp-notice__icon { width: 18px; height: 18px; font-size: 12px; }
+.yp-notice--small .yp-notice__icon { width: 18px; height: 18px; font-size: 14px; }
 .yp-notice--small .yp-notice__content { flex-basis: 160px; }
 </style>

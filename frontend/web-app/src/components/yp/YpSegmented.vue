@@ -1,6 +1,5 @@
 <script setup lang="ts" generic="T extends string | number">
-import { computed, nextTick, ref } from 'vue'
-import { useSlidingIndicator } from './useSlidingIndicator'
+import { nextTick, ref } from 'vue'
 
 export interface SegmentedItem<V extends string | number = string | number> {
   value: V
@@ -22,8 +21,6 @@ const emit = defineEmits<{
 }>()
 
 const group = ref<HTMLElement>()
-const activeIndex = computed(() => props.options.findIndex(option => option.value === props.modelValue))
-const { indicatorStyle, animated } = useSlidingIndicator(group, '.yp-segmented__item', () => activeIndex.value)
 
 function select(value: T): void {
   if (value === props.modelValue || props.options.find(option => option.value === value)?.disabled) return
@@ -59,12 +56,6 @@ async function move(event: KeyboardEvent, index: number): Promise<void> {
     role="radiogroup"
     :aria-label="label"
   >
-    <span
-      class="yp-segmented__thumb"
-      :class="{ 'yp-segmented__thumb--animated': animated }"
-      :style="indicatorStyle"
-      aria-hidden="true"
-    />
     <button
       v-for="(option, index) in options"
       :key="option.value"
@@ -86,50 +77,35 @@ async function move(event: KeyboardEvent, index: number): Promise<void> {
 
 <style scoped>
 .yp-segmented {
-  position: relative;
   display: inline-flex;
   flex: none;
   gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--yp-border-subtle);
-  border-radius: var(--yp-radius-sm);
-  background: var(--yp-bg-sunken);
-}
-
-.yp-segmented__thumb {
-  position: absolute;
-  top: 2px;
-  bottom: 2px;
-  left: 0;
-  border-radius: var(--yp-radius-xs);
-  background: var(--yp-bg-surface);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--yp-text-primary) 14%, transparent);
-  pointer-events: none;
-}
-
-.yp-segmented__thumb--animated {
-  transition: transform var(--yp-motion-progress) var(--yp-ease-standard), width var(--yp-motion-progress) var(--yp-ease-standard);
 }
 
 .yp-segmented__item {
-  position: relative;
   display: inline-flex;
-  height: calc(var(--yp-control-height) - 6px);
+  height: var(--yp-control-height-medium);
   padding: 0 var(--yp-space-3);
   align-items: center;
   border: 0;
-  border-radius: var(--yp-radius-xs);
+  border-radius: var(--yp-radius-sm);
   color: var(--yp-text-secondary);
   background: transparent;
-  font: 500 13px / 1 var(--yp-font-family);
+  font: 500 var(--yp-type-body-size) / 1 var(--yp-font-family);
   white-space: nowrap;
   cursor: pointer;
-  transition: color var(--yp-motion-fast) ease-out;
+  transition: color var(--yp-motion-fast) ease-out, background-color var(--yp-motion-fast) ease-out;
 }
 
-.yp-segmented__item:hover,
-.yp-segmented__item.is-on {
+.yp-segmented__item:hover:not(.is-on, :disabled) {
   color: var(--yp-text-primary);
+  background: var(--yp-bg-hover);
+}
+
+.yp-segmented__item.is-on {
+  color: var(--yp-on-solid);
+  background: var(--yp-action-primary);
+  font-weight: 600;
 }
 
 .yp-segmented__item:disabled {

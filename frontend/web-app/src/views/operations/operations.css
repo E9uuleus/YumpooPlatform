@@ -13,10 +13,7 @@
   color: var(--yp-text-primary);
 }
 
-.operations-page .ops-segmented {
-  min-height: var(--ops-control-height);
-  align-items: center;
-}
+
 
 /* 语义色调：各组件通过 --ops-tone 取色，保证三主题一致 */
 .ops-tone-green { --ops-tone: var(--yp-status-green); }

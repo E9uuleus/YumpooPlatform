@@ -511,14 +511,12 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
               <yp-status-tag
                 domain="account"
                 :status="scope.row.accountStatus"
-                effect="soft"
                 size="small"
               />
               <yp-status-tag
                 v-if="scope.row.employmentStatus !== EmploymentStatus.Active"
                 domain="employment"
                 :status="scope.row.employmentStatus"
-                effect="soft"
                 size="small"
               />
             </div>
@@ -733,13 +731,11 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
               <yp-status-tag
                 domain="account"
                 :status="selected.accountStatus"
-                effect="soft"
                 size="small"
               />
               <yp-status-tag
                 domain="employment"
                 :status="selected.employmentStatus"
-                effect="soft"
                 size="small"
               />
             </div>
