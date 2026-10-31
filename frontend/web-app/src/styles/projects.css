@@ -259,8 +259,7 @@
 }
 
 /* 置顶或点击后项目移到新位置时平滑过渡；减少动态效果时动效令牌为 0。 */
-.project-navigation-move,
-.project-recent-move {
+.project-navigation-move {
   transition: transform var(--yp-motion-overlay) var(--yp-ease-standard);
 }
 
@@ -466,141 +465,6 @@
   padding: var(--yp-space-3) var(--yp-space-4);
   justify-content: flex-end;
   border-top: 1px solid var(--yp-border-subtle);
-}
-
-.project-recent-shell {
-  overflow-x: auto;
-  overflow-y: hidden;
-  min-height: 160px;
-  border: 1px solid var(--yp-border-subtle);
-  border-radius: var(--yp-radius-md);
-  background: var(--yp-bg-surface);
-  box-shadow: var(--yp-shadow-card);
-}
-
-.project-recent-list__header,
-.project-recent-list > li {
-  display: grid;
-  grid-template-columns: minmax(220px, 2fr) 80px minmax(112px, 0.8fr) minmax(150px, 0.9fr) 40px;
-  min-width: 0;
-  min-height: 44px;
-  padding: 0 var(--yp-space-4);
-  align-items: center;
-  gap: var(--yp-space-4);
-}
-
-.project-recent-list__header {
-  min-height: 38px;
-  border-bottom: 1px solid var(--yp-border-subtle);
-  color: var(--yp-table-header-text);
-  background: var(--yp-table-header-bg);
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.project-recent-list {
-  overflow: visible;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.project-recent-list > li {
-  border-bottom: 1px solid var(--yp-table-divider);
-  transition: background var(--yp-motion-fast) var(--yp-ease-standard);
-}
-
-.project-recent-list > li:last-child {
-  border-bottom: 0;
-}
-
-.project-recent-list > li:hover,
-.project-recent-list > li:hover {
-  background: var(--yp-bg-hover);
-}
-
-.project-recent-list > li.pinned {
-  background: var(--yp-bg-selected);
-}
-
-.project-recent-list > li.project-recent-list__row--moved {
-  position: relative;
-  z-index: 1;
-  box-shadow: var(--yp-shadow-hover);
-  transition: box-shadow var(--yp-motion-progress) var(--yp-ease-standard), background var(--yp-motion-fast) var(--yp-ease-standard);
-}
-
-.project-recent-list__row--moved .project-recent-list__pin svg {
-  animation: project-pin-pop var(--yp-motion-overlay) var(--yp-ease-standard);
-}
-
-@keyframes project-pin-pop {
-  50% { transform: scale(1.25); }
-}
-
-.project-recent-list__identity {
-  display: inline-flex;
-  min-width: 0;
-  padding: 0;
-  align-items: center;
-  gap: var(--yp-space-3);
-  border: 0;
-  color: var(--yp-text-primary);
-  background: transparent;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.project-recent-list__identity:hover {
-  color: var(--yp-link);
-}
-
-.project-recent-list__identity > svg {
-  flex: 0 0 20px;
-}
-
-.project-recent-list__identity > span {
-  display: grid;
-  min-width: 0;
-  gap: 2px;
-}
-
-.project-recent-list__identity strong,
-.project-recent-list__identity small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.project-recent-list__identity strong {
-  font-weight: 600;
-}
-
-.project-recent-list__identity small,
-.project-recent-list__type,
-.project-recent-list time {
-  color: var(--yp-text-muted);
-  font-size: var(--yp-type-caption-size);
-}
-
-.project-recent-list__pin {
-  display: grid;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  place-items: center;
-  border: 0;
-  border-radius: var(--yp-radius-sm);
-  color: var(--yp-text-secondary);
-  background: transparent;
-  cursor: pointer;
-}
-
-.project-recent-list__pin:hover,
-.project-recent-list__pin.active {
-  color: var(--yp-link);
-  background: var(--yp-bg-selected);
 }
 
 .project-filter-grid {
@@ -893,6 +757,16 @@
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.project-mobile-list__item--pinnable {
+  position: relative;
+}
+
+.project-mobile-list__item--pinnable > .project-pin-button {
+  position: absolute;
+  right: var(--yp-space-3);
+  bottom: var(--yp-space-3);
 }
 
 .project-name-cell {
@@ -1273,39 +1147,6 @@
 
   .project-table-shell {
     border-radius: var(--yp-radius-sm);
-  }
-
-  .project-recent-shell {
-    overflow: hidden;
-    border-radius: var(--yp-radius-sm);
-  }
-
-  .project-recent-list__header {
-    display: none;
-  }
-
-  .project-recent-list > li {
-    grid-template-areas:
-      "identity pin"
-      "owner pin"
-      "type opened";
-    grid-template-columns: minmax(0, 1fr) auto;
-    min-width: 0;
-    min-height: 124px;
-    padding: var(--yp-space-4);
-    gap: var(--yp-space-2) var(--yp-space-3);
-  }
-
-  .project-recent-list__identity { grid-area: identity; }
-  .project-recent-list > li > .yp-assignee { grid-area: owner; }
-  .project-recent-list__type { grid-area: type; }
-  .project-recent-list time {
-    grid-area: opened;
-    justify-self: end;
-  }
-  .project-recent-list__pin {
-    grid-area: pin;
-    align-self: center;
   }
 
   .project-board-group__header {
