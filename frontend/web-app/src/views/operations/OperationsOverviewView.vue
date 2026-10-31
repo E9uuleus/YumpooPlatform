@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import YpSkeleton from '../../components/yp/YpSkeleton.vue'
 import YpNotice from '../../components/yp/YpNotice.vue'
 import { Coin, Connection, Files, FolderOpened, Monitor, Tickets } from '@element-plus/icons-vue'
 import type { OperationsAlert } from '@yumpoo/api-client'
 import { computed, watch, type Component } from 'vue'
 import { RouterLink } from 'vue-router'
-import { ElIcon, ElSkeleton } from 'element-plus'
+import { ElIcon } from 'element-plus'
 import { identityAdministrationApi } from '../../api/client'
 import { useOperationsQuery } from '../../composables/useOperationsQuery'
 import { useOperations } from '../../components/operations/operationsContext'
@@ -192,10 +193,11 @@ const postureTone = (severity: string) =>
 </script>
 
 <template>
-  <el-skeleton
+  <yp-skeleton
     v-if="!data && query.loading.value"
-    :rows="12"
-    animated
+    variant="cards"
+    :rows="6"
+    label="正在加载运维概览"
   />
   <template v-if="data">
     <section

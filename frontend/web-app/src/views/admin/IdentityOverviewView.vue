@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import YpSkeleton from '../../components/yp/YpSkeleton.vue'
 import YpNotice from '../../components/yp/YpNotice.vue'
 import { usePageLoad } from '../../brand/page-progress'
 
@@ -11,7 +12,7 @@ import {
   type ScheduledJob,
   type WeComIntegrationStatus,
 } from '@yumpoo/api-client'
-import { ElButton, ElIcon, ElMessage, ElMessageBox, ElSkeleton } from 'element-plus'
+import { ElButton, ElIcon, ElMessage, ElMessageBox } from 'element-plus'
 import { computed, onMounted, ref, watch, type Component } from 'vue'
 import { useRouter } from 'vue-router'
 import { administrationApi, identityAdministrationApi, projectsApi } from '../../api/client'
@@ -147,10 +148,11 @@ onMounted(() => {
 </script>
 
 <template>
-  <el-skeleton
+  <yp-skeleton
     v-if="loading"
+    variant="cards"
     :rows="6"
-    animated
+    label="正在加载公司概览"
   />
   <inline-problem
     v-else-if="error"
