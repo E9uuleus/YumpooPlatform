@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import YpSkeleton from '../../components/yp/YpSkeleton.vue'
 import YpNotice from '../../components/yp/YpNotice.vue'
 import { usePageLoad } from '../../brand/page-progress'
 
@@ -140,9 +141,14 @@ onMounted(() => pageLoad.track(load))
 
 <template>
   <section
-    v-loading="loading"
+    v-loading="loading && Boolean(data)"
     class="work-calendar"
   >
+    <yp-skeleton
+      v-if="loading && !data"
+      variant="cards"
+      :rows="12"
+    />
     <inline-problem
       v-if="error"
       :problem="error"
@@ -155,6 +161,7 @@ onMounted(() => pageLoad.track(load))
         <el-button
           aria-label="上一年"
           :disabled="year <= 2000 || loading || saving"
+          text
           @click="changeYear(-1)"
         >
           ‹
@@ -163,6 +170,7 @@ onMounted(() => pageLoad.track(load))
         <el-button
           aria-label="下一年"
           :disabled="year >= 2100 || loading || saving"
+          text
           @click="changeYear(1)"
         >
           ›
@@ -179,12 +187,14 @@ onMounted(() => pageLoad.track(load))
         <el-button
           :disabled="!canWrite || loading || saving"
           data-tour="work-calendar-import"
+          text
           @click="fileInput?.click()"
         >
           导入 Excel
         </el-button>
         <el-button
           :disabled="!dirty || saving"
+          text
           @click="accept(data!)"
         >
           放弃修改
@@ -341,7 +351,7 @@ onMounted(() => pageLoad.track(load))
 .calendar-legend span { display: flex; align-items: center; gap: 6px; }
 .calendar-legend i { width: 12px; height: 12px; border: 1px solid var(--yp-border-subtle); border-radius: 3px; }
 .calendar-months { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: var(--yp-space-4); }
-.calendar-month { padding: var(--yp-space-3); border: 1px solid var(--yp-border-subtle); border-radius: var(--yp-radius-md); background: var(--yp-bg-surface); }
+.calendar-month { padding: var(--yp-space-3);  border-radius: var(--yp-radius-md); background: var(--yp-bg-surface); }
 .calendar-month h3 { margin: 0 0 12px; font-size: 15px; color: var(--yp-text-primary); }
 .month-grid { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 3px; }
 .month-weekday { padding-bottom: 5px; text-align: center; font-size: 12px; color: var(--yp-text-muted); }
@@ -353,12 +363,12 @@ onMounted(() => pageLoad.track(load))
 .is-makeup { background: color-mix(in srgb,var(--yp-status-blue) 12%,var(--yp-bg-surface)); color: var(--yp-status-blue); }
 .calendar-day.is-explicit { border-color: var(--yp-border-strong); }
 .calendar-day.is-today { outline: 2px solid var(--yp-status-blue); outline-offset: -2px; }
-.calendar-day:hover:not(:disabled) { border-color: var(--yp-status-blue); }
+.calendar-day:hover:not(:disabled) {  background:var(--yp-bg-hover);}
 .calendar-day:disabled { cursor: default; }
 .calendar-editor,.calendar-editor label { display: grid; gap: var(--yp-space-2); }
 .calendar-editor { gap: var(--yp-space-4); }
 .calendar-editor .el-input-number { width: 100%; }
-.calendar-alert { padding: var(--yp-space-4); border: 1px solid var(--yp-border-subtle); border-radius: var(--yp-radius-md); background: var(--yp-bg-surface); }
+.calendar-alert { padding: var(--yp-space-4);  border-radius: var(--yp-radius-md); background: var(--yp-bg-surface); }
 .calendar-alert h3 { margin: 0 0 var(--yp-space-3); color: var(--yp-text-primary); }
 .calendar-alert p { margin-bottom: 0; color: var(--yp-text-secondary); line-height: 1.6; }
 @media (max-width: 1280px) { .calendar-months { grid-template-columns: repeat(3,minmax(0,1fr)); } }
