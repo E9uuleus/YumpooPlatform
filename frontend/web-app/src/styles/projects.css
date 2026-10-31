@@ -250,12 +250,53 @@
   gap: var(--yp-space-1);
 }
 
-.project-navigation__children .project-navigation__pin {
-  width: 12px;
-  height: 12px;
-  flex: 0 0 12px;
-  margin-left: auto;
+/* 菜单项目行：右侧星标置顶后常显；可悬停设备上未置顶时只在行悬停或聚焦时出现。 */
+.project-navigation__item {
+  position: relative;
+}
+
+.app-shell .global-navigation .project-navigation__item .project-navigation__project {
+  width: 100%;
+  padding-right: 40px;
+}
+
+.app-shell--workspace .global-navigation .project-navigation__item:hover .project-navigation__project:not(.active) {
+  color: var(--yp-text-primary);
+  background: var(--yp-bg-sunken);
+}
+
+.app-shell .global-navigation .project-navigation__item .project-pin-button {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0;
+  border-radius: var(--yp-radius-sm);
   color: var(--yp-text-muted);
+  background: transparent;
+  transform: translateY(-50%);
+}
+
+.app-shell .global-navigation .project-navigation__item .project-pin-button:hover {
+  color: var(--yp-text-primary);
+  background: color-mix(in srgb, var(--yp-text-primary) 8%, transparent);
+}
+
+.app-shell .global-navigation .project-navigation__item .project-pin-button--active,
+.app-shell .global-navigation .project-navigation__item .project-pin-button--active:hover {
+  color: var(--yp-status-yellow);
+}
+
+@media (hover: hover) {
+  .app-shell .global-navigation .project-navigation__item .project-pin-button:not(.project-pin-button--active) {
+    opacity: 0;
+  }
+
+  .app-shell .global-navigation .project-navigation__item:is(:hover, :focus-within) .project-pin-button {
+    opacity: 1;
+  }
 }
 
 /* 置顶或点击后项目移到新位置时平滑过渡；减少动态效果时动效令牌为 0。 */
