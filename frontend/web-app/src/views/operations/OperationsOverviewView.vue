@@ -283,7 +283,6 @@ const postureTone = (severity: string) =>
       <section class="ops-card flush">
         <header class="ops-card__head">
           <h2>服务组件</h2>
-          <span class="ops-muted">数据库与部署目录来自健康检查，随概览刷新</span>
         </header>
         <ul class="ops-list">
           <li
@@ -360,7 +359,7 @@ const postureTone = (severity: string) =>
             v-else
             compact
             title="没有活跃告警"
-            description="12 条内置规则正在持续评估。"
+            description=""
           />
         </section>
         <section class="ops-card flush">
@@ -441,7 +440,7 @@ const postureTone = (severity: string) =>
           v-else
           compact
           title="没有错误日志"
-          description="当前内存缓冲中没有 ERROR 级别记录。"
+          description=""
         />
       </section>
       <section class="ops-card">

@@ -46,7 +46,6 @@ onMounted(() => void pageLoad.track(loadProject))
           <h2 id="project-activity-title">
             动态
           </h2>
-          <p>按时间查看工作项、讨论、成员与计时的变化。</p>
         </div>
       </header>
       <activity-timeline :project-id="projectId" />

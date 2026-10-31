@@ -432,3 +432,16 @@ export const DUPLICATE_MODE_OPTIONS = [
   { value: WorkItemImportDuplicateMode.Skip, title: '跳过已有', description: '标题与项目中已有工作项相同的行不导入' },
   { value: WorkItemImportDuplicateMode.Update, title: '更新已有', description: '覆盖同名工作项的已映射字段，空单元格会清空对应字段；没有同名项的行新增' },
 ] as const
+
+const REQUEST_FIELD_LABELS: Record<string, string> = {
+  title: '标题', contentId: '类别', statusCode: '状态', priority: '优先级', assigneeUserIds: '处理人',
+  dueDate: '截止日期', parentTitle: '父工作项', notes: '备注',
+}
+
+/** 把服务端字段路径 rows[i].field 换成文件行号与字段名，i 是请求 rows 的下标。 */
+export function importFieldLabel(request: WorkItemImportRequest, field: string): string {
+  const match = /^rows\[(\d+)\](?:\.(\w+))?/.exec(field)
+  if (!match) return field === 'fields' ? '列映射' : field
+  const row = request.rows[Number(match[1])]!
+  return `第 ${row.rowNumber} 行${match[2] ? ` · ${REQUEST_FIELD_LABELS[match[2]] ?? match[2]}` : ''}`
+}

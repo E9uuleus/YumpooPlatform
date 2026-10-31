@@ -206,7 +206,7 @@ describe('项目级工作项首页', () => {
     state.moveProjectWorkItemOrder.mockResolvedValue({ ...item('created'), itemNo: 'WI-2' } as unknown as WorkItemDetail)
   })
 
-  afterEach(() => vi.restoreAllMocks())
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
   it.each(['table', 'kanban'])('does not start onboarding when %s work items fail after project metadata has loaded', async view => {
     state.route.query = { view }
@@ -1538,6 +1538,51 @@ describe('项目级工作项首页', () => {
     expect(JSON.parse(localStorage.getItem('yumpoo:project-work-items:table:v1') ?? '{}')).not.toHaveProperty('savedSort')
   })
 
+  it.each(['overflow', 'exhausted', 'error'] as const)('最大化首屏标记持续可见时自动续页，并在 %s 时停止', async outcome => {
+    let notifyVisible: IntersectionObserverCallback | undefined
+    vi.stubGlobal('IntersectionObserver', class {
+      constructor(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
+        if (options?.rootMargin === '320px 0px') notifyVisible = callback
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    })
+    let resolveFirst!: (value: ProjectWorkItemCursorPage) => void
+    state.listProjectWorkItems.mockImplementationOnce(() => new Promise<ProjectWorkItemCursorPage>(resolve => { resolveFirst = resolve }))
+    if (outcome === 'error') state.listProjectWorkItems.mockRejectedValueOnce(new Error('offline'))
+    else state.listProjectWorkItems.mockResolvedValueOnce({
+      items: Array.from({ length: outcome === 'overflow' ? 25 : 2 }, (_, i) => item(`next-${i}`)),
+      nextCursor: outcome === 'overflow' ? 'page-3' : null,
+    })
+    const wrapper = mount(ProjectOverviewView, { global: { stubs: {
+      InlineProblem: true, WorkItemDetailPanel: true, ProjectWorkspaceHeader: true,
+      ElTable: defineComponent({
+        props: { data: { type: Array, default: () => [] } },
+        setup(_props, { expose }) {
+          expose({ doLayout() {}, clearSelection() {}, toggleRowSelection() {} })
+          return {}
+        },
+        template: '<div><div class="el-scrollbar__wrap"><div v-for="row in data" :key="row.id" /><slot name="append" /></div></div>',
+      }),
+    } } })
+    await flushPromises()
+    const view = wrapper.vm as unknown as { tableItems: ProjectWorkItemListItem[] }
+    const scroll = wrapper.get('.monday-table .el-scrollbar__wrap').element
+    const sentinel = wrapper.get('.cursor-sentinel').element
+    vi.spyOn(scroll, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 358, 800, 1026))
+    vi.spyOn(sentinel, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 358 + view.tableItems.length * 37 + 37, 800, 1))
+    // 首次可见通知发生在请求途中，之后不再发送交叉事件或窗口 resize。
+    notifyVisible!([{ isIntersecting: true, target: sentinel } as IntersectionObserverEntry], {} as IntersectionObserver)
+    expect(state.listProjectWorkItems).toHaveBeenCalledTimes(1)
+    resolveFirst({ items: Array.from({ length: 25 }, (_, i) => item(`first-${i}`)), nextCursor: 'page-2' })
+    for (let i = 0; i < 4; i++) await flushPromises()
+    expect(state.listProjectWorkItems).toHaveBeenCalledTimes(2)
+    expect(state.listProjectWorkItems).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: 'page-2', limit: 25 }), expect.anything())
+    expect(view.tableItems).toHaveLength(outcome === 'overflow' ? 50 : outcome === 'exhausted' ? 27 : 25)
+    if (outcome === 'error') expect(wrapper.text()).toContain('加载更多失败')
+  })
+
   it('按游标无感追加并按 ID 去重', async () => {
     const second = { ...item('item-2'), itemNo: 'WI-2', title: '第二个事项' }
     state.listProjectWorkItems.mockImplementation(({ cursor }: { cursor?: string }) => Promise.resolve(
@@ -1555,6 +1600,54 @@ describe('项目级工作项首页', () => {
     expect(state.listProjectWorkItems).toHaveBeenLastCalledWith(expect.objectContaining({
       cursor: 'cursor-1', limit: 25,
     }), expect.objectContaining({ signal: expect.any(AbortSignal) }))
+  })
+
+  it('首屏与追加加载显示与列对齐的骨架而不是加载文字', async () => {
+    let resolveFirst!: (value: ProjectWorkItemCursorPage) => void
+    state.listProjectWorkItems.mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve }))
+    const wrapper = mountView()
+    await flushPromises()
+
+    const initial = wrapper.get('.table-surface .work-item-table-skeleton')
+    expect(initial.attributes('role')).toBe('status')
+    expect(initial.findAll('.work-item-table-skeleton__row')).toHaveLength(10)
+    expect(wrapper.find('.monday-quick-add').exists()).toBe(false)
+    expect(wrapper.find('.table-surface .el-loading-mask').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('正在加载')
+
+    resolveFirst({ items: [item()], nextCursor: 'cursor-1' })
+    await flushPromises()
+    expect(wrapper.find('.work-item-table-skeleton').exists()).toBe(false)
+
+    let resolveMore!: (value: ProjectWorkItemCursorPage) => void
+    state.listProjectWorkItems.mockImplementationOnce(() => new Promise(resolve => { resolveMore = resolve }))
+    const loading = (wrapper.vm as unknown as { loadTable: (cursor: string, append: boolean) => Promise<void> })
+      .loadTable('cursor-1', true)
+    await nextTick()
+    const more = wrapper.get('.work-item-table-skeleton')
+    expect(more.attributes('aria-label')).toBe('正在加载更多工作项')
+    expect(more.findAll('.work-item-table-skeleton__row')).toHaveLength(3)
+    expect(wrapper.text()).not.toContain('正在加载更多工作项')
+
+    resolveMore({ items: [item('item-2')], nextCursor: null })
+    await loading
+    await flushPromises()
+    expect(wrapper.find('.work-item-table-skeleton').exists()).toBe(false)
+    expect(wrapper.findAll('.work-item-link')).toHaveLength(2)
+  })
+
+  it('被取代的首屏请求不会让后续重新加载一直停在骨架', async () => {
+    state.listProjectWorkItems.mockImplementationOnce(() => new Promise(() => undefined))
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.find('.work-item-table-skeleton').exists()).toBe(true)
+
+    await (wrapper.vm as unknown as { resetCurrentData: () => Promise<void> }).resetCurrentData()
+    await flushPromises()
+
+    expect(state.listProjectWorkItems).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('.work-item-table-skeleton').exists()).toBe(false)
+    expect(wrapper.findAll('.work-item-link')).toHaveLength(1)
   })
 
   it('连续拖动使用最新 ETag，且只提交当前可见相邻项', async () => {
@@ -2453,7 +2546,8 @@ describe('项目级工作项首页', () => {
     expect(document.body.style.getPropertyValue('--yp-work-items-drawer-width')).toBe('560px')
 
     // 详情抽屉不带深色蒙版且包含左侧关闭按钮与拖动手柄
-    const drawer = wrapper.findComponent({ name: 'ElDrawer' })
+    const drawer = wrapper.findAllComponents({ name: 'ElDrawer' })
+      .find(candidate => candidate.props('title') === '工作项详情')!
     expect(drawer.props('modal')).toBe(false)
     expect(drawer.props('modalPenetrable')).toBe(true)
     expect(drawer.props('appendToBody')).toBe(true)
@@ -2541,7 +2635,8 @@ describe('项目级工作项首页', () => {
     expect(await guard()).toBe(false)
     expect(confirm).toHaveBeenCalledTimes(1)
     draft.busy = false
-    const drawer = wrapper.findComponent({ name: 'ElDrawer' })
+    const drawer = wrapper.findAllComponents({ name: 'ElDrawer' })
+      .find(candidate => candidate.props('title') === '工作项详情')!
     const done = vi.fn()
     confirm.mockResolvedValueOnce('confirm' as never)
     await (drawer.props('beforeClose') as (done: () => void) => Promise<void>)(done)

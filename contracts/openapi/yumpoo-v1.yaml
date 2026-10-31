@@ -388,6 +388,12 @@ paths:
             minimum: 1
             maximum: 500
             default: 100
+        - name: failed
+          in: query
+          description: 只返回失败的 HTTP 请求（访问日志 status ≥ 400），覆盖 INFO 的 4xx、WARN 的 403 与 5xx；与其他条件取交集。
+          schema:
+            type: boolean
+            default: false
       responses:
         "200":
           description: 查询或更新成功。
@@ -462,6 +468,12 @@ paths:
             minimum: 1
             maximum: 500
             default: 100
+        - name: failed
+          in: query
+          description: 只返回失败的 HTTP 请求（访问日志 status ≥ 400），覆盖 INFO 的 4xx、WARN 的 403 与 5xx；与其他条件取交集。
+          schema:
+            type: boolean
+            default: false
       responses:
         "200":
           description: 查询或更新成功。
@@ -519,6 +531,12 @@ paths:
         - *a5
         - *a6
         - *a7
+        - name: failed
+          in: query
+          description: 只返回失败的 HTTP 请求（访问日志 status ≥ 400），覆盖 INFO 的 4xx、WARN 的 403 与 5xx；与其他条件取交集。
+          schema:
+            type: boolean
+            default: false
       responses:
         "200":
           description: 查询或更新成功。
@@ -3817,6 +3835,16 @@ paths:
           description: 省略时不按结束状态筛选；true 只返回已结束，false 只返回未结束。
           schema:
             type: boolean
+        - name: ids
+          in: query
+          description: 只返回这些 ID 中调用人可见且符合其他筛选的项目；排序、分页与总数规则不变。
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 50
+            items:
+              $ref: "#/components/schemas/Uuid"
         - name: page
           in: query
           schema:
@@ -4401,7 +4429,7 @@ paths:
       tags:
         - Projects
       operationId: reassignProjectOwner
-      summary: 原子重指派 Project 唯一负责人
+      summary: 负责人或 CompanyAdmin 原子重指派 Project 唯一负责人
       security:
         - sessionCookie: []
       parameters:
@@ -5824,6 +5852,53 @@ paths:
           $ref: "#/components/responses/ResourceNotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /projects/{projectId}/archived-work-items:
+    get:
+      tags:
+        - WorkItems
+      operationId: listArchivedWorkItems
+      summary: 分页查询 Project 中已归档的工作项
+      description: 返回本 Project 内已归档且未删除的工作项（含单独归档的子项），按 updatedAt 倒序。归档项只读，updatedAt 即归档时刻。随已归档父项一起隐藏的子项不单独列出，计入父项的 subitemCount。项目成员与同企业 CompanyAdmin 可读。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - name: q
+          in: query
+          description: 按标题或编号模糊匹配，忽略大小写。
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: 已归档工作项分页。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArchivedWorkItemPage"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
         "422":
           $ref: "#/components/responses/ValidationFailed"
   /projects/{projectId}/work-item-labels:
@@ -12179,6 +12254,13 @@ components:
         workItemTitle:
           type: string
           nullable: true
+    HideCompletedEffect:
+      type: string
+      enum:
+        - FADE
+        - FADE_STRIKETHROUGH
+        - HIDE
+      description: 隐藏已完成开启时工作项表格的显示效果：FADE 文字置灰，FADE_STRIKETHROUGH 置灰并加删除线（默认），HIDE 主表不显示（搜索或按状态筛选时照常显示）。请求省略时保留原值，响应总是返回。
     TimeTrackingPreferences:
       type: object
       additionalProperties: false
@@ -12205,6 +12287,8 @@ components:
         hideCompleted:
           type: boolean
           description: 在工作项表格淡化、在计时与补录选择列表隐藏已完成项；默认 false。请求省略时保留原值，响应总是返回。
+        hideCompletedEffect:
+          $ref: "#/components/schemas/HideCompletedEffect"
     CurrentTimeTracker:
       type: object
       additionalProperties: false
@@ -13920,14 +14004,14 @@ components:
       additionalProperties: false
       required:
         - newOwnerUserId
-        - reason
       properties:
         newOwnerUserId:
           $ref: "#/components/schemas/Uuid"
         reason:
           type: string
-          minLength: 10
           maxLength: 500
+          nullable: true
+          description: 可选，只写入安全审计。
     Content:
       type: object
       additionalProperties: false
@@ -15957,6 +16041,78 @@ components:
           minLength: 1
           maxLength: 500
           nullable: true
+    ArchivedWorkItem:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - itemNo
+        - title
+        - statusCode
+        - statusCategory
+        - parentTitle
+        - subitemCount
+        - updatedAt
+        - updatedByDisplayName
+        - etag
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        itemNo:
+          type: string
+        title:
+          type: string
+        statusCode:
+          type: string
+        statusCategory:
+          $ref: "#/components/schemas/WorkItemStatusCategory"
+        parentTitle:
+          type: string
+          nullable: true
+          description: 父项标题；顶层工作项为 null。
+        subitemCount:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 随它一起隐藏、恢复后一起回到表格的子项数。
+        updatedAt:
+          type: string
+          format: date-time
+          description: 归档时刻（归档项只读）。
+        updatedByDisplayName:
+          type: string
+          description: 归档人。
+        etag:
+          type: string
+          description: 取消归档时作为 If-Match。
+    ArchivedWorkItemPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+        - size
+        - totalElements
+        - totalPages
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ArchivedWorkItem"
+        page:
+          type: integer
+          minimum: 0
+        size:
+          type: integer
+          minimum: 1
+          maximum: 100
+        totalElements:
+          type: integer
+          format: int64
+          minimum: 0
+        totalPages:
+          type: integer
+          minimum: 0
     WorkItemImportDuplicateMode:
       type: string
       description: 标题与项目内已有工作项相同时的处理：全部新增、跳过已有、更新已有。

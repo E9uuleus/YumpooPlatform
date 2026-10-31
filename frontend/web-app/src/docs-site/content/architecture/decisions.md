@@ -27,6 +27,7 @@ audience: [developer]
 | [并行计时](../../../../../../.agents/notes/implemented/architecture/2026-10-14-parallel-time-tracking.md) | 多项同时计时按项数平均计入 |
 | [收件箱](../../../../../../.agents/notes/implemented/architecture/2026-09-25-notification-inbox.md) | 通知由事件投影到收件箱 |
 | [运维中心](../../../../../../.agents/notes/implemented/architecture/2026-09-26-operations-center.md) | 指标采样、运行日志与告警的边界 |
+| [错误分类与诊断](../../../../../../.agents/notes/implemented/architecture/2026-10-30-error-classification-and-diagnostics.md) | 输入问题与内部错误分开记录，提示可复制诊断信息 |
 | [定时任务](../../../../../../.agents/notes/implemented/architecture/2026-10-12-scheduled-jobs.md) | 独立调度线程与可配置计划 |
 | [工作项连接](../../../../../../.agents/notes/implemented/architecture/2026-09-30-work-item-connections.md) | 跨项目双向连接 |
 
@@ -56,12 +57,15 @@ audience: [developer]
 | [统一项目模型](../../../../../../.agents/notes/implemented/product/2026-09-30-unified-project-model.md) | 去掉产品层，只保留项目 |
 | [项目归档与删除](../../../../../../.agents/notes/implemented/product/2026-10-09-project-archive-and-deletion.md) | 归档可恢复，永久删除有 30 天缓冲期 |
 | [个人表格设置](../../../../../../.agents/notes/implemented/product/2026-10-07-work-item-table-settings.md) | 筛选、排序、分组等只影响自己 |
-| [隐没已完成](../../../../../../.agents/notes/implemented/product/2026-10-19-work-item-hide-completed.md) | 按本人定义淡化已完成工作项 |
+| [隐藏已完成](../../../../../../.agents/notes/implemented/product/2026-10-19-work-item-hide-completed.md) | 按本人定义置灰、加删除线或不显示已完成工作项 |
 | [我的一天与关闭计时器](../../../../../../.agents/notes/implemented/product/2026-10-15-my-day-timeline-and-timer-opt-out.md) | 时间线补录，可以只手动填写 |
 | [工作日历与加班](../../../../../../.agents/notes/implemented/product/2026-10-12-work-calendar-and-overtime.md) | 标准工时与加班由公司日历决定 |
 | [新手引导](../../../../../../.agents/notes/implemented/product/2026-10-11-new-user-onboarding.md) | 页面导览的触发与版本 |
 | [快捷工时与偏好设置](../../../../../../.agents/notes/implemented/product/2026-10-19-desktop-quick-time-and-preferences.md) | 托盘小窗按时长补录 |
 | [Canvas 氛围动效](../../../../../../.agents/notes/implemented/product/2026-09-30-canvas-ambient-motion.md) | 动效只用在非工作界面 |
+| [已归档工作项](../../../../../../.agents/notes/implemented/product/2026-10-30-archived-work-items.md) | 工具栏抽屉查看与恢复归档的工作项 |
+| [工作项表格骨架加载](../../../../../../.agents/notes/implemented/product/2026-10-30-work-item-table-skeleton-loading.md) | 加载时显示与列对齐的骨架和扫光 |
+| [菜单项目排序](../../../../../../.agents/notes/implemented/product/2026-10-30-sidebar-project-order.md) | 置顶 → 最近打开 → 其余按名称 |
 
 ## 流程
 

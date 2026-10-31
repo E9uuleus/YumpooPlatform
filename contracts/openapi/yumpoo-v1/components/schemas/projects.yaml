@@ -604,11 +604,11 @@ components:
       additionalProperties: false
       required:
         - newOwnerUserId
-        - reason
       properties:
         newOwnerUserId:
           $ref: "#/components/schemas/Uuid"
         reason:
           type: string
-          minLength: 10
           maxLength: 500
+          nullable: true
+          description: 可选，只写入安全审计。

@@ -550,6 +550,8 @@ describe('项目工作项子表格', () => {
 
     await wrapper.setProps({ loading: true })
     expect(wrapper.findAll('.subitem-hierarchy-branch--empty')).toHaveLength(1)
+    expect(wrapper.get('.subitem-loading-skeleton').attributes('aria-label')).toBe('正在加载子项')
+    expect(wrapper.text()).not.toContain('暂无子项')
     expect(wrapper.get('.monday-subitem-table').classes()).not.toContain('monday-subitem-table--empty')
 
     await wrapper.setProps({ loading: false, error: localProblem('子项加载失败') })

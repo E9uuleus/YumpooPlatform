@@ -209,3 +209,20 @@ export function duration(value: number): string {
       ? Math.floor(minutes / 60) + ' 小时 ' + (minutes % 60) + ' 分钟'
       : minutes + ' 分钟'
 }
+
+/** HTTP 访问日志的失败分类，与 Web 端错误提示的口径一致。 */
+export function failureCategory(status: number, errorCode: string | undefined): string {
+  if (status >= 500) return '服务内部错误'
+  if (status === 401 || status === 403) return '认证或权限'
+  if (status === 404) return '资源不存在或不可见'
+  if (status === 409 || status === 412 || status === 428) return '状态或版本冲突'
+  if (status === 429) return '请求过于频繁'
+  return errorCode === 'MALFORMED_REQUEST' ? '请求格式错误' : '输入校验'
+}
+
+export const STAGE_LABELS: Record<string, string> = { PREVIEW: '预览', COMMIT: '提交' }
+
+/** 访问日志的 fieldErrors：以逗号分隔的「字段路径:错误码」。 */
+export function fieldErrorItems(value: unknown): string[] {
+  return typeof value === 'string' && value ? value.split(',').map(item => item.replace(':', ' · ')) : []
+}

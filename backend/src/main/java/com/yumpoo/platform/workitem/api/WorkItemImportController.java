@@ -3,6 +3,8 @@ package com.yumpoo.platform.workitem.api;
 import com.yumpoo.platform.foundation.api.http.IdempotencyKeyParser;
 import com.yumpoo.platform.foundation.api.http.IdempotencyRequestHasher;
 import com.yumpoo.platform.foundation.api.web.ApiV1Controller;
+import com.yumpoo.platform.foundation.api.web.HttpAccessLog;
+import jakarta.servlet.http.HttpServletRequest;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.FieldViolation;
 import com.yumpoo.platform.foundation.application.idempotency.StoredCommandResult;
@@ -30,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.IntStream;
 
 @ApiV1Controller
 public final class WorkItemImportController {
@@ -52,13 +55,15 @@ public final class WorkItemImportController {
     ResponseEntity<String> importWorkItems(@PathVariable UUID projectId,
             @Valid @RequestBody WorkItemImportRequest body,
             @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false)
-            String idempotencyHeader) {
+            String idempotencyHeader, HttpServletRequest httpRequest) {
+        HttpAccessLog.stage(httpRequest, body.dryRun() ? "PREVIEW" : "COMMIT");
         CurrentActor actor = actors.requiredActive();
         UUID key = keys.parseRequired(idempotencyHeader);
         Set<Field> fields = fields(body.fields());
-        List<Row> rows = body.rows().stream().map(row -> {
+        List<Row> rows = IntStream.range(0, body.rows().size()).mapToObj(index -> {
+            WorkItemImportRequest.Row row = body.rows().get(index);
             if (new HashSet<>(row.assigneeUserIds()).size() != row.assigneeUserIds().size())
-                throw validation("rows[" + row.rowNumber() + "].assigneeUserIds", "DUPLICATE",
+                throw validation("rows[" + index + "].assigneeUserIds", "DUPLICATE",
                         "处理人不可重复");
             return new Row(row.rowNumber(), row.title(), row.contentId(), row.statusCode(),
                     row.priority(), row.assigneeUserIds(), row.dueDate(), row.parentTitle(),

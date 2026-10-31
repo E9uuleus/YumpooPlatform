@@ -148,9 +148,6 @@ async function submit(): Promise<void> {
       <h2 :id="titleId">
         创建项目
       </h2>
-      <p class="project-create-dialog__intro">
-        项目是成员、权限和工作项的边界。创建后你将成为项目负责人。
-      </p>
     </template>
     <inline-problem
       v-if="topProblem"
@@ -204,9 +201,6 @@ async function submit(): Promise<void> {
             aria-label="项目描述"
           />
         </el-form-item>
-        <p class="project-create-dialog__hint">
-          创建后可在项目设置中修改名称与描述。
-        </p>
         <section class="project-create-dialog__section">
           <h3>负责人</h3>
           <div class="project-create-dialog__owner">
@@ -236,7 +230,7 @@ async function submit(): Promise<void> {
             </button>
           </div>
           <p class="project-create-dialog__hint">
-            所有项目使用相同的类别、状态和优先级；点击标签可调整颜色，创建后仍可在表格中修改。
+            点击标签可调整颜色，创建后仍可在表格中修改。
           </p>
           <div
             v-for="row in STRUCTURE_ROWS"
@@ -333,9 +327,6 @@ async function submit(): Promise<void> {
             </div>
           </div>
         </div>
-        <p class="project-create-dialog__preview-note">
-          示例行仅为示意，不会写入项目；项目编码创建后由系统生成。
-        </p>
       </aside>
     </div>
     <template #footer>
@@ -363,7 +354,6 @@ async function submit(): Promise<void> {
 :global(.project-create-dialog .el-dialog__header), :global(.project-create-dialog .el-dialog__footer) { flex-shrink: 0; }
 :global(.project-create-dialog .el-dialog__footer) { display: flex; align-items: center; justify-content: flex-end; gap: var(--yp-space-2); padding-top: var(--yp-space-5); border-top: 1px solid var(--yp-border-subtle); }
 :global(.project-create-dialog .el-dialog__header h2) { margin: 0; color: var(--yp-text-primary); font-size: 18px; line-height: 1.4; }
-:global(.project-create-dialog__intro) { margin: var(--yp-space-2) 0 0; color: var(--yp-text-secondary); font-size: 13px; font-weight: 400; line-height: 1.6; }
 :global(.project-create-dialog__layout) { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: var(--yp-space-6); }
 :global(.project-create-dialog h3) { margin: 0 0 var(--yp-space-4); color: var(--yp-text-primary); font-size: 15px; }
 
@@ -413,7 +403,6 @@ async function submit(): Promise<void> {
 :global(.project-preview__row > span:first-child) { justify-content: flex-start; padding-left: 12px; border-left: 0; }
 :global(.project-preview__title) { overflow: hidden; color: var(--yp-text-primary); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 :global(.project-preview__block) { color: var(--yp-text-inverse); font-weight: 600; white-space: nowrap; transition: background var(--yp-motion-fast) var(--yp-ease-standard); }
-:global(.project-create-dialog__preview-note) { margin: var(--yp-space-3) 0 0; color: var(--yp-text-muted); font-size: 12px; line-height: 1.6; }
 @media (max-width: 959.98px) {
   :global(.project-create-dialog__layout) { grid-template-columns: minmax(0, 1fr); }
   :global(.project-create-dialog__preview) { position: static; }

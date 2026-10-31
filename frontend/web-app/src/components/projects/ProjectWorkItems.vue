@@ -17,6 +17,7 @@ import { createWorkItemColumnFlip, measureWorkItemColumns, visibleWorkItemColumn
 import WorkItemRowActions from './WorkItemRowActions.vue'
 import WorkItemBatchBar from './WorkItemBatchBar.vue'
 import WorkItemImportDialog from './import/WorkItemImportDialog.vue'
+import WorkItemArchivedDrawer from './WorkItemArchivedDrawer.vue'
 import WorkItemParentPicker from './WorkItemParentPicker.vue'
 import { useWorkItemBatchActions, type WorkItemSelection } from './useWorkItemBatchActions'
 import { useWorkItemCellPopover } from './useWorkItemCellPopover'
@@ -27,8 +28,11 @@ import WorkItemNameCell from './WorkItemNameCell.vue'
 import WorkItemDraftCell from './WorkItemDraftCell.vue'
 import { useWorkItemInlineCreate } from './useWorkItemInlineCreate'
 import WorkItemUpdatedCell from './WorkItemUpdatedCell.vue'
-import { ArrowDown, Filter as FilterIcon, Hide, Plus, Search, Sort, Upload, User } from '@element-plus/icons-vue'
+import WorkItemTableSkeleton from './WorkItemTableSkeleton.vue'
+import WorkItemKanbanSkeleton from './WorkItemKanbanSkeleton.vue'
+import { ArrowDown, Box, Filter as FilterIcon, Hide, Plus, Search, Sort, Upload, User } from '@element-plus/icons-vue'
 import {
+  HideCompletedEffect,
   TimeTrackingState,
   WorkItemViewType,
   ProjectActorAccess,
@@ -199,6 +203,7 @@ const quickTitle = ref('')
 const quickCreating = ref(false)
 const creatingTop = ref(false)
 const importOpen = ref(false)
+const archivedOpen = ref(false)
 /** Row whose name cell opens for editing as soon as it renders: the item the toolbar button just created. */
 const autoEditId = ref('')
 const quickRow = ref<HTMLElement>()
@@ -460,7 +465,18 @@ function schedulePageScrollbarSync(): void {
   void nextTick(() => {
     pageScrollbarSyncQueued = false
     syncPageScrollbars()
+    fillTableViewport()
   })
+}
+
+function fillTableViewport(): void {
+  if (selectedView.value !== 'table' || grouped.value || groupingSwitching.value
+    || tableLoading.value || tableSorting.value || error.value || loadingMoreError.value || !tableNextCursor.value) return
+  const root = resolveTableScrollElement()?.getBoundingClientRect()
+  const end = tableSentinel.value?.getBoundingClientRect()
+  // 首批数据可能未填满视口，标记持续可见时 IntersectionObserver 不会再次通知。
+  if (root && end && root.height > 0 && end.height > 0 && end.bottom >= root.top && end.top <= root.bottom + 320)
+    void loadTable(tableNextCursor.value, true)
 }
 
 function syncResponsiveTableLayout(): void {
@@ -589,6 +605,10 @@ const columnSettingsKind = ref<'status' | 'priority' | 'content'>()
 const columnSettingsAnchor = ref<HTMLElement>()
 const assigneeFilterOpen = ref(false)
 const filterPopoverOpen = ref(false)
+const activeFilterCount = computed(() => filters.statuses.size + filters.priorities.size + filters.contents.size
+  + filters.connectedColumnIds.size + filters.unconnectedColumnIds.size + filters.incomingProjectIds.size
+  + (filters.dueRange.length ? 1 : 0) + (filters.updatedAfter ? 1 : 0) + (filters.timeState ? 1 : 0)
+  + (filters.timeMin !== '' || filters.timeMax !== '' ? 1 : 0))
 const groupFieldByColumn: Partial<Record<BuiltInColumnKey, GroupField>> = {
   assignee: 'ASSIGNEE', status: 'STATUS', priority: 'PRIORITY', content: 'CONTENT', dueDate: 'DUE_DATE',
 }
@@ -672,6 +692,10 @@ const quickGridStyle = computed(() => {
       ...visibleColumns.value.map(item => `${columnWidth(item.key)}px`), `${TABLE_ADD_COLUMN_MIN_WIDTH}px`].join(' '),
   }
 })
+const TABLE_LEAD_WIDTHS = [TABLE_MENU_COLUMN_WIDTH, TABLE_EXPAND_COLUMN_WIDTH, TABLE_SELECTION_COLUMN_WIDTH]
+const PAGE_SKELETON_TOOLBAR = [104, 72, 64, 60, 56, 88]
+const skeletonColumns = computed(() => visibleColumns.value.map(item => ({ key: item.key, width: columnWidth(item.key), collapsed: isColumnCollapsed(item.key) })))
+const skeletonRowHeight = computed(() => heightOption(tableViewSettings.value.rowHeight).row)
 const hasExplicitSort = computed(() => sortRules.value.length > 0)
 const filteredMembers = computed(() => {
   const query = assigneeSearch.value.trim().toLocaleLowerCase()
@@ -693,6 +717,8 @@ const canCreate = computed(() => Boolean(project.value
   && activeContents.value.length
   && (project.value.actorAccess === ProjectActorAccess.Owner
     || project.value.actorAccess === ProjectActorAccess.Member)))
+const canRestoreArchived = computed(() => Boolean(project.value && projectWritable(project.value)
+  && (project.value.actorAccess === ProjectActorAccess.Owner || project.value.actorAccess === ProjectActorAccess.Member)))
 const { draft: inlineDraft, rows: displayWorkItemRows, isDraft, start: createBelow, save: saveInlineDraft, cancel: cancelInlineDraft } = useWorkItemInlineCreate({
   contextId: () => projectId.value,
   items: () => tableItems.value,
@@ -785,10 +811,17 @@ const visibleExpandedIds = computed(() => {
   return expandedSubitemIds.value.filter(id => loaded.has(id))
 })
 watch(() => visibleExpandedIds.value.join('|'), () => visibleExpandedIds.value.forEach(id => void loadSubitems(id)))
-const { hideCompleted } = useHideCompleted()
+const { hideCompleted, hideCompletedEffect } = useHideCompleted()
 function isCompletedRow(item: ProjectWorkItemListItem): boolean {
   return hideCompleted.value && isCompletedStatus(tableViewSettings.value.completedStatusCodes, item.statusCode, item.statusCategory)
 }
+/** 「不显示」：主表只请求本人完成定义以外的状态；看板与仪表板内嵌表格不受影响。 */
+const unfinishedStatusCodes = computed(() => !embedded.value && hideCompleted.value
+  && hideCompletedEffect.value === HideCompletedEffect.Hide
+  ? workflowStatuses.value.filter(status => !isCompletedStatus(tableViewSettings.value.completedStatusCodes,
+    status.code, status.statusCategory)).map(status => status.code)
+  : null)
+watch(() => unfinishedStatusCodes.value?.join(','), () => void resetCurrentData())
 const groupingSwitching = ref(false)
 const onboardingReady = computed(() => !embedded.value && Boolean(project.value) && !loading.value && !tableLoading.value && !error.value
   && (selectedView.value === 'kanban'
@@ -820,6 +853,11 @@ function groupKeyForRow(row: TableDisplayRow): string {
   if (isGroupDisplayRow(row)) return row.group.key
   const anchor = isDraft(row) ? tableItems.value.find(item => item.id === inlineDraft.value?.anchorId) : undefined
   return grouping.keyOf(anchor ?? row)
+}
+const tableInitialLoading = computed(() => (grouped.value ? groupsLoading.value : tableLoading.value) && !displayTableItems.value.length)
+function isGroupPageLoading(group: { key: string }): boolean {
+  const page = grouping.page(group.key)
+  return !page.error && (!groupCountsReady.value || page.loading)
 }
 const displayTableItems = computed<TableDisplayRow[]>(() => {
   const withSubitems = (items: ProjectWorkItemListItem[], group: WorkItemGroup): TableDisplayRow[] => items.flatMap(item =>
@@ -1130,6 +1168,18 @@ async function restoreArchivedItem(): Promise<void> {
   finally { restoringArchive.value = false }
 }
 
+/** 抽屉里点标题：关闭抽屉，用现有详情抽屉打开（详情里同样可以恢复）。 */
+async function openArchived(workItemId: string): Promise<void> {
+  if (!await beforeDraftLeave()) return
+  archivedOpen.value = false
+  await setViewQuery({ ...route.query, workItemId })
+}
+
+async function onArchivedRestored(ids: string[]): Promise<void> {
+  void connect.refreshCells(ids)
+  await onRelationsChanged([...ids, ...visibleExpandedIds.value])
+}
+
 function onSubitemSortChange(parentId: string, rules: ProjectWorkItemSubitemSortRule[]): void {
   const state = subitemState(parentId)
   state.sortRules = rules.slice(0, 3)
@@ -1367,8 +1417,12 @@ async function loadFilterOptions(): Promise<void> {
     const base = listRequest(null)
     const { view: _view, limit: _limit, ...context } = base
     void _view; void _limit
+    /** 「不显示」的隐式状态条件只作用于表格行；状态计数仍覆盖全部状态，否则已完成状态的数量显示为空。 */
+    const { status: _implicitStatus, ...withoutStatus } = context
+    void _implicitStatus
     const pages = await Promise.all(fields.map(field => tableSource.listProjectWorkItemFilterOptions({
-      ...context, projectId: projectId.value, field, limit: 100,
+      ...(field === ListProjectWorkItemFilterOptionsFieldEnum.Status && !filters.statuses.size ? withoutStatus : context),
+      projectId: projectId.value, field, limit: 100,
     }, { signal: activeController?.signal ?? null })))
     const next = new Map<string, number>()
     if (!current()) return
@@ -1450,7 +1504,8 @@ function listRequest(cursor?: string | null) {
     view: WorkItemViewType.Table,
     ...(cursor ? { cursor } : {}),
     ...(searchInput.value.trim() ? { q: searchInput.value.trim() } : {}),
-    ...(filters.statuses.size ? { status: filters.statuses } : {}),
+    ...(filters.statuses.size ? { status: filters.statuses }
+      : unfinishedStatusCodes.value && !searchInput.value.trim() ? { status: new Set(unfinishedStatusCodes.value) } : {}),
     ...(filters.priorities.size ? { priority: filters.priorities } : {}),
     ...(filters.assignees.size ? { assigneeUserId: filters.assignees } : {}),
     ...(filters.contents.size ? { contentId: filters.contents } : {}),
@@ -1590,6 +1645,9 @@ async function loadWorkspace(): Promise<void> {
   const revision = ++loadRevision
   activeController?.abort()
   activeController = new AbortController()
+  // 被取代的请求不会回写加载状态，否则新的表格加载会被当成仍在进行而跳过。
+  tableLoading.value = false
+  tableSorting.value = false
   const requestedProjectId = projectId.value
   loading.value = true
   error.value = undefined
@@ -2881,6 +2939,7 @@ async function resetCurrentData(): Promise<void> {
   }
   const revision = ++loadRevision
   activeController?.abort(); activeController = new AbortController()
+  tableLoading.value = false; tableSorting.value = false
   error.value = undefined; tableItems.value = []; tableNextCursor.value = null
   Object.keys(lanes).forEach(key => delete lanes[key])
   Object.keys(subitems).forEach(key => delete subitems[key])
@@ -2986,6 +3045,8 @@ watch([
   tableRef,
   () => selectedView.value,
   () => tableItems.value.length,
+  () => tableNextCursor.value,
+  () => tableSorting.value,
   () => quickOpen.value,
   () => tableLoading.value,
   () => loadingMoreError.value,
@@ -3045,7 +3106,6 @@ onBeforeUnmount(() => {
 
 <template>
   <div
-    v-loading="loading"
     class="project-view-stack project-overview-stack"
     :class="{ 'work-items-embedded': embedded }"
   >
@@ -3053,6 +3113,48 @@ onBeforeUnmount(() => {
       v-if="error"
       :problem="error"
     />
+    <div
+      v-if="loading && !project && !error"
+      class="work-items-page-skeleton"
+    >
+      <div
+        class="work-items-page-skeleton__head work-item-skeleton"
+        aria-hidden="true"
+      >
+        <i class="work-item-skeleton-block work-items-page-skeleton__title" />
+        <div class="work-items-page-skeleton__toolbar">
+          <i
+            v-for="width in PAGE_SKELETON_TOOLBAR"
+            :key="width"
+            class="work-item-skeleton-block"
+            :style="{ width: `${width}px` }"
+          />
+        </div>
+      </div>
+      <div
+        v-if="selectedView === 'kanban'"
+        class="kanban-board"
+      >
+        <section
+          v-for="lane in 4"
+          :key="lane"
+          class="kanban-lane"
+        >
+          <work-item-kanban-skeleton />
+        </section>
+      </div>
+      <work-item-table-skeleton
+        v-else
+        class="work-items-page-skeleton__table"
+        :columns="skeletonColumns"
+        :lead-widths="TABLE_LEAD_WIDTHS"
+        :trailing-width="TABLE_ADD_COLUMN_MIN_WIDTH"
+        :rows="12"
+        :row-height="skeletonRowHeight"
+        header
+        fade
+      />
+    </div>
     <template v-if="project">
       <work-item-import-dialog
         v-if="canCreate"
@@ -3064,6 +3166,15 @@ onBeforeUnmount(() => {
         :members="members"
         :default-content-id="defaultContentId"
         @imported="onWorkItemsImported"
+      />
+      <work-item-archived-drawer
+        v-if="!embedded"
+        v-model="archivedOpen"
+        :project-id="projectId"
+        :statuses="labelCatalog?.statuses ?? []"
+        :can-restore="canRestoreArchived"
+        @open="openArchived"
+        @restored="onArchivedRestored"
       />
       <template v-if="!embedded">
         <connect-column-delete-dialog
@@ -3208,36 +3319,43 @@ onBeforeUnmount(() => {
 
           <el-popover v-model:visible="filterPopoverOpen" placement="bottom-start" :width="560" trigger="click" popper-class="work-items-popover work-items-filter-popover" @show="loadFilterOptions">
             <template #reference>
-              <button class="toolbar-button" :class="{ active: filters.connectedColumnIds.size || filters.unconnectedColumnIds.size || filters.incomingProjectIds.size || filters.statuses.size || filters.priorities.size || filters.contents.size || filters.dueRange.length || filters.timeState || filters.timeMin || filters.timeMax || filters.updatedAfter }">
-                <el-icon><filter-icon /></el-icon><span>筛选</span>
+              <button class="toolbar-button" :class="{ active: activeFilterCount }">
+                <el-icon><filter-icon /></el-icon><span>筛选</span><span v-if="activeFilterCount" class="toolbar-button__count">{{ activeFilterCount }}</span>
               </button>
             </template>
             <div class="filter-popover">
-              <header><strong>快速筛选</strong><button class="text-button" @click="clearFilters">清除全部</button></header>
+              <header class="filter-popover__header">
+                <strong>快速筛选</strong>
+                <span v-if="activeFilterCount" class="filter-popover__count" :aria-label="`已选 ${activeFilterCount} 个条件`">{{ activeFilterCount }}</span>
+                <button class="text-button filter-popover__clear" :disabled="!activeFilterCount && !filters.assignees.size" @click="clearFilters">清除全部</button>
+              </header>
+              <section class="filter-section">
+                <h4>工作项名称</h4>
+                <el-input v-model="searchInput" clearable placeholder="名称或编号" :prefix-icon="Search" @input="scheduleSearch" />
+              </section>
               <div class="filter-columns">
-                <section>
-                  <h4>工作项名称</h4>
-                  <el-input v-model="searchInput" clearable placeholder="名称或编号" @input="scheduleSearch" />
-                </section>
-                <section>
-                  <h4>状态</h4>
+                <section class="filter-section">
+                  <h4>状态<small v-if="filters.statuses.size">已选 {{ filters.statuses.size }}</small></h4>
                   <button v-for="status in workflowStatuses" :key="status.statusCode" class="filter-value" :aria-pressed="filters.statuses.has(status.statusCode)" @click="toggleSet(filters.statuses, status.statusCode, !filters.statuses.has(status.statusCode))">
                     <span class="filter-checkbox" :class="{ checked: filters.statuses.has(status.statusCode) }" aria-hidden="true" />
-                    <span>{{ status.displayName }}</span><small>{{ countBy('statusCode', status.statusCode) }}</small>
+                    <span class="filter-swatch" :style="{ background: workItemLabelColorValue(status.colorToken) }" aria-hidden="true" />
+                    <span class="filter-value__label">{{ status.displayName }}</span><small :class="{ 'filter-value__count--zero': !countBy('statusCode', status.statusCode) }">{{ countBy('statusCode', status.statusCode) }}</small>
                   </button>
                 </section>
-                <section>
-                  <h4>优先级</h4>
+                <section class="filter-section">
+                  <h4>优先级<small v-if="filters.priorities.size">已选 {{ filters.priorities.size }}</small></h4>
                   <button v-for="priority in priorityOptions" :key="priority.code" class="filter-value" :aria-pressed="filters.priorities.has(priority.code)" @click="toggleSet(filters.priorities, priority.code, !filters.priorities.has(priority.code))">
                     <span class="filter-checkbox" :class="{ checked: filters.priorities.has(priority.code) }" aria-hidden="true" />
-                    <span>{{ priority.displayName }}</span><small>{{ countBy('priority', priority.code) }}</small>
+                    <span class="filter-swatch" :style="{ background: workItemLabelColorValue(priority.colorToken) }" aria-hidden="true" />
+                    <span class="filter-value__label">{{ priority.displayName }}</span><small :class="{ 'filter-value__count--zero': !countBy('priority', priority.code) }">{{ countBy('priority', priority.code) }}</small>
                   </button>
                 </section>
-                <section>
-                  <h4>工作项类别</h4>
+                <section class="filter-section">
+                  <h4>工作项类别<small v-if="filters.contents.size">已选 {{ filters.contents.size }}</small></h4>
                   <button v-for="content in catalog?.items ?? []" :key="content.id" class="filter-value" :aria-pressed="filters.contents.has(content.id)" @click="toggleSet(filters.contents, content.id, !filters.contents.has(content.id))">
                     <span class="filter-checkbox" :class="{ checked: filters.contents.has(content.id) }" aria-hidden="true" />
-                    <span>{{ content.name }}</span><small>{{ countBy('contentId', content.id) }}</small>
+                    <span class="filter-swatch" :style="{ background: workItemLabelColorValue(content.colorToken) }" aria-hidden="true" />
+                    <span class="filter-value__label">{{ content.name }}</span><small :class="{ 'filter-value__count--zero': !countBy('contentId', content.id) }">{{ countBy('contentId', content.id) }}</small>
                   </button>
                 </section>
               </div>
@@ -3268,11 +3386,15 @@ onBeforeUnmount(() => {
                   </el-select>
                 </div>
                 <div class="filter-field">
-                  <span class="filter-field-label">累计时长（秒）</span>
+                  <span class="filter-field-label">累计时长</span>
                   <div class="filter-duration-range">
-                    <el-input v-model="filters.timeMin" aria-label="最少累计秒数" type="number" min="0" placeholder="最少" @change="syncUrl()" />
+                    <el-input v-model="filters.timeMin" aria-label="最少累计秒数" type="number" min="0" placeholder="最少" @change="syncUrl()">
+                      <template #suffix>秒</template>
+                    </el-input>
                     <span aria-hidden="true">—</span>
-                    <el-input v-model="filters.timeMax" aria-label="最多累计秒数" type="number" min="0" placeholder="最多" @change="syncUrl()" />
+                    <el-input v-model="filters.timeMax" aria-label="最多累计秒数" type="number" min="0" placeholder="最多" @change="syncUrl()">
+                      <template #suffix>秒</template>
+                    </el-input>
                   </div>
                 </div>
               </div>
@@ -3314,6 +3436,13 @@ onBeforeUnmount(() => {
           <work-item-completed-menu :statuses="workflowStatuses" :codes="tableViewSettings.completedStatusCodes"
             :disabled="selectedView === 'kanban'" :editable="tableSettingsState === 'ready'"
             @update="codes => updateTableSettings({ completedStatusCodes: codes })" />
+          <button
+            v-if="!embedded"
+            class="toolbar-button"
+            @click="archivedOpen = true"
+          >
+            <el-icon><box /></el-icon><span>已归档</span>
+          </button>
           <button v-if="timerEnabled" class="toolbar-button" @click="openSmallTimer">◷ 小计时器</button>
           <work-item-table-settings-menu
             :settings="tableViewSettings"
@@ -3343,9 +3472,9 @@ onBeforeUnmount(() => {
         </template>
         <div
           v-if="selectedView === 'table'"
-          v-loading="tableLoading && !tableItems.length && !grouped"
           :aria-busy="tableLoading || tableSorting || groupsLoading"
           class="table-surface monday-table-surface"
+          :class="{ 'monday-table-surface--strike-completed': hideCompletedEffect !== HideCompletedEffect.Fade }"
           data-tour="work-item-table"
         >
           <div
@@ -3517,20 +3646,24 @@ onBeforeUnmount(() => {
                         <path d="M12.76 10.56a.77.77 0 0 0 0-1.116L8.397 5.233a.84.84 0 0 0-1.157 0 .77.77 0 0 0 0 1.116l3.785 3.653-3.785 3.652a.77.77 0 0 0 0 1.117.84.84 0 0 0 1.157 0l4.363-4.211Z" />
                       </svg>
                       <span class="work-item-group-name">{{ scope.row.group.label }}</span>
-                      <small>{{ groupCountsReady ? scope.row.group.count : '…' }} 个工作项</small>
+                      <small v-if="groupCountsReady">{{ scope.row.group.count }} 个工作项</small>
+                      <i v-else class="work-item-skeleton work-item-skeleton-block work-item-group-count-skeleton" aria-hidden="true" />
                     </button>
                     <el-checkbox v-else-if="scope.row.groupRowKind === 'columns'" :model-value="groupSelection(scope.row.group).checked"
                       :indeterminate="groupSelection(scope.row.group).mixed" :disabled="!grouping.page(scope.row.group.key).items.length"
                       :aria-label="`选择${scope.row.group.label}已加载工作项`" @change="selectGroupRows(scope.row.group, Boolean($event))" />
                     <div v-else-if="scope.row.groupRowKind === 'load'" :ref="element => isGroupDisplayRow(scope.row) && setGroupSentinel(scope.row.group.key, element)"
-                      class="work-item-group-load" :class="{ 'work-item-group-load--complete': scope.row.group.count > 0 && grouping.page(scope.row.group.key).loaded && !grouping.page(scope.row.group.key).nextCursor && !grouping.page(scope.row.group.key).error }">
+                      class="work-item-group-load" :class="{ 'work-item-group-load--complete': scope.row.group.count > 0 && grouping.page(scope.row.group.key).loaded && !grouping.page(scope.row.group.key).nextCursor && !grouping.page(scope.row.group.key).error, 'work-item-group-load--loading': isGroupPageLoading(scope.row.group) }">
                       <template v-if="grouping.page(scope.row.group.key).error">
                         <span>此分组加载失败</span><el-button text size="small" @click="grouping.load(scope.row.group.key)">重试</el-button>
                       </template>
-                      <span v-else-if="scope.row.group.count === 0 && groupCountsReady">暂无工作项</span>
+                      <work-item-table-skeleton v-else-if="isGroupPageLoading(scope.row.group)" :columns="skeletonColumns"
+                        :lead-widths="[TABLE_SELECTION_COLUMN_WIDTH]" :sticky-offset="TABLE_MENU_COLUMN_WIDTH + TABLE_EXPAND_COLUMN_WIDTH"
+                        :trailing-width="TABLE_ADD_COLUMN_MIN_WIDTH" :rows="2" :row-height="skeletonRowHeight" :label="`正在加载分组：${scope.row.group.label}`" />
+                      <span v-else-if="scope.row.group.count === 0">暂无工作项</span>
                       <button v-else-if="!grouping.page(scope.row.group.key).loaded || grouping.page(scope.row.group.key).nextCursor"
-                        class="text-button" :disabled="!groupCountsReady || grouping.page(scope.row.group.key).loading" @click="grouping.load(scope.row.group.key)">
-                        {{ grouping.page(scope.row.group.key).loading || !groupCountsReady ? '正在加载…' : '加载更多工作项' }}
+                        class="text-button" @click="grouping.load(scope.row.group.key)">
+                        加载更多工作项
                       </button>
                     </div>
                   </template>
@@ -3570,7 +3703,7 @@ onBeforeUnmount(() => {
                     @clear="clearColumnSort('title')" @save="saveSortedWorkItemOrder" />
                     <span class="monday-column-resize-handle monday-title-column-resize-handle" data-column-key="title" aria-hidden="true" />
                   </template>
-                  <div v-else class="title-cell" :data-work-item-id="scope.row.id">
+                  <div v-else class="title-cell" data-tour="work-item-row-drag" :data-work-item-id="scope.row.id">
                     <work-item-name-cell
                       class="work-item-link"
                       :item="scope.row as ProjectWorkItemListItem"
@@ -3665,6 +3798,7 @@ onBeforeUnmount(() => {
               >
                 <template #header>
                   <work-item-column-header
+                    data-tour="work-item-column-drag"
                     :state="columnMenuState(column)"
                     :collapsed="isColumnCollapsed(column.key)"
                     :saving="savingSortOrder"
@@ -3937,6 +4071,24 @@ onBeforeUnmount(() => {
               <template #append>
                 <inline-problem v-if="groupingError" :problem="groupingError" />
                 <button v-if="groupingError" class="text-button" @click="grouping.refresh()">重试加载分组</button>
+                <work-item-table-skeleton
+                  v-if="tableInitialLoading"
+                  :columns="skeletonColumns"
+                  :lead-widths="TABLE_LEAD_WIDTHS"
+                  :trailing-width="TABLE_ADD_COLUMN_MIN_WIDTH"
+                  :rows="10"
+                  :row-height="skeletonRowHeight"
+                  fade
+                />
+                <work-item-table-skeleton
+                  v-else-if="!grouped && tableLoading"
+                  :columns="skeletonColumns"
+                  :lead-widths="TABLE_LEAD_WIDTHS"
+                  :trailing-width="TABLE_ADD_COLUMN_MIN_WIDTH"
+                  :rows="3"
+                  :row-height="skeletonRowHeight"
+                  label="正在加载更多工作项"
+                />
                 <div
                   v-if="!grouped && quickOpen"
                   ref="quickRow"
@@ -3970,7 +4122,7 @@ onBeforeUnmount(() => {
                   </div>
                 </div>
                 <button
-                  v-else-if="!grouped"
+                  v-else-if="!grouped && !tableInitialLoading"
                   class="quick-add monday-quick-add"
                   data-tour="work-item-quick-add"
                   :style="quickGridStyle"
@@ -3983,8 +4135,7 @@ onBeforeUnmount(() => {
                 </button>
                 <div v-if="selectedCount || batchBusy" class="work-item-batch-spacer" aria-hidden="true" />
                 <div ref="tableSentinel" class="cursor-sentinel" aria-hidden="true" />
-                <div v-if="!grouped && tableLoading && tableItems.length" class="incremental-state">正在加载更多工作项…</div>
-                <div v-else-if="!grouped && loadingMoreError" class="incremental-state incremental-state--error">
+                <div v-if="!grouped && loadingMoreError" class="incremental-state incremental-state--error">
                   <span>加载更多失败</span><el-button text @click="loadTable(tableNextCursor, true)">重试</el-button>
                 </div>
               </template>
@@ -4021,7 +4172,6 @@ onBeforeUnmount(() => {
           <section
             v-for="status in workflowStatuses"
             :key="status.statusCode"
-            v-loading="lane(status.statusCode).loading"
             class="kanban-lane"
             @dragover.prevent
             @drop.prevent="status.active && dropInto(status.statusCode)"
@@ -4031,6 +4181,7 @@ onBeforeUnmount(() => {
               v-if="lane(status.statusCode).error"
               :problem="lane(status.statusCode).error!"
             />
+            <work-item-kanban-skeleton v-if="lane(status.statusCode).loading && !lane(status.statusCode).items.length" />
             <article
               v-for="item in lane(status.statusCode).items"
               :key="item.id"
@@ -4059,8 +4210,18 @@ onBeforeUnmount(() => {
             <div
               v-if="lane(status.statusCode).nextCursor"
               class="lane-cursor-sentinel incremental-state"
+              :class="{ 'lane-cursor-sentinel--loading': lane(status.statusCode).loading }"
               :data-status="status.statusCode"
-            >{{ lane(status.statusCode).loading ? '正在加载…' : '继续滚动以加载更多' }}</div>
+            >
+              <work-item-kanban-skeleton
+                v-if="lane(status.statusCode).loading"
+                :cards="1"
+                label="正在加载更多工作项"
+              />
+              <template v-else>
+                继续滚动以加载更多
+              </template>
+            </div>
           </section>
         </div>
       </section>
@@ -4187,6 +4348,8 @@ onBeforeUnmount(() => {
 .work-item-group-toggle small { flex: none; font-size: 12px; color: var(--yp-text-secondary); font-weight: 400; }
 .work-item-group-load { position: sticky; left: 33px; flex: none; display: flex; width: fit-content; max-width: min(540px, calc(100vw - 200px)); gap: 8px; align-items: center; min-height: 36px; padding: 0 16px; color: var(--yp-text-secondary); font-size: 12px; }
 .work-item-group-load--complete { min-height: 0; height: 0; padding: 0; }
+.work-item-group-load--loading { --work-item-skeleton-accent: transparent; position: relative; left: auto; display: block; width: auto; max-width: none; min-height: 0; padding: 0; }
+.work-item-group-count-skeleton { flex: none; width: 64px; height: 10px; }
 :deep(.monday-table--grouped.el-table > .el-table__inner-wrapper > .el-table__body-wrapper) { height: 100% !important; }
 :deep(.monday-table--grouped > .el-table__inner-wrapper > .el-table__body-wrapper > .el-scrollbar > .el-scrollbar__wrap > .el-scrollbar__view > table > tbody > tr.work-item-group-collapsed:not(.work-item-group-heading):not(.work-item-group-spacer)),
 :deep(.monday-table--grouped tr.work-item-table-row.work-item-group-collapsed + tr:has(> .el-table__expanded-cell)) { display: none; }
@@ -4351,23 +4514,74 @@ onBeforeUnmount(() => {
 .empty-avatar { display: inline-grid; width: 28px; height: 28px; place-items: center; border: 1px dashed var(--yp-border-default); border-radius: 50%; }
 .filter-popover > header, .sort-popover > header { display: flex; align-items: center; justify-content: space-between; }
 .text-button { width: auto; color: var(--yp-action-primary); }
-.filter-popover { min-width: 0; max-height: min(720px, calc(100dvh - 96px)); overflow-y: auto; overflow-x: hidden; }
-.filter-columns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--yp-space-4); min-width: 0; }
-.filter-columns section:first-child { grid-column: 1 / -1; }
-.filter-columns section { min-width: 0; }
-.filter-columns h4 { margin: 0 0 var(--yp-space-2); color: var(--yp-text-secondary); }
-.filter-value { min-width: 0; }
-.filter-value > span { min-width: 0; overflow-wrap: anywhere; }
-.filter-checkbox { flex: 0 0 auto; width: 14px; height: 14px; border: 1px solid var(--yp-border-default); border-radius: 3px; display: inline-grid; place-items: center; box-sizing: border-box; }
-.filter-checkbox.checked { background: var(--yp-action-primary); border-color: var(--yp-action-primary); color: white; }
-.filter-checkbox.checked::after { content: "✓"; font-size: 11px; line-height: 1; }
-.filter-value small { flex: 0 0 auto; }
-.filter-dates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--yp-space-4); min-width: 0; padding-top: var(--yp-space-4); border-top: 1px solid var(--yp-border-subtle); }
+.toolbar-button__count {
+  display: inline-grid; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; place-items: center;
+  border-radius: var(--yp-radius-pill); background: var(--yp-action-primary); color: var(--yp-text-inverse);
+  font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1;
+}
+.filter-popover {
+  gap: var(--yp-space-4); min-width: 0; max-height: min(720px, calc(100dvh - 96px));
+  overflow: hidden auto; padding: 0 var(--yp-space-5) var(--yp-space-5);
+}
+.filter-popover__header {
+  position: sticky; z-index: 1; top: 0; display: flex; align-items: center; gap: var(--yp-space-2);
+  margin: 0 calc(-1 * var(--yp-space-5)); padding: var(--yp-space-4) var(--yp-space-5) var(--yp-space-3);
+  border-bottom: 1px solid var(--yp-border-subtle); background: var(--yp-bg-raised);
+}
+.filter-popover__header strong { color: var(--yp-text-primary); font-size: 15px; font-weight: 600; }
+.filter-popover__count {
+  display: inline-grid; min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; place-items: center;
+  border-radius: var(--yp-radius-pill); background: var(--yp-action-primary); color: var(--yp-text-inverse);
+  font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.filter-popover__clear { margin-left: auto; padding: 4px 8px; }
+.filter-popover__clear:disabled { color: var(--yp-text-muted); background: transparent; cursor: default; }
+.filter-section { display: grid; align-content: start; gap: 2px; min-width: 0; }
+.filter-section h4 {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--yp-space-2);
+  margin: 0 0 var(--yp-space-2); color: var(--yp-text-secondary); font-size: 12px; font-weight: 600; letter-spacing: .02em;
+}
+.filter-section h4 small { color: var(--yp-action-primary); font-size: 12px; font-weight: 500; letter-spacing: 0; }
+.filter-columns {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--yp-space-4) var(--yp-space-5); min-width: 0;
+  padding-top: var(--yp-space-4); border-top: 1px solid var(--yp-border-subtle);
+}
+.filter-value {
+  min-width: 0; min-height: 32px; gap: 10px; padding: 5px 8px;
+  transition: background-color var(--yp-motion-fast) var(--yp-ease-standard);
+}
+.filter-value[aria-pressed='true'] { background: var(--yp-bg-selected); }
+.filter-value[aria-pressed='true'] .filter-value__label { font-weight: 500; }
+.filter-value__label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.filter-swatch { flex: none; width: 8px; height: 8px; border-radius: 50%; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--yp-text-primary) 12%, transparent); }
+.filter-value small {
+  flex: 0 0 auto; min-width: 24px; padding: 1px 6px; box-sizing: border-box; border-radius: var(--yp-radius-pill);
+  background: var(--yp-bg-sunken); font-size: 12px; font-variant-numeric: tabular-nums; text-align: center;
+}
+.filter-value small.filter-value__count--zero { opacity: .55; }
+.filter-checkbox {
+  position: relative; flex: 0 0 auto; width: 16px; height: 16px; box-sizing: border-box;
+  border: 1px solid var(--yp-border-strong, var(--yp-border-default)); border-radius: 4px; background: var(--yp-bg-surface);
+  transition: background-color var(--yp-motion-fast) var(--yp-ease-standard), border-color var(--yp-motion-fast) var(--yp-ease-standard);
+}
+.filter-value:hover .filter-checkbox:not(.checked) { border-color: var(--yp-action-primary); }
+.filter-checkbox.checked { border-color: var(--yp-action-primary); background: var(--yp-action-primary); }
+.filter-checkbox.checked::after {
+  position: absolute; top: 2px; left: 5px; width: 4px; height: 8px; box-sizing: border-box;
+  border: solid var(--yp-text-inverse); border-width: 0 2px 2px 0; content: '';
+  transform: rotate(45deg); animation: filter-check-in var(--yp-motion-fast) var(--yp-ease-standard);
+}
+@keyframes filter-check-in { from { opacity: 0; transform: rotate(45deg) scale(.4); } }
+.filter-dates {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--yp-space-4) var(--yp-space-5); min-width: 0;
+  padding-top: var(--yp-space-4); border-top: 1px solid var(--yp-border-subtle);
+}
 .filter-field { display: grid; gap: var(--yp-space-2); min-width: 0; }
-.filter-field-label { color: var(--yp-text-secondary); font-weight: 500; }
+.filter-field-label { color: var(--yp-text-secondary); font-size: 12px; font-weight: 600; letter-spacing: .02em; }
 .filter-field :deep(.el-date-editor), .filter-field :deep(.el-select), .filter-field :deep(.el-input) { width: 100%; min-width: 0; box-sizing: border-box; }
-.filter-duration-range { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: var(--yp-space-2); min-width: 0; }
-:global(.work-items-filter-popover.el-popover) { width: min(680px, calc(100vw - 32px)) !important; box-sizing: border-box; }
+.filter-field :deep(.el-input__suffix) { color: var(--yp-text-muted); font-size: 12px; }
+.filter-duration-range { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: var(--yp-space-2); min-width: 0; color: var(--yp-text-muted); }
+:global(.work-items-filter-popover.el-popover) { width: min(680px, calc(100vw - 32px)) !important; box-sizing: border-box; padding: 0; overflow: hidden; }
 @media (max-width: 560px) {
   .filter-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .filter-dates { grid-template-columns: minmax(0, 1fr); }
@@ -4546,29 +4760,21 @@ onBeforeUnmount(() => {
 .project-table-scrollbar {
   position: fixed;
   z-index: 1999;
-  background: var(--yp-bg-sunken);
-  scrollbar-color: var(--yp-border-strong) var(--yp-bg-sunken);
-  scrollbar-width: thin;
   overscroll-behavior: contain;
 }
 
 .project-table-scrollbar::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-.project-table-scrollbar::-webkit-scrollbar-track {
-  background: var(--yp-bg-sunken);
+  width: 12px;
+  height: 12px;
 }
 
 .project-table-scrollbar::-webkit-scrollbar-thumb {
-  border: 2px solid var(--yp-bg-sunken);
-  border-radius: var(--yp-radius-pill);
-  background: var(--yp-border-strong);
+  border-width: 3px;
 }
 
-.project-table-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: var(--yp-text-secondary);
+.project-table-scrollbar::-webkit-scrollbar-thumb:hover,
+.project-table-scrollbar::-webkit-scrollbar-thumb:active {
+  border-width: 2px;
 }
 
 .project-table-scrollbar--horizontal {
@@ -4603,12 +4809,14 @@ onBeforeUnmount(() => {
   background-color: var(--work-item-condition-cell-bg);
 }
 
-/* 隐没已完成：只淡化单元格内容，单元格背景保持不透明，固定列下不透出滚动内容；主表与子项表共用。 */
+/* 隐藏已完成：只淡化单元格内容，单元格背景保持不透明，固定列下不透出滚动内容；主表与子项表共用。
+   置灰加删除线与「不显示」（搜索、状态筛选或刚完成而仍在表格中的项）再给名称加删除线。 */
 :deep(tr.work-item-table-row > td.el-table__cell > .cell), :deep(tr.subitem-table-row > td.el-table__cell > .cell) {
   transition: opacity var(--yp-motion-overlay) var(--yp-ease-standard);
 }
 :deep(tr.work-item-table-row--completed > td.el-table__cell > .cell) { opacity: .5; }
-:deep(tr.work-item-table-row--completed .work-item-title-text) { color: var(--yp-text-muted); text-decoration: line-through; }
+:deep(tr.work-item-table-row--completed .work-item-title-text) { color: var(--yp-text-muted); }
+.monday-table-surface--strike-completed :deep(tr.work-item-table-row--completed .work-item-title-text) { text-decoration: line-through; }
 
 :deep(.monday-table .el-table__body tr.work-item-table-row--selected > td.el-table__cell:not(.work-item-menu-column):not(.monday-expand-column)) {
   background-color: var(--yp-bg-selected) !important;
@@ -5340,6 +5548,16 @@ onBeforeUnmount(() => {
 .cursor-sentinel { height: 1px; }
 .incremental-state { display: flex; min-height: 36px; align-items: center; justify-content: center; gap: var(--yp-space-2); color: var(--yp-text-muted); font-size: 12px; }
 .incremental-state--error { color: var(--yp-status-red); }
+.lane-cursor-sentinel--loading { display: block; min-height: 0; }
+.work-items-page-skeleton { display: grid; gap: var(--yp-space-4); overflow: hidden; }
+.work-items-page-skeleton__head { display: grid; gap: var(--yp-space-4); padding: var(--yp-space-2) 0; }
+.work-items-page-skeleton__title { width: 220px; height: 22px; }
+.work-items-page-skeleton__toolbar { display: flex; flex-wrap: wrap; gap: var(--yp-space-3); }
+.work-items-page-skeleton__toolbar .work-item-skeleton-block { height: 30px; border-radius: var(--yp-radius-sm); }
+.work-items-page-skeleton__table { border-top: 1px solid var(--yp-monday-grid-border); }
+/* 新加载的行淡入；backwards 只作用于动画开始前，不会盖过拖动等状态对透明度的设置。 */
+:deep(.monday-table .el-table__body tr.work-item-table-row) { animation: work-item-row-in 180ms var(--yp-ease-standard) backwards; }
+@keyframes work-item-row-in { from { opacity: 0; } }
 :deep(.monday-table .work-item-table-row--dragging td) {
   pointer-events: none;
 }

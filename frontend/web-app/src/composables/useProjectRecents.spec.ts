@@ -2,7 +2,7 @@ import { ProjectActorAccess, ProjectLifecycle } from '@yumpoo/api-client'
 import { enableAutoUnmount, mount } from '@vue/test-utils'
 import { defineComponent } from 'vue'
 import { afterEach, expect, it } from 'vitest'
-import { useProjectRecents } from './useProjectRecents'
+import { orderByRecents, useProjectRecents, type ProjectRecentEntry } from './useProjectRecents'
 
 enableAutoUnmount(afterEach)
 it('旧最近项目中的退役元数据被忽略，置顶和访问记录保持有效', () => {
@@ -14,6 +14,24 @@ it('旧最近项目中的退役元数据被忽略，置顶和访问记录保持�
   wrapper.vm.record({ ...entry, name: '新名称' })
   expect(wrapper.vm.items[0]).toMatchObject({ name: '新名称', pinned: true })
   expect(wrapper.vm.items[0]).not.toHaveProperty('project' + 'Type')
-  wrapper.vm.togglePinned('p1')
+  wrapper.vm.togglePinned(entry)
   expect(wrapper.vm.items[0]?.pinned).toBe(false)
+})
+
+it('没打开过的项目可置顶，取消置顶后不留最近记录', () => {
+  const entry = { id: 'p1', code: 'P001', name: '项目', lifecycle: ProjectLifecycle.Active, ownerUserId: 'u1', ownerDisplayName: '张三', actorAccess: ProjectActorAccess.Owner, createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-01T00:00:00Z' }
+  const wrapper = mount(defineComponent({ setup: () => useProjectRecents(() => 'unopened-recents'), template: '<div />' }))
+  expect(wrapper.vm.items).toHaveLength(0)
+  wrapper.vm.togglePinned(entry)
+  expect(wrapper.vm.items).toHaveLength(1)
+  expect(wrapper.vm.items[0]).toMatchObject({ id: entry.id, pinned: true, openedAt: 0 })
+  wrapper.vm.togglePinned(entry)
+  expect(wrapper.vm.items).toHaveLength(0)
+})
+
+it('置顶和最近打开的项目排在前面，其余保持原顺序', () => {
+  const recent = (id: string, openedAt: number, pinned = false) => ({ id, openedAt, pinned }) as ProjectRecentEntry
+  const projects = ['a', 'b', 'c', 'd', 'e'].map(id => ({ id }))
+  expect(orderByRecents(projects, [recent('d', 1, true), recent('b', 9), recent('x', 5)]).map(project => project.id))
+    .toEqual(['d', 'b', 'a', 'c', 'e'])
 })

@@ -118,7 +118,9 @@ onMounted(async () => {
           <h2 id="project-statistics-title">
             统计
           </h2>
-          <p>{{ asOf ? `统计至 ${formatTimestamp(asOf, timezone).slice(11)}` : '统计当前项目的进度、投入与成员工作量。' }}</p>
+          <p v-if="asOf">
+            统计至 {{ formatTimestamp(asOf, timezone).slice(11) }}
+          </p>
         </div>
         <el-tooltip content="刷新">
           <el-button

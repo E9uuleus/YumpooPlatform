@@ -34,6 +34,7 @@ const q = ref(initial('q')),
   event = ref(initial('event')),
   userId = ref(initial('userId')),
   modules = ref(initial('modules').split(',').filter(Boolean))
+const failed = ref(initial('failed') === '1')
 const levels = ref((initial('levels') || 'INFO,WARN,ERROR').split(','))
 const range = ref<[Date, Date]>([new Date(Date.now() - 900000), new Date()])
 const following = ref(!initial('from')),
@@ -61,8 +62,14 @@ const filters = () => ({
   requestId: requestId.value,
   event: event.value,
   userId: userId.value,
+  failed: failed.value ? '1' : '',
 })
 const applied = ref(filters())
+/** 接口参数：URL 中的 failed=1 转为布尔筛选。 */
+const apiFilters = () => {
+  const { failed: only, ...rest } = applied.value
+  return { ...rest, ...(only ? { failed: true } : {}) }
+}
 const routeKey = (value: object) =>
   JSON.stringify(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)))
 let lastRouteKey = routeKey(route.query)
@@ -84,7 +91,7 @@ async function loadEntries(signal: AbortSignal) {
   if (following.value) {
     const result = await operationsApi.tailOperationsLogs(
       {
-        ...applied.value,
+        ...apiFilters(),
         ...(bootId.value ? { bootId: bootId.value } : {}),
         ...(afterSeq.value ? { afterSeq: afterSeq.value } : {}),
         limit: 500,
@@ -112,7 +119,7 @@ async function loadEntries(signal: AbortSignal) {
     if (result.droppedCount) warning.value = '部分超长日志未进入缓冲，请查询历史文件。'
   } else {
     const result = await operationsApi.queryOperationsLogs(
-      { ...applied.value, from: appliedRange.value[0], to: appliedRange.value[1], limit: 100 },
+      { ...apiFilters(), from: appliedRange.value[0], to: appliedRange.value[1], limit: 100 },
       { signal },
     )
     if (signal.aborted) return
@@ -134,7 +141,7 @@ const histogram = useOperationsQuery(
   (signal) =>
     operationsApi.getOperationsLogHistogram(
       {
-        ...applied.value,
+        ...apiFilters(),
         levels: 'TRACE,DEBUG,INFO,WARN,ERROR',
         from: histogramRange.value[0],
         to: histogramRange.value[1],
@@ -248,6 +255,7 @@ const activeFilters = computed(() =>
           .map((module) => moduleLabel(module))
           .join('、'),
     },
+    applied.value.failed && { key: 'failed', label: '失败请求（HTTP ≥ 400）' },
     applied.value.q && { key: 'q', label: '关键字：' + applied.value.q },
     applied.value.requestId && { key: 'requestId', label: '请求：' + shortId(applied.value.requestId) },
     applied.value.event && { key: 'event', label: '事件：' + applied.value.event },
@@ -261,9 +269,11 @@ function removeFilter(key: string) {
   else if (key === 'requestId') requestId.value = ''
   else if (key === 'event') event.value = ''
   else if (key === 'userId') userId.value = ''
+  else if (key === 'failed') failed.value = false
   search()
 }
 function clearFilters() {
+  failed.value = false
   restoreTimeSelection()
   modules.value = []
   q.value = ''
@@ -278,6 +288,12 @@ function restoreTimeSelection() {
   if (timeBeforeSelection) range.value = timeBeforeSelection.range
   customRange.value = false
   timeBeforeSelection = undefined
+}
+/** 4xx 记为 INFO、403 与 5xx 记为 WARN，开启时确保这两级在查询范围内。 */
+function toggleFailed() {
+  failed.value = !failed.value
+  if (failed.value) levels.value = [...new Set([...levels.value, 'INFO', 'WARN'])]
+  search()
 }
 function toggleLevel(level: string) {
   if (levels.value.includes(level)) {
@@ -346,7 +362,7 @@ const pagination = useOperationsQuery(
     if (!cursor.value || following.value) return
     const result = await operationsApi.queryOperationsLogs(
       {
-        ...applied.value,
+        ...apiFilters(),
         from: appliedRange.value[0],
         to: appliedRange.value[1],
         cursor: cursor.value,
@@ -418,6 +434,7 @@ watch(
     q.value = initial('q')
     event.value = initial('event')
     userId.value = initial('userId')
+    failed.value = initial('failed') === '1'
     modules.value = initial('modules').split(',').filter(Boolean)
     levels.value = (initial('levels') || 'INFO,WARN,ERROR').split(',')
     const live = !initial('from')
@@ -470,6 +487,14 @@ watch(
       </span>
     </div>
     <div class="log-toolbar__row">
+      <el-button
+        class="log-filter-button"
+        :class="{ active: failed }"
+        :aria-pressed="failed"
+        @click="toggleFailed"
+      >
+        失败请求
+      </el-button>
       <el-popover
         v-model:visible="modulesOpen"
         placement="bottom-start"

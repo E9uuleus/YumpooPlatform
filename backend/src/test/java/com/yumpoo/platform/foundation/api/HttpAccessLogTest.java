@@ -80,4 +80,36 @@ class HttpAccessLogTest {
             logger.setLevel(previous);
         }
     }
+
+    @Test
+    void rejectedImportLogsFieldCodesAndCommitStage() {
+        Logger logger = (Logger) LoggerFactory.getLogger(HttpAccessLog.class);
+        Level previous = logger.getLevel();
+        var captured = new ListAppender<ILoggingEvent>();
+        captured.start();
+        logger.addAppender(captured);
+        logger.setLevel(Level.INFO);
+        try {
+            var request = new MockHttpServletRequest("POST", "/api/v1/projects/123/work-item-imports");
+            request.setAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE,
+                    "/api/v1/projects/{projectId}/work-item-imports");
+            HttpAccessLog.rejected(request, "VALIDATION_FAILED", null, List.of("rows[3].notes:SIZE"));
+            HttpAccessLog.stage(request, "COMMIT");
+            var response = new MockHttpServletResponse();
+            response.setStatus(422);
+            HttpAccessLog.completed(request, response, System.nanoTime());
+            var rejected = captured.list.getLast();
+            assertThat(rejected.getLevel()).isEqualTo(Level.INFO);
+            assertThat(rejected.getKeyValuePairs()).anyMatch(
+                    field -> field.key.equals("errorCode") && field.value.equals("VALIDATION_FAILED"));
+            assertThat(rejected.getKeyValuePairs()).anyMatch(
+                    field -> field.key.equals("fieldErrors") && field.value.equals("rows[3].notes:SIZE"));
+            assertThat(rejected.getKeyValuePairs()).anyMatch(
+                    field -> field.key.equals("stage") && field.value.equals("COMMIT"));
+        } finally {
+            logger.detachAppender(captured);
+            captured.stop();
+            logger.setLevel(previous);
+        }
+    }
 }

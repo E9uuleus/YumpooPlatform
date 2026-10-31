@@ -34,7 +34,6 @@
 .dashboard-switch-list button>span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dashboard-dialog{max-width:calc(100vw - 24px);border-radius:10px!important}
 .dashboard-dialog .el-dialog__body{padding-top:6px}
-.dashboard-dialog .dialog-intro,.dashboard-drawer .dialog-intro,.chart-editor .dialog-intro{display:none}
 .dialog-empty{padding:28px 8px;text-align:center;color:var(--yp-text-secondary);font-size:13px}
 .dashboard-form-label{display:block;font-size:13px;font-weight:500;margin:20px 0 9px}
 .dashboard-template-options{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}

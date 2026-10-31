@@ -5,6 +5,7 @@ import {
   type CurrentAuthentication,
 } from '@yumpoo/api-client'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
+import { ElMessage } from 'element-plus'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App.vue'
@@ -62,6 +63,16 @@ describe('M1-12 Web 全局壳', () => {
     expect(wrapper.text()).not.toContain('在线壳')
     expect(wrapper.text()).not.toContain('Web 浏览器')
     expect(wrapper.findAll('.module-rail__item-label').map(item => item.text())).toEqual(['首页', '工作台'])
+  })
+
+  it('全局轻提示默认带关闭按钮', async () => {
+    await mountApplication('/workspace/member')
+    await flushPromises()
+
+    ElMessage.success('已保存')
+    await flushPromises()
+    expect(document.body.querySelector('.el-message.el-message--success .el-message__closeBtn')).not.toBeNull()
+    ElMessage.closeAll()
   })
 
   it('顶栏图标按钮：本页引导随页面启用，偏好设置进入设置页', async () => {

@@ -337,6 +337,12 @@ paths:
             minimum: 1
             maximum: 500
             default: 100
+        - name: failed
+          in: query
+          description: 只返回失败的 HTTP 请求（访问日志 status ≥ 400），覆盖 INFO 的 4xx、WARN 的 403 与 5xx；与其他条件取交集。
+          schema:
+            type: boolean
+            default: false
       responses:
         "200":
           description: 查询或更新成功。
@@ -411,6 +417,12 @@ paths:
             minimum: 1
             maximum: 500
             default: 100
+        - name: failed
+          in: query
+          description: 只返回失败的 HTTP 请求（访问日志 status ≥ 400），覆盖 INFO 的 4xx、WARN 的 403 与 5xx；与其他条件取交集。
+          schema:
+            type: boolean
+            default: false
       responses:
         "200":
           description: 查询或更新成功。
@@ -468,6 +480,12 @@ paths:
         - *a5
         - *a6
         - *a7
+        - name: failed
+          in: query
+          description: 只返回失败的 HTTP 请求（访问日志 status ≥ 400），覆盖 INFO 的 4xx、WARN 的 403 与 5xx；与其他条件取交集。
+          schema:
+            type: boolean
+            default: false
       responses:
         "200":
           description: 查询或更新成功。

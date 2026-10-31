@@ -12,6 +12,37 @@
   box-sizing: border-box;
 }
 
+/* 滚动条：透明轨道上的胶囊滑块，悬停加粗加深。Chromium 与桌面端用 ::-webkit-scrollbar；
+   元素一旦声明 scrollbar-color / scrollbar-width，Chromium 会改用标准属性并忽略这里，因此其余样式不再声明它们（隐藏滚动条的 none 除外）。 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: var(--yp-radius-pill);
+  background: var(--yp-scrollbar-thumb) padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  border-width: 1px;
+  background-color: var(--yp-scrollbar-thumb-hover);
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-color: var(--yp-scrollbar-thumb) transparent;
+    scrollbar-width: thin;
+  }
+}
+
 body {
   margin: 0;
   min-width: 320px;
@@ -468,6 +499,22 @@ code {
   word-break: break-all;
 }
 
+.problem-fields {
+  margin: var(--yp-space-1) 0 0;
+  padding-left: var(--yp-space-5);
+}
+
+.problem-diagnostics {
+  margin: var(--yp-space-2) 0 0;
+  padding: var(--yp-space-2) var(--yp-space-3);
+  border-radius: var(--yp-radius-sm);
+  background: var(--yp-bg-sunken);
+  color: var(--yp-text-secondary);
+  font: 12px/1.6 var(--yp-font-mono);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
 .table-surface {
   overflow: hidden;
   border: 1px solid var(--yp-border-default);
@@ -859,7 +906,20 @@ code {
 }
 html.timer-surface,html.timer-surface body,html.timer-surface #app{min-width:0;min-height:100%;margin:0;background:transparent;overflow:hidden}
 
-/* Fixed frame (route meta `frame: 'fixed'`): the shell fills the viewport and each page scrolls its own body. */
+/* 桌面宽度下外壳固定为视口高度：顶栏、模块栏与二级导航不随内容滚动，正文在 .app-main 内滚动。 */
+@media (min-width: 960px) {
+  html:has(.app-shell),
+  html:has(.app-shell) body {
+    overflow: hidden;
+  }
+
+  .app-shell {
+    height: 100dvh;
+    min-height: 0;
+  }
+}
+
+/* Fixed frame (route meta `frame: 'fixed'`): .app-main drops its padding and scroll; each page scrolls its own body. */
 html:has(.app-shell--fixed),
 html:has(.app-shell--fixed) body {
   overflow: hidden;

@@ -229,8 +229,6 @@ async function readAll() {
   overflow: auto;
   border-top: 1px solid var(--yp-border-subtle);
   overscroll-behavior: contain;
-  scrollbar-color: var(--yp-border-strong) transparent;
-  scrollbar-width: thin;
 }
 .inbox-panel__list > .inbox-row + .inbox-row { border-top: 1px solid var(--yp-border-subtle); }
 .inbox-panel__status {

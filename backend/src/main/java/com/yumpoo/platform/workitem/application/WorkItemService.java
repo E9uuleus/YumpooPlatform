@@ -71,6 +71,8 @@ import static com.yumpoo.platform.workitem.application.WorkItemRelationRepositor
 
 @Service
 public class WorkItemService {
+    private static final String INVALID_WORK_ITEM_MESSAGE =
+            "工作项字段不符合要求，请检查标题（1～300 字）、备注（最多 16384 字）、处理人（最多 20 位且不重复）、截止时间与时间线日期";
     private static final String CREATED = "workitem.work_item_created";
     private static final String FIELDS_CHANGED = "workitem.work_item_fields_changed";
     private static final String ASSIGNED = "workitem.work_item_assigned";
@@ -334,6 +336,26 @@ public class WorkItemService {
         return new ProjectWorkItemFilterOptionCursorPage(items, nextCursor);
     }
 
+    @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
+    public ArchivedWorkItemPage listArchived(CurrentActor actor, UUID projectId, String query, OffsetPageRequest page) {
+        requireActor(actor);
+        ProjectAccessSnapshot project = visible(actor, projectId);
+        String q = query == null || query.isBlank() ? null : query.strip();
+        List<WorkItemRepository.ArchivedRow> rows = workItems.findArchived(project.companyId(), projectId, q,
+                page.page() * page.size(), page.size());
+        long total = workItems.countArchived(project.companyId(), projectId, q);
+        List<WorkItem> items = rows.stream().map(WorkItemRepository.ArchivedRow::item).toList();
+        Map<UUID, MinimalUserSnapshot> people = people(project.companyId(), items);
+        Map<UUID, Long> subitemCounts = relations.countActiveChildren(project.companyId(),
+                items.stream().map(WorkItem::id).toList());
+        return new ArchivedWorkItemPage(rows.stream().map(row -> new ArchivedWorkItem(row.item().id(),
+                        row.item().itemNo(), row.item().title(), row.item().statusCode(),
+                        row.item().statusCategory().name(), row.parentTitle(),
+                        subitemCounts.getOrDefault(row.item().id(), 0L), row.item().updatedAt(),
+                        updatedByDisplayName(row.item(), people), StrongEtag.format(row.item().rowVersion()))).toList(),
+                page.page(), page.size(), total, (int) ((total + page.size() - 1) / page.size()));
+    }
+
     @Transactional(readOnly = true)
     public WorkItemDetail find(CurrentActor actor, UUID workItemId) {
         requireActor(actor);
@@ -500,7 +522,7 @@ public class WorkItemService {
                     draft.dueTime().resolve(draft.dueDate(), null), rank,
                     projectSortKey, actor.userId(), now).assign(draft.assigneeUserIds(), actor.userId(), now);
         } catch (IllegalArgumentException exception) {
-            throw validation("body", "INVALID_WORK_ITEM", exception.getMessage());
+            throw validation("body", "INVALID_WORK_ITEM", INVALID_WORK_ITEM_MESSAGE);
         }
         if (!workItems.insert(item)) throw new IllegalStateException("work item insert failed");
         appendCreated(item, actor);
@@ -561,7 +583,7 @@ public class WorkItemService {
                     command.actor().userId(), clock.instant());
             candidate = candidate.assign(assignees, command.actor().userId(), candidate.updatedAt());
         } catch (IllegalArgumentException exception) {
-            throw validation("body", "INVALID_WORK_ITEM", exception.getMessage());
+            throw validation("body", "INVALID_WORK_ITEM", INVALID_WORK_ITEM_MESSAGE);
         }
         List<String> changedFields = changed(before, candidate);
         if (changedFields.isEmpty()) {
@@ -1085,7 +1107,7 @@ public class WorkItemService {
                     command.actor().userId(), clock.instant());
             candidate = candidate.assign(assignees, command.actor().userId(), candidate.updatedAt());
         } catch (IllegalArgumentException exception) {
-            throw validation("body", "INVALID_WORK_ITEM", exception.getMessage());
+            throw validation("body", "INVALID_WORK_ITEM", INVALID_WORK_ITEM_MESSAGE);
         }
         List<String> changedFields = changed(before, candidate);
         if (changedFields.isEmpty())
@@ -1706,7 +1728,7 @@ public class WorkItemService {
         try {
             return sanitizer.sanitizeDescription(untrustedHtml);
         } catch (IllegalArgumentException exception) {
-            throw validation("description", "INVALID_DESCRIPTION", exception.getMessage());
+            throw validation("description", "INVALID_DESCRIPTION", "描述格式无效或超过长度上限");
         }
     }
 

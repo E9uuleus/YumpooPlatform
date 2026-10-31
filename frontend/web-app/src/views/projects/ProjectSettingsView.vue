@@ -133,7 +133,6 @@ onMounted(() => pageLoad.track(load))
       section="settings"
       :project="project"
       title="项目设置"
-      description="管理项目基本信息与协作设置。"
     />
     <inline-problem
       v-if="error"

@@ -26,7 +26,6 @@ const session = useSession()
 const timezone = computed(() => session.authentication.value?.company.timezone ?? 'Asia/Shanghai')
 const items = ref<ActivityItem[]>([])
 const nextCursor = ref<string | null>(null)
-const historyStartedAt = ref<Date>()
 const category = ref<'all' | ActivityCategory>('all')
 const dateRange = ref<[Date, Date] | null>(null)
 const loading = ref(false)
@@ -100,7 +99,6 @@ async function load(): Promise<void> {
     if (sequence !== requestSequence) return
     items.value = page.items
     nextCursor.value = page.nextCursor
-    historyStartedAt.value = page.historyStartedAt
   } catch (reason) {
     if (sequence === requestSequence) error.value = await toApiProblem(reason)
   } finally {
@@ -268,7 +266,7 @@ onBeforeUnmount(() => clearInterval(clock))
         compact
       />
       <div
-        v-if="nextCursor || historyStartedAt"
+        v-if="nextCursor"
         class="activity-timeline__footer"
       >
         <el-button
@@ -279,12 +277,6 @@ onBeforeUnmount(() => clearInterval(clock))
         >
           加载更早动态
         </el-button>
-        <p
-          v-if="historyStartedAt"
-          class="activity-timeline__cutover"
-        >
-          动态从 {{ formatTimestamp(historyStartedAt, timezone) }} 开始记录，更早历史未回填。
-        </p>
       </div>
     </div>
   </section>
@@ -442,12 +434,6 @@ onBeforeUnmount(() => clearInterval(clock))
   justify-items: center;
   gap: var(--yp-space-2);
   padding-top: var(--yp-space-4);
-}
-
-.activity-timeline__cutover {
-  margin: 0;
-  color: var(--yp-text-muted);
-  font-size: var(--yp-type-caption-size);
 }
 
 .activity-timeline--compact .activity-timeline__feed {

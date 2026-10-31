@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import YpNotice from '../yp/YpNotice.vue'
 import type {
   WorkItemCellActivityColumn,
   WorkItemCellActivityEntry,
@@ -27,7 +26,6 @@ const timezone = computed(() => session.authentication.value?.company.timezone ?
 const items = ref<WorkItemCellActivityEntry[]>([])
 const facets = ref<WorkItemCellActivityFacets>()
 const nextCursor = ref<string | null>(null)
-const historyStartedAt = ref<Date>()
 const selectedTime = ref<WorkItemCellActivityTimeRange>()
 const selectedActors = ref<string[]>([])
 const selectedColumns = ref<WorkItemCellActivityColumn[]>([])
@@ -81,7 +79,6 @@ async function load(): Promise<void> {
     if (sequence !== requestSequence) return
     items.value = page.items
     nextCursor.value = page.nextCursor
-    historyStartedAt.value = page.historyStartedAt
     facets.value = page.facets
   } catch (reason) {
     if (sequence === requestSequence) error.value = await toApiProblem(reason)
@@ -152,14 +149,6 @@ onBeforeUnmount(() => { if (minuteTimer) clearInterval(minuteTimer) })
     class="cell-activity"
     aria-label="工作项动态"
   >
-    <yp-notice
-      v-if="historyStartedAt"
-      class="cell-activity__cutover"
-      tone="info"
-    >
-      {{ `单元格动态从 ${formatChineseTimestamp(historyStartedAt, timezone)} 开始记录，更早历史未回填。` }}
-    </yp-notice>
-
     <div class="cell-activity__toolbar">
       <el-popover
         v-model:visible="filterVisible"
@@ -489,7 +478,7 @@ onBeforeUnmount(() => { if (minuteTimer) clearInterval(minuteTimer) })
       <yp-empty-state
         v-if="!loading && !items.length && !error"
         :title="hasFilters ? '没有符合筛选条件的动态' : '还没有单元格动态'"
-        :description="hasFilters ? '调整或清除筛选条件后再试。' : '切点后的字段操作会显示在这里。'"
+        :description="hasFilters ? '调整或清除筛选条件后再试。' : '字段操作会显示在这里。'"
       />
     </div>
     <el-button

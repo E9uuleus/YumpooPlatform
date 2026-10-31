@@ -66,7 +66,6 @@ const summary = computed(() => `${THEMES[appearance.themeMode.value]} · ${DENSI
     >
       <div class="settings-row__label">
         <strong>小窗口与侧边栏不透明度</strong>
-        <span>仅桌面端。</span>
       </div>
       <el-slider
         class="appearance-opacity"

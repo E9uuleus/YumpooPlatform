@@ -344,13 +344,16 @@ class TimeTrackingHttpIT {
         String path="/api/v1/me/time-tracker/preferences";
         JsonNode initial=ok(get("/api/v1/me/time-tracker",member));
         assertThat(initial.path("preferences").path("hideCompleted").asBoolean()).isFalse();
+        assertThat(initial.path("preferences").path("hideCompletedEffect").asText()).isEqualTo("FADE_STRIKETHROUGH");
         JsonNode hidden=ok(mutate("PUT",path,member,json.writeValueAsString(Map.of("timerEnabled",true,"workdayStartMinute",540,
-                "workdayEndMinute",1080,"hideCompleted",true)),initial.path("etag").asText()));
+                "workdayEndMinute",1080,"hideCompleted",true,"hideCompletedEffect","HIDE")),initial.path("etag").asText()));
         assertThat(hidden.path("preferences").path("hideCompleted").asBoolean()).isTrue();
+        assertThat(hidden.path("preferences").path("hideCompletedEffect").asText()).isEqualTo("HIDE");
         JsonNode kept=ok(mutate("PUT",path,member,json.writeValueAsString(Map.of("timerEnabled",true,"workdayStartMinute",510,
                 "workdayEndMinute",1080)),hidden.path("etag").asText()));
         assertThat(kept.path("preferences").path("workdayStartMinute").asInt()).isEqualTo(510);
         assertThat(kept.path("preferences").path("hideCompleted").asBoolean()).isTrue();
+        assertThat(kept.path("preferences").path("hideCompletedEffect").asText()).isEqualTo("HIDE");
     }
 
     @Test

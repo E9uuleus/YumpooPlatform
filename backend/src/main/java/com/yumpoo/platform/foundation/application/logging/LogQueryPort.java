@@ -16,7 +16,7 @@ public interface LogQueryPort {
     Map<String, Long> countsSince(Instant since);
     List<Entry> recentErrors(int limit);
 
-    record Filter(Set<String> levels, Set<String> modules, String q, String requestId, String event, String userId) {
+    record Filter(Set<String> levels, Set<String> modules, String q, String requestId, String event, String userId, boolean failedRequests) {
         public Filter {
             levels = levels == null ? Set.of("ERROR", "WARN", "INFO") : Set.copyOf(levels);
             modules = modules == null ? Set.of() : Set.copyOf(modules);
@@ -41,7 +41,8 @@ public interface LogQueryPort {
                 (blank(q) ||
                     (r.msg() + " " + r.event() + " " + (r.error() == null ? "" : r.error().type()))
                         .toLowerCase(Locale.ROOT)
-                        .contains(q.toLowerCase(Locale.ROOT)))
+                        .contains(q.toLowerCase(Locale.ROOT))) &&
+                (!failedRequests || r.fields().get(LogFields.STATUS) instanceof Number status && status.intValue() >= 400)
             );
         }
 
