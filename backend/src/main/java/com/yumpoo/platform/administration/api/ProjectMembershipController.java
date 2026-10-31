@@ -106,7 +106,7 @@ public final class ProjectMembershipController {
     @PostMapping("/projects/{projectId}/leave")
     ResponseEntity<String> leave(@PathVariable UUID projectId,
             @RequestHeader(name=IdempotencyKeyParser.HEADER_NAME,required=false) String idempotencyHeader) {
-        CurrentActor actor=actors.requiredActive(); query.requireVisible(actor,projectId);
+        CurrentActor actor=actors.requiredActive();
         UUID key=idempotencyKeys.parseRequired(idempotencyHeader);
         ProjectMemberGovernanceCommand command=new ProjectMemberGovernanceCommand(actor,projectId,actor.userId(),
                 null,null,key,hasher.hash("leaveProject",Map.of("projectId",projectId.toString()),

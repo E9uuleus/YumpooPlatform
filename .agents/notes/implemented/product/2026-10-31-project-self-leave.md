@@ -9,7 +9,7 @@ Status: implemented
 ## Decision
 
 - 新增 `POST /projects/{projectId}/leave`，项目查询通过可选只读字段 `canLeave` 表示能力。只有进行中项目的非负责人成员可以退出；同时具有公司管理员身份的项目成员也适用，只读访问的公司管理员不可退出。
-- 不需要 If-Match，服务端读取调用者当前成员版本，保留并发冲突的 412；命令需要 Idempotency-Key。负责人需先转交负责人，已结束或已归档项目需先重新打开或恢复。
+- 不需要 If-Match，服务端读取调用者当前成员版本，保留并发冲突的 412；命令需要 Idempotency-Key。可见性与成员资格在幂等回调内校验，已成功退出的普通成员可用同一键重放原响应；新键仍按当前权限拒绝。负责人需先转交负责人，已结束或已归档项目需先重新打开或恢复。
 - 复用[项目成员治理](2026-08-20-project-membership-governance.md)的软移除与 Project → membership 锁序，成员关系变为 REMOVED，removed_by_user_id 为本人；工时、讨论和处理人历史保留。
 - 在同一事务内通过 ProjectTimerStopPort 停止本人在该项目中运行的计时，保持 Project → timer_state 锁序，不停止其他成员或其他项目的计时。无数据库迁移。
 - 复用 `catalog.project_member_removed` v1、`changeSource=DIRECT`，由事件 actor 与 payload userId 相同识别自行退出，不新增事件类型。负责人沿用成员移除通知，收件箱文案为「退出了项目」。
