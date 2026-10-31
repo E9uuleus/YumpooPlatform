@@ -60,6 +60,10 @@ components:
         canResume:
           type: boolean
           readOnly: true
+        canLeave:
+          type: boolean
+          readOnly: true
+          description: 调用者是非负责人的项目成员且项目进行中（未归档、未结束）时为 true。
     ProjectDeletion:
       type: object
       additionalProperties: false

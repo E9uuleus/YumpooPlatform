@@ -85,6 +85,12 @@ export interface ProjectCapabilities {
      * @memberof ProjectCapabilities
      */
     readonly canResume?: boolean;
+    /**
+     * 调用者是非负责人的项目成员且项目进行中（未归档、未结束）时为 true。
+     * @type {boolean}
+     * @memberof ProjectCapabilities
+     */
+    readonly canLeave?: boolean;
 }
 
 /**
@@ -122,6 +128,7 @@ export function ProjectCapabilitiesFromJSONTyped(json: any, ignoreDiscriminator:
         'canCancelDeletion': json['canCancelDeletion'] == null ? undefined : json['canCancelDeletion'],
         'canEnd': json['canEnd'] == null ? undefined : json['canEnd'],
         'canResume': json['canResume'] == null ? undefined : json['canResume'],
+        'canLeave': json['canLeave'] == null ? undefined : json['canLeave'],
     };
 }
 
@@ -129,7 +136,7 @@ export function ProjectCapabilitiesToJSON(json: any): ProjectCapabilities {
     return ProjectCapabilitiesToJSONTyped(json, false);
 }
 
-export function ProjectCapabilitiesToJSONTyped(value?: Omit<ProjectCapabilities, 'canUpdateSettings'|'canManageMembers'|'canReassignOwner'|'canArchive'|'canRestore'|'canMoveWorkspace'|'canOverrideArchive'|'canScheduleDeletion'|'canCancelDeletion'|'canEnd'|'canResume'> | null, ignoreDiscriminator: boolean = false): any {
+export function ProjectCapabilitiesToJSONTyped(value?: Omit<ProjectCapabilities, 'canUpdateSettings'|'canManageMembers'|'canReassignOwner'|'canArchive'|'canRestore'|'canMoveWorkspace'|'canOverrideArchive'|'canScheduleDeletion'|'canCancelDeletion'|'canEnd'|'canResume'|'canLeave'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }
