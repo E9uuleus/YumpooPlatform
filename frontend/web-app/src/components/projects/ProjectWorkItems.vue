@@ -4760,29 +4760,21 @@ onBeforeUnmount(() => {
 .project-table-scrollbar {
   position: fixed;
   z-index: 1999;
-  background: var(--yp-bg-sunken);
-  scrollbar-color: var(--yp-border-strong) var(--yp-bg-sunken);
-  scrollbar-width: thin;
   overscroll-behavior: contain;
 }
 
 .project-table-scrollbar::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-.project-table-scrollbar::-webkit-scrollbar-track {
-  background: var(--yp-bg-sunken);
+  width: 12px;
+  height: 12px;
 }
 
 .project-table-scrollbar::-webkit-scrollbar-thumb {
-  border: 2px solid var(--yp-bg-sunken);
-  border-radius: var(--yp-radius-pill);
-  background: var(--yp-border-strong);
+  border-width: 3px;
 }
 
-.project-table-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: var(--yp-text-secondary);
+.project-table-scrollbar::-webkit-scrollbar-thumb:hover,
+.project-table-scrollbar::-webkit-scrollbar-thumb:active {
+  border-width: 2px;
 }
 
 .project-table-scrollbar--horizontal {

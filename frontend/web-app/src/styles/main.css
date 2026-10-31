@@ -12,6 +12,37 @@
   box-sizing: border-box;
 }
 
+/* 滚动条：透明轨道上的胶囊滑块，悬停加粗加深。Chromium 与桌面端用 ::-webkit-scrollbar；
+   元素一旦声明 scrollbar-color / scrollbar-width，Chromium 会改用标准属性并忽略这里，因此其余样式不再声明它们（隐藏滚动条的 none 除外）。 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: var(--yp-radius-pill);
+  background: var(--yp-scrollbar-thumb) padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  border-width: 1px;
+  background-color: var(--yp-scrollbar-thumb-hover);
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-color: var(--yp-scrollbar-thumb) transparent;
+    scrollbar-width: thin;
+  }
+}
+
 body {
   margin: 0;
   min-width: 320px;
