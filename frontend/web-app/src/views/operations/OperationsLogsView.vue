@@ -845,6 +845,7 @@ watch(
 
 .log-chip {
   cursor: pointer;
+  border: 0;
   background: var(--yp-fill-neutral);
 }
 
