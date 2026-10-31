@@ -50,6 +50,7 @@ defineEmits<{ open: [] }>()
   min-width: 0;
   padding: var(--yp-space-4);
   overflow: hidden;
+  border: 0;
   border-radius: var(--yp-radius-xl);
   background: var(--yp-bg-sunken);
   color: var(--yp-text-primary);
