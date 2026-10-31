@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import YpSkeleton from '../../components/yp/YpSkeleton.vue'
 import { usePageLoad } from '../../brand/page-progress'
 
 import { vBrandLoading as vLoading } from '../../brand/loading'
@@ -427,8 +428,14 @@ onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTi
         role="tabpanel"
         aria-labelledby="project-content-tab"
       >
+        <yp-skeleton
+          v-if="loading && !result?.items.length"
+          variant="table"
+          :rows="8"
+          :columns="3"
+        />
         <div
-          v-if="loading || result?.items.length"
+          v-else-if="loading || result?.items.length"
           v-loading="loading"
           class="project-table-shell"
           :aria-busy="loading"
@@ -551,8 +558,14 @@ onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTi
         role="tabpanel"
         aria-labelledby="project-recent-tab"
       >
+        <yp-skeleton
+          v-if="recentLoading && !recentProjectItems.length"
+          variant="table"
+          :rows="8"
+          :columns="4"
+        />
         <div
-          v-if="recentLoading || recentProjectItems.length"
+          v-else-if="recentLoading || recentProjectItems.length"
           v-loading="recentLoading"
           class="project-table-shell"
           :aria-busy="recentLoading"
