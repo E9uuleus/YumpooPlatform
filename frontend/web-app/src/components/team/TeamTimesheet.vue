@@ -128,10 +128,7 @@ async function exportExcel() {
   >
     <div class="dashboard-toolbar team-toolbar">
       <slot name="switch" />
-      <span
-        class="toolbar-divider"
-        aria-hidden="true"
-      />
+
       <TeamPeriodPicker
         ref="picker"
         v-model:period="period"
