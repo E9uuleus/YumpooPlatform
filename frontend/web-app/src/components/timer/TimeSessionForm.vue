@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, type DefineComponent } from 'vue'
 import { TimeSessionFillMode, type MyTimeSession } from '@yumpoo/api-client'
 import { timeTrackingApi } from '../../api/client'
 import OverlapModeControl from '../my-time/day/OverlapModeControl.vue'
 import { blockFromSession, defaultMode, MIN_BLOCK_MS, overlapEffect, type DayBlock, type Range } from '../my-time/day/dayModel'
 import YpCalendar from '../yp/YpCalendar.vue'
-import { ElOption, ElSelect, ElTimePicker } from 'element-plus'
+import { ElOption as ElOptionRaw, ElSelect as ElSelectRaw, ElTimePicker } from 'element-plus'
 import { companyDateTime, parseCompanyDateTime } from './timeFormat'
+
+const ElOption = ElOptionRaw as unknown as DefineComponent
+const ElSelect = ElSelectRaw as unknown as DefineComponent
 
 const props = withDefaults(defineProps<{ start: string; end: string; timezone: string; editing: boolean; busy: boolean; problem?: string
   mode?: TimeSessionFillMode; workItemId?: string }>(), { mode: TimeSessionFillMode.Gaps, problem: '', workItemId: '' })
