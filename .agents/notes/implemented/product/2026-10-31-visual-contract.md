@@ -33,3 +33,5 @@ Status: implemented
 - 独立监控站与桌面壳启动 / 诊断静态页不在本契约范围内。
 
 [仪表板高度决策](2026-09-18-dashboard-stable-widget-height.md)继续拥有布局高度与标题尺寸，标题栏装饰底线由本契约去除；[自定义图表决策](2026-09-17-dashboard-custom-charts.md)继续拥有配置、统计与预览，通用控件与弹层外观由本契约接管。
+
+[团队视图决策](2026-10-08-dashboard-tabs-export-team-view.md)继续拥有统计口径、周期与导出；其表格悬停外观由本视觉契约统一为中性配色。

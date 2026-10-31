@@ -563,9 +563,8 @@ onBeforeUnmount(() => { ++previewToken })
   display: grid;
   gap: 2px;
   padding: var(--yp-space-3) var(--yp-space-4);
-  border: 1px solid var(--yp-border-default);
   border-radius: var(--yp-radius-md);
-  background: var(--yp-bg-surface);
+  background: var(--yp-bg-sunken);
 }
 
 .hours-import__stats strong {

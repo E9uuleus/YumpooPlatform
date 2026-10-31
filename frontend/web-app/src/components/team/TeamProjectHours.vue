@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import YpSkeleton from '../yp/YpSkeleton.vue'
 import YpNotice from '../yp/YpNotice.vue'
 import { computed, ref } from 'vue'
 import { ElButton, ElIcon, ElMessage } from 'element-plus'
@@ -55,13 +56,20 @@ async function exportExcel() {
           :icon="Download"
           :loading="exporting"
           :disabled="!sheet || loading || !model.rows.length"
+          text
           @click="exportExcel"
         >
           导出 Excel
         </el-button>
       </div>
     </div>
+    <yp-skeleton
+      v-if="loading && !sheet"
+      variant="table"
+      :rows="6"
+    />
     <div
+      v-else
       v-loading="loading"
       class="team-body"
     >

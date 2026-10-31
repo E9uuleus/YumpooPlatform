@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import YpSkeleton from '../yp/YpSkeleton.vue'
 import YpNotice from '../yp/YpNotice.vue'
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
@@ -71,7 +72,13 @@ const labelStyle = (token: string | null | undefined) => ({ backgroundColor: wor
         <span class="team-overdue">逾期 <b>{{ Math.round(shownOverdue) }}</b></span>
       </div>
     </div>
+    <yp-skeleton
+      v-if="loading && !workload"
+      variant="list"
+      :rows="6"
+    />
     <div
+      v-else
       v-loading="loading"
       class="team-body"
     >
@@ -156,7 +163,13 @@ const labelStyle = (token: string | null | undefined) => ({ backgroundColor: wor
                 >
                   {{ tasks.get(row.key)!.error }}
                 </yp-notice>
+                <yp-skeleton
+                  v-if="tasks.get(row.key)?.loading && !tasks.get(row.key)?.items.length"
+                  variant="list"
+                  :rows="2"
+                />
                 <div
+                  v-else
                   v-loading="tasks.get(row.key)?.loading && !tasks.get(row.key)?.items.length"
                   class="team-tasks-wrap work-item-accent-bar"
                 >
