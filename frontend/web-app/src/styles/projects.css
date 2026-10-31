@@ -1,9 +1,39 @@
-.app-shell--workspace .context-navigation {
-  width: 260px;
-  overflow-y: auto;
-  border-right-color: var(--yp-border-subtle);
-  background: var(--yp-bg-surface);
-  box-shadow: none;
+@media (min-width: 960px) {
+  /* 工作台菜单：标题与固定入口占自然高度，项目列表区占剩余高度并在内部滚动，当前项目入口始终可见。 */
+  .app-shell--workspace .context-navigation {
+    display: flex;
+    width: 260px;
+    flex-direction: column;
+    overflow: hidden;
+    border-right-color: var(--yp-border-subtle);
+    background: var(--yp-bg-surface);
+    box-shadow: none;
+  }
+
+  .app-shell--workspace .context-navigation .context-navigation__header {
+    flex: none;
+  }
+
+  .app-shell--workspace .context-navigation .global-navigation {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .app-shell--workspace .context-navigation .project-navigation__children {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .app-shell--workspace .context-navigation .project-navigation__scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
 }
 
 .app-shell--workspace.app-shell--context-open .app-main {

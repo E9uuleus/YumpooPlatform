@@ -156,6 +156,22 @@ describe('项目侧栏导航', () => {
     wrapper.unmount()
   })
 
+  it('当前项目入口排在项目列表之前，收起项目列表时仍显示', async () => {
+    route.params = { workspaceSlug: 'member', projectId: 'project-3' }
+    route.name = 'project-overview'
+    const wrapper = mount(AppShell, { attachTo: document.body, global: { stubs: { RouterView: true } } })
+    await flushPromises()
+    const navigation = wrapper.get('.context-navigation .global-navigation')
+    const visibleItems = () => navigation.findAll('.context-item').filter(item => item.isVisible()).map(item => item.text())
+    expect(visibleItems()).toEqual(['工作项', '统计', '成员', '动态', '设置'])
+    const group = navigation.get('.context-navigation__group-label').element
+    expect(group.compareDocumentPosition(navigation.get('.project-navigation__head').element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    await navigation.get('.project-navigation__toggle').trigger('click')
+    expect(wrapper.get('#desktop-project-navigation').isVisible()).toBe(false)
+    expect(visibleItems()).toEqual(['工作项', '统计', '成员', '动态', '设置'])
+    wrapper.unmount()
+  })
+
   it('置顶与最近打开的项目排在菜单前面，经服务端确认可见，并随置顶变化重排', async () => {
     const recent = (item: ProjectSummary, openedAt: number, pinned = false) => ({
       ...item, createdAt: item.createdAt.toISOString(), updatedAt: item.updatedAt.toISOString(), endedAt: null, openedAt, pinned,
