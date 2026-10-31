@@ -206,7 +206,7 @@ describe('项目级工作项首页', () => {
     state.moveProjectWorkItemOrder.mockResolvedValue({ ...item('created'), itemNo: 'WI-2' } as unknown as WorkItemDetail)
   })
 
-  afterEach(() => vi.restoreAllMocks())
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
   it.each(['table', 'kanban'])('does not start onboarding when %s work items fail after project metadata has loaded', async view => {
     state.route.query = { view }
@@ -1536,6 +1536,51 @@ describe('项目级工作项首页', () => {
     expect(state.replace).toHaveBeenLastCalledWith({ query: {} })
     expect(ElMessage.success).toHaveBeenCalledWith('已保存 3 个工作项的当前顺序')
     expect(JSON.parse(localStorage.getItem('yumpoo:project-work-items:table:v1') ?? '{}')).not.toHaveProperty('savedSort')
+  })
+
+  it.each(['overflow', 'exhausted', 'error'] as const)('最大化首屏标记持续可见时自动续页，并在 %s 时停止', async outcome => {
+    let notifyVisible: IntersectionObserverCallback | undefined
+    vi.stubGlobal('IntersectionObserver', class {
+      constructor(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
+        if (options?.rootMargin === '320px 0px') notifyVisible = callback
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    })
+    let resolveFirst!: (value: ProjectWorkItemCursorPage) => void
+    state.listProjectWorkItems.mockImplementationOnce(() => new Promise<ProjectWorkItemCursorPage>(resolve => { resolveFirst = resolve }))
+    if (outcome === 'error') state.listProjectWorkItems.mockRejectedValueOnce(new Error('offline'))
+    else state.listProjectWorkItems.mockResolvedValueOnce({
+      items: Array.from({ length: outcome === 'overflow' ? 25 : 2 }, (_, i) => item(`next-${i}`)),
+      nextCursor: outcome === 'overflow' ? 'page-3' : null,
+    })
+    const wrapper = mount(ProjectOverviewView, { global: { stubs: {
+      InlineProblem: true, WorkItemDetailPanel: true, ProjectWorkspaceHeader: true,
+      ElTable: defineComponent({
+        props: { data: { type: Array, default: () => [] } },
+        setup(_props, { expose }) {
+          expose({ doLayout() {}, clearSelection() {}, toggleRowSelection() {} })
+          return {}
+        },
+        template: '<div><div class="el-scrollbar__wrap"><div v-for="row in data" :key="row.id" /><slot name="append" /></div></div>',
+      }),
+    } } })
+    await flushPromises()
+    const view = wrapper.vm as unknown as { tableItems: ProjectWorkItemListItem[] }
+    const scroll = wrapper.get('.monday-table .el-scrollbar__wrap').element
+    const sentinel = wrapper.get('.cursor-sentinel').element
+    vi.spyOn(scroll, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 358, 800, 1026))
+    vi.spyOn(sentinel, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 358 + view.tableItems.length * 37 + 37, 800, 1))
+    // 首次可见通知发生在请求途中，之后不再发送交叉事件或窗口 resize。
+    notifyVisible!([{ isIntersecting: true, target: sentinel } as IntersectionObserverEntry], {} as IntersectionObserver)
+    expect(state.listProjectWorkItems).toHaveBeenCalledTimes(1)
+    resolveFirst({ items: Array.from({ length: 25 }, (_, i) => item(`first-${i}`)), nextCursor: 'page-2' })
+    for (let i = 0; i < 4; i++) await flushPromises()
+    expect(state.listProjectWorkItems).toHaveBeenCalledTimes(2)
+    expect(state.listProjectWorkItems).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: 'page-2', limit: 25 }), expect.anything())
+    expect(view.tableItems).toHaveLength(outcome === 'overflow' ? 50 : outcome === 'exhausted' ? 27 : 25)
+    if (outcome === 'error') expect(wrapper.text()).toContain('加载更多失败')
   })
 
   it('按游标无感追加并按 ID 去重', async () => {

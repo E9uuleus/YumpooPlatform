@@ -12,7 +12,7 @@ Project membership、唯一负责人、企业管理员治理、身份有效状�
 
 所有成员写和负责人重指派固定按 Project → membership 加锁。负责人重指派先创建或重激活新负责人的 ACTIVE membership，再以 Project 强 ETag 条件更新唯一 owner；旧负责人继续是 ACTIVE 普通成员。V21 延迟约束在事务提交时验证 owner 必有 ACTIVE membership，当前 owner 的普通移除固定返回状态冲突。
 
-成员列表允许 ACTIVE member 或同企业 COMPANY_ADMIN 读取，默认 `status=ALL`；SQL 在可见性查询阶段同时约束 company 与 ACTIVE membership，不加载后隐藏。候选查询仅 Owner 或 COMPANY_ADMIN，可搜索同企业 ACTIVE+ENABLED 用户并批量补充 membership 状态与 ETag，不返回邮箱、手机号或部门信息。Owner 的成员增删理由可省略；非 Owner COMPANY_ADMIN 必须提交 10–500 字理由，Owner+管理员按 Owner 路径处理。
+成员列表允许 ACTIVE member 或同企业 COMPANY_ADMIN 读取，默认 `status=ALL`；SQL 在可见性查询阶段同时约束 company 与 ACTIVE membership，不加载后隐藏。候选查询仅 Owner 或 COMPANY_ADMIN，可搜索同企业 ACTIVE+ENABLED 用户并批量补充 membership 状态与 ETag，不返回邮箱、手机号或部门信息。成员增删与负责人重指派由 Owner 或同企业 COMPANY_ADMIN 执行，理由一律可选（≤500 字，只写入 Security Audit），界面不再收集理由，改为确认弹窗（2026-10-30 起；此前非 Owner 的 COMPANY_ADMIN 必须提交 10–500 字理由，重指派仅限 COMPANY_ADMIN）。
 
 写命令由 `administration.application.ProjectMembershipGovernanceService` 编排 identity 最小快照、catalog 端口、Security Audit、Outbox 与幂等结果。新建 membership 返回 201；重激活返回 200 且要求 membership `If-Match`；不同幂等键重复加入 ACTIVE 返回 409；相同幂等键重放原始状态、body 与 ETag。进入命令处理后的失败治理动作使用独立 FAILED Audit，审计不可写时失败关闭。
 
@@ -31,6 +31,9 @@ M2-05 不实现 Project 列表、详情、PATCH、激活、Workspace 可见计�
 - 先更新 owner 再异步加入成员：拒绝，会违反提交时 owner membership 不变量。
 - 管理员直接读取 identity 目录 DTO：拒绝，成员 API 只暴露最小展示快照。
 - 离职时自动提升最早成员：拒绝，治理决策必须由 COMPANY_ADMIN 显式完成并审计。
+
+- 管理员治理理由必填：前端无法与服务端一致地判断何时需要（作为项目成员的管理员也走管理员路径），曾导致添加成员报错；审计已记录操作者、目标与前后状态，理由不是必要证据。
+- 项目内按项目角色收回管理员权限：管理员参与的项目在负责人离职时无法治理。
 
 ## Consequences
 

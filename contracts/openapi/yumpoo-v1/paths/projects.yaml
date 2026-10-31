@@ -638,7 +638,7 @@ paths:
       tags:
         - Projects
       operationId: reassignProjectOwner
-      summary: 原子重指派 Project 唯一负责人
+      summary: 负责人或 CompanyAdmin 原子重指派 Project 唯一负责人
       security:
         - sessionCookie: []
       parameters:

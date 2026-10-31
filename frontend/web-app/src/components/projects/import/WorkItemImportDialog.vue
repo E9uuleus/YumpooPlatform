@@ -110,7 +110,7 @@ const submitProblem = ref<ApiProblem>()
 /** 最近一次提交的请求，用来把字段路径换回文件行号。 */
 const submittedRequest = shallowRef<WorkItemImportRequest>()
 const SUBMIT_FAILURES: Record<ProblemKind, { title: string; hint: string }> = {
-  input: { title: '导入未保存：有内容需要修正', hint: '本次导入未保存，列映射和预览已保留。请按上面列出的行修正文件，重新上传后再导入。' },
+  input: { title: '导入未保存：有内容需要修正', hint: '本次导入未保存，列映射和预览已保留。请按上面的提示修正文件，重新上传后再导入。' },
   conflict: { title: '导入未保存：项目数据在预览后发生了变化', hint: '本次导入未保存，列映射已保留。请重新预览，确认结果后再导入。' },
   denied: { title: '导入未保存：没有导入权限', hint: '本次导入未保存。请确认你仍是项目成员，且项目没有结束或归档。' },
   internal: { title: '导入未保存：系统内部错误', hint: '本次导入未保存，列映射和预览已保留。这不是文件内容的问题，可以稍后重试；反复出现时请点「复制诊断信息」发给管理员。' },
@@ -123,7 +123,18 @@ const SUBMIT_REASONS: Record<string, string> = {
   PROJECT_ARCHIVED: '项目已归档，不能导入。',
   PROJECT_ENDED: '项目已结束，不能导入。',
 }
-const submitKind = computed(() => submitProblem.value ? problemKind(submitProblem.value) : undefined)
+/** 这些原因的 HTTP 状态是 409，但不是「预览后数据变化」：项目已结束或归档属于权限范围，排序空间不足要减少行数。 */
+const SUBMIT_REASON_KINDS: Record<string, ProblemKind> = {
+  PROJECT_ARCHIVED: 'denied',
+  PROJECT_ENDED: 'denied',
+  PROJECT_ORDER_DENSE: 'input',
+}
+const submitKind = computed(() => {
+  const problem = submitProblem.value
+  if (!problem) return undefined
+  return (problem.kind === 'response' ? SUBMIT_REASON_KINDS[problem.error.details.reason ?? ''] : undefined)
+    ?? problemKind(problem)
+})
 const submitReason = computed(() => submitProblem.value?.kind === 'response'
   ? SUBMIT_REASONS[submitProblem.value.error.details.reason ?? ''] : undefined)
 const submitFieldLabel = (field: string): string => importFieldLabel(submittedRequest.value!, field)

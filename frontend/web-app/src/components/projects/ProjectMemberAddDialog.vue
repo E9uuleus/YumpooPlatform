@@ -5,18 +5,20 @@ import {
   readCsrfToken,
   type ProjectMemberCandidate,
 } from '@yumpoo/api-client'
-import { ElButton, ElDialog, ElIcon, ElInput, ElMessage, ElMessageBox } from 'element-plus'
+import { ElButton, ElDialog, ElIcon, ElInput, ElMessage } from 'element-plus'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { projectsApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../InlineProblem.vue'
 import YpAssignee from '../yp/YpAssignee.vue'
+import { confirmOwnerTransfer } from './projectOwnerTransfer'
 
 const props = defineProps<{
   modelValue: boolean
   projectId: string
   projectEtag: string
-  reasonRequired: boolean
+  /** 当前用户就是负责人，转交确认据此说明自己将成为普通成员。 */
+  selfOwner: boolean
   canReassignOwner: boolean
 }>()
 const emit = defineEmits<{
@@ -28,7 +30,6 @@ const emit = defineEmits<{
 const query = ref('')
 const candidates = ref<ProjectMemberCandidate[]>([])
 const selected = ref<ProjectMemberCandidate[]>([])
-const reason = ref('')
 const searching = ref(false)
 const searchFailed = ref(false)
 const submitting = ref(false)
@@ -38,10 +39,7 @@ const attempts = new Map<string, { body: string; key: string }>()
 let timer: ReturnType<typeof setTimeout> | undefined
 let controller: AbortController | undefined
 
-const trimmedReason = computed(() => reason.value.trim())
-const reasonValid = computed(() => !props.reasonRequired
-  || (trimmedReason.value.length >= 10 && trimmedReason.value.length <= 500))
-const canSubmit = computed(() => selected.value.length > 0 && reasonValid.value && !submitting.value)
+const canSubmit = computed(() => selected.value.length > 0 && !submitting.value)
 const canMakeOwner = computed(() => props.canReassignOwner && selected.value.length === 1 && !submitting.value)
 
 function stateHint(candidate: ProjectMemberCandidate): string {
@@ -124,7 +122,7 @@ async function submit(): Promise<void> {
   const failed: ProjectMemberCandidate[] = []
   let added = 0
   for (const candidate of selected.value) {
-    const request = { userId: candidate.userId, reason: trimmedReason.value || null }
+    const request = { userId: candidate.userId }
     const body = JSON.stringify(request)
     const previous = attempts.get(candidate.userId)
     const key = previous?.body === body ? previous.key : crypto.randomUUID()
@@ -156,18 +154,8 @@ async function submit(): Promise<void> {
 async function makeOwner(): Promise<void> {
   const candidate = selected.value[0]
   if (!canMakeOwner.value || !candidate) return
-  let ownerReason: string
   try {
-    ownerReason = (await ElMessageBox.prompt(
-      `将负责人转交给「${candidate.displayName}」；此操作必须记录治理理由。`,
-      '设为负责人',
-      {
-        inputValue: trimmedReason.value,
-        inputPlaceholder: '请输入 10～500 字治理理由',
-        inputPattern: /^(?=[\s\S]{10,500}$)(?=\s*\S)/,
-        inputErrorMessage: '治理理由必须为 10～500 字',
-      },
-    )).value.trim()
+    await confirmOwnerTransfer(candidate.displayName, props.selfOwner)
   } catch {
     return
   }
@@ -184,7 +172,7 @@ async function makeOwner(): Promise<void> {
       xXSRFTOKEN: csrf,
       idempotencyKey: crypto.randomUUID(),
       ifMatch: props.projectEtag,
-      projectOwnerReassignmentRequest: { newOwnerUserId: candidate.userId, reason: ownerReason },
+      projectOwnerReassignmentRequest: { newOwnerUserId: candidate.userId },
     })
     ElMessage.success('负责人已转交')
     emit('reassigned')
@@ -209,7 +197,6 @@ watch(() => props.modelValue, open => {
   query.value = ''
   candidates.value = []
   selected.value = []
-  reason.value = ''
   problem.value = undefined
   searchFailed.value = false
   attempts.clear()
@@ -351,22 +338,6 @@ onBeforeUnmount(() => {
             没有找到匹配的成员
           </p>
         </template>
-      </div>
-      <div
-        v-if="reasonRequired"
-        class="member-add__reason"
-      >
-        <span id="member-add-reason-label">治理理由</span>
-        <el-input
-          v-model="reason"
-          type="textarea"
-          :rows="3"
-          maxlength="500"
-          show-word-limit
-          placeholder="企业管理员添加成员需填写 10～500 字理由"
-          aria-labelledby="member-add-reason-label"
-          :disabled="submitting"
-        />
       </div>
     </div>
     <template #footer>
@@ -527,13 +498,6 @@ onBeforeUnmount(() => {
   color: var(--yp-text-muted);
   font-size: var(--yp-type-body-size);
   text-align: center;
-}
-
-.member-add__reason {
-  display: grid;
-  gap: var(--yp-space-2);
-  color: var(--yp-text-secondary);
-  font-size: var(--yp-type-body-size);
 }
 
 .member-add__footer-start {

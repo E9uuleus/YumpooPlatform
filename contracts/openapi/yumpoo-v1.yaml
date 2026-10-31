@@ -4429,7 +4429,7 @@ paths:
       tags:
         - Projects
       operationId: reassignProjectOwner
-      summary: 原子重指派 Project 唯一负责人
+      summary: 负责人或 CompanyAdmin 原子重指派 Project 唯一负责人
       security:
         - sessionCookie: []
       parameters:
@@ -12254,6 +12254,13 @@ components:
         workItemTitle:
           type: string
           nullable: true
+    HideCompletedEffect:
+      type: string
+      enum:
+        - FADE
+        - FADE_STRIKETHROUGH
+        - HIDE
+      description: 隐藏已完成开启时工作项表格的显示效果：FADE 文字置灰，FADE_STRIKETHROUGH 置灰并加删除线（默认），HIDE 主表不显示（搜索或按状态筛选时照常显示）。请求省略时保留原值，响应总是返回。
     TimeTrackingPreferences:
       type: object
       additionalProperties: false
@@ -12280,6 +12287,8 @@ components:
         hideCompleted:
           type: boolean
           description: 在工作项表格淡化、在计时与补录选择列表隐藏已完成项；默认 false。请求省略时保留原值，响应总是返回。
+        hideCompletedEffect:
+          $ref: "#/components/schemas/HideCompletedEffect"
     CurrentTimeTracker:
       type: object
       additionalProperties: false
@@ -13995,14 +14004,14 @@ components:
       additionalProperties: false
       required:
         - newOwnerUserId
-        - reason
       properties:
         newOwnerUserId:
           $ref: "#/components/schemas/Uuid"
         reason:
           type: string
-          minLength: 10
           maxLength: 500
+          nullable: true
+          description: 可选，只写入安全审计。
     Content:
       type: object
       additionalProperties: false

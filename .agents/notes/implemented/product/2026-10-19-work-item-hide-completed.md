@@ -1,4 +1,4 @@
-# Agent Note: 工作项隐没已完成
+# Agent Note: 工作项隐藏已完成
 
 Status: implemented
 
@@ -8,17 +8,17 @@ Status: implemented
 
 ## Decision
 
-“隐没已完成”是每人一个开关，保存在计时偏好 `work_item_timer_state.hide_completed`（V80，默认关），经 `GET /me/time-tracker` 的 `preferences.hideCompleted` 读取、`PUT /me/time-tracker/preferences` 写入，请求省略该字段时保留原值。Web 只通过 [`useHideCompleted`](../../../../frontend/web-app/src/composables/useHideCompleted.ts) 读写，复用计时偏好的 If-Match 保存与计时广播，工作项表格、我的一天、补录选择器、计时器面板和桌面窗口因此同步。
+“隐藏已完成”是每人一个开关，保存在计时偏好 `work_item_timer_state.hide_completed`（V80，默认关），经 `GET /me/time-tracker` 的 `preferences.hideCompleted` 读取、`PUT /me/time-tracker/preferences` 写入，请求省略该字段时保留原值。Web 只通过 [`useHideCompleted`](../../../../frontend/web-app/src/composables/useHideCompleted.ts) 读写，复用计时偏好的 If-Match 保存与计时广播，工作项表格、我的一天、补录选择器、计时器面板和桌面窗口因此同步。
 
 什么算已完成由每人按项目定义，保存在[工作项表格个人设置](2026-10-07-work-item-table-settings.md)的 `completedStatusCodes`；为 null 时 DONE 与 CANCELED 两类状态视为完成。表格工具栏开关旁的下拉列出本项目全部状态供勾选，只对本人生效，跨设备同步。计时候选接口按同一定义返回 `completed`，服务端与表格的判断一致。
 
-开关开启后，工作项表格的主表与子项表只做原位淡化：单元格内容透明度 0.5、标题加删除线，约 220ms 过渡并尊重减少动态效果；单元格背景保持不透明，不改排序、分页、计数和分组。计时与补录的选择列表在没有搜索词时去掉已完成项，并显示“已隐藏 N 项”；有搜索词时始终包含已完成项，淡化显示并标注“已完成”。时间线上已经记录的块不受影响。计时与补录的工作项列表（快捷工时小窗、我的一天侧栏）按父子关系成块显示：候选接口返回 parentWorkItemId、parentTitle 和按本人定义计算的 parentCompleted，子项缩进并以圆角折线连到父项；父项不在列表中时以只读标题行代替，开关开启且父项已完成时，标题行与表格一样淡化并加删除线；已完成的子项照常从列表中去掉。
+开关开启后，工作项表格按本人选择的「隐藏效果」显示已完成项，效果存于计时偏好 hide_completed_effect（V87，默认 FADE_STRIKETHROUGH），与开关一起跨设备同步：FADE 单元格内容透明度 0.5、名称变灰；FADE_STRIKETHROUGH 再给名称加删除线；HIDE 时主表请求只带本人完成定义以外的状态（复用列表接口的 status 筛选），分页、数量与分组在过滤后的集合上计算，有搜索词或状态筛选时不排除，仍在表格中的已完成项（搜索结果、状态筛选、刚完成的项）按置灰加删除线显示，子项表照常淡化，看板与仪表板内嵌表格不受影响。约 220ms 过渡并尊重减少动态效果；单元格背景保持不透明。计时与补录的选择列表在没有搜索词时去掉已完成项，并显示“已隐藏 N 项”；有搜索词时始终包含已完成项，淡化显示并标注“已完成”。时间线上已经记录的块不受影响。计时与补录的工作项列表（快捷工时小窗、我的一天侧栏）按父子关系成块显示：候选接口返回 parentWorkItemId、parentTitle 和按本人定义计算的 parentCompleted，子项缩进并以圆角折线连到父项；父项不在列表中时以只读标题行代替，开关开启且父项已完成时，标题行与表格一样淡化并加删除线；已完成的子项照常从列表中去掉。
 
 ## Alternatives considered
 
 - 按状态分类判断完成：自定义状态都归为 TODO，无法表达“已上线”这类团队自己的完成状态。
 - 项目共享的完成定义：需要负责人治理和覆盖规则；当前定位为个人的筛选习惯，每人按项目设置。
-- 表格中把已完成项沉底或直接隐藏：需要改服务端排序，或让分页与计数失真；用户选择原位淡化。
+- 表格中把已完成项沉底，或在前端直接隐藏：需要改服务端排序，或让分页与计数失真。2026-10-30 起提供「不显示」效果，改用状态筛选在服务端过滤，分页与计数不失真；默认仍为原位淡化。
 - 每个页面各自保存开关：同一件事在表格、侧栏和计时器里状态不一致；改为一个个人偏好处处同步。
 - 搜索时也隐藏：会让人以为工作项不存在，因此搜索结果始终包含已完成项。
 
@@ -26,4 +26,4 @@ Status: implemented
 
 ## Consequences
 
-开关与完成定义分别存于计时状态与表格设置的新列，回退后的旧版本忽略这两列。完成定义引用的状态停用或删除后静默失效。选择列表由服务端按本人完成定义排除已完成项；隐藏数是全量的 `hiddenCompletedCount`；搜索时不排除，只淡化显示。`TimeTrackingHttpIT` 验证偏好省略时保留，以及候选 `completed` 按本人定义计算；`WorkItemHttpIT` 验证分组与完成定义不写入 `settings` jsonb；`useTimerCandidates.spec.ts` 验证服务端筛选参数、搜索时保留已完成项，以及首段计数和筛选重载。
+开关与完成定义分别存于计时状态与表格设置的新列，回退后的旧版本忽略这两列。效果列同样只扩展，回退后旧版本忽略，表格回到置灰加删除线。完成定义引用的状态停用或删除后静默失效。选择列表由服务端按本人完成定义排除已完成项；隐藏数是全量的 `hiddenCompletedCount`；搜索时不排除，只淡化显示。`TimeTrackingHttpIT` 验证偏好省略时保留，以及候选 `completed` 按本人定义计算；`WorkItemHttpIT` 验证分组与完成定义不写入 `settings` jsonb；`useTimerCandidates.spec.ts` 验证服务端筛选参数、搜索时保留已完成项，以及首段计数和筛选重载。

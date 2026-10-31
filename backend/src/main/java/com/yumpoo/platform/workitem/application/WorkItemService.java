@@ -336,6 +336,7 @@ public class WorkItemService {
         return new ProjectWorkItemFilterOptionCursorPage(items, nextCursor);
     }
 
+    @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public ArchivedWorkItemPage listArchived(CurrentActor actor, UUID projectId, String query, OffsetPageRequest page) {
         requireActor(actor);
         ProjectAccessSnapshot project = visible(actor, projectId);

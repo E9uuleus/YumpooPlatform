@@ -93,7 +93,7 @@ const props = defineProps<{
   workflowStatuses: StatusOption[]
   priorityOptions: PriorityOption[]
   labelCatalog?: WorkItemLabelCatalog | undefined
-  /** 隐没已完成开启时，按本人完成定义淡化的子项。 */
+  /** 隐藏已完成开启时，按本人完成定义淡化的子项。 */
   completed?: ((item: ProjectWorkItemListItem) => boolean) | undefined
   canCreate: boolean
   editingCell: boolean

@@ -881,7 +881,7 @@ export class ProjectsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 原子重指派 Project 唯一负责人
+     * 负责人或 CompanyAdmin 原子重指派 Project 唯一负责人
      */
     async reassignProjectOwnerRaw(requestParameters: ReassignProjectOwnerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Project>> {
         if (requestParameters['projectId'] == null) {
@@ -953,7 +953,7 @@ export class ProjectsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 原子重指派 Project 唯一负责人
+     * 负责人或 CompanyAdmin 原子重指派 Project 唯一负责人
      */
     async reassignProjectOwner(requestParameters: ReassignProjectOwnerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Project> {
         const response = await this.reassignProjectOwnerRaw(requestParameters, initOverrides);

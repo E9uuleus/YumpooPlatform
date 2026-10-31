@@ -32,6 +32,7 @@ import WorkItemTableSkeleton from './WorkItemTableSkeleton.vue'
 import WorkItemKanbanSkeleton from './WorkItemKanbanSkeleton.vue'
 import { ArrowDown, Box, Filter as FilterIcon, Hide, Plus, Search, Sort, Upload, User } from '@element-plus/icons-vue'
 import {
+  HideCompletedEffect,
   TimeTrackingState,
   WorkItemViewType,
   ProjectActorAccess,
@@ -464,7 +465,18 @@ function schedulePageScrollbarSync(): void {
   void nextTick(() => {
     pageScrollbarSyncQueued = false
     syncPageScrollbars()
+    fillTableViewport()
   })
+}
+
+function fillTableViewport(): void {
+  if (selectedView.value !== 'table' || grouped.value || groupingSwitching.value
+    || tableLoading.value || tableSorting.value || error.value || loadingMoreError.value || !tableNextCursor.value) return
+  const root = resolveTableScrollElement()?.getBoundingClientRect()
+  const end = tableSentinel.value?.getBoundingClientRect()
+  // 首批数据可能未填满视口，标记持续可见时 IntersectionObserver 不会再次通知。
+  if (root && end && root.height > 0 && end.height > 0 && end.bottom >= root.top && end.top <= root.bottom + 320)
+    void loadTable(tableNextCursor.value, true)
 }
 
 function syncResponsiveTableLayout(): void {
@@ -799,10 +811,17 @@ const visibleExpandedIds = computed(() => {
   return expandedSubitemIds.value.filter(id => loaded.has(id))
 })
 watch(() => visibleExpandedIds.value.join('|'), () => visibleExpandedIds.value.forEach(id => void loadSubitems(id)))
-const { hideCompleted } = useHideCompleted()
+const { hideCompleted, hideCompletedEffect } = useHideCompleted()
 function isCompletedRow(item: ProjectWorkItemListItem): boolean {
   return hideCompleted.value && isCompletedStatus(tableViewSettings.value.completedStatusCodes, item.statusCode, item.statusCategory)
 }
+/** 「不显示」：主表只请求本人完成定义以外的状态；看板与仪表板内嵌表格不受影响。 */
+const unfinishedStatusCodes = computed(() => !embedded.value && hideCompleted.value
+  && hideCompletedEffect.value === HideCompletedEffect.Hide
+  ? workflowStatuses.value.filter(status => !isCompletedStatus(tableViewSettings.value.completedStatusCodes,
+    status.code, status.statusCategory)).map(status => status.code)
+  : null)
+watch(() => unfinishedStatusCodes.value?.join(','), () => void resetCurrentData())
 const groupingSwitching = ref(false)
 const onboardingReady = computed(() => !embedded.value && Boolean(project.value) && !loading.value && !tableLoading.value && !error.value
   && (selectedView.value === 'kanban'
@@ -1398,8 +1417,12 @@ async function loadFilterOptions(): Promise<void> {
     const base = listRequest(null)
     const { view: _view, limit: _limit, ...context } = base
     void _view; void _limit
+    /** 「不显示」的隐式状态条件只作用于表格行；状态计数仍覆盖全部状态，否则已完成状态的数量显示为空。 */
+    const { status: _implicitStatus, ...withoutStatus } = context
+    void _implicitStatus
     const pages = await Promise.all(fields.map(field => tableSource.listProjectWorkItemFilterOptions({
-      ...context, projectId: projectId.value, field, limit: 100,
+      ...(field === ListProjectWorkItemFilterOptionsFieldEnum.Status && !filters.statuses.size ? withoutStatus : context),
+      projectId: projectId.value, field, limit: 100,
     }, { signal: activeController?.signal ?? null })))
     const next = new Map<string, number>()
     if (!current()) return
@@ -1481,7 +1504,8 @@ function listRequest(cursor?: string | null) {
     view: WorkItemViewType.Table,
     ...(cursor ? { cursor } : {}),
     ...(searchInput.value.trim() ? { q: searchInput.value.trim() } : {}),
-    ...(filters.statuses.size ? { status: filters.statuses } : {}),
+    ...(filters.statuses.size ? { status: filters.statuses }
+      : unfinishedStatusCodes.value && !searchInput.value.trim() ? { status: new Set(unfinishedStatusCodes.value) } : {}),
     ...(filters.priorities.size ? { priority: filters.priorities } : {}),
     ...(filters.assignees.size ? { assigneeUserId: filters.assignees } : {}),
     ...(filters.contents.size ? { contentId: filters.contents } : {}),
@@ -3021,6 +3045,8 @@ watch([
   tableRef,
   () => selectedView.value,
   () => tableItems.value.length,
+  () => tableNextCursor.value,
+  () => tableSorting.value,
   () => quickOpen.value,
   () => tableLoading.value,
   () => loadingMoreError.value,
@@ -3448,6 +3474,7 @@ onBeforeUnmount(() => {
           v-if="selectedView === 'table'"
           :aria-busy="tableLoading || tableSorting || groupsLoading"
           class="table-surface monday-table-surface"
+          :class="{ 'monday-table-surface--strike-completed': hideCompletedEffect !== HideCompletedEffect.Fade }"
           data-tour="work-item-table"
         >
           <div
@@ -4790,12 +4817,14 @@ onBeforeUnmount(() => {
   background-color: var(--work-item-condition-cell-bg);
 }
 
-/* 隐没已完成：只淡化单元格内容，单元格背景保持不透明，固定列下不透出滚动内容；主表与子项表共用。 */
+/* 隐藏已完成：只淡化单元格内容，单元格背景保持不透明，固定列下不透出滚动内容；主表与子项表共用。
+   置灰加删除线与「不显示」（搜索、状态筛选或刚完成而仍在表格中的项）再给名称加删除线。 */
 :deep(tr.work-item-table-row > td.el-table__cell > .cell), :deep(tr.subitem-table-row > td.el-table__cell > .cell) {
   transition: opacity var(--yp-motion-overlay) var(--yp-ease-standard);
 }
 :deep(tr.work-item-table-row--completed > td.el-table__cell > .cell) { opacity: .5; }
-:deep(tr.work-item-table-row--completed .work-item-title-text) { color: var(--yp-text-muted); text-decoration: line-through; }
+:deep(tr.work-item-table-row--completed .work-item-title-text) { color: var(--yp-text-muted); }
+.monday-table-surface--strike-completed :deep(tr.work-item-table-row--completed .work-item-title-text) { text-decoration: line-through; }
 
 :deep(.monday-table .el-table__body tr.work-item-table-row--selected > td.el-table__cell:not(.work-item-menu-column):not(.monday-expand-column)) {
   background-color: var(--yp-bg-selected) !important;

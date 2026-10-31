@@ -106,12 +106,17 @@ public final class TimeTrackingModels {
 
     public record CurrentRunningTimer(TimeTrackingSession session, String workItemTitle) {}
 
-    public record TimeTrackingPreferences(boolean timerEnabled, int workdayStartMinute, int workdayEndMinute, boolean hideCompleted) {
-        public static final TimeTrackingPreferences DEFAULT=new TimeTrackingPreferences(true,540,1080,false);
+    /** 工作项表格中已完成项的显示：置灰、置灰加删除线，或主表不显示。 */
+    public enum HideCompletedEffect { FADE, FADE_STRIKETHROUGH, HIDE }
+
+    public record TimeTrackingPreferences(boolean timerEnabled, int workdayStartMinute, int workdayEndMinute,
+            boolean hideCompleted, HideCompletedEffect hideCompletedEffect) {
+        public static final TimeTrackingPreferences DEFAULT=new TimeTrackingPreferences(true,540,1080,false,HideCompletedEffect.FADE_STRIKETHROUGH);
     }
 
-    /** hideCompleted 省略时保留原值。 */
-    public record TimeTrackingPreferencesCommand(Boolean timerEnabled, Integer workdayStartMinute, Integer workdayEndMinute, Boolean hideCompleted) {}
+    /** hideCompleted 与 hideCompletedEffect 省略时保留原值。 */
+    public record TimeTrackingPreferencesCommand(Boolean timerEnabled, Integer workdayStartMinute, Integer workdayEndMinute,
+            Boolean hideCompleted, HideCompletedEffect hideCompletedEffect) {}
 
     public record CurrentTimeTracker(TimeTrackingSession session, String workItemTitle,
             long rowVersion, String etag, Instant serverNow, List<RecentTimeTrackingItem> recentItems,

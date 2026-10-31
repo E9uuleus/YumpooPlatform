@@ -135,8 +135,10 @@ public class TimeTrackingService {
         int start=command.workdayStartMinute(), end=command.workdayEndMinute();
         if(start<0 || start>1439 || end<1 || end>1440 || end<=start)
             throw validation("workdayEndMinute","INVALID_RANGE","下班时间须晚于上班时间，且都在当天之内");
+        var currentPreferences=preferences(actor);
         var next=new TimeTrackingPreferences(command.timerEnabled(),start,end,
-                command.hideCompleted()==null ? preferences(actor).hideCompleted() : command.hideCompleted());
+                command.hideCompleted()==null ? currentPreferences.hideCompleted() : command.hideCompleted(),
+                command.hideCompletedEffect()==null ? currentPreferences.hideCompletedEffect() : command.hideCompletedEffect());
         Set<UUID> projects=new TreeSet<>();
         if(!next.timerEnabled()) {
             timers.running(actor.companyId(),actor.userId()).stream().map(Session::projectId).filter(Objects::nonNull).forEach(projects::add);
