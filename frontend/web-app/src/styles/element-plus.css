@@ -410,7 +410,7 @@
   color: var(--yp-text-disabled);
 }
 
-.el-dropdown-menu__item.el-dropdown-menu__item--divided {
+.el-dropdown-menu__item--divided {
   margin: 8px 0 0;
   border-top: 0;
 }
@@ -534,6 +534,7 @@
 }
 
 .el-time-panel {
+  --el-timepicker-inner-border-color: transparent;
   border: 0;
   box-shadow: none;
 }

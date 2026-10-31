@@ -11,6 +11,7 @@ Status: implemented
 - Element Plus 继续提供行为，外观由 `styles/element-plus.css` 全局接管，不新建 Button / Input / Select / Menu 包装组件。
 - 实底填色只用于操作与提醒：主要按钮蓝底白字、危险按钮红底白字、默认按钮浅灰实底深色字，全部无描边；工具栏里的非主操作用 `text`。实底上的白字用 `--yp-on-solid`，不用随主题变化的 `--yp-text-inverse`。
 - 菜单以工作项表格设置菜单为基准：36px 行、左右 10px、图标距 10px、浅灰悬停；`divided` 渲染为组间留白，组名用 `.yp-menu-label`，危险项 `yp-menu-item--danger`，当前项 `yp-menu-item--current`。选择列表同一行规格。弹层无描边、无箭头。
+- Element Plus 2.14.7 的菜单分组分隔符是独立的 `.el-dropdown-menu__item--divided` 节点，不能要求它同时带菜单项类；时间面板用 `--el-timepicker-inner-border-color` 隐去内部边线，不与日期面板变量混用。
 - 输入类保留 1px 单描边（[单描边聚焦](2026-10-04-single-stroke-input-focus.md)）。
 - 切换控件统一外观、保留语义：YpSegmented / OpsSegmented / 单选按钮组选中为蓝底白字、无轨道；页签为文字加 2px 指示条、无整条底线。
 - [YpNotice](2026-10-29-notice-bar.md) 四种色调实底白字；YpStatusTag 只保留 solid / cell / dot。
