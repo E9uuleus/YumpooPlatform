@@ -37,7 +37,7 @@
 .discussion-table-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }.discussion-table-form button { grid-column: 1 / -1; }
 .discussion-link-form label { display: block; }.discussion-link-form p { color: var(--yp-status-red); }
 .discussion-emoji-grid { display: grid; grid-template-columns: repeat(6, 1fr); }.discussion-emoji-grid button { padding: 6px 0; text-align: center; font-size: 22px; }
-.discussion-popup-close { margin-top: 6px; border-top: 1px solid var(--yp-border-subtle) !important; }
+.discussion-popup-close { margin-top: 6px;  }
 
 .discussion-rich-text a[data-type='attachment'] { display: flex; align-items: center; gap: 12px; box-sizing: border-box; width: min(100%, 380px); margin: 12px 0; padding: 12px; border: 1px solid var(--yp-border-strong); border-radius: 8px; color: var(--yp-text-primary); background: var(--yp-bg-surface); text-decoration: none; }
 .discussion-rich-text a[data-type='attachment']:hover { border-color: var(--yp-action-primary); background: var(--yp-bg-selected); }

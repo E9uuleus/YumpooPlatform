@@ -4276,6 +4276,7 @@ onBeforeUnmount(() => {
               <el-button
                 v-if="detail.capabilities.canDelete"
                 :loading="restoringArchive"
+                text
                 @click="restoreArchivedItem"
               >
                 恢复工作项
@@ -4527,7 +4528,7 @@ onBeforeUnmount(() => {
 .filter-popover__header {
   position: sticky; z-index: 1; top: 0; display: flex; align-items: center; gap: var(--yp-space-2);
   margin: 0 calc(-1 * var(--yp-space-5)); padding: var(--yp-space-4) var(--yp-space-5) var(--yp-space-3);
-  border-bottom: 1px solid var(--yp-border-subtle); background: var(--yp-bg-raised);
+   background: var(--yp-bg-raised);
 }
 .filter-popover__header strong { color: var(--yp-text-primary); font-size: 15px; font-weight: 600; }
 .filter-popover__count {
@@ -4545,7 +4546,7 @@ onBeforeUnmount(() => {
 .filter-section h4 small { color: var(--yp-action-primary); font-size: 12px; font-weight: 500; letter-spacing: 0; }
 .filter-columns {
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--yp-space-4) var(--yp-space-5); min-width: 0;
-  padding-top: var(--yp-space-4); border-top: 1px solid var(--yp-border-subtle);
+  padding-top: var(--yp-space-4);
 }
 .filter-value {
   min-width: 0; min-height: 32px; gap: 10px; padding: 5px 8px;
@@ -4575,7 +4576,7 @@ onBeforeUnmount(() => {
 @keyframes filter-check-in { from { opacity: 0; transform: rotate(45deg) scale(.4); } }
 .filter-dates {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--yp-space-4) var(--yp-space-5); min-width: 0;
-  padding-top: var(--yp-space-4); border-top: 1px solid var(--yp-border-subtle);
+  padding-top: var(--yp-space-4);
 }
 .filter-field { display: grid; gap: var(--yp-space-2); min-width: 0; }
 .filter-field-label { color: var(--yp-text-secondary); font-size: 12px; font-weight: 600; letter-spacing: .02em; }

@@ -78,5 +78,5 @@ const color = defineModel<WorkItemLabelColorToken>('color', { required: true })
 .structure-color-grid__swatch:hover { transform: scale(1.12); }
 .structure-color-grid__swatch.is-selected { box-shadow: 0 0 0 2px var(--yp-bg-raised), 0 0 0 4px var(--yp-focus-ring); }
 .structure-color-grid__swatch:focus-visible { outline: 2px solid var(--yp-focus-ring); outline-offset: 2px; }
-:global(.structure-color-popover.el-popover.el-popper) { padding: 10px; border-radius: var(--yp-radius-md); }
+:global(.structure-color-popover.el-popover.el-popper) { padding: 10px;  }
 </style>

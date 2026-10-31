@@ -302,5 +302,5 @@ async function connect() {
 </style>
 
 <style>
-.connect-setup-popper.el-popover.el-popper { max-width: calc(100vw - 32px); padding: 14px; border-radius: var(--yp-radius-lg); box-sizing: border-box; box-shadow: var(--yp-shadow-popover); }
+.connect-setup-popper.el-popover.el-popper { max-width: calc(100vw - 32px); padding: 14px;  box-sizing: border-box;  }
 </style>

@@ -245,6 +245,7 @@ onBeforeUnmount(() => { if (minuteTimer) clearInterval(minuteTimer) })
           class="cell-activity__refresh"
           :loading="loading"
           aria-label="刷新动态"
+          text
           @click="load"
         >
           <refresh-icon
@@ -266,7 +267,6 @@ onBeforeUnmount(() => { if (minuteTimer) clearInterval(minuteTimer) })
       />
       <el-button
         type="primary"
-        plain
         @click="load"
       >
         重试
@@ -485,6 +485,7 @@ onBeforeUnmount(() => { if (minuteTimer) clearInterval(minuteTimer) })
       v-if="nextCursor"
       class="cell-activity__older"
       :loading="loadingOlder"
+      text
       @click="loadOlder"
     >
       加载更早动态
@@ -527,7 +528,7 @@ onBeforeUnmount(() => { if (minuteTimer) clearInterval(minuteTimer) })
 
 <style>
 .cell-activity-filter-popover.el-popover { padding: 0; overflow: visible; }
-.cell-activity-filter-popover .activity-filter { overflow: hidden; border-radius: var(--el-popover-border-radius, 4px); background: var(--yp-bg-raised); }
+.cell-activity-filter-popover .activity-filter { overflow: hidden;   }
 .activity-filter__header { display: flex; min-height: 62px; align-items: center; gap: 16px; padding: 0 16px; }
 .activity-filter__header strong { flex: 0 0 auto; color: var(--yp-text-primary); font-size: 15px; font-weight: 600; }
 .activity-filter__summary { flex: 0 1 auto; color: var(--yp-text-secondary); font-size: 13px; white-space: nowrap; }

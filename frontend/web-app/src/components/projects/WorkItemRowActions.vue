@@ -356,7 +356,7 @@ tr.el-table__row.hover-row > td > .cell > .work-item-row-actions .work-item-row-
 
 .work-item-row-menu .row-action-convert--open { background: var(--yp-bg-hover); }
 .row-action-submenu-arrow { width: 14px; height: 14px; margin-left: auto; }
-.work-item-parent-popover.el-popover { max-width: calc(100vw - 24px); padding: 16px; border-radius: 8px; box-sizing: border-box; }
+.work-item-parent-popover.el-popover { max-width: calc(100vw - 24px); padding: 16px;  box-sizing: border-box; }
 .monday-table td.work-item-menu-column, .monday-table th.work-item-menu-column,
 .monday-subitem-table td.work-item-menu-column, .monday-subitem-table th.work-item-menu-column { border: 0 !important; background: var(--yp-bg-surface) !important; }
 .monday-table .work-item-menu-column > .cell, .monday-subitem-table .work-item-menu-column > .cell { overflow: visible; padding: 0; }
