@@ -1,9 +1,40 @@
-.app-shell--workspace .context-navigation {
-  width: 260px;
-  overflow-y: auto;
-  border-right-color: var(--yp-border-subtle);
-  background: var(--yp-bg-surface);
-  box-shadow: none;
+@media (min-width: 960px) and (min-height: 700px) {
+  /* 工作台菜单：标题与固定入口占自然高度，项目列表区占剩余高度并在内部滚动，当前项目入口始终可见。 */
+  .app-shell--workspace .context-navigation {
+    display: flex;
+    width: 260px;
+    flex-direction: column;
+    overflow: hidden;
+    border-right-color: var(--yp-border-subtle);
+    background: var(--yp-bg-surface);
+    box-shadow: none;
+  }
+
+  .app-shell--workspace .context-navigation .context-navigation__header {
+    flex: none;
+  }
+
+  .app-shell--workspace .context-navigation .global-navigation {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .app-shell--workspace .context-navigation .project-navigation__children {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .app-shell--workspace .context-navigation .project-navigation__scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
 }
 
 .app-shell--workspace.app-shell--context-open .app-main {
@@ -231,7 +262,13 @@
 
 .project-navigation__children {
   display: grid;
+  min-width: 0;
   gap: var(--yp-space-1);
+}
+
+.project-navigation__scroll {
+  min-width: 0;
+  overflow-x: clip;
 }
 
 .app-shell--workspace .global-navigation .project-navigation__children button {
@@ -240,6 +277,7 @@
 
 .project-navigation__project-name {
   overflow: hidden;
+  flex: 1 1 auto;
   min-width: 0;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -247,17 +285,25 @@
 
 .project-navigation__projects {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: var(--yp-space-1);
 }
 
 /* 菜单项目行：右侧星标置顶后常显；可悬停设备上未置顶时只在行悬停或聚焦时出现。 */
 .project-navigation__item {
   position: relative;
+  min-width: 0;
 }
 
 .app-shell .global-navigation .project-navigation__item .project-navigation__project {
   width: 100%;
+  min-width: 0;
   padding-right: 40px;
+}
+
+.project-navigation__project > svg {
+  flex: none;
 }
 
 .app-shell--workspace .global-navigation .project-navigation__item:hover .project-navigation__project:not(.active) {
@@ -1373,5 +1419,49 @@ body.yp-work-items-drawer-resizing {
   .project-page-heading {
     flex-direction: column;
     align-items: stretch;
+  }
+}
+
+@media (min-width: 960px) and (max-height: 699.98px) {
+  .app-shell--workspace {
+    grid-template:
+      "topbar" 64px
+      "workspace" minmax(0, 1fr)
+      / minmax(0, 1fr);
+  }
+
+  .app-shell--workspace .module-rail,
+  .app-shell--workspace .context-navigation,
+  .app-shell--workspace .context-toggle {
+    display: none;
+  }
+
+  .app-shell--workspace .app-topbar {
+    grid-area: topbar;
+    padding: 0 var(--yp-space-4);
+  }
+
+  .app-shell--workspace .app-main,
+  .app-shell--workspace.app-shell--context-open .app-main {
+    grid-area: workspace;
+    padding: var(--yp-space-4);
+  }
+
+  .app-shell--workspace .mobile-nav-toggle {
+    position: fixed;
+    z-index: 40;
+    right: var(--yp-space-4);
+    bottom: var(--yp-space-4);
+    display: grid;
+    width: 48px;
+    height: 48px;
+    padding: 0;
+    place-items: center;
+    border: 0;
+    border-radius: var(--yp-radius-pill);
+    color: var(--yp-status-blue-foreground);
+    background: var(--yp-action-primary);
+    box-shadow: var(--yp-shadow-popover);
+    cursor: pointer;
   }
 }
