@@ -18,6 +18,8 @@ Project membership、唯一负责人、企业管理员治理、身份有效状�
 
 公开事件固定为 `catalog.project_member_added`、`catalog.project_member_removed`、`catalog.project_owner_reassigned` v1。重指派需要创建或重激活 membership 时额外发出 `changeSource=OWNER_REASSIGNMENT` 的 member-added；事件不携带 reason、客户字段或目录资料。
 
+[成员自行退出](2026-10-31-project-self-leave.md)使用独立命令，服务端读取本人成员版本并复用软移除、锁序与 member-removed 事件；本记录的负责人／管理员治理入口及其 ETag 要求保持有效。
+
 catalog 对其他业务模块只公开按 Company、Project、User 判断 ACTIVE membership 的只读端口。Work Item 处理人资格复用该端口，不直接读取 `catalog.project_membership` 表；调用方必须先按自身事实锁协议锁定 Project 和上级资源，再查询处理人资格，避免把 membership 仓储变成跨模块共享表接口。
 
 OWNER_MISSING 是 administration 投影，不是 Project 生命周期。负责人离职或禁用会为其 ACTIVE Project 幂等打开告警；返聘或启用后仅在就业和账号双状态都恢复时解决；重指派后按当前新负责人状态重算。系统不自动提升成员，也不改变 Project lifecycle。
