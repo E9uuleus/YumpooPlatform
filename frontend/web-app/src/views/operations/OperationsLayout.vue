@@ -92,6 +92,7 @@ watch(
       />
       <el-button
         :loading="query.loading.value"
+        text
         @click="refresh"
       >
         刷新

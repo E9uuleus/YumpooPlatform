@@ -469,6 +469,7 @@ watch(
         ><i aria-hidden="true" />{{ paused ? '已暂停' : '实时' }}</span>
         <el-button
           v-if="following && !paused"
+          text
           @click="paused = true"
         >
           暂停显示
@@ -491,6 +492,7 @@ watch(
         class="log-filter-button"
         :class="{ active: failed }"
         :aria-pressed="failed"
+        text
         @click="toggleFailed"
       >
         失败请求
@@ -508,6 +510,7 @@ watch(
             :class="{ active: modules.length }"
             :icon="Filter"
             :aria-expanded="modulesOpen"
+            text
           >
             模块{{ modules.length ? ` · ${modules.length}` : '' }}
           </el-button>
@@ -570,6 +573,7 @@ watch(
               class="log-filter-button"
               :class="{ active: moreFilterCount }"
               :aria-expanded="moreOpen"
+              text
             >
               更多筛选{{ moreFilterCount ? ` · ${moreFilterCount}` : '' }}
             </el-button>
@@ -606,7 +610,10 @@ watch(
               />
             </label>
             <div class="log-panel__foot">
-              <el-button @click="clearMoreFilters">
+              <el-button
+                text
+                @click="clearMoreFilters"
+              >
                 清除
               </el-button>
               <el-button
@@ -711,6 +718,7 @@ watch(
   >
     <el-button
       :loading="pagination.loading.value"
+      text
       @click="pagination.refresh"
     >
       加载更早
@@ -746,7 +754,6 @@ watch(
   display: grid;
   gap: var(--yp-space-2);
   margin-bottom: var(--yp-space-3);
-  border-bottom: 1px solid var(--yp-border-subtle);
 }
 
 .log-toolbar__row {
@@ -766,7 +773,6 @@ watch(
 }
 
 .log-filter-button.active {
-  border-color: color-mix(in srgb, var(--yp-action-primary) 50%, var(--yp-border-default));
   color: var(--yp-action-primary);
   background: var(--yp-bg-selected);
 }
@@ -839,6 +845,7 @@ watch(
 
 .log-chip {
   cursor: pointer;
+  background: var(--yp-fill-neutral);
 }
 
 .log-chip__remove {
@@ -866,7 +873,6 @@ watch(
 }
 
 .log-chip:hover {
-  border-color: var(--yp-border-strong);
   color: var(--yp-text-primary);
 }
 

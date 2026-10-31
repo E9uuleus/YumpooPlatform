@@ -356,7 +356,10 @@ function logLink(alert: OperationsAlert) {
         >
           确认
         </el-button>
-        <el-button @click="open(alert)">
+        <el-button
+          text
+          @click="open(alert)"
+        >
           详情与时间线
         </el-button>
         <div class="alert-card__links">
@@ -640,7 +643,10 @@ function logLink(alert: OperationsAlert) {
       class="alert-detail__error"
     >
       <inline-problem :problem="detail.error.value" />
-      <el-button @click="detail.refresh">
+      <el-button
+        text
+        @click="detail.refresh"
+      >
         重新加载
       </el-button>
     </div>
@@ -756,7 +762,6 @@ function logLink(alert: OperationsAlert) {
   gap: 0 var(--yp-space-4);
   margin-bottom: var(--yp-space-3);
   overflow: hidden;
-  border: 1px solid var(--yp-border-subtle);
   border-radius: var(--yp-radius-md);
   background: var(--yp-bg-surface);
 }
@@ -882,7 +887,6 @@ function logLink(alert: OperationsAlert) {
 :global(.alert-detail-dialog .el-dialog__header) {
   flex: none;
   padding-bottom: var(--yp-space-4);
-  border-bottom: 1px solid var(--yp-border-subtle);
 }
 
 :global(.alert-detail-dialog .el-dialog__body) {
@@ -894,7 +898,6 @@ function logLink(alert: OperationsAlert) {
 :global(.alert-detail-dialog .el-dialog__footer) {
   flex: none;
   padding-top: var(--yp-space-4);
-  border-top: 1px solid var(--yp-border-subtle);
 }
 
 .alert-detail__content {
@@ -915,7 +918,6 @@ function logLink(alert: OperationsAlert) {
   gap: 1px;
   margin: 0;
   overflow: hidden;
-  border: 1px solid var(--yp-border-subtle);
   border-radius: var(--yp-radius-md);
   background: var(--yp-border-subtle);
 }

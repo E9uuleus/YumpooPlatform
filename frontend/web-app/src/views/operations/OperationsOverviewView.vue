@@ -479,7 +479,6 @@ const postureTone = (severity: string) =>
   gap: var(--yp-space-4);
   margin-bottom: var(--yp-space-4);
   padding: var(--yp-space-4) var(--yp-space-5);
-  border: 1px solid color-mix(in srgb, var(--ops-tone) 40%, var(--yp-border-subtle));
   border-radius: var(--yp-radius-md);
   background: color-mix(in srgb, var(--ops-tone) 8%, var(--yp-bg-surface));
 }
