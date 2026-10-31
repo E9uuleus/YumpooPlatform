@@ -41,6 +41,8 @@ const groups = computed(() => worklog.value ? worklogGroups(worklog.value) : [])
 const weekTotal = computed(() => groups.value.reduce((sum, group) => sum + group.totalMs, 0))
 let worklogSequence = 0
 
+async function reloadProject(): Promise<void> { project.value = await projectsApi.getProject({ projectId }) }
+
 async function loadCharts(): Promise<void> {
   loading.value = true
   error.value = ''
@@ -98,6 +100,7 @@ onMounted(async () => {
       section="statistics"
       :project="project"
       title="项目统计"
+      @changed="reloadProject"
     />
     <inline-problem
       v-if="projectError"

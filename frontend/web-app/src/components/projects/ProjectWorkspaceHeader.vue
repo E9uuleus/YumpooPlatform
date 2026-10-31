@@ -1,17 +1,14 @@
 <script setup lang="ts">
 import { projectStatus } from './projectStatus'
-import { Bell, Calendar, DataAnalysis, Clock, Grid, Setting, User } from '@element-plus/icons-vue'
-import { ProjectActorAccess, type ProjectDetail, type ProjectNotificationPreference } from '@yumpoo/api-client'
-import { ElIcon, ElPopover, ElTooltip } from 'element-plus'
-import { computed, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
-import { notificationsApi } from '../../api/client'
+import { Calendar, User } from '@element-plus/icons-vue'
+import { ProjectActorAccess, type ProjectDetail } from '@yumpoo/api-client'
+import { ElIcon, ElPopover } from 'element-plus'
+import { computed, ref } from 'vue'
 import { useSession } from '../../composables/useSession'
 import { formatChineseTimestamp } from '../../design-system/dates'
 import YpAssignee from '../yp/YpAssignee.vue'
 import YpStatusTag from '../yp/YpStatusTag.vue'
-import ProjectNotificationSettingsDialog from './ProjectNotificationSettingsDialog.vue'
-import { projectNotificationSummary } from './projectNotificationPreference'
+import ProjectMoreMenu from './ProjectMoreMenu.vue'
 
 type ProjectSection = 'catalog' | 'overview' | 'statistics' | 'members' | 'activity' | 'settings'
 
@@ -26,48 +23,12 @@ const props = withDefaults(defineProps<{
   project: undefined,
 })
 
-const router = useRouter()
 const session = useSession()
-const projectId = computed(() => props.project?.id)
 const heading = computed(() => props.project?.name ?? props.title)
 const timezone = computed(() => session.authentication.value?.company.timezone ?? 'Asia/Shanghai')
 const infoOpen = ref(false)
-const notificationsOpen = ref(false)
-const preference = ref<ProjectNotificationPreference>()
-const canConfigureNotifications = computed(() => Boolean(props.project)
-  && props.project?.actorAccess !== ProjectActorAccess.CompanyAdmin)
-const sectionGroups = [
-  [
-    { section: 'overview', route: 'project-overview', label: '工作项', icon: Grid },
-    { section: 'statistics', route: 'project-statistics', label: '统计', icon: DataAnalysis },
-    { section: 'members', route: 'project-members', label: '成员', icon: User },
-    { section: 'activity', route: 'project-activity', label: '动态', icon: Clock },
-  ],
-  [{ section: 'settings', route: 'project-settings', label: '设置', icon: Setting }],
-]
-
-function navigate(routeName: string): void {
-  if (!projectId.value) return
-  void router.push({ name: routeName, params: { projectId: projectId.value } })
-}
-
-async function loadPreference(): Promise<void> {
-  const id = projectId.value
-  if (!id || !canConfigureNotifications.value) return
-  try {
-    const value = await notificationsApi.getMyProjectNotificationPreference({ projectId: id })
-    if (id === projectId.value) preference.value = value
-  } catch {
-    preference.value = undefined
-  }
-}
-
-function openNotifications(): void {
-  infoOpen.value = false
-  notificationsOpen.value = true
-}
-
-watch(projectId, () => { preference.value = undefined })
+const readOnlyAdmin = computed(() => props.project?.actorAccess === ProjectActorAccess.CompanyAdmin)
+const emit = defineEmits<{ changed: [] }>()
 </script>
 
 <template>
@@ -139,7 +100,6 @@ watch(projectId, () => { preference.value = undefined })
           :persistent="false"
           :disabled="!project"
           popper-class="project-info-popover"
-          @show="loadPreference"
         >
           <template #reference>
             <button
@@ -199,42 +159,8 @@ watch(projectId, () => { preference.value = undefined })
                 <dd>{{ formatChineseTimestamp(project.createdAt, timezone) }}</dd>
               </div>
             </dl>
-            <div
-              class="project-info__divider"
-              aria-hidden="true"
-            />
-            <button
-              v-if="canConfigureNotifications"
-              type="button"
-              class="project-info__action"
-              @click="openNotifications"
-            >
-              <el-icon aria-hidden="true">
-                <bell />
-              </el-icon>
-              <span class="project-info__action-label">通知提醒</span>
-              <span
-                v-if="preference"
-                class="project-info__action-value"
-              >{{ projectNotificationSummary(preference) }}</span>
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 20 20"
-                fill="none"
-                aria-hidden="true"
-              >
-                <path
-                  d="M8 6l4 4-4 4"
-                  stroke="currentColor"
-                  stroke-width="1.6"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
-            </button>
             <p
-              v-else
+              v-if="readOnlyAdmin"
               class="project-info__note"
             >
               你正以企业管理员身份只读查看此项目，加入项目后可设置通知提醒。
@@ -254,47 +180,13 @@ watch(projectId, () => { preference.value = undefined })
       class="project-workspace-header__actions"
     >
       <slot name="primary-action" />
-      <nav
+      <project-more-menu
         v-if="project && section !== 'catalog'"
-        class="project-workspace-header__sections"
-        aria-label="项目分区"
-        data-tour="project-sections"
-      >
-        <div
-          v-for="(group, index) in sectionGroups"
-          :key="index"
-          class="project-workspace-header__section-group"
-        >
-          <el-tooltip
-            v-for="item in group"
-            :key="item.section"
-            :content="item.label"
-            placement="bottom"
-            :show-after="300"
-          >
-            <button
-              type="button"
-              class="project-workspace-header__section"
-              :class="{ 'is-current': section === item.section }"
-              :aria-label="item.label"
-              :aria-current="section === item.section ? 'page' : undefined"
-              @click="navigate(item.route)"
-            >
-              <el-icon aria-hidden="true">
-                <component :is="item.icon" />
-              </el-icon>
-            </button>
-          </el-tooltip>
-        </div>
-      </nav>
+        :project="project"
+        :section="section"
+        @changed="emit('changed')"
+      />
     </div>
-    <project-notification-settings-dialog
-      v-if="project && canConfigureNotifications"
-      v-model="notificationsOpen"
-      :project-id="project.id"
-      :project-name="project.name"
-      @saved="preference = $event"
-    />
   </header>
 </template>
 
@@ -376,10 +268,6 @@ watch(projectId, () => { preference.value = undefined })
 
 :global(.project-info-popover.el-popover.el-popper) {
   padding: var(--yp-space-2);
-  border: 1px solid var(--yp-border-subtle);
-  border-radius: var(--yp-radius-md);
-  background: var(--yp-bg-raised);
-  box-shadow: var(--yp-shadow-popover);
 }
 
 .project-info__facts {
@@ -412,54 +300,6 @@ watch(projectId, () => { preference.value = undefined })
   font-size: var(--yp-type-body-size);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.project-info__divider {
-  height: 1px;
-  margin: var(--yp-space-1) 0;
-  background: var(--yp-border-subtle);
-}
-
-.project-info__action {
-  display: flex;
-  align-items: center;
-  gap: var(--yp-space-2);
-  width: 100%;
-  min-height: 40px;
-  padding: 0 var(--yp-space-2);
-  border: 0;
-  border-radius: var(--yp-radius-sm);
-  color: var(--yp-text-primary);
-  background: transparent;
-  font: inherit;
-  font-size: var(--yp-type-body-size);
-  text-align: left;
-  cursor: pointer;
-  transition: background-color var(--yp-motion-fast) var(--yp-ease-standard);
-}
-
-.project-info__action:hover {
-  background: var(--yp-bg-hover);
-}
-
-.project-info__action:focus-visible {
-  outline: 2px solid var(--yp-focus-ring);
-  outline-offset: -2px;
-}
-
-.project-info__action .el-icon,
-.project-info__action svg {
-  flex: none;
-  color: var(--yp-text-secondary);
-}
-
-.project-info__action-label {
-  flex: 1;
-}
-
-.project-info__action-value {
-  color: var(--yp-text-muted);
-  font-size: var(--yp-type-caption-size);
 }
 
 .project-info__note {
@@ -528,57 +368,6 @@ watch(projectId, () => { preference.value = undefined })
   gap: var(--yp-space-2);
 }
 
-.project-workspace-header__sections {
-  display: flex;
-  gap: 8px;
-}
-
-.project-workspace-header__section-group {
-  display: flex;
-  height: var(--yp-control-height);
-  box-sizing: border-box;
-  border: 1px solid var(--yp-border-default);
-  border-radius: var(--yp-radius-md);
-  overflow: hidden;
-}
-
-.project-workspace-header__section {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 100%;
-  padding: 0;
-  border: 0;
-  color: var(--yp-text-secondary);
-  background: transparent;
-  cursor: pointer;
-  transition: color var(--yp-motion-fast), background-color var(--yp-motion-fast);
-}
-
-.project-workspace-header__section + .project-workspace-header__section {
-  border-left: 1px solid var(--yp-border-subtle);
-}
-
-.project-workspace-header__section .el-icon {
-  font-size: 16px;
-}
-
-.project-workspace-header__section:hover {
-  background: var(--yp-bg-hover);
-  color: var(--yp-text-primary);
-}
-
-.project-workspace-header__section.is-current {
-  background: var(--yp-bg-selected);
-  color: var(--yp-action-primary);
-}
-
-.project-workspace-header__section:focus-visible {
-  outline: 2px solid var(--yp-focus-ring);
-  outline-offset: -2px;
-}
-
 .project-workspace-header--catalog {
   position: relative;
   align-items: flex-start;
@@ -607,9 +396,8 @@ watch(projectId, () => { preference.value = undefined })
 }
 
 .project-workspace-header__icon--catalog {
-  background: linear-gradient(135deg, var(--yp-status-pink) 0%, color-mix(in srgb, var(--yp-status-pink) 80%, white) 100%) !important;
+  background: var(--yp-status-pink) !important;
   color: var(--yp-status-pink-foreground) !important;
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--yp-status-pink) 25%, transparent);
   font-weight: 700;
   position: relative;
 }
@@ -636,7 +424,6 @@ watch(projectId, () => { preference.value = undefined })
   color: var(--yp-bg-surface);
   border-radius: 6px;
   border: 2px solid var(--yp-bg-surface);
-  box-shadow: 0 2px 4px color-mix(in srgb, var(--yp-text-primary) 15%, transparent);
 }
 
 .project-workspace-header__chevron {
