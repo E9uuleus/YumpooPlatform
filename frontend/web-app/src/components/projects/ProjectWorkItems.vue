@@ -1391,8 +1391,12 @@ async function loadFilterOptions(): Promise<void> {
     const base = listRequest(null)
     const { view: _view, limit: _limit, ...context } = base
     void _view; void _limit
+    /** 「不显示」的隐式状态条件只作用于表格行；状态计数仍覆盖全部状态，否则已完成状态的数量显示为空。 */
+    const { status: _implicitStatus, ...withoutStatus } = context
+    void _implicitStatus
     const pages = await Promise.all(fields.map(field => tableSource.listProjectWorkItemFilterOptions({
-      ...context, projectId: projectId.value, field, limit: 100,
+      ...(field === ListProjectWorkItemFilterOptionsFieldEnum.Status && !filters.statuses.size ? withoutStatus : context),
+      projectId: projectId.value, field, limit: 100,
     }, { signal: activeController?.signal ?? null })))
     const next = new Map<string, number>()
     if (!current()) return
