@@ -16,11 +16,6 @@ withDefaults(defineProps<{
 
 defineEmits<{ open: [] }>()
 
-function spotlight(event: PointerEvent): void {
-  const card = event.currentTarget as HTMLElement, bounds = card.getBoundingClientRect()
-  card.style.setProperty('--spot-x', `${event.clientX - bounds.left}px`)
-  card.style.setProperty('--spot-y', `${event.clientY - bounds.top}px`)
-}
 </script>
 
 <template>
@@ -29,7 +24,6 @@ function spotlight(event: PointerEvent): void {
     class="yp-jump-card"
     :class="[`yp-jump-card--${tone}`, `yp-jump-card--${variant}`]"
     :style="{ '--i': index }"
-    @pointermove="spotlight"
     @click="$emit('open')"
   >
     <span class="yp-jump-card__icon"><el-icon aria-hidden="true"><component :is="icon" /></el-icon></span>
@@ -48,7 +42,6 @@ function spotlight(event: PointerEvent): void {
 <style scoped>
 .yp-jump-card {
   --from: var(--yp-action-primary);
-  --to: var(--yp-label-bright-blue);
 
   position: relative;
   display: grid;
@@ -57,34 +50,22 @@ function spotlight(event: PointerEvent): void {
   min-width: 0;
   padding: var(--yp-space-4);
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--yp-border-subtle) 80%, transparent);
   border-radius: var(--yp-radius-xl);
-  background:
-    radial-gradient(160px circle at var(--spot-x, -200px) var(--spot-y, -200px), color-mix(in srgb, var(--from) 12%, transparent), transparent 70%),
-    color-mix(in srgb, var(--yp-bg-surface) 76%, transparent);
-  box-shadow: var(--yp-shadow-card);
+  background: var(--yp-bg-sunken);
   color: var(--yp-text-primary);
   font: inherit;
   text-align: left;
   cursor: pointer;
-  backdrop-filter: blur(14px) saturate(1.3);
   animation: yp-jump-rise 320ms var(--yp-ease-standard) backwards;
   animation-delay: calc(var(--i) * 40ms + 80ms);
-  transition:
-    transform var(--yp-motion-overlay) var(--yp-ease-standard),
-    box-shadow var(--yp-motion-overlay) var(--yp-ease-standard),
-    border-color var(--yp-motion-overlay) var(--yp-ease-standard);
+  transition: background-color var(--yp-motion-fast) var(--yp-ease-standard);
 }
 
 .yp-jump-card:hover {
-  border-color: color-mix(in srgb, var(--from) 35%, var(--yp-border-subtle));
-  box-shadow: var(--yp-shadow-hover);
-  transform: translateY(-2px);
+  background: var(--yp-bg-hover);
 }
 
-.yp-jump-card:active {
-  transform: scale(0.98);
-}
+
 
 .yp-jump-card:focus-visible {
   outline: 2px solid var(--yp-focus-ring);
@@ -93,27 +74,22 @@ function spotlight(event: PointerEvent): void {
 
 .yp-jump-card--purple {
   --from: var(--yp-label-dark-purple);
-  --to: var(--yp-label-lavender);
 }
 
 .yp-jump-card--teal {
   --from: var(--yp-status-teal);
-  --to: var(--yp-label-aquamarine);
 }
 
 .yp-jump-card--red {
   --from: var(--yp-label-red);
-  --to: var(--yp-label-sunset);
 }
 
 .yp-jump-card--green {
   --from: var(--yp-status-green);
-  --to: var(--yp-label-bright-green);
 }
 
 .yp-jump-card--amber {
   --from: var(--yp-label-dark-orange);
-  --to: var(--yp-label-egg-yolk);
 }
 
 .yp-jump-card__icon {
@@ -122,11 +98,8 @@ function spotlight(event: PointerEvent): void {
   height: 34px;
   place-items: center;
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--from), var(--to));
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--yp-status-blue-foreground) 35%, transparent),
-    0 6px 14px -4px color-mix(in srgb, var(--from) 55%, transparent);
-  color: var(--yp-status-blue-foreground);
+  background: var(--from);
+  color: var(--yp-on-solid);
   font-size: 18px;
 }
 
@@ -179,7 +152,6 @@ function spotlight(event: PointerEvent): void {
   width: 34px;
   height: 34px;
   background: color-mix(in srgb, var(--from) 14%, var(--yp-bg-surface));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--from) 18%, transparent);
   color: var(--from);
 }
 
@@ -213,8 +185,6 @@ function spotlight(event: PointerEvent): void {
 
 @media (prefers-reduced-motion: reduce) {
   .yp-jump-card { animation: none; }
-  .yp-jump-card:hover,
-  .yp-jump-card:active { transform: none; }
   .yp-jump-card--row:hover .yp-jump-card__arrow { translate: none; }
 }
 </style>
