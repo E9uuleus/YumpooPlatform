@@ -500,7 +500,6 @@ onBeforeUnmount(() => {
   text-align: center;
 }
 
-
 .member-add__footer-start {
   display: inline-flex;
   align-items: center;

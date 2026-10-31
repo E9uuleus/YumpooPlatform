@@ -198,6 +198,4 @@ public class ProjectMembershipGovernanceService {
         if (value == null || value.isBlank()) return null;
         return value.strip();
     }
-
-
 }
