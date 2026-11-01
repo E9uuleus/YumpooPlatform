@@ -568,7 +568,10 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
         v-if="hasCriteria"
         #action
       >
-        <el-button @click="resetAll">
+        <el-button
+          text
+          @click="resetAll"
+        >
           清除筛选
         </el-button>
       </template>
@@ -625,7 +628,6 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
             v-for="tier in tiers"
             :key="tier.value"
             :value="tier.value"
-            border
             class="tier-option"
             :class="`tier--${tierMeta(tier.value).tone}`"
           >
@@ -678,6 +680,7 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
         />
         <el-button
           v-if="needsReauthentication(roleProblem)"
+          text
           @click="reauthenticate(roleMember)"
         >
           重新认证并返回成员详情
@@ -813,6 +816,7 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
             <el-button
               v-if="session.canChangeMemberTier.value && !isSelf(selected)"
               size="small"
+              text
               @click="openRole(selected)"
             >
               更改角色
@@ -834,7 +838,6 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
             </p>
           </div>
           <el-button
-            plain
             :type="selected.accountStatus === AccountStatus.Enabled ? 'danger' : 'success'"
             :loading="changingUserId === selected.userId"
             @click="changeAccount(selected)"
@@ -856,7 +859,6 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
   display: flex;
   gap: var(--yp-space-1);
   overflow-x: auto;
-  border-bottom: 1px solid var(--yp-border-subtle);
   scrollbar-width: none;
 }
 .tier-tab {
@@ -889,13 +891,6 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
   border-radius: 2px;
   background: var(--yp-action-primary);
   content: "";
-}
-
-.members-view .members-filter { margin-bottom: var(--yp-space-3); border-bottom: 0; }
-.members-view .members-filter :deep(.yp-filter-bar__tool.labeled .yp-filter-bar__badge) {
-  position: static;
-  color: var(--yp-status-blue-foreground);
-  background: var(--yp-action-primary);
 }
 .members-search { width: min(260px, 100%); }
 .member-filter-field { display: grid; min-width: 0; gap: 6px; }
@@ -966,15 +961,13 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
   height: auto;
   margin: 0;
   padding: var(--yp-space-3) var(--yp-space-4);
-  border-color: var(--yp-border-default);
   border-radius: var(--yp-radius-md);
   white-space: normal;
   transition: border-color var(--yp-motion-fast) var(--yp-ease-standard), background-color var(--yp-motion-fast) var(--yp-ease-standard);
+  background: var(--yp-bg-sunken);
 }
-.tier-options :deep(.tier-option.el-radio:hover) { border-color: var(--yp-border-strong); }
 .tier-options :deep(.tier-option.el-radio.is-checked) {
-  border-color: var(--yp-action-primary);
-  background: color-mix(in srgb, var(--yp-bg-selected) 70%, transparent);
+  background: var(--yp-bg-selected);
 }
 .tier-options :deep(.tier-option:has(.el-radio__original:focus-visible)) { outline: 2px solid var(--yp-focus-ring); outline-offset: 2px; }
 .tier-options :deep(.tier-option .el-radio__input) { position: absolute; opacity: 0; pointer-events: none; }
@@ -1049,11 +1042,9 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
   display: grid;
   margin: 0;
   overflow: hidden;
-  border: 1px solid var(--yp-border-subtle);
   border-radius: var(--yp-radius-md);
 }
 .member-profile dl > div { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: var(--yp-space-3); padding: 10px 14px; }
-.member-profile dl > div + div { border-top: 1px solid var(--yp-border-subtle); }
 .member-profile dt { color: var(--yp-text-secondary); }
 .member-profile dd { margin: 0; color: var(--yp-text-primary); overflow-wrap: anywhere; }
 .member-profile__mono { font-family: var(--yp-font-mono); font-size: 13px; }
@@ -1062,8 +1053,8 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
   align-items: center;
   gap: var(--yp-space-3);
   padding: var(--yp-space-3) 14px;
-  border: 1px solid var(--yp-border-subtle);
   border-radius: var(--yp-radius-md);
+  background: var(--yp-bg-sunken);
 }
 .member-profile__role-text { flex: 1; min-width: 0; }
 .member-profile__role-text strong { color: var(--yp-text-primary); font-weight: 600; }
@@ -1074,15 +1065,10 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
   justify-content: space-between;
   gap: var(--yp-space-4);
   padding: 14px;
-  border: 1px solid color-mix(in srgb, var(--yp-status-red) 32%, var(--yp-border-subtle));
   border-radius: var(--yp-radius-md);
-  background: color-mix(in srgb, var(--yp-status-red) 5%, transparent);
-}
-.member-profile__access.is-disabled {
-  border-color: var(--yp-border-subtle);
-  background: color-mix(in srgb, var(--yp-bg-sunken) 60%, transparent);
 }
 .member-profile__access strong { color: var(--yp-text-primary); font-weight: 600; }
+.member-profile__access:not(.is-disabled) strong { color: var(--yp-status-red); }
 .member-profile__access p { margin: 2px 0 0; color: var(--yp-text-secondary); font-size: var(--yp-type-caption-size); line-height: var(--yp-type-caption-line); }
 .member-profile__access .el-button { flex: none; }
 

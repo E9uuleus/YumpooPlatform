@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import YpSkeleton from '../../components/yp/YpSkeleton.vue'
 import { usePageLoad } from '../../brand/page-progress'
 
 import { readCsrfToken, type ScheduledJob } from '@yumpoo/api-client'
@@ -130,7 +131,13 @@ onMounted(() => pageLoad.track(load))
       v-if="loading || jobs.length"
       class="table-surface table-scroll scheduled-jobs__surface"
     >
+      <yp-skeleton
+        v-if="loading && !jobs.length"
+        variant="table"
+        :rows="6"
+      />
       <el-table
+        v-else
         v-loading="loading"
         :data="jobs"
         row-key="code"
@@ -311,12 +318,6 @@ onMounted(() => pageLoad.track(load))
 .scheduled-jobs {
   display: grid;
   gap: var(--yp-space-4);
-}
-
-.scheduled-jobs__surface {
-  border-color: var(--yp-border-subtle);
-  border-radius: var(--yp-radius-md);
-  background: var(--yp-bg-surface);
 }
 
 .scheduled-job__name {

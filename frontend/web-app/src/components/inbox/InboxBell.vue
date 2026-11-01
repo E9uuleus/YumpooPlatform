@@ -46,6 +46,7 @@ async function readAll() {
         data-tour="topbar-inbox"
         :class="{ 'is-open': open }"
         :aria-label="`收件箱，${inbox.unread.value} 条未读`"
+        text
       >
         <el-badge
           :value="inbox.unread.value"
@@ -206,7 +207,6 @@ async function readAll() {
   min-height: 120px;
   max-height: min(420px, 60vh);
   overflow: auto;
-  border-top: 1px solid var(--yp-border-subtle);
   overscroll-behavior: contain;
 }
 .inbox-panel__list > .inbox-row + .inbox-row { border-top: 1px solid var(--yp-border-subtle); }
@@ -223,7 +223,7 @@ async function readAll() {
 .inbox-panel__status--error { padding: 16px; color: var(--yp-text-secondary); }
 .inbox-panel__status--error .el-icon { color: var(--yp-status-red); }
 
-.inbox-panel__footer { padding: 4px; border-top: 1px solid var(--yp-border-subtle); }
+.inbox-panel__footer { padding: 4px; }
 .inbox-panel__footer .el-button { width: 100%; min-height: 36px; color: var(--yp-text-secondary); font-size: 13px; }
 .inbox-panel__footer .el-button:hover { color: var(--yp-link); }
 
@@ -237,9 +237,5 @@ async function readAll() {
   max-width: calc(100vw - 24px);
   box-sizing: border-box;
   padding: 0;
-  border-color: var(--yp-border-default);
-  border-radius: var(--yp-radius-xl);
-  background: var(--yp-bg-raised);
-  box-shadow: var(--yp-shadow-popover);
 }
 </style>

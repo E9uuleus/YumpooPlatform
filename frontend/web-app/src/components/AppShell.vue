@@ -516,14 +516,11 @@ onBeforeUnmount(() => {
             </button>
           </el-tooltip>
         </div>
-        <span
-          class="app-topbar__divider"
-          aria-hidden="true"
-        />
         <el-dropdown trigger="click">
           <el-button
             class="user-menu-trigger"
             data-tour="topbar-user"
+            text
           >
             <yp-assignee
               :user-id="session.authentication.value?.user.id"
