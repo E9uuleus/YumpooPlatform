@@ -117,6 +117,21 @@ describe('快捷工时小窗', () => {
     await flushPromises()
     expect(api.create).toHaveBeenCalledExactlyOnceWith(TimeSessionFillMode.Gaps, ['category:MEETING:p1'], expect.any(Array))
   })
+  it('项目标签超出宽度时，滚轮左右滚动并在仍有标签的一侧渐隐', async () => {
+    const view = await mountView()
+    const strip = view.get('.quick-projects')
+    const element = strip.element as HTMLElement
+    await strip.trigger('wheel', { deltaY: 60 })
+    expect(element.scrollLeft).toBe(0)
+    Object.defineProperty(element, 'scrollWidth', { configurable: true, value: 400 })
+    Object.defineProperty(element, 'clientWidth', { configurable: true, value: 200 })
+    await strip.trigger('wheel', { deltaY: 60 })
+    expect(element.scrollLeft).toBe(60)
+    expect(strip.classes()).toEqual(expect.arrayContaining(['has-start', 'has-end']))
+    await strip.trigger('wheel', { deltaY: 200 })
+    expect(strip.classes()).toContain('has-start')
+    expect(strip.classes()).not.toContain('has-end')
+  })
   it('改时段后按填写的起止记录，↺ 回到自动排入空档', async () => {
     const view = await mountView()
     await view.get('.quick-row').trigger('click')

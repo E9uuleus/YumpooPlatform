@@ -87,6 +87,10 @@ const chips = computed(() => {
   return locked && !list.some(item => item.id === locked.id) ? [{ id: locked.id, name: locked.name }, ...list] : list
 })
 const tones = computed(() => projectTones(context.value.projects, chips.value.map(chip => chip.id)))
+const strip = ref<HTMLElement>()
+/** Which ends of the project strip hide more chips; each such end fades out. */
+const edges = ref({ start: false, end: false })
+const STRIP_FADE = 24
 const todayMs = computed(() => new Map(todayDay.totals.value.map(total => [total.key, total.ms])))
 /** Categories sit above the work items; with a project chip they are recorded against that project. */
 const categories = computed(() => matchCategories(query.value, project.value))
@@ -161,6 +165,38 @@ function revealCreated() {
   void nextTick(() => list.value?.querySelector(`[data-work-item-id="${item.workItemId}"]`)?.scrollIntoView({ block: 'nearest' }))
 }
 watch(() => candidates.loading.value, revealCreated)
+
+function measureEdges() {
+  const el = strip.value
+  if (!el) return
+  edges.value = { start: el.scrollLeft > 1, end: el.scrollLeft < el.scrollWidth - el.clientWidth - 1 }
+}
+/** A mouse wheel only scrolls vertically; over the project strip it moves the chips sideways. */
+function scrollStrip(event: WheelEvent) {
+  const el = strip.value
+  if (!el || el.scrollWidth <= el.clientWidth || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return
+  event.preventDefault()
+  el.scrollLeft += event.deltaY
+  measureEdges()
+}
+// The card, and with it the strip, is rebuilt on every open; resizing the panel changes how many chips fit.
+watch(strip, (el, _, onCleanup) => {
+  if (!el || typeof ResizeObserver === 'undefined') return
+  const observer = new ResizeObserver(measureEdges)
+  observer.observe(el)
+  onCleanup(() => observer.disconnect())
+})
+// The chosen project stays clear of the fades, e.g. when the panel opens from a project far along the strip.
+watch([project, chips, strip], () => {
+  const el = strip.value
+  const chip = el?.querySelector<HTMLElement>('.quick-chip.is-active')
+  if (el && chip) {
+    const left = chip.offsetLeft, right = left + chip.offsetWidth
+    if (left < el.scrollLeft + STRIP_FADE) el.scrollLeft = Math.max(0, left - STRIP_FADE)
+    else if (right > el.scrollLeft + el.clientWidth - STRIP_FADE) el.scrollLeft = right - el.clientWidth + STRIP_FADE
+  }
+  measureEdges()
+}, { flush: 'post' })
 
 const offOpen = bridge?.onOpen(value => {
   pinned.value = value.pinned === true
@@ -349,9 +385,13 @@ function keydown(event: KeyboardEvent) {
         </button>
       </label>
       <div
+        ref="strip"
         class="quick-projects"
+        :class="{ 'has-start': edges.start, 'has-end': edges.end }"
         role="radiogroup"
         aria-label="项目"
+        @wheel="scrollStrip"
+        @scroll.passive="measureEdges"
       >
         <button
           type="button"
@@ -371,12 +411,13 @@ function keydown(event: KeyboardEvent) {
           role="radio"
           :aria-checked="project === chip.id"
           :class="{ 'is-active': project === chip.id }"
+          :title="chip.name"
           @click="project = chip.id"
         >
           <span
             class="quick-dot"
             :style="{ background: tones.get(chip.id) }"
-          />{{ chip.name }}
+          /><span class="quick-chip__name">{{ chip.name }}</span>
         </button>
       </div>
       <div
@@ -580,7 +621,14 @@ button:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:-2p
 .quick-search :deep(.el-input__wrapper){padding:0;background:none;box-shadow:none}
 .quick-search :deep(.el-input__inner){height:30px;color:var(--yp-text-primary);font:13px var(--yp-font-family)}
 .quick-search :deep(.el-input__inner::placeholder){color:var(--yp-text-placeholder)}
-.quick-projects{display:flex;gap:6px;padding:0 10px 6px;overflow-x:auto;scrollbar-width:none;flex-shrink:0}
+.quick-projects{position:relative;display:flex;gap:6px;padding:0 10px 6px;overflow-x:auto;scrollbar-width:none;flex-shrink:0}
+.quick-projects::-webkit-scrollbar{display:none}
+.quick-projects.has-start{mask-image:linear-gradient(to right,transparent,#000 24px)}
+.quick-projects.has-end{mask-image:linear-gradient(to left,transparent,#000 24px)}
+.quick-projects.has-start.has-end{mask-image:linear-gradient(to right,transparent,#000 24px,#000 calc(100% - 24px),transparent)}
+.quick-projects .quick-chip{max-width:160px}
+.quick-projects .quick-dot{flex-shrink:0}
+.quick-chip__name{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .quick-chip{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;border-radius:999px;color:var(--yp-text-secondary);font-size:12px;white-space:nowrap;flex-shrink:0;background:transparent;}
 .quick-chip:hover:not(.is-active){background:var(--yp-bg-hover)}
 .quick-chip.is-active{background:var(--yp-action-primary);color:var(--yp-on-solid);}
