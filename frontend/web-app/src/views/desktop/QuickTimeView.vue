@@ -623,9 +623,9 @@ button:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:-2p
 .quick-search :deep(.el-input__inner::placeholder){color:var(--yp-text-placeholder)}
 .quick-projects{position:relative;display:flex;gap:6px;padding:0 10px 6px;overflow-x:auto;scrollbar-width:none;flex-shrink:0}
 .quick-projects::-webkit-scrollbar{display:none}
-.quick-projects.has-start{mask-image:linear-gradient(to right,transparent,#000 24px)}
-.quick-projects.has-end{mask-image:linear-gradient(to left,transparent,#000 24px)}
-.quick-projects.has-start.has-end{mask-image:linear-gradient(to right,transparent,#000 24px,#000 calc(100% - 24px),transparent)}
+.quick-projects.has-start{mask-image:linear-gradient(to right,transparent,black 24px)}
+.quick-projects.has-end{mask-image:linear-gradient(to left,transparent,black 24px)}
+.quick-projects.has-start.has-end{mask-image:linear-gradient(to right,transparent,black 24px,black calc(100% - 24px),transparent)}
 .quick-projects .quick-chip{max-width:160px}
 .quick-projects .quick-dot{flex-shrink:0}
 .quick-chip__name{min-width:0;overflow:hidden;text-overflow:ellipsis}
