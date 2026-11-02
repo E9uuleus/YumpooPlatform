@@ -4518,7 +4518,7 @@ onBeforeUnmount(() => {
 .text-button { width: auto; color: var(--yp-action-primary); }
 .toolbar-button__count {
   display: inline-grid; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; place-items: center;
-  border-radius: var(--yp-radius-pill); background: var(--yp-action-primary); color: var(--yp-text-inverse);
+  border-radius: var(--yp-radius-pill); background: var(--yp-action-primary); color: var(--yp-on-solid);
   font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1;
 }
 .filter-popover {
@@ -4533,7 +4533,7 @@ onBeforeUnmount(() => {
 .filter-popover__header strong { color: var(--yp-text-primary); font-size: 15px; font-weight: 600; }
 .filter-popover__count {
   display: inline-grid; min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; place-items: center;
-  border-radius: var(--yp-radius-pill); background: var(--yp-action-primary); color: var(--yp-text-inverse);
+  border-radius: var(--yp-radius-pill); background: var(--yp-action-primary); color: var(--yp-on-solid);
   font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums;
 }
 .filter-popover__clear { margin-left: auto; padding: 4px 8px; }
@@ -4570,7 +4570,7 @@ onBeforeUnmount(() => {
 .filter-checkbox.checked { border-color: var(--yp-action-primary); background: var(--yp-action-primary); }
 .filter-checkbox.checked::after {
   position: absolute; top: 2px; left: 5px; width: 4px; height: 8px; box-sizing: border-box;
-  border: solid var(--yp-text-inverse); border-width: 0 2px 2px 0; content: '';
+  border: solid var(--yp-on-solid); border-width: 0 2px 2px 0; content: '';
   transform: rotate(45deg); animation: filter-check-in var(--yp-motion-fast) var(--yp-ease-standard);
 }
 @keyframes filter-check-in { from { opacity: 0; transform: rotate(45deg) scale(.4); } }
