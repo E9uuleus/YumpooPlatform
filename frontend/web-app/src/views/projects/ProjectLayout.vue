@@ -44,7 +44,7 @@ onBeforeUnmount(() => { request++; window.removeEventListener(PROJECT_LIFECYCLE_
       class="ended-project-banner"
       tone="info"
     >
-      项目已结束，内容为只读，仍计入统计。负责人或公司管理员可以在「设置」中重新打开。
+      项目已结束，内容为只读，仍计入统计。负责人或公司管理员可以在项目菜单或「设置」中重新打开。
     </yp-notice>
     <router-view :key="route.name === 'project-statistics' ? String(route.params.projectId) : 'project-page'" />
   </section>

@@ -364,7 +364,7 @@ async function submit(): Promise<void> {
 :global(.project-create-dialog__form .el-input__wrapper.is-focus), :global(.project-create-dialog__form .el-textarea__inner:focus) { background: var(--yp-bg-surface); box-shadow: 0 0 0 1px var(--yp-focus-ring) inset, 0 0 0 3px color-mix(in srgb, var(--yp-focus-ring) 22%, transparent); }
 :global(.project-create-dialog__form .el-textarea__inner) { padding: 10px 12px; line-height: 1.6; }
 :global(.project-create-dialog__name) { display: flex; width: 100%; align-items: center; gap: var(--yp-space-3); }
-:global(.project-create-dialog__tile), :global(.project-preview__tile) { display: grid; flex: 0 0 44px; height: 44px; place-items: center; border-radius: var(--yp-radius-md); color: var(--yp-text-inverse); background: linear-gradient(135deg, var(--yp-action-primary), color-mix(in srgb, var(--yp-action-primary) 55%, var(--yp-status-purple))); font-size: 20px; font-weight: 600; }
+:global(.project-create-dialog__tile), :global(.project-preview__tile) { display: grid; flex: 0 0 44px; height: 44px; place-items: center; border-radius: var(--yp-radius-md); color: var(--yp-on-solid); background: linear-gradient(135deg, var(--yp-action-primary), color-mix(in srgb, var(--yp-action-primary) 55%, var(--yp-status-purple))); font-size: 20px; font-weight: 600; }
 :global(.project-create-dialog__name-input) { flex: 1; min-width: 0; }
 :global(.project-create-dialog__name-input .el-input__wrapper) { height: 44px; padding: 0 12px; }
 :global(.project-create-dialog__name-input .el-input__inner) { font-size: 16px; font-weight: 600; }
