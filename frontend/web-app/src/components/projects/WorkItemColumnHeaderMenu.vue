@@ -67,9 +67,16 @@ function run(action: ColumnMenuAction): void {
             @keydown.right.stop.prevent="showSubmenu('settings', $event)"
           >
             <work-item-action-icon name="settings" />设置
-            <work-item-action-icon name="chevron" class="work-item-column-menu__arrow" />
+            <work-item-action-icon
+              name="chevron"
+              class="work-item-column-menu__arrow"
+            />
           </el-dropdown-item>
-          <el-dropdown-item divided @pointermove="submenu = undefined" @click="run({ type: 'filter' })">
+          <el-dropdown-item
+            divided
+            @pointermove="submenu = undefined"
+            @click="run({ type: 'filter' })"
+          >
             <work-item-action-icon name="filter" />筛选
           </el-dropdown-item>
           <el-dropdown-item
@@ -81,9 +88,16 @@ function run(action: ColumnMenuAction): void {
             @keydown.right.stop.prevent="showSubmenu('sort', $event)"
           >
             <work-item-action-icon name="sort" />排序
-            <work-item-action-icon name="chevron" class="work-item-column-menu__arrow" />
+            <work-item-action-icon
+              name="chevron"
+              class="work-item-column-menu__arrow"
+            />
           </el-dropdown-item>
-          <el-dropdown-item :disabled="!state.collapsible" @pointermove="submenu = undefined" @click="run({ type: 'collapse' })">
+          <el-dropdown-item
+            :disabled="!state.collapsible"
+            @pointermove="submenu = undefined"
+            @click="run({ type: 'collapse' })"
+          >
             <work-item-action-icon name="collapse" />折叠
           </el-dropdown-item>
           <el-dropdown-item
@@ -107,8 +121,15 @@ function run(action: ColumnMenuAction): void {
             :teleported="false"
             popper-class="work-item-column-submenu"
           >
-            <div v-if="submenu === 'settings'" class="work-item-column-submenu__list" role="menu">
-              <div v-if="state.settings === 'timer'" class="work-item-column-submenu__switch">
+            <div
+              v-if="submenu === 'settings'"
+              class="work-item-column-submenu__list"
+              role="menu"
+            >
+              <div
+                v-if="state.settings === 'timer'"
+                class="work-item-column-submenu__switch"
+              >
                 <span><strong>使用计时器</strong><small>关闭后隐藏所有计时入口，只按时段手动填写。</small></span>
                 <timer-enabled-switch />
               </div>
@@ -123,10 +144,35 @@ function run(action: ColumnMenuAction): void {
                 编辑标签与颜色
               </button>
             </div>
-            <div v-else-if="submenu === 'sort'" class="work-item-column-submenu__list" role="menu">
-              <button type="button" role="menuitem" :class="{ active: state.sortDirection === 'ASC' }" @click="run({ type: 'sort', direction: 'ASC' })">升序</button>
-              <button type="button" role="menuitem" :class="{ active: state.sortDirection === 'DESC' }" @click="run({ type: 'sort', direction: 'DESC' })">降序</button>
-              <button v-if="state.sortDirection" type="button" role="menuitem" @click="run({ type: 'sort', direction: null })">清除排序</button>
+            <div
+              v-else-if="submenu === 'sort'"
+              class="work-item-column-submenu__list"
+              role="menu"
+            >
+              <button
+                type="button"
+                role="menuitem"
+                :class="{ active: state.sortDirection === 'ASC' }"
+                @click="run({ type: 'sort', direction: 'ASC' })"
+              >
+                升序
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                :class="{ active: state.sortDirection === 'DESC' }"
+                @click="run({ type: 'sort', direction: 'DESC' })"
+              >
+                降序
+              </button>
+              <button
+                v-if="state.sortDirection"
+                type="button"
+                role="menuitem"
+                @click="run({ type: 'sort', direction: null })"
+              >
+                清除排序
+              </button>
             </div>
           </el-popover>
         </el-dropdown-menu>
@@ -139,11 +185,11 @@ function run(action: ColumnMenuAction): void {
 .work-item-column-menu { display: flex; }
 .work-item-column-menu-popper .el-dropdown-menu { min-width: 220px; padding: 8px; }
 .work-item-column-menu-popper .el-scrollbar, .work-item-column-menu-popper .el-scrollbar__wrap { overflow: visible; }
-.work-item-column-menu-popper .el-dropdown-menu__item { min-height: 34px; padding: 0 10px; gap: 10px; border-radius: 4px; font-size: 14px; }
-.work-item-column-menu-popper .el-dropdown-menu__item--divided { margin: 7px 0 0; }
+.work-item-column-menu-popper .el-dropdown-menu__item { gap: 10px; font-size: 14px; }
+
 .work-item-column-menu-popper .work-item-column-menu__submenu.is-open { background: var(--yp-bg-hover); }
 .work-item-column-menu__arrow { width: 14px; height: 14px; margin-left: auto; }
-.work-item-column-submenu.el-popover { padding: 8px; border-radius: 8px; }
+.work-item-column-submenu.el-popover { padding: 8px;  }
 .work-item-column-submenu__list { display: grid; gap: 2px; }
 .work-item-column-submenu__list button { display: flex; min-height: 34px; align-items: center; padding: 0 10px; border: 0; border-radius: 4px; background: transparent; color: var(--yp-text-primary); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
 .work-item-column-submenu__list button:hover:not(:disabled),

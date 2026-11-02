@@ -34,12 +34,12 @@ watch(() => [props.projectId, Boolean(props.catalog)], () => { if (!props.catalo
       正在加载连接…
     </p>
     <template v-if="catalog">
-      <div
+      <p
         v-if="!catalog.items.length && !catalog.incomingColumns.length"
-        class="unified-project-settings__empty"
+        class="project-connections-overview__empty"
       >
         还没有连接。在工作项表格右上角「+」中添加连接列。
-      </div>
+      </p>
       <template v-else>
         <h3>本项目的连接列</h3>
         <div
@@ -91,5 +91,4 @@ watch(() => [props.projectId, Boolean(props.catalog)], () => { if (!props.catalo
 .project-connections-overview__row code { color: var(--yp-text-muted); font-size: 12px; }
 .project-connections-overview__row a { color: var(--yp-action-primary); text-decoration: none; margin-left: auto; white-space: nowrap; }
 .project-connections-overview__targets { display: flex; flex-wrap: wrap; gap: 6px; }
-.unified-project-settings__empty { padding: var(--yp-space-5); border: 1px dashed var(--yp-border-default); border-radius: var(--yp-radius-sm); background: var(--yp-bg-sunken); color: var(--yp-text-secondary); line-height: 1.7; }
 </style>

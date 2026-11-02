@@ -41,6 +41,8 @@ const groups = computed(() => worklog.value ? worklogGroups(worklog.value) : [])
 const weekTotal = computed(() => groups.value.reduce((sum, group) => sum + group.totalMs, 0))
 let worklogSequence = 0
 
+async function reloadProject(): Promise<void> { project.value = await projectsApi.getProject({ projectId }) }
+
 async function loadCharts(): Promise<void> {
   loading.value = true
   error.value = ''
@@ -98,6 +100,7 @@ onMounted(async () => {
       section="statistics"
       :project="project"
       title="项目统计"
+      @changed="reloadProject"
     />
     <inline-problem
       v-if="projectError"
@@ -255,7 +258,7 @@ onMounted(async () => {
 .project-statistics { display: grid; gap: var(--yp-space-4); }
 .project-statistics__metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--yp-space-3); }
 .project-statistics__charts { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--yp-space-3); }
-.project-statistics__card { display: flex; flex-direction: column; min-width: 0; padding: var(--yp-space-4); border: 1px solid var(--yp-border-subtle); border-radius: var(--yp-radius-md); background: var(--yp-bg-surface); }
+.project-statistics__card { display: flex; flex-direction: column; min-width: 0; padding: var(--yp-space-4);  border-radius: var(--yp-radius-md);  background:var(--yp-bg-sunken);}
 .project-statistics__card h3 { margin: 0 0 var(--yp-space-2); font-size: 14px; font-weight: 600; }
 .project-statistics__chart { height: 320px; min-height: 0; }
 .project-statistics__card--metric .project-statistics__chart { height: 120px; }

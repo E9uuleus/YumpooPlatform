@@ -20,6 +20,7 @@ public class ActivitySummaryRenderer {
             case "PROJECT_TEMPLATE_APPLIED" -> "应用了项目模板";
             case "PROJECT_MEMBER_ADDED" -> "添加了项目成员：" + person;
             case "PROJECT_MEMBER_REMOVED" -> "移除了项目成员：" + person;
+            case "PROJECT_MEMBER_LEFT" -> "退出了项目";
             case "PROJECT_OWNER_REASSIGNED" -> "调整了项目负责人：" + person;
             case "CONTENT_CREATED" -> "创建了工作项类别 " + ref;
             case "CONTENT_UPDATED" -> "更新了工作项类别 " + ref;

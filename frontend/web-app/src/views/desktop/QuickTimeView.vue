@@ -87,6 +87,10 @@ const chips = computed(() => {
   return locked && !list.some(item => item.id === locked.id) ? [{ id: locked.id, name: locked.name }, ...list] : list
 })
 const tones = computed(() => projectTones(context.value.projects, chips.value.map(chip => chip.id)))
+const strip = ref<HTMLElement>()
+/** Which ends of the project strip hide more chips; each such end fades out. */
+const edges = ref({ start: false, end: false })
+const STRIP_FADE = 24
 const todayMs = computed(() => new Map(todayDay.totals.value.map(total => [total.key, total.ms])))
 /** Categories sit above the work items; with a project chip they are recorded against that project. */
 const categories = computed(() => matchCategories(query.value, project.value))
@@ -161,6 +165,38 @@ function revealCreated() {
   void nextTick(() => list.value?.querySelector(`[data-work-item-id="${item.workItemId}"]`)?.scrollIntoView({ block: 'nearest' }))
 }
 watch(() => candidates.loading.value, revealCreated)
+
+function measureEdges() {
+  const el = strip.value
+  if (!el) return
+  edges.value = { start: el.scrollLeft > 1, end: el.scrollLeft < el.scrollWidth - el.clientWidth - 1 }
+}
+/** A mouse wheel only scrolls vertically; over the project strip it moves the chips sideways. */
+function scrollStrip(event: WheelEvent) {
+  const el = strip.value
+  if (!el || el.scrollWidth <= el.clientWidth || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return
+  event.preventDefault()
+  el.scrollLeft += event.deltaY
+  measureEdges()
+}
+// The card, and with it the strip, is rebuilt on every open; resizing the panel changes how many chips fit.
+watch(strip, (el, _, onCleanup) => {
+  if (!el || typeof ResizeObserver === 'undefined') return
+  const observer = new ResizeObserver(measureEdges)
+  observer.observe(el)
+  onCleanup(() => observer.disconnect())
+})
+// The chosen project stays clear of the fades, e.g. when the panel opens from a project far along the strip.
+watch([project, chips, strip], () => {
+  const el = strip.value
+  const chip = el?.querySelector<HTMLElement>('.quick-chip.is-active')
+  if (el && chip) {
+    const left = chip.offsetLeft, right = left + chip.offsetWidth
+    if (left < el.scrollLeft + STRIP_FADE) el.scrollLeft = Math.max(0, left - STRIP_FADE)
+    else if (right > el.scrollLeft + el.clientWidth - STRIP_FADE) el.scrollLeft = right - el.clientWidth + STRIP_FADE
+  }
+  measureEdges()
+}, { flush: 'post' })
 
 const offOpen = bridge?.onOpen(value => {
   pinned.value = value.pinned === true
@@ -349,9 +385,13 @@ function keydown(event: KeyboardEvent) {
         </button>
       </label>
       <div
+        ref="strip"
         class="quick-projects"
+        :class="{ 'has-start': edges.start, 'has-end': edges.end }"
         role="radiogroup"
         aria-label="项目"
+        @wheel="scrollStrip"
+        @scroll.passive="measureEdges"
       >
         <button
           type="button"
@@ -371,12 +411,13 @@ function keydown(event: KeyboardEvent) {
           role="radio"
           :aria-checked="project === chip.id"
           :class="{ 'is-active': project === chip.id }"
+          :title="chip.name"
           @click="project = chip.id"
         >
           <span
             class="quick-dot"
             :style="{ background: tones.get(chip.id) }"
-          />{{ chip.name }}
+          /><span class="quick-chip__name">{{ chip.name }}</span>
         </button>
       </div>
       <div
@@ -559,7 +600,7 @@ function keydown(event: KeyboardEvent) {
 button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;padding:0}
 button:disabled{cursor:default;opacity:.45}
 button:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:-2px}
-.quick-head{display:flex;align-items:center;gap:8px;height:44px;padding:0 8px 0 12px;border-bottom:1px solid var(--yp-timer-hairline);flex-shrink:0}
+.quick-head{display:flex;align-items:center;gap:8px;height:44px;padding:0 8px 0 12px;flex-shrink:0}
 .quick-logo{width:22px;height:22px}
 .quick-head strong{font-weight:600}
 .quick-total{display:inline-flex;align-items:center;gap:4px;height:24px;margin-left:auto;padding:0 9px;border-radius:999px;background:var(--yp-timer-sunken);color:var(--yp-text-secondary);font-size:12px}
@@ -580,9 +621,17 @@ button:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:-2p
 .quick-search :deep(.el-input__wrapper){padding:0;background:none;box-shadow:none}
 .quick-search :deep(.el-input__inner){height:30px;color:var(--yp-text-primary);font:13px var(--yp-font-family)}
 .quick-search :deep(.el-input__inner::placeholder){color:var(--yp-text-placeholder)}
-.quick-projects{display:flex;gap:6px;padding:0 10px 6px;overflow-x:auto;scrollbar-width:none;flex-shrink:0}
-.quick-chip{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;border:1px solid var(--yp-timer-hairline);border-radius:999px;color:var(--yp-text-secondary);font-size:12px;white-space:nowrap;flex-shrink:0}
-.quick-chip.is-active{border-color:var(--yp-timer-accent);background:color-mix(in srgb,var(--yp-timer-accent) 12%,transparent);color:var(--yp-timer-accent)}
+.quick-projects{position:relative;display:flex;gap:6px;padding:0 10px 6px;overflow-x:auto;scrollbar-width:none;flex-shrink:0}
+.quick-projects::-webkit-scrollbar{display:none}
+.quick-projects.has-start{mask-image:linear-gradient(to right,transparent,black 24px)}
+.quick-projects.has-end{mask-image:linear-gradient(to left,transparent,black 24px)}
+.quick-projects.has-start.has-end{mask-image:linear-gradient(to right,transparent,black 24px,black calc(100% - 24px),transparent)}
+.quick-projects .quick-chip{max-width:160px}
+.quick-projects .quick-dot{flex-shrink:0}
+.quick-chip__name{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.quick-chip{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;border-radius:999px;color:var(--yp-text-secondary);font-size:12px;white-space:nowrap;flex-shrink:0;background:transparent;}
+.quick-chip:hover:not(.is-active){background:var(--yp-bg-hover)}
+.quick-chip.is-active{background:var(--yp-action-primary);color:var(--yp-on-solid);}
 .quick-dot{width:7px;height:7px;border-radius:50%}
 .quick-list{flex:1;min-height:0;overflow:auto;padding:2px 8px 8px}
 .quick-group{padding:8px 6px 3px;color:var(--yp-text-muted);font-size:11px}
@@ -594,7 +643,7 @@ button:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:-2p
 .quick-status{margin:6px 0;color:var(--yp-text-muted);font-size:12px;text-align:center}
 .quick-status button{color:var(--yp-timer-accent)}
 .quick-sentinel{height:1px}
-.quick-foot{display:flex;align-items:center;gap:8px;height:44px;padding:0 12px;border-top:1px solid var(--yp-timer-hairline);flex-shrink:0}
+.quick-foot{display:flex;align-items:center;gap:8px;height:44px;padding:0 12px;flex-shrink:0}
 .quick-link{display:inline-flex;align-items:center;gap:2px;margin-left:auto;color:var(--yp-timer-accent);font-size:12.5px}
 .quick-link svg{width:13px;height:13px}
 .quick-toast{position:absolute;left:12px;right:12px;bottom:52px;display:flex;align-items:center;gap:8px;height:34px;padding:0 12px;border-radius:9px;

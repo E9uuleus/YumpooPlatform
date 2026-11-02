@@ -128,8 +128,10 @@ public class ActivityProjectionService implements OutboxEventConsumer {
         } else if (event.eventType().endsWith("owner_reassigned")) {
             safe.put("memberDisplayName", user(event, uuid(payload, "newOwnerUserId")));
         }
+        String templateCode = event.eventType().endsWith("member_removed")
+                && uuid(payload, "userId").equals(event.actor().userId()) ? "PROJECT_MEMBER_LEFT" : template(event.eventType());
         append(event, ActivityAudienceType.PROJECT, projectId, entityType, entityId, ref,
-                template(event.eventType()), safe, null, null);
+                templateCode, safe, null, null);
     }
 
     private void appendContent(DomainEventEnvelope event) {

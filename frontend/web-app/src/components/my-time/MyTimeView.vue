@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import YpSkeleton from '../yp/YpSkeleton.vue'
 import YpNotice from '../yp/YpNotice.vue'
 import { usePageLoad } from '../../brand/page-progress'
 
@@ -143,17 +144,28 @@ defineExpose({ refresh: load, loading, ready })
           @click="step(1)"
         />
       </div>
-      <el-button @click="openDay(today)">
+      <el-button
+        text
+        @click="openDay(today)"
+      >
         今天
       </el-button>
       <el-button
         :disabled="month === thisMonth"
+        text
         @click="goThisMonth"
       >
         本月
       </el-button>
     </div>
+    <yp-skeleton
+      v-if="loading && !row"
+      variant="table"
+      :rows="5"
+      :columns="7"
+    />
     <div
+      v-else
       v-loading="loading && !row"
       class="my-time__body"
     >

@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import YpSkeleton from '../components/yp/YpSkeleton.vue'
 import YpNotice from '../components/yp/YpNotice.vue'
-import { ElIcon, ElInput, ElButton, ElTooltip, ElDropdown, ElDropdownMenu, ElDropdownItem, ElTag, ElSkeleton, ElDialog, ElDrawer, ElMessage, ElMessageBox } from 'element-plus'
+import { ElIcon, ElInput, ElButton, ElTooltip, ElDropdown, ElDropdownMenu, ElDropdownItem, ElTag, ElDialog, ElDrawer, ElMessage, ElMessageBox } from 'element-plus'
 import { computed, nextTick, ref, watch } from 'vue'
 import { Close, Connection, DataAnalysis, Download, Filter, MoreFilled, Plus, Refresh, FullScreen, Setting, List, CopyDocument, Delete, Edit, RefreshLeft, User } from '@element-plus/icons-vue'
 import { type DashboardFilters, type DashboardWidget, type DashboardChartSelection } from '@yumpoo/api-client'
@@ -120,7 +121,7 @@ async function dashboardAction(command: string) {
     if (command === 'rename') { const answer = await ElMessageBox.prompt('仪表板名称', '重命名仪表板', { inputValue: name.value, inputValidator: value => !!value?.trim() && value.trim().length <= 100 || '请输入 1–100 个字符', confirmButtonText: '保存', cancelButtonText: '取消' }); name.value = answer.value.trim(); changed() }
     if (command === 'copy') await create(`${name.value} 副本`.slice(0, 100), configuration.value, true)
     if (command === 'reset') { await ElMessageBox.confirm('恢复默认的 8 个组件及其布局？', '恢复默认布局', { confirmButtonText: '恢复', cancelButtonText: '取消' }); configuration.value.widgets = defaultConfiguration().widgets; changed(true) }
-    if (command === 'delete') { await ElMessageBox.confirm(`删除“${name.value}”后无法恢复。`, '删除仪表板', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }); await remove() }
+    if (command === 'delete') { await ElMessageBox.confirm(`删除“${name.value}”后无法恢复。`, '删除仪表板', { type: 'warning', confirmButtonText: '删除', confirmButtonClass: 'el-button--danger', cancelButtonText: '取消' }); await remove() }
   } catch (reason) { if (reason !== 'cancel' && reason !== 'close') ElMessage.error(problemMessage(await toApiProblem(reason))) }
 }
 function renameDashboard(value: string) { name.value = value; changed() }
@@ -244,7 +245,7 @@ async function discardReload() {
       >
         {{ activeConnectionCount ? `${activeConnectionCount} 个连接项目` : '连接项目' }}
       </el-button>
-      <span class="toolbar-divider" />
+
       <el-button
         :icon="User"
         :class="{ 'filter-active': configuration.filters.assignees.length }"
@@ -356,11 +357,11 @@ async function discardReload() {
           @click="removed = undefined"
         />
       </div>
-      <el-skeleton
+      <yp-skeleton
         v-if="loading"
-        animated
-        :rows="12"
-        class="dashboard-skeleton"
+        variant="cards"
+        :rows="8"
+        label="正在加载仪表板"
       />
       <div
         v-else-if="!dashboard || !configuration.projectIds.length"
@@ -579,6 +580,7 @@ async function discardReload() {
           </div><el-button
             :icon="Plus"
             :aria-label="`添加${entry.title}`"
+            text
             @click="addWidget(entry.kind)"
           >
             添加

@@ -13,10 +13,7 @@
   color: var(--yp-text-primary);
 }
 
-.operations-page .ops-segmented {
-  min-height: var(--ops-control-height);
-  align-items: center;
-}
+
 
 /* 语义色调：各组件通过 --ops-tone 取色，保证三主题一致 */
 .ops-tone-green { --ops-tone: var(--yp-status-green); }
@@ -41,11 +38,10 @@
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
 }
 .ops-card {
-  border: 1px solid var(--yp-border-subtle);
   border-radius: var(--yp-radius-md);
-  background: var(--yp-bg-surface);
   padding: var(--yp-space-5);
   min-width: 0;
+  background: var(--yp-bg-sunken);
 }
 .ops-card h2,
 .ops-card h3 {
@@ -64,7 +60,6 @@
   flex-wrap: wrap;
   gap: var(--yp-space-3);
   padding: var(--yp-space-3) var(--yp-space-4);
-  border-bottom: 1px solid var(--yp-border-subtle);
 }
 .ops-card .ops-card__head h2 {
   margin: 0;
@@ -86,7 +81,6 @@
   display: flex;
   justify-content: flex-end;
   padding: var(--yp-space-3) var(--yp-space-4);
-  border-top: 1px solid var(--yp-border-subtle);
 }
 
 .ops-muted {
@@ -182,9 +176,8 @@
 }
 .ops-callout {
   padding: var(--yp-space-4);
-  background: var(--yp-bg-sunken);
-  border-left: 3px solid var(--yp-action-primary);
   margin-bottom: var(--yp-space-4);
+  background: var(--yp-fill-neutral);
 }
 
 /* 小圆点、chip、字段标签 */
@@ -201,25 +194,23 @@
   gap: var(--yp-space-1);
   height: 22px;
   padding: 0 var(--yp-space-2);
-  border: 1px solid var(--yp-border-subtle);
   border-radius: var(--yp-radius-pill);
   color: var(--yp-text-secondary);
-  background: var(--yp-bg-sunken);
   font-size: var(--yp-type-caption-size);
   white-space: nowrap;
   text-decoration: none;
+  background: var(--yp-fill-neutral);
 }
 a.ops-chip:hover {
-  border-color: var(--yp-border-strong);
   color: var(--yp-text-primary);
+  background: var(--yp-fill-neutral);
 }
 .ops-chip.ops-tone-yellow,
 .ops-chip.ops-tone-red,
 .ops-chip.ops-tone-green,
 .ops-chip.ops-tone-blue {
-  border-color: color-mix(in srgb, var(--ops-tone) var(--yp-status-border-mix), var(--yp-border-default));
-  background: color-mix(in srgb, var(--ops-tone) var(--yp-status-surface-mix), var(--yp-bg-surface));
-  color: var(--yp-text-primary);
+  background: var(--yp-fill-neutral);
+  color: var(--ops-tone);
 }
 .ops-kv {
   flex: 0 0 auto;
@@ -288,7 +279,6 @@ a.ops-bar-row:hover {
   display: flex;
   flex-wrap: wrap;
   margin-bottom: var(--yp-space-4);
-  border: 1px solid var(--yp-border-subtle);
   border-radius: var(--yp-radius-md);
   background: var(--yp-bg-surface);
 }
@@ -298,7 +288,6 @@ a.ops-bar-row:hover {
   align-content: start;
   gap: 2px;
   padding: var(--yp-space-3) var(--yp-space-5);
-  border-left: 1px solid var(--yp-border-subtle);
 }
 .ops-strip > div:first-child {
   border-left: 0;

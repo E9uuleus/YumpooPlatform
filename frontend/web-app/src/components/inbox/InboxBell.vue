@@ -46,6 +46,7 @@ async function readAll() {
         data-tour="topbar-inbox"
         :class="{ 'is-open': open }"
         :aria-label="`收件箱，${inbox.unread.value} 条未读`"
+        text
       >
         <el-badge
           :value="inbox.unread.value"
@@ -188,46 +189,24 @@ async function readAll() {
 .inbox-panel__header .el-button { min-height: 0; font-size: 13px; }
 
 .inbox-panel__filters {
-  --el-radio-button-checked-bg-color: var(--yp-bg-raised);
-  --el-radio-button-checked-text-color: var(--yp-text-primary);
-  --el-radio-button-checked-border-color: transparent;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   margin: 0 16px 12px;
-  padding: 3px;
-  border-radius: var(--yp-radius-md);
-  background: var(--yp-bg-sunken);
 }
 .inbox-panel__filters :deep(.el-radio-button__inner) {
   width: 100%;
-  padding: 6px 0;
-  border: 0 !important;
-  border-radius: var(--yp-radius-sm) !important;
-  outline: none;
-  color: var(--yp-text-secondary);
-  background: transparent;
-  box-shadow: none !important;
+  justify-content: center;
   font-size: var(--yp-type-caption-size);
-  font-weight: 600;
-  transition: color var(--yp-motion-fast) var(--yp-ease-standard), background-color var(--yp-motion-fast) var(--yp-ease-standard);
 }
-.inbox-panel__filters :deep(.el-radio-button__inner:hover) { color: var(--yp-text-primary); }
-.inbox-panel__filters :deep(.el-radio-button.is-active .el-radio-button__inner) {
-  color: var(--yp-text-primary);
-  background: var(--yp-bg-raised);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--yp-text-primary) 14%, transparent) !important;
-}
-.inbox-panel__filters :deep(.el-radio-button__original-radio:focus-visible + .el-radio-button__inner) {
-  outline: 2px solid var(--yp-focus-ring);
-  outline-offset: -2px;
-}
+
+
+
 
 .inbox-panel__list {
   --inbox-surface: var(--yp-bg-raised);
   min-height: 120px;
   max-height: min(420px, 60vh);
   overflow: auto;
-  border-top: 1px solid var(--yp-border-subtle);
   overscroll-behavior: contain;
 }
 .inbox-panel__list > .inbox-row + .inbox-row { border-top: 1px solid var(--yp-border-subtle); }
@@ -244,7 +223,7 @@ async function readAll() {
 .inbox-panel__status--error { padding: 16px; color: var(--yp-text-secondary); }
 .inbox-panel__status--error .el-icon { color: var(--yp-status-red); }
 
-.inbox-panel__footer { padding: 4px; border-top: 1px solid var(--yp-border-subtle); }
+.inbox-panel__footer { padding: 4px; }
 .inbox-panel__footer .el-button { width: 100%; min-height: 36px; color: var(--yp-text-secondary); font-size: 13px; }
 .inbox-panel__footer .el-button:hover { color: var(--yp-link); }
 
@@ -258,9 +237,5 @@ async function readAll() {
   max-width: calc(100vw - 24px);
   box-sizing: border-box;
   padding: 0;
-  border-color: var(--yp-border-default);
-  border-radius: var(--yp-radius-xl);
-  background: var(--yp-bg-raised);
-  box-shadow: var(--yp-shadow-popover);
 }
 </style>

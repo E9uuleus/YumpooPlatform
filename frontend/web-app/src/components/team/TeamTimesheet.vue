@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import YpSkeleton from '../yp/YpSkeleton.vue'
 import YpNotice from '../yp/YpNotice.vue'
 import { computed, nextTick, onBeforeUnmount, onUpdated, ref, watch } from 'vue'
 import { ElButton, ElCheckbox, ElMessage } from 'element-plus'
@@ -128,10 +129,7 @@ async function exportExcel() {
   >
     <div class="dashboard-toolbar team-toolbar">
       <slot name="switch" />
-      <span
-        class="toolbar-divider"
-        aria-hidden="true"
-      />
+
       <TeamPeriodPicker
         ref="picker"
         v-model:period="period"
@@ -149,6 +147,7 @@ async function exportExcel() {
         <el-button
           v-if="!overtime"
           :icon="Upload"
+          text
           @click="openHoursImport"
         >
           迁入工时
@@ -157,13 +156,20 @@ async function exportExcel() {
           :icon="Download"
           :loading="exporting"
           :disabled="!sheet || loading || !days.length"
+          text
           @click="exportExcel"
         >
           {{ checkedRows.length ? `导出所选（${checkedRows.length}）` : '导出 Excel' }}
         </el-button>
       </div>
     </div>
+    <yp-skeleton
+      v-if="loading && !sheet"
+      variant="table"
+      :rows="6"
+    />
     <div
+      v-else
       v-loading="loading"
       class="team-body"
     >

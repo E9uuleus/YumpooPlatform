@@ -105,6 +105,7 @@ function togglePreviewGroup(id: string): void {
           class="acceptance-context-toggle"
           aria-label="切换上下文导航"
           :aria-expanded="contextNavigationOpen"
+          text
           @click="contextNavigationOpen = !contextNavigationOpen"
         >
           <el-icon aria-hidden="true">
@@ -158,14 +159,16 @@ function togglePreviewGroup(id: string): void {
               <yp-status-tag
                 domain="integration"
                 status="CONFIGURED"
-                effect="soft"
               />
               <span class="muted-text">Light / Dark / Night × Comfortable / Compact</span>
             </div>
           </div>
         </div>
         <div class="acceptance-project-header__actions">
-          <el-button @click="drawerOpen = true">
+          <el-button
+            text
+            @click="drawerOpen = true"
+          >
             检查浮层
           </el-button>
           <el-button type="primary">
@@ -400,12 +403,13 @@ function togglePreviewGroup(id: string): void {
             <yp-status-tag
               domain="integration"
               status="FUTURE_STATUS"
-              effect="soft"
             />
           </div>
           <yp-empty-state reason="no-results">
             <template #action>
-              <el-button>清除筛选</el-button>
+              <el-button text>
+                清除筛选
+              </el-button>
             </template>
           </yp-empty-state>
         </section>
@@ -471,7 +475,6 @@ function togglePreviewGroup(id: string): void {
               <yp-status-tag
                 domain="integration"
                 status="ENABLED"
-                effect="soft"
               />
             </template>
             <yp-definition-list :items="previewDefinitions" />

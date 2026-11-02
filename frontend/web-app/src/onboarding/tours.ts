@@ -40,10 +40,10 @@ export const TOURS: Record<TourId, TourDefinition> = {
     ],
   },
   'project-work-items': {
-    version: 4,
+    version: 5,
     steps: [
-      { target: at('project-title'), placement: 'bottom-start', title: '项目信息', description: '点击项目名查看负责人、创建时间，并设置本项目的通知提醒。' },
-      { target: at('project-sections'), placement: 'bottom-end', title: '项目分区', description: '在工作项、统计、成员、动态和设置之间切换；负责人和公司管理员可以在成员页添加、移出成员或转交负责人。', since: 2 },
+      { target: at('project-title'), placement: 'bottom-start', title: '项目信息', description: '点击项目名查看负责人和创建时间。' },
+      { target: at('project-sections'), placement: 'bottom-end', title: '项目菜单', description: '在工作项、统计、成员、动态和设置之间切换，设置本项目的通知提醒；负责人和公司管理员可以结束或归档项目，成员可以退出项目。', since: 5 },
       { target: at('work-item-views'), placement: 'bottom-start', title: '表格与看板', description: '表格适合批量编辑；在看板中拖动卡片即可推进状态。' },
       { target: at('work-item-toolbar'), placement: 'bottom-start', title: '工具栏', description: '「新增工作项」在表格顶部创建一条并直接改名，右侧的 ▾ 可从 Excel/CSV 导入，提交前可预览重复处理和父项关系，提交失败保留映射和预览并提供诊断信息；搜索、按处理人或条件筛选、排序、隐藏列和分组，打开“隐藏已完成”可置灰或不显示已完成的工作项，这些视图设置只影响你自己；「已归档」列出本项目归档的工作项，可以恢复。', since: 3 },
       { target: at('work-item-table'), placement: 'top', title: '直接在表格里编辑', description: '点击状态、处理人、截止日期等单元格即可修改；勾选多行后，底部会出现批量操作栏。表格会自动补齐首屏内容，向下滚动可继续加载工作项。' },
@@ -71,7 +71,7 @@ export const TOURS: Record<TourId, TourDefinition> = {
   workspace: {
     version: 2,
     steps: [
-      { target: at('context-nav'), placement: 'right-start', title: '工作台导航', description: '仪表板、我的工时、管理项目、归档项目，以及你参与的项目列表；鼠标移到项目上点星标可以置顶，「…」弹出更多项目。「项目」右侧的 + 可以直接创建项目，顶部的搜索按钮可以快速查找项目。', since: 2,
+      { target: at('context-nav'), placement: 'right-start', title: '工作台导航', description: '仪表板、我的工时，进入项目后的「当前项目」入口，以及管理项目、归档项目和你参与的项目列表；项目较多时列表在菜单内纵向滚动，长名称省略显示，悬停可查看全名。窗口较矮时点右下角导航按钮打开完整菜单抽屉。鼠标移到项目上点星标可以置顶，「…」弹出更多项目。「项目」右侧的 + 可以直接创建项目，顶部的搜索按钮可以快速查找项目。', since: 2,
         fallback: { target: at('context-nav-expand'), placement: 'right-start', description: '点这里展开工作台菜单：仪表板、我的工时、管理项目、归档项目和你参与的项目都在里面。' } },
       { target: at('project-catalog-tabs'), placement: 'bottom-start', title: '最近与内容', description: '“最近”是你最近打开的项目，可置顶常用项目；“内容”是全部项目目录。' },
       { target: at('project-filter'), placement: 'bottom', title: '搜索与筛选', description: '按名称或编码搜索，按项目状态、最后修改时间、负责人和你的角色筛选。' },

@@ -107,7 +107,6 @@ const content = computed(() => ({
 
 .yp-empty-state--ambient .yp-empty-state__icon {
   position: relative;
-  border: 1px solid var(--yp-border-subtle);
   background: var(--yp-bg-surface);
 }
 

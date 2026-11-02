@@ -57,6 +57,7 @@ async function restart(): Promise<void> {
       </el-button>
       <el-button
         size="small"
+        text
         @click="dismissedVersion = state.version"
       >
         稍后

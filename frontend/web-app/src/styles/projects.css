@@ -1,9 +1,61 @@
-.app-shell--workspace .context-navigation {
-  width: 260px;
-  overflow-y: auto;
-  border-right-color: var(--yp-border-subtle);
-  background: var(--yp-bg-surface);
-  box-shadow: none;
+@media (min-width: 960px) {
+  /* 工作台菜单：标题与固定入口占自然高度，项目列表区占剩余高度并在内部滚动，当前项目入口始终可见。
+     矮视口下列表区至少保留三行；放不下时整个菜单纵向滚动，当前项目仍在顶部首屏。 */
+  .app-shell--workspace .context-navigation {
+    display: flex;
+    width: 260px;
+    flex-direction: column;
+    overflow: hidden;
+    border-right-color: var(--yp-border-subtle);
+    background: var(--yp-bg-surface);
+    box-shadow: none;
+  }
+
+  .app-shell--workspace .context-navigation .context-navigation__header {
+    flex: none;
+  }
+
+  .app-shell--workspace .context-navigation .global-navigation {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .app-shell--workspace .context-navigation .project-navigation__children {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+  }
+
+  /* height: 0 让列表区按剩余空间伸展，菜单的最小高度只计入三行而不是全部项目。 */
+  .app-shell--workspace .context-navigation .project-navigation__scroll {
+    height: 0;
+    flex: 1 1 auto;
+    min-height: calc(3 * var(--yp-navigation-height) + 2 * var(--yp-space-1));
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
+/* 矮视口（1366×768 屏幕的浏览器、150% 缩放的 1080p 屏幕）：收紧菜单行高与留白，让项目列表留在首屏；字号不变。 */
+@media (min-width: 960px) and (max-height: 820px) {
+  .app-shell--workspace .context-navigation {
+    --yp-navigation-height: 32px;
+    padding-top: var(--yp-space-3);
+  }
+
+  .app-shell--workspace .context-navigation .context-navigation__header {
+    margin-bottom: var(--yp-space-3);
+  }
+
+  .app-shell--workspace .context-navigation .context-navigation__group-label {
+    margin-top: var(--yp-space-3);
+    margin-bottom: var(--yp-space-1);
+  }
 }
 
 .app-shell--workspace.app-shell--context-open .app-main {
@@ -231,7 +283,13 @@
 
 .project-navigation__children {
   display: grid;
+  min-width: 0;
   gap: var(--yp-space-1);
+}
+
+.project-navigation__scroll {
+  min-width: 0;
+  overflow-x: clip;
 }
 
 .app-shell--workspace .global-navigation .project-navigation__children button {
@@ -240,6 +298,7 @@
 
 .project-navigation__project-name {
   overflow: hidden;
+  flex: 1 1 auto;
   min-width: 0;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -247,17 +306,25 @@
 
 .project-navigation__projects {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: var(--yp-space-1);
 }
 
 /* 菜单项目行：右侧星标置顶后常显；可悬停设备上未置顶时只在行悬停或聚焦时出现。 */
 .project-navigation__item {
   position: relative;
+  min-width: 0;
 }
 
 .app-shell .global-navigation .project-navigation__item .project-navigation__project {
   width: 100%;
+  min-width: 0;
   padding-right: 40px;
+}
+
+.project-navigation__project > svg {
+  flex: none;
 }
 
 .app-shell--workspace .global-navigation .project-navigation__item:hover .project-navigation__project:not(.active) {
@@ -379,9 +446,8 @@
   margin-right: calc(0px - var(--project-page-inline-gutter));
   margin-bottom: 0;
   margin-left: calc(0px - var(--project-page-inline-gutter));
-  border-bottom: 1px solid var(--yp-border-subtle);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--yp-bg-sunken) 70%, transparent) 0%, color-mix(in srgb, var(--yp-bg-surface) 95%, transparent) 100%);
   content: "";
+  background: var(--yp-bg-sunken);
 }
 
 .project-view-stack {
@@ -395,7 +461,6 @@
 .project-list-surface,
 .project-settings-surface,
 .project-overview-surface {
-  border: 1px solid var(--yp-border-subtle);
   border-radius: var(--yp-radius-md);
   background: var(--yp-bg-surface);
 }
@@ -428,10 +493,8 @@
 
 .project-table-shell {
   overflow: hidden;
-  border: 1px solid var(--yp-border-subtle);
   border-radius: var(--yp-radius-md);
   background: var(--yp-bg-surface);
-  box-shadow: var(--yp-shadow-card);
 }
 
 .project-management-table.el-table {
@@ -505,7 +568,6 @@
   margin: 0;
   padding: var(--yp-space-3) var(--yp-space-4);
   justify-content: flex-end;
-  border-top: 1px solid var(--yp-border-subtle);
 }
 
 .project-filter-grid {
@@ -878,11 +940,11 @@
   height: 34px;
   place-items: center;
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--mark), color-mix(in srgb, var(--mark) 70%, var(--yp-bg-surface)));
   color: var(--yp-status-blue-foreground);
   font-family: var(--yp-font-heading);
   font-size: 14px;
   font-weight: 600;
+  background: var(--mark);
 }
 
 .project-identity-cell__text {
@@ -910,12 +972,11 @@
   height: 24px;
   align-items: center;
   padding: 0 10px;
-  border: 1px solid var(--yp-border-subtle);
   border-radius: var(--yp-radius-pill);
-  background: var(--yp-bg-sunken);
   color: var(--yp-text-secondary);
   font-size: 12px;
   white-space: nowrap;
+  background: var(--yp-fill-neutral);
 }
 
 .project-name-cell__code,
@@ -949,7 +1010,7 @@
 .project-workspace .yp-filter-bar__tool.active .yp-filter-bar__badge,
 .project-catalog .yp-filter-bar__tool.active .yp-filter-bar__badge {
   background: var(--yp-action-primary);
-  color: var(--yp-text-inverse);
+  color: var(--yp-on-solid);
 }
 
 .project-section-heading {
@@ -1041,48 +1102,6 @@
 .project-workspace .form-section:first-child {
   padding-top: 0;
   border-top: 0;
-}
-
-.project-workspace .el-button,
-.project-catalog .el-button,
-.project-create-drawer .el-button,
-.project-filter-popover .el-button {
-  min-height: var(--yp-control-height-medium);
-  border-color: var(--yp-border-subtle);
-  border-radius: 6px;
-  color: var(--yp-text-primary);
-  background: var(--yp-bg-surface);
-  box-shadow: none;
-  transform: none;
-  transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease;
-}
-
-.project-workspace .el-button:hover,
-.project-catalog .el-button:hover,
-.project-create-drawer .el-button:hover,
-.project-filter-popover .el-button:hover {
-  border-color: var(--yp-border-strong);
-  color: var(--yp-text-primary);
-  background: var(--yp-bg-sunken);
-  transform: none;
-}
-
-.project-workspace .el-button--primary,
-.project-catalog .el-button--primary,
-.project-create-drawer .el-button--primary,
-.project-filter-popover .el-button--primary {
-  border-color: var(--yp-action-primary);
-  color: var(--yp-status-blue-foreground);
-  background: var(--yp-action-primary);
-}
-
-.project-workspace .el-button--primary:hover,
-.project-catalog .el-button--primary:hover,
-.project-create-drawer .el-button--primary:hover,
-.project-filter-popover .el-button--primary:hover {
-  border-color: var(--yp-action-primary-hover);
-  color: var(--yp-status-blue-foreground);
-  background: var(--yp-action-primary-hover);
 }
 
 :is(.project-workspace, .project-catalog, .project-create-drawer, .project-filter-popover, .archived-project-table) .el-button.is-link {
@@ -1297,22 +1316,14 @@
 
 /* 状态与优先级现代弹窗容器 */
 .el-popover.work-items-label-popover {
-  padding: 0 !important;
-  min-width: unset !important;
-  border-radius: 8px !important;
-  border: 1px solid var(--yp-border-subtle) !important;
-  background: var(--yp-bg-surface) !important;
-  box-shadow: var(--yp-shadow-popover) !important;
-  overflow: visible !important;
+  padding: 0;
+  min-width: unset;
+  overflow: visible;
 }
 
 .el-popover.color-picker-popover {
-  padding: 6px !important;
-  min-width: unset !important;
-  border-radius: 6px !important;
-  border: 1px solid var(--yp-border-subtle) !important;
-  background: var(--yp-bg-surface) !important;
-  box-shadow: var(--yp-shadow-popover) !important;
+  padding: 6px;
+  min-width: unset;
 }
 
 .el-dropdown__popper .label-more-dropdown-menu,

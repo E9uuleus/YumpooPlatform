@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import YpSkeleton from '../../components/yp/YpSkeleton.vue'
 import { usePageLoad } from '../../brand/page-progress'
 
 import { ProjectActorAccess, ProjectLifecycleFilter, type ProjectPage, type ProjectSummary } from '@yumpoo/api-client'
@@ -95,13 +96,19 @@ void pageLoad.track(load)
           />
           <el-button
             :loading="loading"
+            text
             @click="load"
           >
             刷新
           </el-button>
         </div>
+        <yp-skeleton
+          v-if="loading && !result?.items.length"
+          variant="table"
+          :rows="6"
+        />
         <div
-          v-if="loading || result?.items.length"
+          v-else-if="loading || result?.items.length"
           v-loading="loading"
           class="table-scroll"
           :aria-busy="loading"
@@ -137,7 +144,6 @@ void pageLoad.track(load)
                 <yp-status-tag
                   domain="project-lifecycle"
                   :status="projectStatus(scope.row as ProjectSummary)"
-                  effect="soft"
                   size="small"
                 />
               </template>

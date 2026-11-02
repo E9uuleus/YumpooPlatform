@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import YpNotice from '../yp/YpNotice.vue'
 import { computed, ref, watch, type DefineComponent } from 'vue'
-import { ElDialog, ElButton, ElIcon, ElSelect as ElSelectRaw, ElOption as ElOptionRaw, ElInput, ElColorPicker } from 'element-plus'
+import { ElDialog, ElButton, ElIcon, ElSelect as ElSelectRaw, ElOption as ElOptionRaw, ElInput, ElInputNumber, ElColorPicker } from 'element-plus'
 import { Close, Setting, ArrowUp, ArrowDown, Search, EditPen, RefreshLeft, Filter, List } from '@element-plus/icons-vue'
 import type { DashboardBucket, DashboardChart, DashboardChartResult, DashboardChartSelection, DashboardConnection, DashboardFilters, DashboardWidget } from '@yumpoo/api-client'
 import { clone, emptyFilters } from './dashboardModel'
@@ -84,13 +84,13 @@ function changeContents(ids: string[]) { c.value.filters = { ...clone(filters.va
     <template #header>
       <div class="chart-editor-heading">
         <span class="chart-editor-heading-icon"><ChartTypeIcon :type="c.type" /></span>
-        <input
+        <el-input
           v-model="draft.title"
           aria-label="组件名称"
           maxlength="80"
           :class="{ invalid: !draft.title.trim() }"
           @keydown.enter.prevent="($event.target as HTMLInputElement).blur()"
-        >
+        />
         <el-button
           :icon="Close"
           class="chart-editor-close"
@@ -357,14 +357,14 @@ function changeContents(ids: string[]) { c.value.filters = { ...clone(filters.va
             <label
               v-if="limitEnabled"
               class="chart-field"
-            ><span>数量</span><input
-              v-model.number="c.limit"
-              type="number"
-              min="1"
-              max="5000"
+            ><span>数量</span><el-input-number
+              v-model="c.limit"
+              controls-position="right"
+              :min="1"
+              :max="5000"
               aria-label="显示数量"
               :aria-invalid="!validLimit"
-            ></label>
+            /></label>
             <span
               v-if="limitEnabled && !validLimit"
               role="alert"
@@ -381,6 +381,7 @@ function changeContents(ids: string[]) { c.value.filters = { ...clone(filters.va
                 <span>分类标签</span><el-button
                   :icon="EditPen"
                   :aria-expanded="labelsOpen"
+                  text
                   @click="labelsOpen = !labelsOpen"
                 >
                   编辑颜色、名称与顺序
@@ -502,6 +503,7 @@ function changeContents(ids: string[]) { c.value.filters = { ...clone(filters.va
             </div>
             <el-button
               :icon="Filter"
+              text
               @click="filterOpen = true"
             >
               设置组件筛选

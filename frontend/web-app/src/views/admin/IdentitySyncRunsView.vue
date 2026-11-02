@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import YpSkeleton from '../../components/yp/YpSkeleton.vue'
 import { usePageLoad } from '../../brand/page-progress'
 
 import {
@@ -293,8 +294,14 @@ onBeforeUnmount(clearPoll)
       :problem="error"
     />
 
+    <yp-skeleton
+      v-if="loading && !result?.items.length"
+      variant="table"
+      :rows="8"
+      :columns="6"
+    />
     <div
-      v-if="loading || result?.items.length"
+      v-else-if="loading || result?.items.length"
       class="table-surface table-scroll sync-runs__surface"
     >
       <el-table

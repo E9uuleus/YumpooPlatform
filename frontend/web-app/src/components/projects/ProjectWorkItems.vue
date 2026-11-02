@@ -3195,6 +3195,7 @@ onBeforeUnmount(() => {
         v-if="!embedded"
         section="overview"
         :project="project"
+        @changed="loadWorkspace"
       />
 
       <section class="work-items-home">
@@ -4275,6 +4276,7 @@ onBeforeUnmount(() => {
               <el-button
                 v-if="detail.capabilities.canDelete"
                 :loading="restoringArchive"
+                text
                 @click="restoreArchivedItem"
               >
                 恢复工作项
@@ -4516,7 +4518,7 @@ onBeforeUnmount(() => {
 .text-button { width: auto; color: var(--yp-action-primary); }
 .toolbar-button__count {
   display: inline-grid; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; place-items: center;
-  border-radius: var(--yp-radius-pill); background: var(--yp-action-primary); color: var(--yp-text-inverse);
+  border-radius: var(--yp-radius-pill); background: var(--yp-action-primary); color: var(--yp-on-solid);
   font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1;
 }
 .filter-popover {
@@ -4526,12 +4528,12 @@ onBeforeUnmount(() => {
 .filter-popover__header {
   position: sticky; z-index: 1; top: 0; display: flex; align-items: center; gap: var(--yp-space-2);
   margin: 0 calc(-1 * var(--yp-space-5)); padding: var(--yp-space-4) var(--yp-space-5) var(--yp-space-3);
-  border-bottom: 1px solid var(--yp-border-subtle); background: var(--yp-bg-raised);
+   background: var(--yp-bg-raised);
 }
 .filter-popover__header strong { color: var(--yp-text-primary); font-size: 15px; font-weight: 600; }
 .filter-popover__count {
   display: inline-grid; min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; place-items: center;
-  border-radius: var(--yp-radius-pill); background: var(--yp-action-primary); color: var(--yp-text-inverse);
+  border-radius: var(--yp-radius-pill); background: var(--yp-action-primary); color: var(--yp-on-solid);
   font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums;
 }
 .filter-popover__clear { margin-left: auto; padding: 4px 8px; }
@@ -4544,7 +4546,7 @@ onBeforeUnmount(() => {
 .filter-section h4 small { color: var(--yp-action-primary); font-size: 12px; font-weight: 500; letter-spacing: 0; }
 .filter-columns {
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--yp-space-4) var(--yp-space-5); min-width: 0;
-  padding-top: var(--yp-space-4); border-top: 1px solid var(--yp-border-subtle);
+  padding-top: var(--yp-space-4);
 }
 .filter-value {
   min-width: 0; min-height: 32px; gap: 10px; padding: 5px 8px;
@@ -4568,13 +4570,13 @@ onBeforeUnmount(() => {
 .filter-checkbox.checked { border-color: var(--yp-action-primary); background: var(--yp-action-primary); }
 .filter-checkbox.checked::after {
   position: absolute; top: 2px; left: 5px; width: 4px; height: 8px; box-sizing: border-box;
-  border: solid var(--yp-text-inverse); border-width: 0 2px 2px 0; content: '';
+  border: solid var(--yp-on-solid); border-width: 0 2px 2px 0; content: '';
   transform: rotate(45deg); animation: filter-check-in var(--yp-motion-fast) var(--yp-ease-standard);
 }
 @keyframes filter-check-in { from { opacity: 0; transform: rotate(45deg) scale(.4); } }
 .filter-dates {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--yp-space-4) var(--yp-space-5); min-width: 0;
-  padding-top: var(--yp-space-4); border-top: 1px solid var(--yp-border-subtle);
+  padding-top: var(--yp-space-4);
 }
 .filter-field { display: grid; gap: var(--yp-space-2); min-width: 0; }
 .filter-field-label { color: var(--yp-text-secondary); font-size: 12px; font-weight: 600; letter-spacing: .02em; }

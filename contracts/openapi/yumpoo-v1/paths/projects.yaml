@@ -588,6 +588,34 @@ paths:
           $ref: "#/components/responses/ValidationFailed"
         "428":
           $ref: "#/components/responses/PreconditionRequired"
+  /projects/{projectId}/leave:
+    post:
+      tags:
+        - Projects
+      operationId: leaveProject
+      summary: 项目成员退出进行中的 Project
+      description: 只有非负责人的成员可以退出；服务端使用调用者当前的成员版本，不需要 If-Match。退出后停止调用者在该项目中运行中的计时，已有工时、讨论与处理人记录保留。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          $ref: "#/components/responses/ProjectMemberChanged"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
   /projects/{projectId}/member-candidates:
     get:
       tags:

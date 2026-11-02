@@ -86,7 +86,6 @@ async function move(event: KeyboardEvent, index: number): Promise<void> {
   min-height: 44px;
   align-items: stretch;
   gap: var(--yp-space-2);
-  border-bottom: 1px solid var(--yp-border-subtle);
 }
 
 .yp-tabs__tab {
@@ -115,6 +114,7 @@ async function move(event: KeyboardEvent, index: number): Promise<void> {
 
 .yp-tabs__tab.selected {
   color: var(--yp-text-primary);
+  font-weight: 600;
 }
 
 .yp-tabs__tab:focus-visible {
@@ -132,7 +132,7 @@ async function move(event: KeyboardEvent, index: number): Promise<void> {
   padding: 0 6px;
   border-radius: var(--yp-radius-pill);
   color: var(--yp-text-secondary);
-  background: var(--yp-bg-sunken);
+  background: var(--yp-fill-neutral);
   font-size: var(--yp-type-caption-size);
   font-variant-numeric: tabular-nums;
   line-height: 18px;
@@ -140,9 +140,9 @@ async function move(event: KeyboardEvent, index: number): Promise<void> {
 
 .yp-tabs__ink {
   position: absolute;
-  bottom: -1px;
+  bottom: 0;
   left: 0;
-  height: 2.5px;
+  height: 2px;
   border-radius: var(--yp-radius-pill) var(--yp-radius-pill) 0 0;
   background: var(--yp-action-primary);
   pointer-events: none;

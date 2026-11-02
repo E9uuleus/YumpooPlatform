@@ -344,16 +344,19 @@ provide(connectedItemSource, itemSource)
     <div class="connect-preview__examples">
       <span>卡片状态</span><el-button
         size="small"
+        text
         @click="openCard(previewConnection)"
       >
         有处理人
       </el-button><el-button
         size="small"
+        text
         @click="openCard(previewConnections[1]!)"
       >
         无处理人 / 无优先级
       </el-button><el-button
         size="small"
+        text
         @click="openCard({ ...previewConnections[2]!, target: { ...previewConnections[2]!.target, projectLifecycle: ProjectLifecycle.Archived } })"
       >
         已归档

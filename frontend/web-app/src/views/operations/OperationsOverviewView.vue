@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import YpSkeleton from '../../components/yp/YpSkeleton.vue'
 import YpNotice from '../../components/yp/YpNotice.vue'
 import { Coin, Connection, Files, FolderOpened, Monitor, Tickets } from '@element-plus/icons-vue'
 import type { OperationsAlert } from '@yumpoo/api-client'
 import { computed, watch, type Component } from 'vue'
 import { RouterLink } from 'vue-router'
-import { ElIcon, ElSkeleton } from 'element-plus'
+import { ElIcon } from 'element-plus'
 import { identityAdministrationApi } from '../../api/client'
 import { useOperationsQuery } from '../../composables/useOperationsQuery'
 import { useOperations } from '../../components/operations/operationsContext'
@@ -192,10 +193,11 @@ const postureTone = (severity: string) =>
 </script>
 
 <template>
-  <el-skeleton
+  <yp-skeleton
     v-if="!data && query.loading.value"
-    :rows="12"
-    animated
+    variant="cards"
+    :rows="6"
+    label="正在加载运维概览"
   />
   <template v-if="data">
     <section
@@ -299,7 +301,6 @@ const postureTone = (severity: string) =>
             <yp-status-tag
               domain="operations"
               :status="component.status"
-              effect="soft"
               size="small"
             />
             <span class="ops-health-row__detail">{{ componentDetail(component.code, component.detail) }}</span>
@@ -318,7 +319,6 @@ const postureTone = (severity: string) =>
             <yp-status-tag
               domain="integration"
               :status="integration.data.value?.oauth.configured ? 'CONFIGURED' : 'INCOMPLETE'"
-              effect="soft"
               size="small"
             />
             <span class="ops-health-row__detail">最近同步成功 {{ time(integration.data.value?.lastSuccessfulRunAt) }}</span>
@@ -380,7 +380,6 @@ const postureTone = (severity: string) =>
               <yp-status-tag
                 domain="operations"
                 :status="check.status"
-                effect="soft"
                 size="small"
               />
             </li>
@@ -480,7 +479,6 @@ const postureTone = (severity: string) =>
   gap: var(--yp-space-4);
   margin-bottom: var(--yp-space-4);
   padding: var(--yp-space-4) var(--yp-space-5);
-  border: 1px solid color-mix(in srgb, var(--ops-tone) 40%, var(--yp-border-subtle));
   border-radius: var(--yp-radius-md);
   background: color-mix(in srgb, var(--ops-tone) 8%, var(--yp-bg-surface));
 }

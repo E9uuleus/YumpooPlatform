@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import YpSkeleton from '../../components/yp/YpSkeleton.vue'
 import { usePageLoad } from '../../brand/page-progress'
 
 import { MoreFilled, Plus, Search } from '@element-plus/icons-vue'
@@ -128,7 +129,7 @@ function confirmAction(member: ProjectMember, action: MemberAction): Promise<unk
       { confirmButtonText: '重新加入', cancelButtonText: '取消' })
   }
   return ElMessageBox.confirm(`确定将「${member.displayName}」移出项目？移出后对方不能再访问此项目，之后可以重新加入。`,
-    '移出项目', { confirmButtonText: '移出', cancelButtonText: '取消', type: 'warning' })
+    '移出项目', { confirmButtonText: '移出', confirmButtonClass: 'el-button--danger', cancelButtonText: '取消', type: 'warning' })
 }
 
 async function run(member: ProjectMember, action: MemberAction): Promise<void> {
@@ -211,6 +212,7 @@ onBeforeUnmount(() => clearTimeout(timer))
       section="members"
       :project="project"
       title="项目成员"
+      @changed="refresh"
     />
     <inline-problem
       v-if="error"
@@ -255,7 +257,13 @@ onBeforeUnmount(() => clearTimeout(timer))
           aria-label="搜索成员"
         />
       </div>
+      <yp-skeleton
+        v-if="loading && !result?.items.length"
+        variant="list"
+        :rows="6"
+      />
       <div
+        v-else
         v-loading="loading"
         class="project-members__list"
       >
@@ -289,7 +297,6 @@ onBeforeUnmount(() => clearTimeout(timer))
                 v-if="member.membershipStatus === ProjectMembershipStatus.Removed"
                 domain="project-membership"
                 :status="member.membershipStatus"
-                effect="soft"
                 size="small"
               />
             </span>
@@ -391,7 +398,6 @@ onBeforeUnmount(() => clearTimeout(timer))
 .project-members__list {
   min-height: 168px;
   overflow: hidden;
-  border: 1px solid var(--yp-border-subtle);
   border-radius: var(--yp-radius-md);
   background: var(--yp-bg-surface);
 }

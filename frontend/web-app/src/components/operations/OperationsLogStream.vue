@@ -125,6 +125,7 @@ async function copy(value: string) {
           <strong>{{ entry.record.event ?? '未命名事件' }}</strong><el-button
             v-if="entry.record.requestId"
             size="small"
+            text
             @click="emit('trace', entry)"
           >
             请求追踪
@@ -136,6 +137,7 @@ async function copy(value: string) {
           </el-button>
           <el-button
             size="small"
+            text
             @click="copy(JSON.stringify(entry.record, null, 2))"
           >
             复制 JSON
@@ -150,6 +152,7 @@ async function copy(value: string) {
           <el-button
             v-if="filters"
             size="small"
+            text
             @click="emit('window', entry)"
           >
             前后 5 分钟
@@ -245,7 +248,6 @@ async function copy(value: string) {
 <style scoped>
 .ops-log-stream {
   overflow: hidden;
-  border: 1px solid var(--yp-border-subtle);
   border-radius: var(--yp-radius-md);
   background: var(--yp-bg-surface);
   font: 12.5px / 1.5 var(--yp-font-mono);
@@ -343,9 +345,9 @@ summary:focus-visible {
   display: grid;
   gap: var(--yp-space-3);
   padding: var(--yp-space-3) var(--yp-space-4) var(--yp-space-4);
-  border-top: 1px dashed var(--yp-border-subtle);
   background: var(--yp-bg-sunken);
   font-family: var(--yp-font-family);
+  border-top: 1px solid var(--yp-border-subtle);
 }
 
 .ops-log-detail .ops-toolbar {
@@ -359,7 +361,6 @@ summary:focus-visible {
 
 .ops-log-error {
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--yp-status-red) 35%, var(--yp-border-subtle));
   border-radius: var(--yp-radius-sm);
   background: var(--yp-bg-surface);
 }

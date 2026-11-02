@@ -86,5 +86,5 @@ onBeforeUnmount(() => { ++sequence; ++revealSequence; observer?.disconnect(); gr
   </div>
 </template>
 <style>
-.dashboard-grid{margin:-8px;min-height:160px}.dashboard-grid .grid-stack-item-content{overflow:hidden!important;border:1px solid var(--yp-border-default);border-radius:8px;background:var(--yp-bg-surface);box-shadow:0 2px 5px #00000003}.dashboard-grid.is-editing .grid-stack-item-content{box-shadow:0 3px 12px #00000009}.dashboard-grid .grid-stack-placeholder>.placeholder-content{border:1px dashed var(--yp-action-primary);background:color-mix(in srgb,var(--yp-action-primary) 7%,transparent);border-radius:8px}.dashboard-grid .ui-resizable-se{opacity:.55}.dashboard-grid .ui-draggable-dragging{z-index:20}.dashboard-grid.is-editing .dashboard-card__handle{cursor:grab}
+.dashboard-grid{margin:-8px;min-height:160px}.dashboard-grid .grid-stack-item-content{overflow:hidden!important;border-radius:8px;background:var(--yp-bg-surface);}.dashboard-grid .grid-stack-placeholder>.placeholder-content{border:1px dashed var(--yp-action-primary);background:color-mix(in srgb,var(--yp-action-primary) 7%,transparent);border-radius:8px}.dashboard-grid .ui-resizable-se{opacity:.55}.dashboard-grid .ui-draggable-dragging{z-index:20}.dashboard-grid.is-editing .dashboard-card__handle{cursor:grab}
 </style>
