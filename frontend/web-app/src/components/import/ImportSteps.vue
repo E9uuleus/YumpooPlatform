@@ -86,7 +86,7 @@ defineProps<{
 
 .import-steps__item.is-current .import-steps__mark {
   border-color: var(--yp-action-primary);
-  color: var(--yp-text-inverse);
+  color: var(--yp-on-solid);
   background: var(--yp-action-primary);
 }
 
