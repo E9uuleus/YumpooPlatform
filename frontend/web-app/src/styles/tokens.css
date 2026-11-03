@@ -183,6 +183,7 @@
   --yp-bg-sunken: #f5f6f8;
   --yp-bg-hover: #eff0f4;
   --yp-bg-selected: #eaf3ff;
+  --yp-bg-selected-strong: #cce5ff;
   --yp-border-subtle: #e6e9ef;
   --yp-border-default: #d0d4e4;
   --yp-border-strong: #aeb6c3;
@@ -213,6 +214,7 @@
   --yp-bg-sunken: #121318;
   --yp-bg-hover: #2e313b;
   --yp-bg-selected: #163a5f;
+  --yp-bg-selected-strong: #163a5f;
   --yp-border-subtle: #30323b;
   --yp-border-default: #3a3d48;
   --yp-border-strong: #555a68;
@@ -248,6 +250,7 @@
   --yp-bg-sunken: #050c16;
   --yp-bg-hover: #172c45;
   --yp-bg-selected: #0b3c6f;
+  --yp-bg-selected-strong: #0b3c6f;
   --yp-border-subtle: #1b2d44;
   --yp-border-default: #263b55;
   --yp-border-strong: #3b5878;
