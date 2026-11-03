@@ -13,7 +13,7 @@
 
 import { mapValues } from '../runtime';
 /**
- * 复用项目工作项查询语义；图表条件与表格条件取交集，field 查询分组选项，parentWorkItemId 查询匹配子项。主表保留命中子项的父项作为上下文。
+ * 复用项目工作项查询语义；图表条件与表格条件取交集，field 查询分组选项，parentWorkItemId 查询匹配子项。主表保留命中子项的父项作为上下文。group* 只约束主行；countSubitems 与筛选选项接口相同。
  * @export
  * @interface DashboardTableCriteria
  */
@@ -102,6 +102,42 @@ export interface DashboardTableCriteria {
      * @memberof DashboardTableCriteria
      */
     emptyField?: DashboardTableCriteriaEmptyFieldEnum;
+    /**
+     *
+     * @type {string}
+     * @memberof DashboardTableCriteria
+     */
+    groupStatus?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DashboardTableCriteria
+     */
+    groupPriority?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DashboardTableCriteria
+     */
+    groupContentId?: string;
+    /**
+     *
+     * @type {Date}
+     * @memberof DashboardTableCriteria
+     */
+    groupDueFrom?: Date;
+    /**
+     *
+     * @type {Date}
+     * @memberof DashboardTableCriteria
+     */
+    groupDueTo?: Date;
+    /**
+     *
+     * @type {boolean}
+     * @memberof DashboardTableCriteria
+     */
+    countSubitems?: boolean;
     /**
      *
      * @type {string}
@@ -196,6 +232,12 @@ export function DashboardTableCriteriaFromJSONTyped(json: any, ignoreDiscriminat
         ...(json['timeTrackingMinMs'] == null ? {} : { 'timeTrackingMinMs': json['timeTrackingMinMs'] }),
         ...(json['timeTrackingMaxMs'] == null ? {} : { 'timeTrackingMaxMs': json['timeTrackingMaxMs'] }),
         ...(json['emptyField'] == null ? {} : { 'emptyField': json['emptyField'] }),
+        ...(json['groupStatus'] == null ? {} : { 'groupStatus': json['groupStatus'] }),
+        ...(json['groupPriority'] == null ? {} : { 'groupPriority': json['groupPriority'] }),
+        ...(json['groupContentId'] == null ? {} : { 'groupContentId': json['groupContentId'] }),
+        ...(json['groupDueFrom'] == null ? {} : { 'groupDueFrom': (new Date(json['groupDueFrom'])) }),
+        ...(json['groupDueTo'] == null ? {} : { 'groupDueTo': (new Date(json['groupDueTo'])) }),
+        ...(json['countSubitems'] == null ? {} : { 'countSubitems': json['countSubitems'] }),
         ...(json['cursor'] == null ? {} : { 'cursor': json['cursor'] }),
         ...(json['limit'] == null ? {} : { 'limit': json['limit'] }),
         ...(json['field'] == null ? {} : { 'field': json['field'] }),
@@ -228,6 +270,12 @@ export function DashboardTableCriteriaToJSONTyped(value?: DashboardTableCriteria
         'timeTrackingMinMs': value['timeTrackingMinMs'],
         'timeTrackingMaxMs': value['timeTrackingMaxMs'],
         'emptyField': value['emptyField'],
+        'groupStatus': value['groupStatus'],
+        'groupPriority': value['groupPriority'],
+        'groupContentId': value['groupContentId'],
+        'groupDueFrom': value['groupDueFrom'] == null ? value['groupDueFrom'] : value['groupDueFrom'].toISOString().substring(0,10),
+        'groupDueTo': value['groupDueTo'] == null ? value['groupDueTo'] : value['groupDueTo'].toISOString().substring(0,10),
+        'countSubitems': value['countSubitems'],
         'cursor': value['cursor'],
         'limit': value['limit'],
         'field': value['field'],
