@@ -111,7 +111,7 @@ public final class TimeTrackingModels {
 
     public record TimeTrackingPreferences(boolean timerEnabled, int workdayStartMinute, int workdayEndMinute,
             boolean hideCompleted, HideCompletedEffect hideCompletedEffect) {
-        public static final TimeTrackingPreferences DEFAULT=new TimeTrackingPreferences(true,540,1080,false,HideCompletedEffect.FADE_STRIKETHROUGH);
+        public static final TimeTrackingPreferences DEFAULT=new TimeTrackingPreferences(false,540,1080,false,HideCompletedEffect.FADE_STRIKETHROUGH);
     }
 
     /** hideCompleted 与 hideCompletedEffect 省略时保留原值。 */

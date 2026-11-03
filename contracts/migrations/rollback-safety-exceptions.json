@@ -21,6 +21,13 @@
       "classification": "expand",
       "reason": "只把导入写入的完成时间（completed_at 等于 created_at 的完成项）清为空。上一版本把空完成时间按「完成时间未记录」处理（V49 之前的历史数据即如此），读写不受影响，回退安全；迁移策略把修改已有数据一律判为破坏性，属经审阅的误报。",
       "agentNote": ".agents/notes/implemented/product/2026-10-28-work-item-import.md"
+    },
+    {
+      "file": "workitem/V88__timer_disabled_by_default.sql",
+      "sha256": "ea70ed5b8b10f4edf7a60d4f3b3e6d8f323c16421fbc571904df10c9dd2c7db9",
+      "classification": "expand",
+      "reason": "只把 work_item_timer_state.timer_enabled 的列默认值改为 false，不改已有行。上一版本插入状态行时只写 company_id 与 user_id，回退后读写都不受影响；回退期间尚无状态行的成员首次产生状态行后计时器为关闭，可在计时偏好中重新开启。迁移策略把已有表的 ALTER COLUMN 一律判为破坏性，属经审阅的误报。",
+      "agentNote": ".agents/notes/implemented/product/2026-10-15-my-day-timeline-and-timer-opt-out.md"
     }
   ]
 }

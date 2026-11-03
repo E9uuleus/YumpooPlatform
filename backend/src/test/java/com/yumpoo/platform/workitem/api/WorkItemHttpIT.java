@@ -71,10 +71,19 @@ class WorkItemHttpIT {
             DirectoryMemberProvisioningResult memberUser = provisioner.provision("work-category-member", "Work Category Member");
             owner = actor(ownerUser.userId());
             member = actor(memberUser.userId());
+            enableTimer(owner.userId());
+            enableTimer(member.userId());
             createProject(owner.userId(), member.userId());
             requirementsId = createContent("需求", "BRIGHT_BLUE");
             tasksId = createContent("任务", "BRIGHT_GREEN");
         }
+    }
+
+    /** 计时器默认关闭（V88）：直接写入开启的状态行，row_version 保持 0，既有 "0" ETag 用例不变。 */
+    private void enableTimer(UUID userId) {
+        jdbc.sql("INSERT INTO yumpoo.work_item_timer_state(company_id,user_id,timer_enabled) VALUES (:company,:user,true) "
+                + "ON CONFLICT (company_id,user_id) DO UPDATE SET timer_enabled=true")
+                .param("company", COMPANY_ID).param("user", userId).update();
     }
 
     @AfterEach
