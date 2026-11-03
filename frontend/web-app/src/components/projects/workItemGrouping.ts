@@ -65,7 +65,11 @@ export function dateGroupKey(value: Date | string | null, today: string): string
     && (!group.from || date >= group.from) && (!group.to || date <= group.to))!.key
 }
 
-export function itemGroupKey(item: ProjectWorkItemListItem, field: GroupField, today: string): string {
+/** 计算分组键所需的字段；列表行与工作项详情都满足。 */
+export type GroupKeySource = Pick<ProjectWorkItemListItem,
+  'assigneeUserId' | 'assigneeDisplayName' | 'assignees' | 'statusCode' | 'priority' | 'contentId' | 'dueDate'>
+
+export function itemGroupKey(item: GroupKeySource, field: GroupField, today: string): string {
   switch (field) {
     case 'ASSIGNEE': { const ids = workItemAssigneeIds(item); return ids.length ? assigneeSetKey(ids) : EMPTY_GROUP }
     case 'STATUS': return item.statusCode

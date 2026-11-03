@@ -7,7 +7,7 @@ import type { WorkItemTableSource } from './workItemTableSource'
 import { workItemsApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import { buildWorkItemGroups, EMPTY_GROUP, groupingFields, groupListRequest, groupOrders,
-  itemGroupKey, type GroupField, type GroupOrder, type GroupSources, type WorkItemGroup } from './workItemGrouping'
+  itemGroupKey, type GroupField, type GroupKeySource, type GroupOrder, type GroupSources, type WorkItemGroup } from './workItemGrouping'
 
 interface GroupPage {
   items: ProjectWorkItemListItem[]
@@ -81,7 +81,7 @@ export function useWorkItemGrouping(options: Options) {
   const groups = computed(() => field.value ? buildWorkItemGroups(field.value, order.value, showEmpty.value && !options.filtering?.(),
     facets.value, options.sources(), options.today(), colors) : [])
   const active = computed(() => Boolean(field.value))
-  const keyOf = (item: ProjectWorkItemListItem) => field.value ? itemGroupKey(item, field.value, options.today()) : ''
+  const keyOf = (item: GroupKeySource) => field.value ? itemGroupKey(item, field.value, options.today()) : ''
   const collapseKey = (key: string) => `${field.value}:${key}`
   const isCollapsed = (key: string) => collapsed.value.has(collapseKey(key)) && !revealed.value.has(collapseKey(key))
   function page(key: string): GroupPage {

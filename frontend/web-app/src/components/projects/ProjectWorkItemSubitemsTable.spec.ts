@@ -105,6 +105,16 @@ function pointer(type: string, clientY: number, clientX = 200, pointerId = 11) {
 }
 
 describe('项目工作项子表格', () => {
+  it('selected 返回 true 的子项行带选中类名', async () => {
+    const wrapper = mountTable()
+    await wrapper.setProps({ selected: (item: ProjectWorkItemListItem) => item.id === 'child-2' })
+    await flushPromises()
+    const rows = wrapper.findAll('tr.subitem-table-row')
+    expect(rows[0]!.classes()).not.toContain('subitem-table-row--selected')
+    expect(rows[1]!.classes()).toContain('subitem-table-row--selected')
+    expect(wrapper.findAll('tr.subitem-table-row--selected')).toHaveLength(1)
+  })
+
   it('复用父表连接列宽度和只读态，固定在内置列后并转发卡片事件', async () => {
     const wrapper = mountTable([item('child-1')])
     await wrapper.setProps({
