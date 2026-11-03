@@ -5,14 +5,15 @@ const api = vi.hoisted(() => ({ getCurrentTimeTracker: vi.fn(), getTimeTrackingS
 vi.mock('../api/client', () => ({ timeTrackingApi: api }))
 vi.mock('@yumpoo/api-client', async importOriginal => ({ ...await importOriginal<object>(), readCsrfToken: () => 'csrf' }))
 vi.mock('element-plus', () => ({ ElMessage: { error: vi.fn(), warning: vi.fn() }, ElMessageBox: { confirm: vi.fn(async () => undefined) } }))
-import { activateTimeTracker, cancelTimerExit, timerExitPhase, timerExitPrompt, chooseTimerExit, confirmTimerExit, timerMutation, useTimeTracker } from './useTimeTracker'
+import { activateTimeTracker, cancelTimerExit, timerExitPhase, timerExitPrompt, chooseTimerExit, confirmTimerExit, DEFAULT_TIME_PREFERENCES, timerMutation, useTimeTracker } from './useTimeTracker'
 
 function state(version: number, running = false) {
   const session = running ? { id: 'session', workItemId: 'item', projectId: 'project', startedAt: new Date(), userId: 'user' } : null
   return { rowVersion: version, etag: `"${version}"`, serverNow: new Date(), workItemTitle: running ? '测试事项' : null, recentItems: [], resumeItems: [],
+    preferences: { ...DEFAULT_TIME_PREFERENCES, timerEnabled: true },
     session, runningSessions: session ? [{ session, workItemTitle: '测试事项' }] : [] }
 }
-beforeEach(() => { vi.clearAllMocks(); vi.stubGlobal('BroadcastChannel', undefined); api.getCurrentTimeTracker.mockResolvedValue(state(0)); activateTimeTracker(true) })
+beforeEach(async () => { vi.clearAllMocks(); vi.stubGlobal('BroadcastChannel', undefined); api.getCurrentTimeTracker.mockResolvedValue(state(0)); activateTimeTracker(true); await useTimeTracker().refresh() })
 afterEach(() => { cancelTimerExit(); activateTimeTracker(false); vi.unstubAllGlobals() })
 
 describe('application timer facts', () => {
