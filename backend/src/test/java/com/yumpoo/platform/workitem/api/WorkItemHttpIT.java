@@ -71,10 +71,19 @@ class WorkItemHttpIT {
             DirectoryMemberProvisioningResult memberUser = provisioner.provision("work-category-member", "Work Category Member");
             owner = actor(ownerUser.userId());
             member = actor(memberUser.userId());
+            enableTimer(owner.userId());
+            enableTimer(member.userId());
             createProject(owner.userId(), member.userId());
             requirementsId = createContent("需求", "BRIGHT_BLUE");
             tasksId = createContent("任务", "BRIGHT_GREEN");
         }
+    }
+
+    /** 计时器默认关闭（V88）：直接写入开启的状态行，row_version 保持 0，既有 "0" ETag 用例不变。 */
+    private void enableTimer(UUID userId) {
+        jdbc.sql("INSERT INTO yumpoo.work_item_timer_state(company_id,user_id,timer_enabled) VALUES (:company,:user,true) "
+                + "ON CONFLICT (company_id,user_id) DO UPDATE SET timer_enabled=true")
+                .param("company", COMPANY_ID).param("user", userId).update();
     }
 
     @AfterEach
@@ -233,6 +242,43 @@ class WorkItemHttpIT {
         assertThat(ok(get(collection + "?emptyField=PRIORITY&priority=HIGH", member)).path("items").size()).isZero();
         assertThat(ok(get(collection + "?emptyField=DUE_DATE&dueFrom=2026-09-01", member)).path("items").size()).isZero();
         assertThat(get(collection + "?emptyField=STATUS", member).statusCode()).isEqualTo(422);
+    }
+
+    @Test
+    void searchAndFiltersMatchSubitemsWhileGroupConditionsConstrainRootsOnly() throws Exception {
+        String collection = "/api/v1/projects/" + PROJECT_ID + "/work-items";
+        JsonNode parent = created(mutate("POST", collection, member, workItemBody(tasksId, "plain parent"), null, UUID.randomUUID()));
+        var childBody = (tools.jackson.databind.node.ObjectNode) json.readTree(subitemBody(tasksId, "zz-subhit child"));
+        childBody.put("priority", "HIGH");
+        JsonNode child = created(mutate("POST", "/api/v1/work-items/" + parent.path("id").asText() + "/subitems", member,
+                json.writeValueAsString(childBody), null, UUID.randomUUID()));
+        created(mutate("POST", "/api/v1/work-items/" + parent.path("id").asText() + "/subitems", member,
+                subitemBody(tasksId, "other child"), null, UUID.randomUUID()));
+
+        JsonNode searched = ok(get(collection + "?q=zz-subhit", member)).path("items");
+        assertThat(searched).hasSize(1);
+        assertThat(searched.get(0).path("id").asText()).isEqualTo(parent.path("id").asText());
+        assertThat(searched.get(0).path("matchedSubitemCount").asLong()).isEqualTo(1);
+        assertThat(ok(get(collection, member)).path("items").get(0).path("matchedSubitemCount").asLong()).isZero();
+
+        String subitems = "/api/v1/work-items/" + parent.path("id").asText() + "/subitems";
+        JsonNode matched = ok(get(subitems + "?q=zz-subhit", member)).path("items");
+        assertThat(matched).hasSize(1);
+        assertThat(matched.get(0).path("id").asText()).isEqualTo(child.path("id").asText());
+        assertThat(ok(get(subitems, member)).path("items")).hasSize(2);
+
+        assertThat(ok(get(collection + "?priority=HIGH", member)).path("items")).hasSize(1);
+        assertThat(ok(get(collection + "?priority=HIGH&groupPriority=HIGH", member)).path("items")).isEmpty();
+        assertThat(ok(get(collection + "?priority=HIGH&emptyField=PRIORITY", member)).path("items")).hasSize(1);
+        JsonNode rowCounts = ok(get(collection + "/filter-options?field=PRIORITY&priority=HIGH", member)).path("items");
+        assertThat(rowCounts).hasSize(1);
+        assertThat(rowCounts.get(0).path("value").asText()).isEqualTo("__NULL__");
+        JsonNode itemCounts = ok(get(collection + "/filter-options?field=PRIORITY&priority=HIGH&countSubitems=true", member)).path("items");
+        assertThat(itemCounts).hasSize(1);
+        assertThat(itemCounts.get(0).path("value").asText()).isEqualTo("HIGH");
+        assertThat(ok(get(collection + "?view=KANBAN&status=" + parent.path("statusCode").asText() + "&q=zz-subhit", member))
+                .path("items")).isEmpty();
+        assertThat(get(collection + "?groupStatus=NOT_A_STATUS", member).statusCode()).isEqualTo(422);
     }
 
     @Test

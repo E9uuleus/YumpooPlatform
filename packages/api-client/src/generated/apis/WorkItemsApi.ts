@@ -357,6 +357,7 @@ export interface ListProjectWorkItemFilterOptionsRequest {
     timeTrackingMaxMs?: number;
     cursor?: string;
     limit?: number;
+    countSubitems?: boolean;
     q?: string;
     status?: Set<string>;
     priority?: Set<string>;
@@ -381,6 +382,11 @@ export interface ListProjectWorkItemsRequest {
     limit?: number;
     view?: WorkItemViewType;
     emptyField?: ListProjectWorkItemsEmptyFieldEnum;
+    groupStatus?: string;
+    groupPriority?: string;
+    groupContentId?: string;
+    groupDueFrom?: Date;
+    groupDueTo?: Date;
     status?: Set<string>;
     q?: string;
     priority?: Set<string>;
@@ -419,6 +425,14 @@ export interface ListWorkItemSubitemsRequest {
     timeTrackingState?: TimeTrackingState;
     timeTrackingMinMs?: number;
     timeTrackingMaxMs?: number;
+    status?: Set<string>;
+    q?: string;
+    priority?: Set<string>;
+    assigneeUserId?: Set<string>;
+    contentId?: Set<string>;
+    dueFrom?: Date;
+    dueTo?: Date;
+    updatedAfter?: Date;
     sort?: Array<string>;
 }
 
@@ -2218,7 +2232,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * ASSIGNEE 按成员分别计数，同一工作项可计入多个成员；ASSIGNEE_SET 按处理人组合计数。
+     * ASSIGNEE 按成员分别计数，同一工作项可计入多个成员；ASSIGNEE_SET 按处理人组合计数。省略 countSubitems 时按表格主行计数：主行本身或其任一子项满足条件即计入，按主行本身的字段值归类；countSubitems=true 时主行与子项各自满足全部条件才计入，按自身字段值归类。
      * 按当前项目查询上下文分页取得筛选选项及动态计数
      */
     async listProjectWorkItemFilterOptionsRaw(requestParameters: ListProjectWorkItemFilterOptionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectWorkItemFilterOptionCursorPage>> {
@@ -2278,6 +2292,10 @@ export class WorkItemsApi extends runtime.BaseAPI {
             queryParameters['limit'] = requestParameters['limit'];
         }
 
+        if (requestParameters['countSubitems'] != null) {
+            queryParameters['countSubitems'] = requestParameters['countSubitems'];
+        }
+
         if (requestParameters['q'] != null) {
             queryParameters['q'] = requestParameters['q'];
         }
@@ -2331,7 +2349,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * ASSIGNEE 按成员分别计数，同一工作项可计入多个成员；ASSIGNEE_SET 按处理人组合计数。
+     * ASSIGNEE 按成员分别计数，同一工作项可计入多个成员；ASSIGNEE_SET 按处理人组合计数。省略 countSubitems 时按表格主行计数：主行本身或其任一子项满足条件即计入，按主行本身的字段值归类；countSubitems=true 时主行与子项各自满足全部条件才计入，按自身字段值归类。
      * 按当前项目查询上下文分页取得筛选选项及动态计数
      */
     async listProjectWorkItemFilterOptions(requestParameters: ListProjectWorkItemFilterOptionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectWorkItemFilterOptionCursorPage> {
@@ -2340,7 +2358,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 聚合 Project 内全部类别的非删除工作项。TABLE 复用白名单筛选与排序； KANBAN 必须指定单一 status，并使用项目级状态泳道 rank。
+     * 聚合 Project 内全部类别的非删除工作项。TABLE 返回主行（顶层工作项）：主行本身或其任一未删除、未归档的直接子项满足 q、status、priority、assigneeUserId、contentId、dueFrom、dueTo、updatedAfter、计时与连接条件时返回；assigneeSetUserId、emptyField 与 group* 只约束主行本身。KANBAN 必须指定单一 status，全部条件只作用于卡片本身，并使用项目级状态泳道 rank。
      * 分页查询 Project 下全部工作项
      */
     async listProjectWorkItemsRaw(requestParameters: ListProjectWorkItemsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectWorkItemCursorPage>> {
@@ -2397,6 +2415,26 @@ export class WorkItemsApi extends runtime.BaseAPI {
             queryParameters['emptyField'] = requestParameters['emptyField'];
         }
 
+        if (requestParameters['groupStatus'] != null) {
+            queryParameters['groupStatus'] = requestParameters['groupStatus'];
+        }
+
+        if (requestParameters['groupPriority'] != null) {
+            queryParameters['groupPriority'] = requestParameters['groupPriority'];
+        }
+
+        if (requestParameters['groupContentId'] != null) {
+            queryParameters['groupContentId'] = requestParameters['groupContentId'];
+        }
+
+        if (requestParameters['groupDueFrom'] != null) {
+            queryParameters['groupDueFrom'] = (requestParameters['groupDueFrom'] as any).toISOString().substring(0,10);
+        }
+
+        if (requestParameters['groupDueTo'] != null) {
+            queryParameters['groupDueTo'] = (requestParameters['groupDueTo'] as any).toISOString().substring(0,10);
+        }
+
         if (requestParameters['status'] != null) {
             queryParameters['status'] = requestParameters['status'];
         }
@@ -2450,7 +2488,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 聚合 Project 内全部类别的非删除工作项。TABLE 复用白名单筛选与排序； KANBAN 必须指定单一 status，并使用项目级状态泳道 rank。
+     * 聚合 Project 内全部类别的非删除工作项。TABLE 返回主行（顶层工作项）：主行本身或其任一未删除、未归档的直接子项满足 q、status、priority、assigneeUserId、contentId、dueFrom、dueTo、updatedAfter、计时与连接条件时返回；assigneeSetUserId、emptyField 与 group* 只约束主行本身。KANBAN 必须指定单一 status，全部条件只作用于卡片本身，并使用项目级状态泳道 rank。
      * 分页查询 Project 下全部工作项
      */
     async listProjectWorkItems(requestParameters: ListProjectWorkItemsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectWorkItemCursorPage> {
@@ -2642,7 +2680,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 仅返回未删除的直接子项；未指定 sort 时按项目共享手工顺序返回。
+     * 仅返回未删除、未归档的直接子项；带 q、status、priority、assigneeUserId、contentId、dueFrom、dueTo、updatedAfter 或计时条件时只返回本身满足全部条件的子项。未指定 sort 时按项目共享手工顺序返回。
      * 查询 Work Item 的直接子项
      */
     async listWorkItemSubitemsRaw(requestParameters: ListWorkItemSubitemsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemSubitemList>> {
@@ -2667,6 +2705,38 @@ export class WorkItemsApi extends runtime.BaseAPI {
             queryParameters['timeTrackingMaxMs'] = requestParameters['timeTrackingMaxMs'];
         }
 
+        if (requestParameters['status'] != null) {
+            queryParameters['status'] = requestParameters['status'];
+        }
+
+        if (requestParameters['q'] != null) {
+            queryParameters['q'] = requestParameters['q'];
+        }
+
+        if (requestParameters['priority'] != null) {
+            queryParameters['priority'] = requestParameters['priority'];
+        }
+
+        if (requestParameters['assigneeUserId'] != null) {
+            queryParameters['assigneeUserId'] = requestParameters['assigneeUserId'];
+        }
+
+        if (requestParameters['contentId'] != null) {
+            queryParameters['contentId'] = requestParameters['contentId'];
+        }
+
+        if (requestParameters['dueFrom'] != null) {
+            queryParameters['dueFrom'] = (requestParameters['dueFrom'] as any).toISOString().substring(0,10);
+        }
+
+        if (requestParameters['dueTo'] != null) {
+            queryParameters['dueTo'] = (requestParameters['dueTo'] as any).toISOString().substring(0,10);
+        }
+
+        if (requestParameters['updatedAfter'] != null) {
+            queryParameters['updatedAfter'] = (requestParameters['updatedAfter'] as any).toISOString();
+        }
+
         if (requestParameters['sort'] != null) {
             queryParameters['sort'] = requestParameters['sort'];
         }
@@ -2688,7 +2758,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 仅返回未删除的直接子项；未指定 sort 时按项目共享手工顺序返回。
+     * 仅返回未删除、未归档的直接子项；带 q、status、priority、assigneeUserId、contentId、dueFrom、dueTo、updatedAfter 或计时条件时只返回本身满足全部条件的子项。未指定 sort 时按项目共享手工顺序返回。
      * 查询 Work Item 的直接子项
      */
     async listWorkItemSubitems(requestParameters: ListWorkItemSubitemsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemSubitemList> {

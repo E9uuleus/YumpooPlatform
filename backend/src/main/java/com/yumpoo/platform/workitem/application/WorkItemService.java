@@ -211,6 +211,11 @@ public class WorkItemService {
         boolean hasMore = rows.size() > page.limit();
         if (hasMore) rows = new ArrayList<>(rows.subList(0, page.limit()));
         List<ProjectWorkItemListItem> items = tableItems(actor, project, rows, timeAsOf);
+        if (effectiveView == WorkItemViewType.TABLE) {
+            Map<UUID, Long> matched = workItems.countMatchingChildren(project.companyId(), project.projectId(), query,
+                    rows.stream().map(WorkItem::id).toList());
+            items = items.stream().map(item -> item.withMatchedSubitemCount(matched.getOrDefault(item.id(), 0L))).toList();
+        }
         String nextCursor = hasMore && !rows.isEmpty()
                 ? projectCursors.encode(new ProjectWorkItemCursorCodec.Cursor(
                         fingerprint, effectiveView,
@@ -262,7 +267,7 @@ public class WorkItemService {
 
     @Transactional(readOnly = true)
     public ProjectWorkItemFilterOptionCursorPage listProjectFilterOptions(CurrentActor actor,
-            UUID projectId, String field, WorkItemQuery.Request request, CursorPageRequest page) {
+            UUID projectId, String field, boolean countSubitems, WorkItemQuery.Request request, CursorPageRequest page) {
         requireActor(actor);
         ProjectAccessSnapshot project = visible(actor, projectId);
         List<WorkItemLabelModels.StatusLabel> statusLabels = labels.statuses(
@@ -282,14 +287,14 @@ public class WorkItemService {
             throw validation("field", "INVALID_VALUE", "筛选选项字段不受支持");
         }
         String fingerprint = projectCursorFingerprint(projectId, WorkItemViewType.TABLE, query)
-                + ":" + normalizedField;
+                + ":" + normalizedField + (countSubitems ? ":items" : "");
         ProjectWorkItemFilterCursorCodec.Cursor decoded = projectFilterCursors.decode(page.cursor());
         if (decoded != null && (!decoded.fingerprint().equals(fingerprint)
                 || !decoded.field().equals(normalizedField)))
             throw validation("cursor", "CURSOR_QUERY_MISMATCH", "筛选选项游标不属于当前查询");
         List<WorkItemRepository.FilterOptionCount> rows = new ArrayList<>(
                 workItems.findProjectFilterOptions(project.companyId(), project.projectId(), query,
-                        normalizedField, decoded == null ? null : decoded.lastValue(), page.limit() + 1));
+                        normalizedField, countSubitems, decoded == null ? null : decoded.lastValue(), page.limit() + 1));
         boolean hasMore = rows.size() > page.limit();
         if (hasMore) rows = new ArrayList<>(rows.subList(0, page.limit()));
         Map<UUID, String> contentNames = contents.findAll(project.companyId(), project.projectId())
@@ -1306,6 +1311,7 @@ public class WorkItemService {
                 query.timeTracking()==null ? "" : Objects.toString(query.timeTracking().state(),"")+":"+query.timeTracking().minMs()+":"+query.timeTracking().maxMs());
         if (!query.assigneeSetUserIds().isEmpty()) canonical += "\nassigneeSet=" + query.assigneeSetKey();
         if (query.emptyField() != null) canonical += "\nemptyField=" + query.emptyField();
+        if (!query.group().equals(WorkItemQuery.GroupFilter.NONE)) canonical += "\ngroup=" + query.group().fingerprint();
         if (query.scope() != null) canonical += "\nchart=" + query.scope().fingerprint();
         canonical += "\nconnections=" + query.connections().fingerprint();
         try {
@@ -1647,6 +1653,8 @@ public class WorkItemService {
                 .collect(java.util.stream.Collectors.toSet());
         if (!allowed.containsAll(query.priorities()))
             throw validation("priority", "INVALID_VALUE", "优先级筛选值无效");
+        if (query.group().priority() != null && !allowed.contains(query.group().priority()))
+            throw validation("groupPriority", "INVALID_VALUE", "优先级分组值无效");
     }
 
     private static void requireSelectablePriority(String requested,

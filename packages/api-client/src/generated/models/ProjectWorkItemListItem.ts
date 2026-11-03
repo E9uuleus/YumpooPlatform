@@ -181,6 +181,12 @@ export interface ProjectWorkItemListItem {
      */
     readonly subitemCount: number;
     /**
+     * TABLE 列表带筛选条件时，直接子项中本身满足这些条件的数量；未带条件、KANBAN 与子项列表为 0。
+     * @type {number}
+     * @memberof ProjectWorkItemListItem
+     */
+    readonly matchedSubitemCount?: number;
+    /**
      * 未删除的顶层讨论串数量，不含回复；旧响应省略时按 0 展示。
      * @type {number}
      * @memberof ProjectWorkItemListItem
@@ -264,6 +270,7 @@ export function ProjectWorkItemListItemFromJSONTyped(json: any, ignoreDiscrimina
         'etag': json['etag'],
         'capabilities': WorkItemCapabilitiesFromJSON(json['capabilities']),
         'subitemCount': json['subitemCount'],
+        'matchedSubitemCount': json['matchedSubitemCount'] == null ? undefined : json['matchedSubitemCount'],
         'discussionCount': json['discussionCount'] == null ? undefined : json['discussionCount'],
         'updatedAt': (new Date(json['updatedAt'])),
         'updatedByUserId': json['updatedByUserId'] == null ? undefined : json['updatedByUserId'],
@@ -275,7 +282,7 @@ export function ProjectWorkItemListItemToJSON(json: any): ProjectWorkItemListIte
     return ProjectWorkItemListItemToJSONTyped(json, false);
 }
 
-export function ProjectWorkItemListItemToJSONTyped(value?: Omit<ProjectWorkItemListItem, 'assignees'|'completedAt'|'rowVersion'|'etag'|'subitemCount'|'discussionCount'|'updatedAt'|'updatedByUserId'|'updatedByDisplayName'> | null, ignoreDiscriminator: boolean = false): any {
+export function ProjectWorkItemListItemToJSONTyped(value?: Omit<ProjectWorkItemListItem, 'assignees'|'completedAt'|'rowVersion'|'etag'|'subitemCount'|'matchedSubitemCount'|'discussionCount'|'updatedAt'|'updatedByUserId'|'updatedByDisplayName'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }

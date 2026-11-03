@@ -7,7 +7,7 @@ import type { WorkItemTableSource } from './workItemTableSource'
 import { workItemsApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import { buildWorkItemGroups, EMPTY_GROUP, groupingFields, groupListRequest, groupOrders,
-  itemGroupKey, type GroupField, type GroupOrder, type GroupSources, type WorkItemGroup } from './workItemGrouping'
+  itemGroupKey, type GroupField, type GroupKeySource, type GroupOrder, type GroupSources, type WorkItemGroup } from './workItemGrouping'
 
 interface GroupPage {
   items: ProjectWorkItemListItem[]
@@ -31,6 +31,8 @@ interface Options {
   ready: () => boolean
   restore: () => Promise<void>
   protectedIds?: () => Set<string>
+  /** 搜索或筛选生效时不显示空分组，即使打开了「显示空分组」。 */
+  filtering?: () => boolean
 }
 
 /** 与 WorkItemTableSettingsService.MAX_GROUPING_KEYS 一致。 */
@@ -76,10 +78,10 @@ export function useWorkItemGrouping(options: Options) {
   let stopped = false
   let restoringPrefs = false
   const pending = new Map<string, Promise<void>>()
-  const groups = computed(() => field.value ? buildWorkItemGroups(field.value, order.value, showEmpty.value,
+  const groups = computed(() => field.value ? buildWorkItemGroups(field.value, order.value, showEmpty.value && !options.filtering?.(),
     facets.value, options.sources(), options.today(), colors) : [])
   const active = computed(() => Boolean(field.value))
-  const keyOf = (item: ProjectWorkItemListItem) => field.value ? itemGroupKey(item, field.value, options.today()) : ''
+  const keyOf = (item: GroupKeySource) => field.value ? itemGroupKey(item, field.value, options.today()) : ''
   const collapseKey = (key: string) => `${field.value}:${key}`
   const isCollapsed = (key: string) => collapsed.value.has(collapseKey(key)) && !revealed.value.has(collapseKey(key))
   function page(key: string): GroupPage {

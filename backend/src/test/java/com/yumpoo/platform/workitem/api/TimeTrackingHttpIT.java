@@ -70,8 +70,40 @@ class TimeTrackingHttpIT {
             owner = actor("owner");
             member = actor("member");
         }
+        enableTimer(owner.userId());
+        enableTimer(member.userId());
         source = project("原计时项目");
         target = project("保留计时项目");
+    }
+
+    /** 计时器默认关闭（V88）：直接写入开启的状态行，row_version 保持 0，既有 "0" ETag 用例不变。 */
+    private void enableTimer(UUID userId) {
+        jdbc.sql("INSERT INTO yumpoo.work_item_timer_state(company_id,user_id,timer_enabled) VALUES (:company,:user,true) "
+                + "ON CONFLICT (company_id,user_id) DO UPDATE SET timer_enabled=true")
+                .param("company", COMPANY).param("user", userId).update();
+    }
+
+    @Test
+    void timerIsDisabledByDefaultUntilEnabled() throws Exception {
+        Actor fresh;
+        try (var ignored = RequestCorrelationContext.open(RequestCorrelation.root("timer-default-off-" + UUID.randomUUID()))) {
+            fresh = actor("default-off");
+        }
+        jdbc.sql("""
+                INSERT INTO yumpoo.project_membership(id,company_id,project_id,user_id,status,joined_at,joined_by_user_id)
+                VALUES (:id,:company,:project,:user,'ACTIVE',transaction_timestamp(),:owner)
+                """).param("id", UUID.randomUUID()).param("company", COMPANY).param("project", source.id())
+                .param("user", fresh.userId()).param("owner", owner.userId()).update();
+        JsonNode initial = ok(get("/api/v1/me/time-tracker", fresh));
+        assertThat(initial.path("preferences").path("timerEnabled").asBoolean()).isFalse();
+        String startBody = json.writeValueAsString(Map.of("workItemId", source.itemId()));
+        var rejected = mutate("POST", "/api/v1/me/time-tracker/start", fresh, startBody, initial.path("etag").asText());
+        assertThat(rejected.statusCode()).as(rejected.body()).isEqualTo(409);
+        assertThat(json.readTree(rejected.body()).path("details").path("reason").asText()).isEqualTo("TIMER_DISABLED");
+        JsonNode enabled = ok(mutate("PUT", "/api/v1/me/time-tracker/preferences", fresh,
+                json.writeValueAsString(Map.of("timerEnabled", true, "workdayStartMinute", 540, "workdayEndMinute", 1080)), "\"0\""));
+        assertThat(ok(mutate("POST", "/api/v1/me/time-tracker/start", fresh, startBody, enabled.path("etag").asText()))
+                .path("runningSessions")).hasSize(1);
     }
 
     @ParameterizedTest
@@ -199,7 +231,7 @@ class TimeTrackingHttpIT {
         assertThat(revision(source)).isZero();
         assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_time_session WHERE user_id=:user")
                 .param("user", member.userId()).query(Long.class).single()).isZero();
-        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_timer_state WHERE user_id=:user")
+        assertThat(jdbc.sql("SELECT row_version FROM yumpoo.work_item_timer_state WHERE user_id=:user")
                 .param("user", member.userId()).query(Long.class).single()).isZero();
     }
 

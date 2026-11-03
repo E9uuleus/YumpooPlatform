@@ -502,6 +502,8 @@ class TimeTrackingServiceTest {
             when(timers.running(company, user)).thenReturn(List.of(session), List.of(session), List.of());
             when(timers.find(company, session.id())).thenReturn(Optional.of(session));
             when(timers.stateVersion(company, user, true)).thenReturn(1L);
+            when(timers.preferences(company, user)).thenReturn(Optional.of(new TimeTrackingModels.TimeTrackingPreferences(
+                    true, 540, 1080, false, TimeTrackingModels.HideCompletedEffect.FADE_STRIKETHROUGH)));
             when(timers.recentItems(company, user)).thenReturn(List.of());
             when(items.findLocator(company, targetItem)).thenReturn(Optional.of(new WorkItemModels.WorkItemLocator(
                     targetItem, targetProject, UUID.randomUUID())));

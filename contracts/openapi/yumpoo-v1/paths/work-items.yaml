@@ -1018,13 +1018,13 @@ paths:
         - WorkItems
       operationId: listProjectWorkItems
       summary: 分页查询 Project 下全部工作项
-      description: 聚合 Project 内全部类别的非删除工作项。TABLE 复用白名单筛选与排序； KANBAN 必须指定单一 status，并使用项目级状态泳道 rank。
+      description: 聚合 Project 内全部类别的非删除工作项。TABLE 返回主行（顶层工作项）：主行本身或其任一未删除、未归档的直接子项满足 q、status、priority、assigneeUserId、contentId、dueFrom、dueTo、updatedAfter、计时与连接条件时返回；assigneeSetUserId、emptyField 与 group* 只约束主行本身。KANBAN 必须指定单一 status，全部条件只作用于卡片本身，并使用项目级状态泳道 rank。
       security:
         - sessionCookie: []
       parameters:
         - name: assigneeSetUserId
           in: query
-          description: 精确匹配处理人集合，与其他筛选取交集并绑定游标；空集合使用 emptyField=ASSIGNEE。
+          description: 精确匹配主行本身的处理人集合（只约束主行），与其他条件取交集并绑定游标；空集合使用 emptyField=ASSIGNEE。
           style: form
           explode: true
           schema:
@@ -1109,13 +1109,41 @@ paths:
             $ref: "#/components/schemas/WorkItemViewType"
         - name: emptyField
           in: query
-          description: 仅返回指定字段为空的工作项，与其他筛选条件取交集；游标绑定该条件。
+          description: 仅返回主行本身该字段为空的工作项（只约束主行），与其他条件取交集；游标绑定该条件。
           schema:
             type: string
             enum:
               - ASSIGNEE
               - PRIORITY
               - DUE_DATE
+        - name: groupStatus
+          in: query
+          description: 分组表段条件：主行本身的状态；只约束主行，不因子项命中放宽，参与游标绑定。
+          schema:
+            type: string
+            pattern: ^[A-Z][A-Z0-9_]{1,31}$
+        - name: groupPriority
+          in: query
+          description: 分组表段条件：主行本身的优先级；空优先级使用 emptyField=PRIORITY。
+          schema:
+            $ref: "#/components/schemas/WorkItemPriority"
+        - name: groupContentId
+          in: query
+          description: 分组表段条件：主行本身的工作项类别。
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: groupDueFrom
+          in: query
+          description: 分组表段条件：主行本身的截止日期不早于该日。
+          schema:
+            type: string
+            format: date
+        - name: groupDueTo
+          in: query
+          description: 分组表段条件：主行本身的截止日期不晚于该日。
+          schema:
+            type: string
+            format: date
         - name: status
           in: query
           style: form
@@ -1550,7 +1578,7 @@ paths:
         - WorkItems
       operationId: listProjectWorkItemFilterOptions
       summary: 按当前项目查询上下文分页取得筛选选项及动态计数
-      description: ASSIGNEE 按成员分别计数，同一工作项可计入多个成员；ASSIGNEE_SET 按处理人组合计数。
+      description: ASSIGNEE 按成员分别计数，同一工作项可计入多个成员；ASSIGNEE_SET 按处理人组合计数。省略 countSubitems 时按表格主行计数：主行本身或其任一子项满足条件即计入，按主行本身的字段值归类；countSubitems=true 时主行与子项各自满足全部条件才计入，按自身字段值归类。
       security:
         - sessionCookie: []
       parameters:
@@ -1644,6 +1672,12 @@ paths:
             minimum: 1
             maximum: 100
             default: 25
+        - name: countSubitems
+          in: query
+          description: true 时按工作项本身计数（主行与子项各自计入）；省略或 false 时按表格主行计数。参与游标绑定。
+          schema:
+            type: boolean
+            default: false
         - name: q
           in: query
           schema:
@@ -1783,7 +1817,7 @@ paths:
         - WorkItems
       operationId: listWorkItemSubitems
       summary: 查询 Work Item 的直接子项
-      description: 仅返回未删除的直接子项；未指定 sort 时按项目共享手工顺序返回。
+      description: 仅返回未删除、未归档的直接子项；带 q、status、priority、assigneeUserId、contentId、dueFrom、dueTo、updatedAfter 或计时条件时只返回本身满足全部条件的子项。未指定 sort 时按项目共享手工顺序返回。
       security:
         - sessionCookie: []
       parameters:
@@ -1803,6 +1837,63 @@ paths:
             type: integer
             format: int64
             minimum: 0
+        - name: status
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            items:
+              type: string
+              pattern: ^[A-Z][A-Z0-9_]{1,31}$
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: priority
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            items:
+              $ref: "#/components/schemas/WorkItemPriority"
+        - name: assigneeUserId
+          description: 任一所选成员是处理人即匹配。
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            items:
+              $ref: "#/components/schemas/Uuid"
+        - name: contentId
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            items:
+              $ref: "#/components/schemas/Uuid"
+        - name: dueFrom
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: dueTo
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: updatedAfter
+          in: query
+          schema:
+            type: string
+            format: date-time
         - name: parentWorkItemId
           in: path
           required: true
