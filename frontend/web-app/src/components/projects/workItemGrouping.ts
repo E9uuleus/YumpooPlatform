@@ -130,33 +130,23 @@ export function buildWorkItemGroups(field: GroupField, order: GroupOrder, showEm
   })
 }
 
+/** 分组表段请求：表段条件写入只约束主行的参数，用户的搜索与筛选原样保留（可由子项命中）。 */
 export function groupListRequest(base: ListProjectWorkItemsRequest, field: GroupField,
   group: WorkItemGroup): ListProjectWorkItemsRequest | null {
   const request = { ...base }
-  const intersects = (values: Set<string> | undefined) => !values?.size || values.has(group.key)
   if (group.key === EMPTY_GROUP) {
     if (field === 'ASSIGNEE') request.emptyField = ListProjectWorkItemsEmptyFieldEnum.Assignee
     else if (field === 'PRIORITY') request.emptyField = ListProjectWorkItemsEmptyFieldEnum.Priority
     else if (field === 'DUE_DATE') request.emptyField = ListProjectWorkItemsEmptyFieldEnum.DueDate
     else return null
-  } else if (field === 'ASSIGNEE') {
-    if (base.assigneeUserId?.size && !group.key.split(',').some(id => base.assigneeUserId!.has(id))) return null
-    request.assigneeSetUserId = new Set(group.key.split(','))
-  } else if (field === 'STATUS') {
-    if (!intersects(base.status)) return null
-    request.status = new Set([group.key])
-  } else if (field === 'PRIORITY') {
-    if (!intersects(base.priority)) return null
-    request.priority = new Set([group.key])
-  } else if (field === 'CONTENT') {
-    if (!intersects(base.contentId)) return null
-    request.contentId = new Set([group.key])
-  } else {
-    const from = [dueDateKey(base.dueFrom ?? null), group.from].filter((v): v is string => Boolean(v)).sort().at(-1)
-    const to = [dueDateKey(base.dueTo ?? null), group.to].filter((v): v is string => Boolean(v)).sort()[0]
-    if (from && to && from > to) return null
-    if (from) request.dueFrom = new Date(`${from}T00:00:00Z`)
-    if (to) request.dueTo = new Date(`${to}T00:00:00Z`)
+  } else if (field === 'ASSIGNEE') request.assigneeSetUserId = new Set(group.key.split(','))
+  else if (field === 'STATUS') request.groupStatus = group.key
+  else if (field === 'PRIORITY') request.groupPriority = group.key
+  else if (field === 'CONTENT') request.groupContentId = group.key
+  else {
+    if (group.from && group.to && group.from > group.to) return null
+    if (group.from) request.groupDueFrom = new Date(`${group.from}T00:00:00Z`)
+    if (group.to) request.groupDueTo = new Date(`${group.to}T00:00:00Z`)
   }
   return request
 }

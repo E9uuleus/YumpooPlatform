@@ -59,14 +59,14 @@ class ConnectionFilterIT {
         assertThat(list(sourceOwner, source, request(Set.of(column.id()), Set.of(another.id()), Set.of()))).containsExactly(second.id());
         assertThat(repository.countProjectPage(COMPANY, source.id(), WorkItemQuery.parse(connected, Set.of("NOT_STARTED"))))
                 .isEqualTo(2);
-        var options = items.listProjectFilterOptions(sourceOwner, source.id(), "CONTENT", connected, CursorPageRequest.of(null, 100));
+        var options = items.listProjectFilterOptions(sourceOwner, source.id(), "CONTENT", false, connected, CursorPageRequest.of(null, 100));
         assertThat(options.items()).singleElement().satisfies(option -> assertThat(option.count()).isEqualTo(2));
     }
 
     @Test void incomingCountsItemsOnceAcrossColumnsWithoutRequiringSourceMembership() {
         var incoming = request(Set.of(), Set.of(), Set.of(source.id()));
         assertThat(list(targetOwner, target, incoming)).containsExactly(targetFirst.id(), targetSecond.id());
-        var options = items.listProjectFilterOptions(targetOwner, target.id(), "INCOMING_PROJECT",
+        var options = items.listProjectFilterOptions(targetOwner, target.id(), "INCOMING_PROJECT", false,
                 request(Set.of(), Set.of(), Set.of()), CursorPageRequest.of(null, 100));
         assertThat(options.items()).singleElement().satisfies(option -> {
             assertThat(option.value()).isEqualTo(source.id().toString());
@@ -88,8 +88,8 @@ class ConnectionFilterIT {
         assertThat(list(targetOwner, target, request(Set.of(), Set.of(), Set.of(source.id(), otherSource.id()))))
                 .containsExactly(targetFirst.id(), targetSecond.id(), otherTarget.id());
         var context = request(Set.of(), Set.of(), Set.of());
-        var firstPage = items.listProjectFilterOptions(targetOwner, target.id(), "INCOMING_PROJECT", context, CursorPageRequest.of(null, 1));
-        var secondPage = items.listProjectFilterOptions(targetOwner, target.id(), "INCOMING_PROJECT", context,
+        var firstPage = items.listProjectFilterOptions(targetOwner, target.id(), "INCOMING_PROJECT", false, context, CursorPageRequest.of(null, 1));
+        var secondPage = items.listProjectFilterOptions(targetOwner, target.id(), "INCOMING_PROJECT", false, context,
                 CursorPageRequest.of(firstPage.nextCursor(), 1));
         var expected = List.of(source.id().toString(), otherSource.id().toString()).stream().sorted().toList();
         assertThat(List.of(firstPage.items().getFirst().value(), secondPage.items().getFirst().value())).isEqualTo(expected);

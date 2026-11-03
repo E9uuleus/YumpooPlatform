@@ -96,7 +96,10 @@ public interface WorkItemRepository {
     List<WorkItem> findSubitems(UUID companyId, UUID projectId, UUID parentWorkItemId,
             WorkItemQuery query, WorkItemSortRanks ranks);
     List<FilterOptionCount> findProjectFilterOptions(UUID companyId, UUID projectId,
-            WorkItemQuery query, String field, String afterValue, int limit);
+            WorkItemQuery query, String field, boolean countSubitems, String afterValue, int limit);
+    /** 每个主行的直接子项中本身满足查询条件的数量；查询没有条件时为空。 */
+    Map<UUID, Long> countMatchingChildren(UUID companyId, UUID projectId, WorkItemQuery query,
+            Collection<UUID> parentWorkItemIds);
     long countProjectPage(UUID companyId, UUID projectId, WorkItemQuery query);
     long countOpenByProject(UUID companyId, UUID projectId);
     long countOpenByContent(UUID companyId, UUID projectId, UUID contentId);
