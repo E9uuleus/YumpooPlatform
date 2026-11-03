@@ -132,6 +132,7 @@ interface SubitemState {
   loading: boolean
   loaded: boolean
   reloadRequested?: boolean
+  pending?: Promise<void>
   error?: ApiProblem
   sortRules: ProjectWorkItemSubitemSortRule[]
 }
@@ -1076,33 +1077,36 @@ async function loadSubitems(parentId: string, force = false): Promise<void> {
   const state = subitemState(parentId)
   if (state.loading) {
     if (force) state.reloadRequested = true
-    return
+    return state.pending
   }
   if (state.loaded && !force) return
   state.loading = true
   delete state.error
-  try {
-    const result = await tableSource.listWorkItemSubitems({
-      parentWorkItemId: parentId,
-      ...filterRequest(),
-      ...(filters.statuses.size ? { status: filters.statuses } : {}),
-      ...(state.sortRules.length
-        ? { sort: state.sortRules.map(rule => `${rule.field},${rule.direction}`) }
-        : {}),
-    })
-    if (subitems[parentId] !== state) return
-    state.items = result.items
-    state.loaded = true
-  } catch (reason) {
-    state.error = await toApiProblem(reason)
-  } finally {
-    state.loading = false
-    schedulePageScrollbarSync()
-    if (state.reloadRequested && subitems[parentId] === state) {
-      delete state.reloadRequested
-      await loadSubitems(parentId, true)
+  state.pending = (async () => {
+    try {
+      const result = await tableSource.listWorkItemSubitems({
+        parentWorkItemId: parentId,
+        ...filterRequest(),
+        ...(filters.statuses.size ? { status: filters.statuses } : {}),
+        ...(state.sortRules.length
+          ? { sort: state.sortRules.map(rule => `${rule.field},${rule.direction}`) }
+          : {}),
+      })
+      if (subitems[parentId] !== state) return
+      state.items = result.items
+      state.loaded = true
+    } catch (reason) {
+      state.error = await toApiProblem(reason)
+    } finally {
+      state.loading = false
+      schedulePageScrollbarSync()
+      if (state.reloadRequested && subitems[parentId] === state) {
+        delete state.reloadRequested
+        await loadSubitems(parentId, true)
+      }
     }
-  }
+  })()
+  return state.pending
 }
 
 function onTableExpandChange(row: TableDisplayRow,
