@@ -34,6 +34,8 @@ import { ArrowDown, Box, Filter as FilterIcon, Hide, Plus, Search, Sort, Upload,
 import {
   HideCompletedEffect,
   WorkItemViewType,
+  WorkItemRelationRole,
+  WorkItemRelationType,
   ProjectActorAccess,
   ProjectLifecycle,
   ProjectMembershipStatus,
@@ -1625,6 +1627,8 @@ async function loadWorkspace(): Promise<void> {
       loadMembers(requestedProjectId, revision),
       selectedView.value === 'kanban' ? loadKanban(revision) : loadTable(null, false, revision),
     ])
+    const revealId = route.query.workItemId
+    if (revision === loadRevision && typeof revealId === 'string') void revealWorkItem(revealId)
   } catch (reason) {
     if (revision === loadRevision) error.value = await toApiProblem(reason)
   } finally {
@@ -1672,7 +1676,7 @@ async function createAtTop(): Promise<void> {
     let shown: boolean
     if (grouped.value) {
       await grouping.refresh()
-      const key = grouping.keyOf({ ...created, subitemCount: 0 })
+      const key = grouping.keyOf(created)
       if (grouping.isCollapsed(key)) grouping.reveal(key)
       await grouping.load(key, false)
       const page = grouping.page(key)
@@ -1820,6 +1824,37 @@ async function onRowMoved(item: ProjectWorkItemListItem, parentId?: string): Pro
   await nextTick()
   tableRef.value?.$el.querySelector<HTMLElement>('.work-item-name-cell.monday-cell--selected')
     ?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
+}
+
+/** 从页面外打开工作项：载入所在行，选中并滚到表格可视区中部；子项先展开父项。 */
+async function revealWorkItem(workItemId: string): Promise<void> {
+  if (embedded.value || selectedView.value !== 'table') return
+  try {
+    const relations = await workItemsApi.listWorkItemRelations({ workItemId, relationType: WorkItemRelationType.ParentChild, size: 100 })
+    const parentId = relations.items.find(relation => relation.currentRole === WorkItemRelationRole.Child)?.counterpart.id
+    const rowId = parentId ?? workItemId
+    if (grouped.value) {
+      const key = grouping.keyOf(await workItemsApi.getWorkItem({ workItemId: rowId }))
+      if (!groupCountsReady.value || !workItemGroups.value.some(group => group.key === key)) return
+      if (grouping.isCollapsed(key)) grouping.reveal(key)
+      const page = grouping.page(key)
+      while (!page.items.some(item => item.id === rowId) && !page.error && (!page.loaded || page.nextCursor)) await grouping.load(key)
+    } else if (!tableItems.value.some(item => item.id === rowId)) await reloadSortedTableInPlace(rowId)
+    if (parentId) {
+      expandedSubitemIds.value = [...new Set([...expandedSubitemIds.value, parentId])]
+      await loadSubitems(parentId)
+    }
+    selectCell(workItemId, 'title')
+    await nextTick()
+    const cell = tableRef.value?.$el.querySelector<HTMLElement>('.work-item-name-cell.monday-cell--selected')
+    const wrap = resolveTableScrollElement()
+    if (!cell || !wrap) return
+    const cellBox = cell.getBoundingClientRect()
+    const wrapBox = wrap.getBoundingClientRect()
+    wrap.scrollTop += cellBox.top + cellBox.height / 2 - (wrapBox.top + wrapBox.height / 2)
+  } catch (reason) {
+    error.value = await toApiProblem(reason)
+  }
 }
 
 async function openDetail(item: ProjectWorkItemListItem, tab: 'details' | 'discussion' | 'activity'): Promise<void> {
@@ -2949,12 +2984,14 @@ watch([() => route.query.workItemId, () => route.query.tab], ([value, tab], [pre
     void setViewQuery(next, true)
   }
   if (workItemId) {
+    const external = selectedRowId.value !== String(workItemId)
     selectedRowId.value = String(workItemId)
     if (!selectedCellKey.value || !selectedCellKey.value.startsWith(`${workItemId}:`)) {
       selectedCellKey.value = `${workItemId}:title`
     }
     void loadDetail(String(workItemId), tab === undefined ? detailTab.value
       : tab === 'discussion' || tab === 'activity' ? tab : 'details')
+    if (external && project.value) void revealWorkItem(String(workItemId))
   } else {
     detailGeneration++
     detailOpen.value = false

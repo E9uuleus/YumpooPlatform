@@ -1,6 +1,9 @@
 import {
   ResponseError,
   WorkItemViewType,
+  WorkItemRelationRole,
+  WorkItemRelationType,
+  WorkItemRelationStatusEnum,
   WorkItemLabelColorToken,
   ProjectActorAccess,
   ProjectLifecycle,
@@ -12,6 +15,7 @@ import {
   type WorkItemDetail,
   type ProjectWorkItemCursorPage,
   type ProjectWorkItemListItem,
+  type WorkItemRelation,
 } from '@yumpoo/api-client'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { ElDropdown, ElMessage, ElMessageBox } from 'element-plus'
@@ -39,6 +43,7 @@ const state = vi.hoisted(() => ({
   listProjectMembers: vi.fn(),
   listProjectWorkItems: vi.fn(),
   listWorkItemSubitems: vi.fn(),
+  listWorkItemRelations: vi.fn(),
   listProjectWorkItemFilterOptions: vi.fn(),
   getProjectWorkItemLabels: vi.fn(),
   getMyWorkItemTableSettings: vi.fn(),
@@ -85,6 +90,7 @@ vi.mock('../../api/client', () => ({
     unlinkWorkItemConnection: state.unlinkWorkItemConnection,
     listProjectWorkItems: state.listProjectWorkItems,
     listWorkItemSubitems: state.listWorkItemSubitems,
+    listWorkItemRelations: state.listWorkItemRelations,
     listProjectWorkItemFilterOptions: state.listProjectWorkItemFilterOptions,
     getProjectWorkItemLabels: state.getProjectWorkItemLabels,
     getMyWorkItemTableSettings: state.getMyWorkItemTableSettings,
@@ -198,6 +204,7 @@ describe('项目级工作项首页', () => {
     state.listProjectMembers.mockResolvedValue({ items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 })
     state.listProjectWorkItems.mockResolvedValue(page())
     state.listWorkItemSubitems.mockResolvedValue({ items: [] })
+    state.listWorkItemRelations.mockResolvedValue({ items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 })
     state.listProjectWorkItemFilterOptions.mockResolvedValue({ items: [], nextCursor: null })
     state.createWorkItem.mockResolvedValue({ ...item('created'), itemNo: 'WI-2' } as unknown as WorkItemDetail)
     state.createWorkItemSubitem.mockResolvedValue({ ...item('subitem-created'), itemNo: 'WI-3' } as unknown as WorkItemDetail)
@@ -838,6 +845,24 @@ describe('项目级工作项首页', () => {
     expect(wrapper.findAll('.subitem-table-row')).toHaveLength(1)
     const saved = Object.entries(localStorage).filter(([key]) => key.includes('expanded-subitems') && key.endsWith(':project-1'))
     expect(saved.map(([, value]) => value).join('')).not.toContain('parent')
+  })
+
+  it('从页面外打开子工作项时展开父项并选中该行', async () => {
+    state.route.query = { workItemId: 'child' }
+    const relation: WorkItemRelation = {
+      id: 'parent-child', relationType: WorkItemRelationType.ParentChild,
+      currentRole: WorkItemRelationRole.Child, counterpartRole: WorkItemRelationRole.Parent,
+      counterpartVisible: true, counterpart: { ...item('parent'), deleted: false },
+      status: WorkItemRelationStatusEnum.Active, createdByUserId: 'owner-1', createdAt: new Date(),
+      deletedByUserId: null, deletedAt: null, deleteReason: null, rowVersion: 1, etag: '"1"',
+      capabilities: { canDelete: true, canChangeParent: true },
+    }
+    state.listWorkItemRelations.mockResolvedValue({ items: [relation], page: 0, size: 100, totalElements: 1, totalPages: 1 })
+    state.listProjectWorkItems.mockResolvedValue(page([{ ...item('parent'), subitemCount: 1 }]))
+    state.listWorkItemSubitems.mockResolvedValue({ items: [item('child')] })
+    const wrapper = mountView(); await flushPromises()
+    expect(state.listWorkItemSubitems).toHaveBeenCalledWith(expect.objectContaining({ parentWorkItemId: 'parent' }))
+    expect(wrapper.find('.subitem-table-row--selected').exists()).toBe(true)
   })
 
   it('子表拖动结果写回当前父项缓存，更新版本和折叠重开后仍保留顺序', async () => {
@@ -1796,7 +1821,7 @@ describe('项目级工作项首页', () => {
     expect(state.route.query).toEqual({})
   })
 
-  it('直达 workItemId 路由恢复抽屉且不重复加载项目列表', async () => {
+  it('直达 workItemId 路由恢复抽屉，外部改为未加载工作项时重载列表定位', async () => {
     state.route.query = { view: 'table', workItemId: 'item-1' }
     const wrapper = mountView()
     await flushPromises()
@@ -1808,7 +1833,7 @@ describe('项目级工作项首页', () => {
     await flushPromises()
 
     expect(state.getWorkItem).toHaveBeenLastCalledWith({ workItemId: 'item-2' })
-    expect(state.listProjectWorkItems).toHaveBeenCalledTimes(listCalls)
+    expect(state.listProjectWorkItems).toHaveBeenCalledTimes(listCalls + 1)
     wrapper.unmount()
   })
 
