@@ -95,6 +95,8 @@ const props = defineProps<{
   labelCatalog?: WorkItemLabelCatalog | undefined
   /** 隐藏已完成开启时，按本人完成定义淡化的子项。 */
   completed?: ((item: ProjectWorkItemListItem) => boolean) | undefined
+  /** 勾选、单元格选中或详情打开的行，显示选中底色。 */
+  selected?: ((item: ProjectWorkItemListItem) => boolean) | undefined
   canCreate: boolean
   editingCell: boolean
   selectedCellKey?: string | undefined
@@ -384,6 +386,7 @@ function subitemRowElements(): HTMLTableRowElement[] {
 function subitemRowClassName({ row: item }: { row: ProjectWorkItemListItem }): string {
   return ['subitem-table-row', isDraft(item) ? 'work-item-draft-row' : '',
     draggingItem.value?.id === item.id ? 'subitem-table-row--dragging' : '',
+    props.selected?.(item) ? 'subitem-table-row--selected' : '',
     props.completed?.(item) ? 'work-item-table-row--completed' : ''].filter(Boolean).join(' ')
 }
 
@@ -1484,6 +1487,9 @@ onBeforeUnmount(() => {
 }
 :deep(.monday-subitem-table .subitem-selection-column) {
   border-left: 0;
+}
+:deep(.monday-subitem-table .el-table__body tr.subitem-table-row--selected > td.el-table__cell:not(.work-item-menu-column)) {
+  background-color: var(--yp-bg-selected-strong) !important;
 }
 :deep(.monday-subitem-table .el-table__header th.subitem-selection-column) {
   border-top: 0 !important;

@@ -3491,6 +3491,7 @@ onBeforeUnmount(() => {
                     :priority-options="priorityOptions"
                     :label-catalog="labelCatalog"
                     :completed="isCompletedRow"
+                    :selected="item => isRowSelected(item.id)"
                     :can-create="canCreate"
                     :editing-cell="Boolean(editingCell) || batchBusy"
                     :before-remove="beforeRowRemove"
@@ -4733,7 +4734,7 @@ onBeforeUnmount(() => {
 .monday-table-surface--strike-completed :deep(tr.work-item-table-row--completed .work-item-title-text) { text-decoration: line-through; }
 
 :deep(.monday-table .el-table__body tr.work-item-table-row--selected > td.el-table__cell:not(.work-item-menu-column):not(.monday-expand-column)) {
-  background-color: var(--yp-bg-selected) !important;
+  background-color: var(--yp-bg-selected-strong) !important;
 }
 
 :deep(.monday-table.el-table--border::after),
