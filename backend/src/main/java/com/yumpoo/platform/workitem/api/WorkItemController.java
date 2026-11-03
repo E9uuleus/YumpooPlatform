@@ -87,6 +87,11 @@ public final class WorkItemController {
             @RequestParam(required = false) LocalDate dueFrom,
             @RequestParam(required = false) LocalDate dueTo,
             @RequestParam(required = false) Instant updatedAfter,
+            @RequestParam(required = false) String groupStatus,
+            @RequestParam(required = false) String groupPriority,
+            @RequestParam(required = false) UUID groupContentId,
+            @RequestParam(required = false) LocalDate groupDueFrom,
+            @RequestParam(required = false) LocalDate groupDueTo,
             @RequestParam(required = false) String view,
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false) Integer limit,
@@ -98,7 +103,8 @@ public final class WorkItemController {
                                 dueFrom, dueTo, updatedAfter, sorts == null ? null : List.of(sorts))
                                 .withEmptyField(httpRequest.getParameter("emptyField"))
                                 .withAssigneeSet(assigneeSetUserIds)
-                                .withConnections(connectedColumnIds, unconnectedColumnIds, incomingProjectIds), httpRequest),
+                                .withConnections(connectedColumnIds, unconnectedColumnIds, incomingProjectIds)
+                                .withGroup(new WorkItemQuery.GroupFilter(groupStatus, groupPriority, groupContentId, groupDueFrom, groupDueTo)), httpRequest),
                         view, CursorPageRequest.of(cursor, limit)));
     }
 
@@ -114,6 +120,7 @@ public final class WorkItemController {
     @GetMapping("/projects/{projectId}/work-items/filter-options")
     ResponseEntity<ProjectWorkItemFilterOptionCursorPage> listProjectFilterOptions(
             @PathVariable UUID projectId, @RequestParam String field,
+            @RequestParam(defaultValue = "false") boolean countSubitems,
             @RequestParam(required = false) List<UUID> connectedColumnIds,
             @RequestParam(required = false) List<UUID> unconnectedColumnIds,
             @RequestParam(required = false) List<UUID> incomingProjectIds,
@@ -131,7 +138,7 @@ public final class WorkItemController {
             HttpServletRequest httpRequest) {
         String[] sorts = httpRequest.getParameterValues("sort");
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(service.listProjectFilterOptions(actors.requiredActive(), projectId, field,
+                .body(service.listProjectFilterOptions(actors.requiredActive(), projectId, field, countSubitems,
                         withTime(new WorkItemQuery.Request(q, statuses, priorities, assigneeUserIds,
                                 contentIds, dueFrom, dueTo, updatedAfter,
                                 sorts == null ? null : List.of(sorts))
@@ -164,12 +171,20 @@ public final class WorkItemController {
 
     @GetMapping("/work-items/{parentWorkItemId}/subitems")
     ResponseEntity<WorkItemSubitemList> listSubitems(@PathVariable UUID parentWorkItemId,
+            @RequestParam(required = false) String q,
+            @RequestParam(name = "status", required = false) List<String> statuses,
+            @RequestParam(name = "priority", required = false) List<String> priorities,
+            @RequestParam(name = "assigneeUserId", required = false) List<UUID> assigneeUserIds,
+            @RequestParam(name = "contentId", required = false) List<UUID> contentIds,
+            @RequestParam(required = false) LocalDate dueFrom,
+            @RequestParam(required = false) LocalDate dueTo,
+            @RequestParam(required = false) Instant updatedAfter,
             HttpServletRequest httpRequest) {
         String[] sorts = httpRequest.getParameterValues("sort");
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                 .body(service.listSubitems(actors.requiredActive(), parentWorkItemId,
-                        withTime(new WorkItemQuery.Request(null, null, null, null, null,
-                                null, null, null, sorts == null ? null : List.of(sorts)), httpRequest)));
+                        withTime(new WorkItemQuery.Request(q, statuses, priorities, assigneeUserIds, contentIds,
+                                dueFrom, dueTo, updatedAfter, sorts == null ? null : List.of(sorts)), httpRequest)));
     }
 
     @PostMapping("/work-items/{parentWorkItemId}/subitems")

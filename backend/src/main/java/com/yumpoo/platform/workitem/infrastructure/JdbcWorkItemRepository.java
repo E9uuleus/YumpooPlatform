@@ -623,7 +623,7 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
             WorkItemQuery query, WorkItemSortRanks ranks, WorkItemViewType view,
             OffsetPageRequest page) {
         Map<String, Object> parameters = baseProjectParameters(companyId, projectId);
-        String where = where(query, parameters, false);
+        String where = where(query, parameters, false, Rows.ROOTS);
         String orderBy = view == WorkItemViewType.KANBAN
                 ? "rank ASC, id ASC" : orderBy(query, ranks, parameters);
         parameters.put("limit", page.size());
@@ -639,7 +639,7 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
             WorkItemQuery query, WorkItemSortRanks ranks, WorkItemViewType view,
             ProjectCursorAnchor anchor, int limit) {
         Map<String, Object> parameters = baseProjectParameters(companyId, projectId);
-        StringBuilder where = new StringBuilder(where(query, parameters, false));
+        StringBuilder where = new StringBuilder(where(query, parameters, false, view == WorkItemViewType.KANBAN ? Rows.ROOTS : Rows.ROOTS_OR_MATCHING_CHILD));
         String orderBy;
         if (view == WorkItemViewType.KANBAN) {
             orderBy = "rank ASC, id ASC";
@@ -675,7 +675,7 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
             WorkItemQuery query, WorkItemSortRanks ranks) {
         Map<String, Object> parameters = baseProjectParameters(companyId, projectId);
         parameters.put("parentWorkItemId", parentWorkItemId);
-        String where = where(query, parameters, false, false)
+        String where = where(query, parameters, false, Rows.ITEMS)
                 + " AND EXISTS (SELECT 1 FROM yumpoo.work_item_relation relation "
                 + "WHERE relation.company_id=:companyId "
                 + "AND relation.relation_type='PARENT_CHILD' "
@@ -691,10 +691,11 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
 
     @Override
     public List<FilterOptionCount> findProjectFilterOptions(UUID companyId, UUID projectId,
-            WorkItemQuery query, String field, String afterValue, int limit) {
+            WorkItemQuery query, String field, boolean countSubitems, String afterValue, int limit) {
+        Rows rows = countSubitems ? Rows.ITEMS : Rows.ROOTS_OR_MATCHING_CHILD;
         if ("INCOMING_PROJECT".equals(field)) {
             Map<String, Object> parameters = baseProjectParameters(companyId, projectId);
-            String predicate = where(query, parameters, false);
+            String predicate = where(query, parameters, false, rows);
             String after = afterValue == null ? "" : " WHERE incoming.option_value > :afterValue";
             if (afterValue != null) parameters.put("afterValue", afterValue);
             parameters.put("limit", limit);
@@ -708,7 +709,7 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         }
         if ("ASSIGNEE".equals(field)) {
             Map<String, Object> parameters = baseProjectParameters(companyId, projectId);
-            String predicate = where(query, parameters, false);
+            String predicate = where(query, parameters, false, rows);
             String after = afterValue == null ? "" : " WHERE member.option_value > :afterValue";
             if (afterValue != null) parameters.put("afterValue", afterValue);
             parameters.put("limit", limit);
@@ -721,7 +722,7 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         }
         if ("ASSIGNEE_SET".equals(field)) {
             Map<String, Object> parameters = baseProjectParameters(companyId, projectId);
-            String predicate = where(query, parameters, false);
+            String predicate = where(query, parameters, false, rows);
             String after = afterValue == null ? "" : " WHERE o.option_value > :afterValue";
             if (afterValue != null) parameters.put("afterValue", afterValue);
             parameters.put("limit", limit);
@@ -741,7 +742,7 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
             default -> throw new IllegalArgumentException("unsupported project filter option field");
         };
         Map<String, Object> parameters = baseProjectParameters(companyId, projectId);
-        StringBuilder predicate = new StringBuilder(where(query, parameters, false));
+        StringBuilder predicate = new StringBuilder(where(query, parameters, false, rows));
         if (afterValue != null) {
             predicate.append(" AND ").append(expression).append(" > :afterValue");
             parameters.put("afterValue", afterValue);
@@ -756,10 +757,26 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
     }
 
     @Override
+    public Map<UUID, Long> countMatchingChildren(UUID companyId, UUID projectId, WorkItemQuery query,
+            Collection<UUID> parentWorkItemIds) {
+        Map<String, Object> parameters = baseProjectParameters(companyId, projectId);
+        if (parentWorkItemIds.isEmpty() || match(query, parameters).isEmpty()) return Map.of();
+        parameters.put("parentIds", parentWorkItemIds);
+        return bind(jdbc.sql("SELECT relation.left_work_item_id AS parent_id, count(*) AS matched"
+                + " FROM yumpoo.work_item_relation relation WHERE relation.company_id=:companyId"
+                + " AND relation.relation_type='PARENT_CHILD' AND relation.deleted_at IS NULL"
+                + " AND relation.left_work_item_id IN (:parentIds)"
+                + " AND relation.right_work_item_id IN (" + matchingItems(query, parameters) + ")"
+                + " GROUP BY relation.left_work_item_id"), parameters)
+                .query((rs, row) -> Map.entry(rs.getObject("parent_id", UUID.class), rs.getLong("matched"))).list()
+                .stream().collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    @Override
     public long countProjectPage(UUID companyId, UUID projectId, WorkItemQuery query) {
         Map<String, Object> parameters = baseProjectParameters(companyId, projectId);
         JdbcClient.StatementSpec statement = jdbc.sql("SELECT count(*) FROM yumpoo.work_item"
-                + where(query, parameters, false));
+                + where(query, parameters, false, Rows.ROOTS));
         return bind(statement, parameters).query(Long.class).single();
     }
 
@@ -795,47 +812,83 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         return parameters;
     }
 
+    /** ITEMS：各工作项本身匹配；ROOTS：只看主行；ROOTS_OR_MATCHING_CHILD：主行或直接子项命中即返回主行。 */
+    private enum Rows { ITEMS, ROOTS, ROOTS_OR_MATCHING_CHILD }
+
     private static String where(WorkItemQuery query, Map<String, Object> parameters) {
-        return where(query, parameters, true);
+        return where(query, parameters, true, Rows.ROOTS);
     }
 
     private static String where(WorkItemQuery query, Map<String, Object> parameters,
-            boolean contentScoped) {
-        return where(query, parameters, contentScoped, true);
-    }
-
-    private static String where(WorkItemQuery query, Map<String, Object> parameters,
-            boolean contentScoped, boolean rootsOnly) {
+            boolean contentScoped, Rows rows) {
         StringBuilder sql = new StringBuilder(" WHERE company_id=:companyId")
                 .append(" AND project_id=:projectId")
                 .append(contentScoped ? " AND content_id=:contentId" : "")
                 .append(" AND deleted_at IS NULL")
                 .append(query.scope() == null ? " AND NOT archived" : "");
-        if (rootsOnly) {
+        if (rows != Rows.ITEMS) {
             sql.append(" AND NOT EXISTS (SELECT 1 FROM yumpoo.work_item_relation relation ")
                     .append("WHERE relation.company_id=:companyId ")
                     .append("AND relation.relation_type='PARENT_CHILD' ")
                     .append("AND relation.right_work_item_id=yumpoo.work_item.id ")
                     .append("AND relation.deleted_at IS NULL)");
         }
-        if (query.scope() != null) {
-            var scope = query.scope();
-            var chart = JdbcWorkItemChartRepository.base((UUID) parameters.get("companyId"),
-                    scope.global(), scope.local(), scope.chart(), scope.selection(), scope.asOf(), true);
-            String scopedSql = chart.sql();
-            for (var entry : chart.parameters().entrySet()) {
-                scopedSql = scopedSql.replaceAll("(?<!:):" + java.util.regex.Pattern.quote(entry.getKey()) + "\\b", ":chart_" + entry.getKey());
-                parameters.put("chart_" + entry.getKey(), entry.getValue());
-            }
-            String ids = scopedSql + "SELECT id FROM scoped";
-            if (rootsOnly) {
-                ids += " UNION SELECT relation.left_work_item_id FROM yumpoo.work_item_relation relation "
-                        + "JOIN scoped child ON child.id=relation.right_work_item_id "
-                        + "WHERE relation.company_id=:companyId AND relation.relation_type='PARENT_CHILD' "
-                        + "AND relation.deleted_at IS NULL";
-            }
-            sql.append(" AND id IN (").append(ids).append(")");
+        if (query.scope() != null) sql.append(scope(query, parameters, rows != Rows.ITEMS));
+        rowFilters(sql, query, parameters);
+        String match = match(query, parameters);
+        if (rows == Rows.ROOTS_OR_MATCHING_CHILD && !match.isEmpty())
+            sql.append(" AND ((TRUE").append(match).append(") OR id IN (SELECT relation.left_work_item_id")
+                    .append(" FROM yumpoo.work_item_relation relation WHERE relation.company_id=:companyId")
+                    .append(" AND relation.relation_type='PARENT_CHILD' AND relation.deleted_at IS NULL")
+                    .append(" AND relation.right_work_item_id IN (").append(matchingItems(query, parameters)).append(")))");
+        else sql.append(match);
+        return sql.toString();
+    }
+
+    private static String scope(WorkItemQuery query, Map<String, Object> parameters, boolean withParents) {
+        var scope = query.scope();
+        var chart = JdbcWorkItemChartRepository.base((UUID) parameters.get("companyId"),
+                scope.global(), scope.local(), scope.chart(), scope.selection(), scope.asOf(), true);
+        String scopedSql = chart.sql();
+        for (var entry : chart.parameters().entrySet()) {
+            scopedSql = scopedSql.replaceAll("(?<!:):" + java.util.regex.Pattern.quote(entry.getKey()) + "\\b", ":chart_" + entry.getKey());
+            parameters.put("chart_" + entry.getKey(), entry.getValue());
         }
+        String ids = scopedSql + "SELECT id FROM scoped";
+        if (withParents) {
+            ids += " UNION SELECT relation.left_work_item_id FROM yumpoo.work_item_relation relation "
+                    + "JOIN scoped child ON child.id=relation.right_work_item_id "
+                    + "WHERE relation.company_id=:companyId AND relation.relation_type='PARENT_CHILD' "
+                    + "AND relation.deleted_at IS NULL";
+        }
+        return " AND id IN (" + ids + ")";
+    }
+
+    /** 分组表段条件只约束主行本身。 */
+    private static void rowFilters(StringBuilder sql, WorkItemQuery query, Map<String, Object> parameters) {
+        if (!query.assigneeSetUserIds().isEmpty()) {
+            sql.append(" AND (SELECT string_agg(a.user_id::text, ',' ORDER BY a.user_id) FROM yumpoo.work_item_assignee a WHERE a.company_id=:companyId AND a.work_item_id=yumpoo.work_item.id) = :assigneeSetKey");
+            parameters.put("assigneeSetKey", query.assigneeSetKey());
+        }
+        if (query.emptyField() != null) {
+            String column = switch (query.emptyField()) {
+                case "ASSIGNEE" -> "assignee_user_id";
+                case "PRIORITY" -> "priority";
+                case "DUE_DATE" -> "due_date";
+                default -> throw new IllegalArgumentException("unsupported empty field");
+            };
+            sql.append(" AND ").append(column).append(" IS NULL");
+        }
+        var group = query.group();
+        if (group.status() != null) { sql.append(" AND status_code=:groupStatus"); parameters.put("groupStatus", group.status()); }
+        if (group.priority() != null) { sql.append(" AND priority=:groupPriority"); parameters.put("groupPriority", group.priority()); }
+        if (group.contentId() != null) { sql.append(" AND content_id=:groupContentId"); parameters.put("groupContentId", group.contentId()); }
+        if (group.dueFrom() != null) { sql.append(" AND due_date >= :groupDueFrom"); parameters.put("groupDueFrom", group.dueFrom()); }
+        if (group.dueTo() != null) { sql.append(" AND due_date <= :groupDueTo"); parameters.put("groupDueTo", group.dueTo()); }
+    }
+
+    private static String match(WorkItemQuery query, Map<String, Object> parameters) {
+        StringBuilder sql = new StringBuilder();
         if (query.query() != null) {
             sql.append(" AND (lower(title) LIKE :titleQuery ESCAPE '\\' "
                     + "OR lower(item_no) LIKE :titleQuery ESCAPE '\\')");
@@ -852,19 +905,6 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         if (!query.assigneeUserIds().isEmpty()) {
             sql.append(" AND EXISTS (SELECT 1 FROM yumpoo.work_item_assignee a WHERE a.work_item_id=yumpoo.work_item.id AND a.user_id IN (:assigneeUserIds))");
             parameters.put("assigneeUserIds", query.assigneeUserIds());
-        }
-        if (!query.assigneeSetUserIds().isEmpty()) {
-            sql.append(" AND (SELECT string_agg(a.user_id::text, ',' ORDER BY a.user_id) FROM yumpoo.work_item_assignee a WHERE a.company_id=:companyId AND a.work_item_id=yumpoo.work_item.id) = :assigneeSetKey");
-            parameters.put("assigneeSetKey", query.assigneeSetKey());
-        }
-        if (query.emptyField() != null) {
-            String column = switch (query.emptyField()) {
-                case "ASSIGNEE" -> "assignee_user_id";
-                case "PRIORITY" -> "priority";
-                case "DUE_DATE" -> "due_date";
-                default -> throw new IllegalArgumentException("unsupported empty field");
-            };
-            sql.append(" AND ").append(column).append(" IS NULL");
         }
         if (!query.contentIds().isEmpty()) {
             sql.append(" AND content_id IN (:contentIds)");
@@ -895,6 +935,14 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         }
         JdbcConnectionFilterSql.append(sql, parameters, query.connections());
         return sql.toString();
+    }
+
+    private static String matchingItems(WorkItemQuery query, Map<String, Object> parameters) {
+        StringBuilder sql = new StringBuilder("SELECT id FROM yumpoo.work_item WHERE company_id=:companyId")
+                .append(" AND project_id=:projectId AND deleted_at IS NULL")
+                .append(query.scope() == null ? " AND NOT archived" : "");
+        if (query.scope() != null) sql.append(scope(query, parameters, false));
+        return sql.append(match(query, parameters)).toString();
     }
 
     private static String orderBy(WorkItemQuery query, WorkItemSortRanks ranks,
