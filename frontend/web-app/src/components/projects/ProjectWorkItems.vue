@@ -600,6 +600,9 @@ const assigneeFilterOpen = ref(false)
 const filterPopoverOpen = ref(false)
 const activeFilterCount = computed(() => filters.assignees.size + filters.statuses.size + filters.priorities.size
   + filters.contents.size + (filters.dueRange.length ? 1 : 0) + (filters.updatedAfter ? 1 : 0))
+/** 已生效的搜索或筛选（以视图查询为准，输入中的搜索词不算）；「隐藏已完成」的隐式状态条件不算。 */
+const explicitFilterActive = computed(() => ['q', 'assignee', 'status', 'priority', 'content', 'dueFrom', 'updatedAfter']
+  .some(key => route.query[key] !== undefined))
 const groupFieldByColumn: Partial<Record<BuiltInColumnKey, GroupField>> = {
   assignee: 'ASSIGNEE', status: 'STATUS', priority: 'PRIORITY', content: 'CONTENT', dueDate: 'DUE_DATE',
 }
@@ -779,8 +782,9 @@ const grouping = useWorkItemGrouping({
   today: () => companyDate(groupingClock.value, session.authentication.value?.company.timezone ?? 'Asia/Shanghai'),
   ready: () => Boolean(project.value && selectedView.value === 'table'),
   restore: () => reloadSortedTableInPlace(selectedRowId.value),
-  protectedIds: () => new Set([...expandedSubitemIds.value, ...selectedWorkItemIds.value,
+  protectedIds: () => new Set([...expandedIds.value, ...selectedWorkItemIds.value,
     ...[selectedRowId.value, inlineDraft.value?.anchorId].filter((id): id is string => Boolean(id))]),
+  filtering: () => explicitFilterActive.value,
 })
 const { active: grouped, field: groupingField, order: groupingOrder, showEmpty: showEmptyGroups,
   groups: workItemGroups, countsReady: groupCountsReady, error: groupingError, loading: groupsLoading } = grouping
@@ -797,9 +801,14 @@ watch(expandedSubitemsKey, key => {
 watch(expandedSubitemIds, ids => {
   try { localStorage.setItem(expandedSubitemsKey(), JSON.stringify(ids.slice(-MAX_SAVED_EXPANDED))) } catch { /* 本地存储不可用时只在当前页面保留展开。 */ }
 })
+/** 筛选生效时：含命中子项的主行默认展开；其间的手动展开收起只记在这里，筛选变化时清空，不写入本机展开记录。 */
+const filterToggledIds = ref(new Set<string>())
+const expandedIds = computed(() => explicitFilterActive.value
+  ? tableItems.value.filter(item => Boolean(item.matchedSubitemCount) !== filterToggledIds.value.has(item.id)).map(item => item.id)
+  : expandedSubitemIds.value)
 const visibleExpandedIds = computed(() => {
   const loaded = new Set(tableItems.value.map(item => item.id))
-  return expandedSubitemIds.value.filter(id => loaded.has(id))
+  return expandedIds.value.filter(id => loaded.has(id))
 })
 watch(() => visibleExpandedIds.value.join('|'), () => visibleExpandedIds.value.forEach(id => void loadSubitems(id)))
 const { hideCompleted, hideCompletedEffect } = useHideCompleted()
@@ -852,7 +861,7 @@ function isGroupPageLoading(group: { key: string }): boolean {
 }
 const displayTableItems = computed<TableDisplayRow[]>(() => {
   const withSubitems = (items: ProjectWorkItemListItem[], group: WorkItemGroup): TableDisplayRow[] => items.flatMap(item =>
-    expandedSubitemIds.value.includes(item.id)
+    expandedIds.value.includes(item.id)
       ? [item, { id: `subitems:${item.id}`, groupRowKind: 'subitems', group, parent: item } as WorkItemGroupDisplayRow] : [item])
   if (!grouped.value) return withSubitems(displayWorkItemRows.value, { key: '', label: '', color: 'rgb(87, 155, 252)', rank: 0, count: 0 })
   const result: TableDisplayRow[] = []
@@ -1073,6 +1082,8 @@ async function loadSubitems(parentId: string, force = false): Promise<void> {
   try {
     const result = await tableSource.listWorkItemSubitems({
       parentWorkItemId: parentId,
+      ...filterRequest(),
+      ...(filters.statuses.size ? { status: filters.statuses } : {}),
       ...(state.sortRules.length
         ? { sort: state.sortRules.map(rule => `${rule.field},${rule.direction}`) }
         : {}),
@@ -1096,14 +1107,20 @@ function onTableExpandChange(row: TableDisplayRow,
   expanded: TableDisplayRow[] | boolean): void {
   if (isGroupDisplayRow(row)) return
   const open = Array.isArray(expanded) ? expanded.includes(row) : expanded
-  expandedSubitemIds.value = open ? [...new Set([...expandedSubitemIds.value, row.id])]
-    : expandedSubitemIds.value.filter(id => id !== row.id)
+  if (explicitFilterActive.value) {
+    const next = new Set(filterToggledIds.value)
+    if (open === Boolean(row.matchedSubitemCount)) next.delete(row.id); else next.add(row.id)
+    filterToggledIds.value = next
+  } else {
+    expandedSubitemIds.value = open ? [...new Set([...expandedSubitemIds.value, row.id])]
+      : expandedSubitemIds.value.filter(id => id !== row.id)
+  }
   if (open) void loadSubitems(row.id)
   schedulePageScrollbarSync()
 }
 
 function toggleSubitems(row: ProjectWorkItemListItem): void {
-  onTableExpandChange(row, !expandedSubitemIds.value.includes(row.id))
+  onTableExpandChange(row, !expandedIds.value.includes(row.id))
 }
 
 function setSubitemTableHandle(id: string, handle: unknown): void {
@@ -1402,7 +1419,7 @@ async function loadFilterOptions(): Promise<void> {
     void _implicitStatus
     const pages = await Promise.all(fields.map(field => tableSource.listProjectWorkItemFilterOptions({
       ...(field === ListProjectWorkItemFilterOptionsFieldEnum.Status && !filters.statuses.size ? withoutStatus : context),
-      projectId: projectId.value, field, limit: 100,
+      projectId: projectId.value, field, limit: 100, countSubitems: true,
     }, { signal: activeController?.signal ?? null })))
     const next = new Map<string, number>()
     if (!current()) return
@@ -1762,7 +1779,7 @@ async function onDiscussionChanged(workItemId: string): Promise<void> {
   parents.forEach(id => { subitems[id]!.loaded = false })
   await Promise.all([
     selectedView.value === 'table' ? reloadSortedTableInPlace() : refreshCurrentView(),
-    ...parents.filter(id => expandedSubitemIds.value.includes(id)).map(id => loadSubitems(id, true)),
+    ...parents.filter(id => expandedIds.value.includes(id)).map(id => loadSubitems(id, true)),
   ])
 }
 
@@ -2864,9 +2881,13 @@ async function resetCurrentData(): Promise<void> {
   invalidateFilterOptions()
   clearSelection()
   grouping.stop()
+  filterToggledIds.value = new Set()
+  // 子项表随搜索与筛选变化，平铺与分组都要丢弃已加载的子项。
+  Object.keys(subitems).forEach(key => delete subitems[key])
   if (grouped.value && selectedView.value === 'table') {
     loadRevision++; activeController?.abort(); tableLoading.value = false; tableSorting.value = false
     await grouping.refresh()
+    visibleExpandedIds.value.forEach(id => void loadSubitems(id))
     return
   }
   const revision = ++loadRevision
@@ -2874,8 +2895,6 @@ async function resetCurrentData(): Promise<void> {
   tableLoading.value = false; tableSorting.value = false
   error.value = undefined; tableItems.value = []; tableNextCursor.value = null
   Object.keys(lanes).forEach(key => delete lanes[key])
-  Object.keys(subitems).forEach(key => delete subitems[key])
-  Object.keys(subitemSelections).forEach(key => delete subitemSelections[key])
   if (selectedView.value === 'kanban') await loadKanban(revision); else await loadTable(null, false, revision)
 }
 
@@ -3637,8 +3656,8 @@ onBeforeUnmount(() => {
                             'subitem-expand-button--empty': visibleSubitemCount(scope.row as ProjectWorkItemListItem) === 0,
                           }"
                           type="button"
-                          :aria-label="expandedSubitemIds.includes((scope.row as ProjectWorkItemListItem).id) ? '收起子项' : '展开子项'"
-                          :aria-expanded="expandedSubitemIds.includes((scope.row as ProjectWorkItemListItem).id)"
+                          :aria-label="expandedIds.includes((scope.row as ProjectWorkItemListItem).id) ? '收起子项' : '展开子项'"
+                          :aria-expanded="expandedIds.includes((scope.row as ProjectWorkItemListItem).id)"
                           @click.stop="toggleSubitems(scope.row as ProjectWorkItemListItem)"
                         >
                           <svg
@@ -3671,7 +3690,7 @@ onBeforeUnmount(() => {
                           tabindex="0"
                           role="button"
                           :aria-label="`${visibleSubitemCount(scope.row as ProjectWorkItemListItem)} Subitems`"
-                          :aria-expanded="expandedSubitemIds.includes((scope.row as ProjectWorkItemListItem).id)"
+                          :aria-expanded="expandedIds.includes((scope.row as ProjectWorkItemListItem).id)"
                           class="clickable_b3ab95e8e9 monday-subitems-counter-component name-cell-component__subitems-counter disableTextSelection_fae179dda6"
                           @click.stop="toggleSubitems(scope.row as ProjectWorkItemListItem)"
                         >

@@ -538,8 +538,8 @@ describe('项目级工作项首页', () => {
 
   it('分组态只向顺序接口提交本组锚点，拒绝跨组拖动并逐组保存排序', async () => {
     const first = item('a1'), second = item('a2'), other = { ...item('b1'), statusCode: 'DONE' }
-    state.listProjectWorkItems.mockImplementation(async (request: { status?: Set<string> }) =>
-      page(request.status?.has('BACKLOG') ? [first, second] : request.status?.has('DONE') ? [other] : [first, second, other]))
+    state.listProjectWorkItems.mockImplementation(async (request: { groupStatus?: string }) =>
+      page(request.groupStatus === 'BACKLOG' ? [first, second] : request.groupStatus === 'DONE' ? [other] : [first, second, other]))
     state.listProjectWorkItemFilterOptions.mockResolvedValue({ items: [
       { value: 'BACKLOG', label: '待开始', count: 2 }, { value: 'DONE', label: '已完成', count: 1 },
     ], nextCursor: null })
@@ -827,6 +827,17 @@ describe('项目级工作项首页', () => {
     await wrapper.get('button[aria-label="展开子项"]').trigger('click')
     await flushPromises()
     expect(state.listWorkItemSubitems).toHaveBeenCalledTimes(1)
+  })
+
+  it('搜索命中子项时展开父项并只请求命中的子项，展开不写入本机记录', async () => {
+    state.route.query = { q: 'child' }
+    state.listProjectWorkItems.mockResolvedValue(page([{ ...item('parent'), subitemCount: 2, matchedSubitemCount: 1 }]))
+    state.listWorkItemSubitems.mockResolvedValue({ items: [item('child')] })
+    const wrapper = mountView(); await flushPromises()
+    expect(state.listWorkItemSubitems).toHaveBeenCalledWith(expect.objectContaining({ parentWorkItemId: 'parent', q: 'child' }))
+    expect(wrapper.findAll('.subitem-table-row')).toHaveLength(1)
+    const saved = Object.entries(localStorage).filter(([key]) => key.includes('expanded-subitems') && key.endsWith(':project-1'))
+    expect(saved.map(([, value]) => value).join('')).not.toContain('parent')
   })
 
   it('子表拖动结果写回当前父项缓存，更新版本和折叠重开后仍保留顺序', async () => {
