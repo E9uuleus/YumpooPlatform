@@ -16,7 +16,7 @@ public class PostgreSqlTestContainerConfiguration {
             registry.add("spring.datasource.password", SharedPostgreSql::password);
             // 已结束的测试类的上下文仍在缓存中；空闲连接尽快归还，避免占满共享实例。
             registry.add("spring.datasource.hikari.minimum-idle", () -> 1);
-            registry.add("spring.datasource.hikari.idle-timeout", () -> "30s");
+            registry.add("spring.datasource.hikari.idle-timeout", () -> 30000);
         };
     }
 }
