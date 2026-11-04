@@ -91,7 +91,7 @@ const durationTitle = computed(() => {
         :class="variant === 'tag'
           ? ['work-item-kanban-tag', 'timer-cell--tag', empty ? 'work-item-kanban-tag--placeholder' : 'work-item-kanban-tag--plain']
           : 'timer-cell'"
-        :data-tour="variant === 'tag' ? undefined : 'work-item-timer'"
+        data-tour="work-item-timer"
         role="button"
         tabindex="0"
         aria-label="查看计时日志"
