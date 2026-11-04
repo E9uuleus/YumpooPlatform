@@ -1,12 +1,10 @@
 package com.yumpoo.platform.identityaccess.api;
 
-import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
+import com.yumpoo.platform.testing.JdbcIntegrationTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
@@ -16,8 +14,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@Import(PostgreSqlTestContainerConfiguration.class)
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+@JdbcIntegrationTest
 class M108PlatformRoleQueryIT {
 
     private static final UUID COMPANY_ID = UUID.fromString("00000000-0000-4000-8000-000000000001");

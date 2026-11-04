@@ -24,13 +24,11 @@ import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncTri
 import com.yumpoo.platform.identityaccess.application.directory.WeComMemberProfile;
 import com.yumpoo.platform.identityaccess.domain.identity.ProfileHash;
 import com.yumpoo.platform.identityaccess.application.session.SessionService;
-import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
+import com.yumpoo.platform.testing.JdbcIntegrationTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 import java.time.Duration;
@@ -45,8 +43,7 @@ import java.util.concurrent.Future;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@Import(PostgreSqlTestContainerConfiguration.class)
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+@JdbcIntegrationTest
 class DirectorySyncRepositoryIT {
 
     private static final UUID COMPANY_ID = UUID.fromString(

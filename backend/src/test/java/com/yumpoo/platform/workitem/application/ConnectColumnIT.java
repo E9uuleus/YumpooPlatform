@@ -3,12 +3,10 @@ package com.yumpoo.platform.workitem.application;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
-import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
+import com.yumpoo.platform.testing.JdbcIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
@@ -20,8 +18,7 @@ import static com.yumpoo.platform.workitem.application.ConnectionFixture.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@Import(PostgreSqlTestContainerConfiguration.class)
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE, properties = "yumpoo.outbox.enabled=false")
+@JdbcIntegrationTest
 @Transactional
 class ConnectColumnIT {
     @Autowired private JdbcClient jdbc;

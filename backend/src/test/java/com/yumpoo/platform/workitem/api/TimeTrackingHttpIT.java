@@ -8,15 +8,13 @@ import com.yumpoo.platform.identityaccess.application.session.IssuedSession;
 import com.yumpoo.platform.identityaccess.application.session.SessionService;
 import com.yumpoo.platform.identityaccess.application.verification.IdentityAcceptanceFixtureProvisioner;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
-import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
+import com.yumpoo.platform.testing.HttpIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -40,10 +38,7 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @ActiveProfiles("test")
-@Import(PostgreSqlTestContainerConfiguration.class)
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
-        "yumpoo.outbox.enabled=false", "yumpoo.projects.deletion.purge-poll-delay=24h",
-        "yumpoo.attachments.scan-enabled=false", "yumpoo.attachments.maintenance-initial-delay=24h"})
+@HttpIntegrationTest
 class TimeTrackingHttpIT {
     private static final UUID COMPANY = UUID.fromString("00000000-0000-4000-8000-000000000001");
     private record Actor(UUID userId, IssuedSession session) {}

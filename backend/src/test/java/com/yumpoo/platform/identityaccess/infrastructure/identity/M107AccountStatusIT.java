@@ -10,13 +10,11 @@ import com.yumpoo.platform.identityaccess.application.account.AccountStatusComma
 import com.yumpoo.platform.identityaccess.application.account.AccountStatusUseCase;
 import com.yumpoo.platform.identityaccess.application.session.SessionService;
 import com.yumpoo.platform.identityaccess.domain.identity.AccountStatus;
-import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
+import com.yumpoo.platform.testing.JdbcIntegrationTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import tools.jackson.databind.ObjectMapper;
 
@@ -28,8 +26,7 @@ import java.util.concurrent.Executors;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@Import(PostgreSqlTestContainerConfiguration.class)
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+@JdbcIntegrationTest
 class M107AccountStatusIT {
 
     private static final UUID COMPANY_ID = UUID.fromString(

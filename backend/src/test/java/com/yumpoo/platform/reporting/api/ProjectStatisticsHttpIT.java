@@ -10,15 +10,13 @@ import com.yumpoo.platform.identityaccess.application.session.IssuedSession;
 import com.yumpoo.platform.identityaccess.application.session.SessionService;
 import com.yumpoo.platform.identityaccess.application.verification.IdentityAcceptanceFixtureProvisioner;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
-import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
+import com.yumpoo.platform.testing.HttpIntegrationTest;
 import com.yumpoo.platform.workitem.application.WorkItemLabelRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -37,9 +35,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @ActiveProfiles("test")
-@Import(PostgreSqlTestContainerConfiguration.class)
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = {"yumpoo.outbox.enabled=false","yumpoo.projects.deletion.purge-poll-delay=1h"})
+@HttpIntegrationTest
 class ProjectStatisticsHttpIT {
     private static final UUID COMPANY_ID = UUID.fromString("00000000-0000-4000-8000-000000000001");
     private static final UUID WORKSPACE_ID = UUID.fromString("a460aa25-7180-490b-ab14-f9ec09049024");

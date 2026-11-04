@@ -11,12 +11,10 @@ import com.yumpoo.platform.identityaccess.application.desktopauth.PkceS256Challe
 import com.yumpoo.platform.identityaccess.application.desktopauth.PkceVerifier;
 import com.yumpoo.platform.identityaccess.application.desktopauth.ProductDesktopAuthAttempt;
 import com.yumpoo.platform.identityaccess.application.desktopauth.ProductDesktopAuthExchange;
-import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
+import com.yumpoo.platform.testing.JdbcIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 import java.time.Instant;
@@ -32,8 +30,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@Import(PostgreSqlTestContainerConfiguration.class)
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+@JdbcIntegrationTest
 class JdbcDesktopAuthAttemptRepositoryIT {
 
     private static final Instant CREATED_AT = Instant.parse("2026-08-11T03:00:00Z");
