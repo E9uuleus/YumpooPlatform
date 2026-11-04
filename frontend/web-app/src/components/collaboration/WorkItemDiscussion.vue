@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useMinuteClock } from '../../composables/useMinuteClock'
 import { useEditor } from '@tiptap/vue-3'
 import {
   ErrorCode,
@@ -78,10 +79,9 @@ const replyOpen = reactive<Record<string, boolean>>({})
 const repliesLoading = reactive<Record<string, boolean>>({})
 const replyProblems = reactive<Record<string, ApiProblem | undefined>>({})
 const replyComposers = new Map<string, InstanceType<typeof DiscussionReplyComposer>>()
-const now = ref(new Date())
+const now = useMinuteClock()
 let publishKey = crypto.randomUUID()
 let publishKeyBody = ''
-let clock: ReturnType<typeof setInterval> | undefined
 
 const draftAttachments = useEditorAttachments({
   editor: () => editor.value, ownerId: () => props.workItemId,
@@ -492,7 +492,6 @@ watch(editDialogVisible, visible => { if (!visible) editAttachments.abortUploads
 
 defineExpose({ hasDraft, busy, discardDraft, editor, editEditor, saveEdit, loadLatest, loadOlder })
 onMounted(() => {
-  clock = setInterval(() => { now.value = new Date() }, 60_000)
   scrollRoot = timeline.value?.closest<HTMLElement>('.el-drawer__body') ?? undefined
   if (scrollRoot && typeof IntersectionObserver !== 'undefined' && sentinel.value) {
     observer = new IntersectionObserver(entries => {
@@ -517,7 +516,6 @@ onBeforeUnmount(() => {
   resizeObserver?.disconnect()
   scrollRoot?.removeEventListener('scroll', queueFill)
   if (frame !== undefined) cancelAnimationFrame(frame)
-  if (clock) clearInterval(clock)
 })
 </script>
 

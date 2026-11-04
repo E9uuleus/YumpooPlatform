@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useMinuteClock } from '../../composables/useMinuteClock'
 import type {
   WorkItemCellActivityColumn,
   WorkItemCellActivityEntry,
@@ -9,7 +10,7 @@ import type {
 import { WorkItemCellActivityTimeRange as WorkItemCellActivityTimeRangeValue } from '@yumpoo/api-client'
 import { Refresh as RefreshIcon } from '@element-plus/icons-vue'
 import { ElButton, ElPopover, ElTooltip } from 'element-plus'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { activityApi } from '../../api/client'
 import { toApiProblem, type ApiProblem } from '../../api/problems'
 import { useSession } from '../../composables/useSession'
@@ -33,8 +34,7 @@ const filterVisible = ref(false)
 const loading = ref(false)
 const loadingOlder = ref(false)
 const error = ref<ApiProblem>()
-const now = ref(new Date())
-let minuteTimer: ReturnType<typeof setInterval> | undefined
+const now = useMinuteClock()
 let requestSequence = 0
 
 const timeLabels: Record<string, string> = {
@@ -139,9 +139,7 @@ watch(() => props.workItemId, () => void load())
 watch([selectedTime, selectedActors, selectedColumns], () => void load(), { deep: true })
 onMounted(() => {
   void load()
-  minuteTimer = setInterval(() => { now.value = new Date() }, 60_000)
 })
-onBeforeUnmount(() => { if (minuteTimer) clearInterval(minuteTimer) })
 </script>
 
 <template>
