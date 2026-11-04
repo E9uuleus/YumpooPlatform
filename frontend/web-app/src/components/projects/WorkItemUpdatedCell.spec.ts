@@ -1,4 +1,5 @@
 import { mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import WorkItemUpdatedCell from './WorkItemUpdatedCell.vue'
 import YpAssignee from '../yp/YpAssignee.vue'
@@ -15,6 +16,7 @@ describe('最后更新单元格', () => {
     const wrapper = mount(WorkItemUpdatedCell, { props: { item: {
       updatedAt: new Date('2026-09-11T02:00:00Z'), updatedByUserId: 'updater', updatedByDisplayName: '林晓',
     } } })
+    await nextTick()
     expect(wrapper.text()).toContain('5分钟前')
     expect(wrapper.get('.work-item-updated-cell').attributes('aria-label')).toBe('由林晓更新于2026年9月11日 10:00')
     expect(wrapper.getComponent(YpAssignee).props()).toMatchObject({ userId: 'updater', tooltipDisabled: true })

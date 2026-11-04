@@ -10,7 +10,7 @@ function refresh(): void {
   timer = setTimeout(refresh, 60_000 - now.value.getTime() % 60_000)
 }
 
-export function useWorkItemDueClock() {
+export function useMinuteClock() {
   onMounted(() => {
     if (users++ !== 0) return
     refresh()
