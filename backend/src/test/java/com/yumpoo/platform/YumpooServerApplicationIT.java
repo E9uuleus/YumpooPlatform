@@ -3,7 +3,7 @@ package com.yumpoo.platform;
 import com.yumpoo.platform.filestorage.testing.M014AttachmentProbeController;
 import com.yumpoo.platform.foundation.application.event.EventSubscription;
 import com.yumpoo.platform.foundation.application.event.OutboxEventConsumer;
-import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
+import com.yumpoo.platform.testing.DedicatedPostgreSqlContainerConfiguration;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.configuration.Configuration;
 import org.flywaydb.core.api.output.MigrateResult;
@@ -46,7 +46,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static com.yumpoo.platform.testing.MigrationAssertions.assertMigrateToLatest;
 import static com.yumpoo.platform.testing.MigrationAssertions.migrationVersions;
 
-@Import(PostgreSqlTestContainerConfiguration.class)
+@Import(DedicatedPostgreSqlContainerConfiguration.class)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class YumpooServerApplicationIT {
 
