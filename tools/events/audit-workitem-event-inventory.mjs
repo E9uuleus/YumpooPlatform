@@ -10,7 +10,7 @@ const applicationRoot = path.join(repositoryRoot, 'backend', 'src', 'main', 'jav
   'com', 'yumpoo', 'platform', 'workitem', 'application')
 const serviceFiles = new Map([
   ['WorkItemService', path.join(applicationRoot, 'WorkItemService.java')],
-  ['WorkItemUpdateService', path.join(applicationRoot, 'WorkItemUpdateService.java')],
+  ['WorkItemUpdateService', path.join(applicationRoot, 'discussion', 'WorkItemUpdateService.java')],
   ['WorkItemRelationService', path.join(applicationRoot, 'WorkItemRelationService.java')],
 ])
 const eventPattern = /workitem\.work_item_[a-z0-9_]+/gu
