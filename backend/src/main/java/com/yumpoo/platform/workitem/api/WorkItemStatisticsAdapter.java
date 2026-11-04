@@ -1,9 +1,9 @@
 package com.yumpoo.platform.workitem.api;
 
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
-import com.yumpoo.platform.workitem.application.ChartStatistics;
-import com.yumpoo.platform.workitem.application.WorkItemStatisticsRepository;
-import com.yumpoo.platform.workitem.application.WorkItemStatisticsService;
+import com.yumpoo.platform.workitem.application.statistics.ChartStatistics;
+import com.yumpoo.platform.workitem.application.statistics.WorkItemStatisticsRepository;
+import com.yumpoo.platform.workitem.application.statistics.WorkItemStatisticsService;
 import org.springframework.stereotype.Component;
 import java.util.List;
 import java.util.UUID;
@@ -11,9 +11,9 @@ import java.util.UUID;
 @Component
 public class WorkItemStatisticsAdapter implements WorkItemStatisticsQuery {
     private final WorkItemStatisticsService service;
-    private final com.yumpoo.platform.workitem.application.WorkItemChartService charts;
+    private final com.yumpoo.platform.workitem.application.statistics.WorkItemChartService charts;
     private final com.yumpoo.platform.workitem.application.WorkItemService workItems;
-    public WorkItemStatisticsAdapter(WorkItemStatisticsService service, com.yumpoo.platform.workitem.application.WorkItemChartService charts,
+    public WorkItemStatisticsAdapter(WorkItemStatisticsService service, com.yumpoo.platform.workitem.application.statistics.WorkItemChartService charts,
             com.yumpoo.platform.workitem.application.WorkItemService workItems) { this.service = service; this.charts = charts; this.workItems = workItems; }
     public Snapshot aggregate(CurrentActor actor, List<UUID> projects, Filters filters) {
         var result = service.aggregate(actor, projects, filter(filters));
@@ -54,7 +54,7 @@ public class WorkItemStatisticsAdapter implements WorkItemStatisticsQuery {
     }
     public Page chartItems(CurrentActor actor, List<UUID> projects, Filters filters, ChartRequest request, ChartSelection selection, int offset, int limit) {
         return page(actor, charts.items(actor, projects, filter(filters), chart(request), selection == null ? null
-                : new com.yumpoo.platform.workitem.application.ChartStatistics.Selection(selection.key(), selection.seriesKey()), offset, limit));
+                : new com.yumpoo.platform.workitem.application.statistics.ChartStatistics.Selection(selection.key(), selection.seriesKey()), offset, limit));
     }
     public Page projectChartItems(CurrentActor actor, UUID projectId, Filters filters, ChartRequest request, ChartSelection selection, int offset, int limit) {
         return page(actor, charts.projectItems(actor, projectId, filter(filters), chart(request), selection == null ? null
@@ -69,7 +69,7 @@ public class WorkItemStatisticsAdapter implements WorkItemStatisticsQuery {
     public TablePage table(CurrentActor actor, List<UUID> projects, Filters filters, ChartRequest chart,
             ChartSelection selection, UUID projectId, TableCriteria c) {
         var scope = charts.tableScope(actor, projects, filter(filters), chart(chart), selection == null ? null
-                : new com.yumpoo.platform.workitem.application.ChartStatistics.Selection(selection.key(), selection.seriesKey()), projectId);
+                : new com.yumpoo.platform.workitem.application.statistics.ChartStatistics.Selection(selection.key(), selection.seriesKey()), projectId);
         return table(actor, scope, projectId, c);
     }
     private TablePage table(CurrentActor actor, ChartStatistics.TableScope scope, UUID projectId, TableCriteria c) {
@@ -103,13 +103,13 @@ public class WorkItemStatisticsAdapter implements WorkItemStatisticsQuery {
         var childCounts = charts.childCounts(actor, scope, ids);
         return new TablePage(items, List.of(), next, ids.stream().filter(i -> !matching.contains(i)).toList(), childCounts);
     }
-    private static com.yumpoo.platform.workitem.application.ChartStatistics.Request chart(ChartRequest r) {
+    private static com.yumpoo.platform.workitem.application.statistics.ChartStatistics.Request chart(ChartRequest r) {
         if (r == null) return null;
-        return new com.yumpoo.platform.workitem.application.ChartStatistics.Request(r.id(), r.dimension(), r.series(), r.dateInterval(), r.timezone(),
+        return new com.yumpoo.platform.workitem.application.statistics.ChartStatistics.Request(r.id(), r.dimension(), r.series(), r.dateInterval(), r.timezone(),
                 measure(r.measure()), measure(r.xMeasure()), measure(r.sizeMeasure()), r.filters() == null ? null : filter(r.filters()), r.projectIds(), r.showEmpty());
     }
-    private static com.yumpoo.platform.workitem.application.ChartStatistics.Measure measure(ChartMeasure m) {
-        return m == null ? null : new com.yumpoo.platform.workitem.application.ChartStatistics.Measure(m.metric(), m.calculation());
+    private static com.yumpoo.platform.workitem.application.statistics.ChartStatistics.Measure measure(ChartMeasure m) {
+        return m == null ? null : new com.yumpoo.platform.workitem.application.statistics.ChartStatistics.Measure(m.metric(), m.calculation());
     }
     private static WorkItemStatisticsService.Request filter(Filters value) {
         Filters f = value == null ? Filters.empty() : value;

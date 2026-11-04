@@ -1,7 +1,7 @@
 package com.yumpoo.platform.workitem.api;
 
-import com.yumpoo.platform.workitem.application.ContentInitializationService;
-import com.yumpoo.platform.workitem.application.ContentInitializationCommand;
+import com.yumpoo.platform.workitem.application.content.ContentInitializationService;
+import com.yumpoo.platform.workitem.application.content.ContentInitializationCommand;
 import org.springframework.stereotype.Component;
 
 import java.util.List;

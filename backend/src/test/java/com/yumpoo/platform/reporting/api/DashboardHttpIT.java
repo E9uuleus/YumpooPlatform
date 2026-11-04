@@ -17,7 +17,7 @@ import com.yumpoo.platform.reporting.application.DashboardModels;
 import com.yumpoo.platform.reporting.application.DashboardService;
 import com.yumpoo.platform.reporting.infrastructure.JdbcReportingProjectDataPurger;
 import com.yumpoo.platform.testing.HttpIntegrationTest;
-import com.yumpoo.platform.workitem.application.WorkItemLabelRepository;
+import com.yumpoo.platform.workitem.application.label.WorkItemLabelRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
