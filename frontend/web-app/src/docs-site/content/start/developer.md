@@ -78,7 +78,7 @@ Invoke-RestMethod 'http://127.0.0.1:8100/actuator/health/readiness'
 
 - 前置：Docker、已打包的后端 JAR（`.\backend\mvnw.cmd -f backend/pom.xml -DskipTests package`）、系统 Edge 或 Chrome；运行前释放 8100 和 18174 端口。
 - `pnpm test:e2e -- --skip-web-build` 复用已有的 Web 构建。
-- 只在本地运行，不属于 CI 合并门禁。
+- CI 的 portable 阶段也会运行同一组用例。
 
 ## 仓库目录速览
 
