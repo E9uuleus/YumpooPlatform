@@ -1600,7 +1600,15 @@ async function loadKanban(revision = loadRevision): Promise<void> {
 
 // 看板：卡片字段跟随「隐藏」列设置；列头数量与分组计数同源，按当前筛选统计根工作项。
 const KANBAN_CARD_FIELDS: readonly string[] = ['content', 'status', 'priority', 'dueDate', 'timeTracking']
-const kanbanLaneStatuses = computed<KanbanBoardStatus[]>(() => workflowStatuses.value)
+/** 隐藏已完成开启时（任一效果），看板不显示也不加载被本人视为已完成的状态列；仪表板内嵌看板不受影响。 */
+const kanbanLaneStatuses = computed<KanbanBoardStatus[]>(() => !embedded.value && hideCompleted.value
+  ? workflowStatuses.value.filter(status => !isCompletedStatus(tableViewSettings.value.completedStatusCodes,
+    status.statusCode, status.statusCategory))
+  : workflowStatuses.value)
+watch(() => kanbanLaneStatuses.value.map(status => status.statusCode).join('|'), () => {
+  if (selectedView.value !== 'kanban' || !project.value) return
+  kanbanLaneStatuses.value.filter(status => !lanes[status.statusCode]).forEach(status => void loadLane(status.statusCode))
+})
 const kanbanCardFields = computed(() => movableVisibleColumns.value.map(column => column.key)
   .filter((key): key is KanbanCardField => KANBAN_CARD_FIELDS.includes(key)))
 const kanbanCounts = ref<Map<string, number>>()
@@ -3506,7 +3514,7 @@ onBeforeUnmount(() => {
             :disabled="selectedView === 'kanban' || savingSortOrder"
             @field="changeGrouping" @order="groupingOrder = $event" @show-empty="showEmptyGroups = $event" />
           <work-item-completed-menu :statuses="workflowStatuses" :codes="tableViewSettings.completedStatusCodes"
-            :disabled="selectedView === 'kanban'" :editable="tableSettingsState === 'ready'"
+            :disabled="false" :editable="tableSettingsState === 'ready'"
             @update="codes => updateTableSettings({ completedStatusCodes: codes })" />
           <button
             v-if="!embedded"
