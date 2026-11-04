@@ -1,0 +1,22 @@
+# 每条豁免都有理由与到期日；到期后 OSV 重新报出，必须复核。理由见
+# .agents/notes/implemented/process/2026-10-19-dependency-security-overrides.md。
+
+[[IgnoredVulns]]
+id = "GHSA-4r6h-8v6p-xvw6"
+ignoreUntil = 2027-02-01
+reason = "xlsx 0.20.3 来自 cdn.sheetjs.com，已含 0.19.3 的原型污染修复；npm 公告无已修复版本，属误报"
+
+[[IgnoredVulns]]
+id = "GHSA-5pgg-2g8v-p4x9"
+ignoreUntil = 2027-02-01
+reason = "xlsx 0.20.3 来自 cdn.sheetjs.com，已含 0.20.2 的 ReDoS 修复；npm 公告无已修复版本，属误报"
+
+[[IgnoredVulns]]
+id = "GHSA-g3hv-75wg-m249"
+ignoreUntil = 2027-02-01
+reason = "minimatch 只在 11.x 修复且未回移；所用匹配模式均为代码常量，不来自用户输入；仅经构建工具链与 exceljs 的 Node 打包路径引入"
+
+[[IgnoredVulns]]
+id = "GHSA-3g3m-2fjr-6pw4"
+ignoreUntil = 2027-02-01
+reason = "glob 13.x 只在 14.x 修复；仅开发与构建工具链使用，模式均为代码常量"
