@@ -3492,9 +3492,10 @@ onBeforeUnmount(() => {
             </div>
           </el-popover>
 
-          <el-popover placement="bottom-start" :width="320" trigger="click" :disabled="selectedView === 'kanban'" popper-class="work-items-popover work-item-view-control">
+          <!-- 看板中「隐藏」控制卡片上显示的字段。 -->
+          <el-popover placement="bottom-start" :width="320" trigger="click" popper-class="work-items-popover work-item-view-control">
             <template #reference>
-              <button class="toolbar-button" :disabled="selectedView === 'kanban'">
+              <button class="toolbar-button">
                 <el-icon><hide /></el-icon><span>隐藏</span>
               </button>
             </template>
@@ -4512,6 +4513,7 @@ onBeforeUnmount(() => {
 
 .monday-view-header {
   display: flex;
+  flex: none;
   align-items: center;
   justify-content: space-between;
   margin-bottom: var(--yp-space-4);
@@ -4540,8 +4542,10 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
 }
 
+/* 工具栏不参与纵向收缩：看板内容高于可用空间时也保持完整高度。 */
 .work-items-toolbar {
   display: flex;
+  flex: none;
   min-width: 0;
   align-items: center;
   gap: var(--yp-space-2);
