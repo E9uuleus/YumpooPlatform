@@ -1041,7 +1041,7 @@ onBeforeUnmount(() => {
               :status-label="statusLabel(scope.row.statusCode) || '—'"
               :status-color="workflowStatuses.find(status => status.statusCode === scope.row.statusCode)?.colorToken"
             />
-            <el-popover :persistent="false" v-else-if="column.key === 'assignee'" placement="bottom" :width="360" trigger="click"
+            <el-popover :persistent="false" v-else-if="column.key === 'assignee'" placement="bottom" :width="360" trigger="click" popper-class="work-items-popover"
               :visible="openCell === scope.row.id + ':assignee'" @update:visible="setCellOpen(scope.row.id + ':assignee', $event)">
               <template #reference>
                 <button class="subitem-cell-button" :disabled="editingCell">
@@ -1055,6 +1055,7 @@ onBeforeUnmount(() => {
             </el-popover>
 
             <el-popover :persistent="Boolean(cellPopoverBusy[scope.row.id + ':status'])" v-else-if="column.key === 'status'" placement="bottom" width="auto" trigger="click"
+              popper-class="work-items-label-popover status-popover"
               :visible="openCell === scope.row.id + ':status'" @update:visible="setCellOpen(scope.row.id + ':status', $event)">
               <template #reference>
                 <button class="subitem-block-cell" :style="statusStyle(scope.row.statusCode)" :disabled="editingCell">{{ statusLabel(scope.row.statusCode) }}</button>
@@ -1075,6 +1076,7 @@ onBeforeUnmount(() => {
             </el-popover>
 
             <el-popover :persistent="Boolean(cellPopoverBusy[scope.row.id + ':priority'])" v-else-if="column.key === 'priority'" placement="bottom" width="auto" trigger="click"
+              popper-class="work-items-label-popover priority-popover"
               :visible="openCell === scope.row.id + ':priority'" @update:visible="setCellOpen(scope.row.id + ':priority', $event)">
               <template #reference>
                 <button class="subitem-block-cell" :class="`subitem-priority--${priorityPresentation(scope.row.priority).tone}`" :style="priorityStyle(scope.row.priority)" :disabled="editingCell">
@@ -1096,6 +1098,7 @@ onBeforeUnmount(() => {
             </el-popover>
 
             <el-popover :persistent="Boolean(cellPopoverBusy[scope.row.id + ':content'])" v-else-if="column.key === 'content'" placement="bottom" width="auto" trigger="click"
+              popper-class="work-items-label-popover content-popover"
               :visible="openCell === scope.row.id + ':content'" @update:visible="setCellOpen(scope.row.id + ':content', $event)">
               <template #reference>
                 <button class="subitem-content-pill" :style="labelCellStyle(contentLabel(scope.row as ProjectWorkItemListItem).colorToken)" :disabled="editingCell">
