@@ -32,13 +32,11 @@ import com.yumpoo.platform.identityaccess.application.authorization.RoleAssignme
 import com.yumpoo.platform.identityaccess.application.authorization.RoleAssignmentStatus;
 import com.yumpoo.platform.identityaccess.application.authorization.RoleCommandActor;
 import com.yumpoo.platform.identityaccess.domain.identity.AccountStatus;
-import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
+import com.yumpoo.platform.testing.JdbcIntegrationTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -52,11 +50,7 @@ import java.util.concurrent.Executors;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@Import(PostgreSqlTestContainerConfiguration.class)
-@SpringBootTest(
-        webEnvironment = SpringBootTest.WebEnvironment.NONE,
-        properties = "yumpoo.outbox.enabled=false"
-)
+@JdbcIntegrationTest
 class M109PlatformRoleGovernanceIT {
 
     private static final UUID COMPANY_ID = UUID.fromString("00000000-0000-4000-8000-000000000001");

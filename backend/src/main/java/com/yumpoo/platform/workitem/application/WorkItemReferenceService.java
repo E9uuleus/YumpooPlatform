@@ -1,5 +1,6 @@
 package com.yumpoo.platform.workitem.application;
 
+import com.yumpoo.platform.workitem.application.content.ContentRepository;
 import com.yumpoo.platform.catalog.api.ProjectAccessSnapshotQuery;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;

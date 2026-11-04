@@ -1,6 +1,6 @@
 package com.yumpoo.platform.foundation.consistency;
 
-import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
+import com.yumpoo.platform.testing.DedicatedPostgreSqlContainerConfiguration;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -18,7 +18,7 @@ import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@Import(PostgreSqlTestContainerConfiguration.class)
+@Import(DedicatedPostgreSqlContainerConfiguration.class)
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,

@@ -1,7 +1,10 @@
 package com.yumpoo.platform.workitem.application;
 
+import com.yumpoo.platform.workitem.application.content.ContentRepository;
+import com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateRepository;
+import com.yumpoo.platform.workitem.application.label.WorkItemLabelRepository;
 import com.yumpoo.platform.workitem.application.WorkItemModels.WorkItemLocator;
-import com.yumpoo.platform.workitem.application.WorkItemUpdateModels.UpdateLocator;
+import com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateModels.UpdateLocator;
 import com.yumpoo.platform.workitem.domain.WorkItem;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

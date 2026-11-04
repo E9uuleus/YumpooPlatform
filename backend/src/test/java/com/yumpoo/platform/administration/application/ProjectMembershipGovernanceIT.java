@@ -7,13 +7,11 @@ import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.foundation.application.idempotency.RequestHash;
 import com.yumpoo.platform.foundation.application.request.*;
 import com.yumpoo.platform.identityaccess.api.*;
-import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
+import com.yumpoo.platform.testing.JdbcIntegrationTest;
 import com.yumpoo.platform.administration.infrastructure.governance.JdbcProjectOwnerGovernanceProjection;
 import com.yumpoo.platform.foundation.application.event.*;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -24,9 +22,7 @@ import java.util.concurrent.*;
 
 import static org.assertj.core.api.Assertions.*;
 
-@Import(PostgreSqlTestContainerConfiguration.class)
-@SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.NONE,
-        properties="yumpoo.outbox.enabled=false")
+@JdbcIntegrationTest
 class ProjectMembershipGovernanceIT {
     private static final UUID COMPANY=UUID.fromString("00000000-0000-4000-8000-000000000001");
     private static final UUID ADMIN=UUID.fromString("25000000-0000-4000-8000-000000000101");

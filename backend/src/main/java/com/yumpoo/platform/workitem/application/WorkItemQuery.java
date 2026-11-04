@@ -1,5 +1,6 @@
 package com.yumpoo.platform.workitem.application;
 
+import com.yumpoo.platform.workitem.application.statistics.ChartStatistics;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.FieldViolation;
 import com.yumpoo.platform.workitem.domain.ConnectColumn;

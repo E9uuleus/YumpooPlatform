@@ -38,6 +38,8 @@ audience: [developer]
 | `domain` | 只有 `domain` |
 | `infrastructure` | `infrastructure`、`application`、`domain` |
 
+较大的模块在层内按子域分包，例如 `workitem.application.time`、`workitem.infrastructure.connection`。子包仍属于所在的层，层规则与模块依赖规则不变；跨模块端口只放在 `api` 根包。
+
 **跨模块只能调用对方的 `api` 层**，不能触碰对方的应用服务、领域对象或仓储。
 
 ## 允许的模块依赖

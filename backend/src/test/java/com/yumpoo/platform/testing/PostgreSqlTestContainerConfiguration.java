@@ -1,25 +1,22 @@
 package com.yumpoo.platform.testing;
 
 import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
-import org.testcontainers.postgresql.PostgreSQLContainer;
-import org.testcontainers.utility.DockerImageName;
+import org.springframework.test.context.DynamicPropertyRegistrar;
 
 @TestConfiguration(proxyBeanMethods = false)
 public class PostgreSqlTestContainerConfiguration {
 
-    private static final DockerImageName POSTGRES_IMAGE =
-            DockerImageName.parse("postgres:17.10-alpine");
-
     @Bean
-    @ServiceConnection
-    PostgreSQLContainer postgresContainer() {
-        return new PostgreSQLContainer(POSTGRES_IMAGE)
-                .withDatabaseName("yumpoo_test")
-                .withUsername("yumpoo_test")
-                .withPassword("yumpoo_test")
-                .withEnv("TZ", "UTC")
-                .withCommand("postgres", "-c", "timezone=UTC");
+    DynamicPropertyRegistrar sharedPostgreSqlDatabase() {
+        String url = SharedPostgreSql.createDatabase();
+        return registry -> {
+            registry.add("spring.datasource.url", () -> url);
+            registry.add("spring.datasource.username", SharedPostgreSql::username);
+            registry.add("spring.datasource.password", SharedPostgreSql::password);
+            // 已结束的测试类的上下文仍在缓存中；空闲连接尽快归还，避免占满共享实例。
+            registry.add("spring.datasource.hikari.minimum-idle", () -> 1);
+            registry.add("spring.datasource.hikari.idle-timeout", () -> 30000);
+        };
     }
 }

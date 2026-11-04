@@ -99,12 +99,12 @@ class UnifiedProjectModelMigrationIT {
     @Test
     void upgradesV59ThroughV61WithoutChangingExistingCategoriesLabelsActivitiesOrAudit() {
         flyway("60").migrate();
-        var contentRepository = new com.yumpoo.platform.workitem.infrastructure.JdbcContentRepository(jdbc);
+        var contentRepository = new com.yumpoo.platform.workitem.infrastructure.content.JdbcContentRepository(jdbc);
         contentRepository.initializeCatalog(COMPANY, PROJECT, java.time.Instant.now());
         contentRepository.insertAll(List.of(com.yumpoo.platform.workitem.domain.Content.initial(
                 UUID.randomUUID(), COMPANY, PROJECT, "LEGACY_CATEGORY", "保留类别", "BERRY", 10,
                 USER, java.time.Instant.now())));
-        new com.yumpoo.platform.workitem.infrastructure.JdbcWorkItemLabelRepository(jdbc)
+        new com.yumpoo.platform.workitem.infrastructure.label.JdbcWorkItemLabelRepository(jdbc)
                 .initialize(COMPANY, PROJECT, java.time.Instant.now());
         sql("UPDATE yumpoo.project_work_item_status_label SET display_name='既有状态' WHERE project_id=:project AND status_code='STUCK'").update();
         var contents = rows("content");
