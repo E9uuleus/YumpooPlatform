@@ -3,7 +3,8 @@ package com.yumpoo.platform.workitem.application.connection;
 import com.yumpoo.platform.workitem.application.DueTimeChange;
 import com.yumpoo.platform.workitem.application.WorkItemCommands;
 import com.yumpoo.platform.workitem.application.WorkItemModels;
-import com.yumpoo.platform.workitem.application.WorkItemService;
+import com.yumpoo.platform.workitem.application.WorkItemCommandService;
+import com.yumpoo.platform.workitem.application.WorkItemQueryService;
 import com.yumpoo.platform.workitem.application.content.ContentRepository;
 import com.yumpoo.platform.workitem.application.label.WorkItemLabelRepository;
 import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
@@ -37,7 +38,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @Transactional
 class WorkItemConnectionIT {
     @Autowired private JdbcClient jdbc;
-    @Autowired private WorkItemService items;
+    @Autowired private WorkItemCommandService items;
+    @Autowired private WorkItemQueryService queries;
     @Autowired private ConnectColumnService columns;
     @Autowired private WorkItemConnectionService connections;
     @Autowired private ContentRepository contents;
@@ -423,7 +425,7 @@ class WorkItemConnectionIT {
         assertThat(fixture.eventCount("workitem.connection_deleted")).isZero();
         assertReason(() -> unlink(sourceOwner, linked.resourceId(), 0), "CONNECTION_NOT_ACTIVE");
         assertThat(columns.catalog(targetOwner, target.id()).incomingAvailable()).isFalse();
-        assertThat(items.find(targetOwner, targetItem.id()).id()).isEqualTo(targetItem.id());
+        assertThat(queries.find(targetOwner, targetItem.id()).id()).isEqualTo(targetItem.id());
     }
 
     @Test

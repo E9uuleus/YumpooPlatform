@@ -3,7 +3,7 @@ package com.yumpoo.platform.workitem.application.connection;
 import com.yumpoo.platform.workitem.application.DueTimeChange;
 import com.yumpoo.platform.workitem.application.WorkItemCommands;
 import com.yumpoo.platform.workitem.application.WorkItemModels;
-import com.yumpoo.platform.workitem.application.WorkItemService;
+import com.yumpoo.platform.workitem.application.WorkItemCommandService;
 import com.yumpoo.platform.workitem.application.content.ContentRepository;
 import com.yumpoo.platform.workitem.application.label.WorkItemLabelRepository;
 import com.yumpoo.platform.foundation.application.idempotency.RequestHash;
@@ -23,14 +23,14 @@ final class ConnectionFixture {
     static final UUID COMPANY = UUID.fromString("00000000-0000-4000-8000-000000000001");
     record Project(UUID id, UUID contentId, String code) {}
     final JdbcClient jdbc;
-    final WorkItemService items;
+    final WorkItemCommandService items;
     final ConnectColumnService columns;
     final ContentRepository contents;
     final WorkItemLabelRepository labels;
     final ObjectMapper json;
     private final Set<UUID> userIds = new java.util.LinkedHashSet<>();
 
-    ConnectionFixture(JdbcClient jdbc, WorkItemService items, ConnectColumnService columns,
+    ConnectionFixture(JdbcClient jdbc, WorkItemCommandService items, ConnectColumnService columns,
             ContentRepository contents, WorkItemLabelRepository labels, ObjectMapper json) {
         this.jdbc = jdbc;
         this.items = items;

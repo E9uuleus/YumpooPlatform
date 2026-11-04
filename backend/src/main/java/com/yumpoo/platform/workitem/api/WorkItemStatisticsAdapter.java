@@ -12,9 +12,9 @@ import java.util.UUID;
 public class WorkItemStatisticsAdapter implements WorkItemStatisticsQuery {
     private final WorkItemStatisticsService service;
     private final com.yumpoo.platform.workitem.application.statistics.WorkItemChartService charts;
-    private final com.yumpoo.platform.workitem.application.WorkItemService workItems;
+    private final com.yumpoo.platform.workitem.application.WorkItemQueryService workItems;
     public WorkItemStatisticsAdapter(WorkItemStatisticsService service, com.yumpoo.platform.workitem.application.statistics.WorkItemChartService charts,
-            com.yumpoo.platform.workitem.application.WorkItemService workItems) { this.service = service; this.charts = charts; this.workItems = workItems; }
+            com.yumpoo.platform.workitem.application.WorkItemQueryService workItems) { this.service = service; this.charts = charts; this.workItems = workItems; }
     public Snapshot aggregate(CurrentActor actor, List<UUID> projects, Filters filters) {
         var result = service.aggregate(actor, projects, filter(filters));
         return new Snapshot(result.buckets().stream().map(WorkItemStatisticsAdapter::bucket).toList(),

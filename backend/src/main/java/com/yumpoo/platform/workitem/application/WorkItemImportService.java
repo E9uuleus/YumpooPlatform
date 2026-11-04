@@ -67,7 +67,8 @@ import java.util.stream.Collectors;
 public class WorkItemImportService {
     private static final String IMPORT_REASON = "WORK_ITEM_IMPORT";
 
-    private final WorkItemService core;
+    private final WorkItemCommandService core;
+    private final WorkItemOrderingService ordering;
     private final WorkItemRepository workItems;
     private final WorkItemRelationRepository relations;
     private final ContentRepository contents;
@@ -81,13 +82,14 @@ public class WorkItemImportService {
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
-    public WorkItemImportService(WorkItemService core, WorkItemRepository workItems,
+    public WorkItemImportService(WorkItemCommandService core, WorkItemOrderingService ordering, WorkItemRepository workItems,
             WorkItemRelationRepository relations, ContentRepository contents,
             WorkItemLabelRepository labels, ProjectAccessSnapshotQuery access,
             ProjectFactWriteGuard writeGuard, ProjectActiveMembershipQuery activeMemberships,
             IdempotentCommandExecutor idempotency, TimeTrackingRepository timeTracking,
             SecurityAuditAppendPort audits, ObjectMapper objectMapper, Clock clock) {
         this.core = core;
+        this.ordering = ordering;
         this.workItems = workItems;
         this.relations = relations;
         this.contents = contents;
@@ -107,7 +109,7 @@ public class WorkItemImportService {
         if (actor == null) throw new ApplicationException(StandardErrorCode.AUTHENTICATION_REQUIRED);
         ProjectAccessSnapshot visible = access.findVisible(actor, command.projectId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-        WorkItemService.requireWritableAccess(visible.actorAccess());
+        WorkItemRules.requireWritableAccess(visible.actorAccess());
         return idempotency.execute(new IdempotencyCommand(new IdempotencyScope(actor.userId(),
                 "POST", "importWorkItems", command.idempotencyKey()), command.requestHash()),
                 () -> run(command));
@@ -116,7 +118,7 @@ public class WorkItemImportService {
     private StoredCommandResult run(Command command) {
         CurrentActor actor = command.actor();
         ProjectFactWriteSnapshot project = writeGuard.lockForFactWrite(actor, command.projectId());
-        WorkItemService.requireWritableAccess(project.actorAccess());
+        WorkItemRules.requireWritableAccess(project.actorAccess());
         ItemWriteTarget target = ItemWriteTarget.from(project);
         List<WorkItemLabelModels.StatusLabel> statuses = labels.statuses(
                 target.companyId(), target.projectId());
@@ -165,7 +167,7 @@ public class WorkItemImportService {
         for (UUID contentId : contentIds) {
             Content content = core.lockCreationContent(project.companyId(), project.projectId(), contentId)
                     .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-            WorkItemService.requireActiveContent(content);
+            WorkItemRules.requireActiveContent(content);
             core.markContentUsed(project, content, actor);
         }
 
@@ -204,7 +206,7 @@ public class WorkItemImportService {
             PlannedRow planned = creates.get(index);
             String code = statusCode(planned);
             WorkItemLabelModels.StatusLabel status = statusByCode.get(code);
-            String rank = core.allocateRank(project.companyId(), project.projectId(), code,
+            String rank = ordering.allocateRank(project.companyId(), project.projectId(), code,
                     WorkItemRankPlacement.START, null, null).rank();
             long sequence = sequences[index];
             WorkItem item;
@@ -276,7 +278,7 @@ public class WorkItemImportService {
         }
         if (fields.contains(Field.STATUS) && !statusCode(planned).equals(current.statusCode())) {
             WorkItemLabelModels.StatusLabel status = statusByCode.get(statusCode(planned));
-            String rank = core.allocateRank(project.companyId(), project.projectId(),
+            String rank = ordering.allocateRank(project.companyId(), project.projectId(),
                     status.code(), WorkItemRankPlacement.START, null, current.id()).rank();
             WorkItem moved = current.move(status.code(),
                     WorkItemStatusCategory.valueOf(status.statusCategory()), rank,

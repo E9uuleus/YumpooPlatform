@@ -3,7 +3,7 @@ package com.yumpoo.platform.workitem.application.connection;
 import com.yumpoo.platform.workitem.application.ItemWriteTarget;
 import com.yumpoo.platform.workitem.application.WorkItemModels;
 import com.yumpoo.platform.workitem.application.WorkItemRepository;
-import com.yumpoo.platform.workitem.application.WorkItemService;
+import com.yumpoo.platform.workitem.application.WorkItemCommandService;
 import com.yumpoo.platform.catalog.api.ProjectAccessSnapshot;
 import com.yumpoo.platform.catalog.api.ProjectAccessSnapshotQuery;
 import com.yumpoo.platform.catalog.api.ProjectConnectionTargetQuery;
@@ -51,7 +51,7 @@ public class WorkItemConnectionService {
     private final WorkItemConnectionRepository connections;
     private final ConnectColumnRepository columns;
     private final WorkItemRepository items;
-    private final WorkItemService itemService;
+    private final WorkItemCommandService itemService;
     private final ProjectAccessSnapshotQuery access;
     private final ProjectConnectionTargetQuery targets;
     private final ProjectFactWriteGuard guard;
@@ -63,7 +63,7 @@ public class WorkItemConnectionService {
     private final Clock clock;
 
     public WorkItemConnectionService(WorkItemConnectionRepository connections, ConnectColumnRepository columns,
-            WorkItemRepository items, WorkItemService itemService, ProjectAccessSnapshotQuery access,
+            WorkItemRepository items, WorkItemCommandService itemService, ProjectAccessSnapshotQuery access,
             ProjectConnectionTargetQuery targets, ProjectFactWriteGuard guard, ConnectionCardReader cards,
             MinimalUserSnapshotQuery users, IdempotentCommandExecutor idempotency, TransactionalEventPort events,
             ObjectMapper json, Clock clock) {

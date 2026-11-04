@@ -2,10 +2,8 @@ package com.yumpoo.platform.workitem.application;
 
 import com.yumpoo.platform.workitem.application.content.ContentModels;
 import com.yumpoo.platform.workitem.application.content.ContentRepository;
-import com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateRepository;
 import com.yumpoo.platform.workitem.application.label.WorkItemLabelModels;
 import com.yumpoo.platform.workitem.application.label.WorkItemLabelRepository;
-import com.yumpoo.platform.workitem.application.time.TimeTrackingRepository;
 import com.yumpoo.platform.catalog.api.ProjectAccessSnapshot;
 import com.yumpoo.platform.catalog.api.ProjectAccessSnapshotQuery;
 import com.yumpoo.platform.catalog.api.ProjectActiveMembershipQuery;
@@ -64,18 +62,21 @@ class WorkItemCreationCoreTest {
     private final CollaborationHtmlSanitizer sanitizer = mock(CollaborationHtmlSanitizer.class);
     private final Content content = Content.initial(UUID.randomUUID(), company, project,
             "TASKS", "任务", "BRIGHT_GREEN", 10, user, now).markUsed(user, now);
-    private WorkItemService service;
+    private WorkItemCommandService service;
 
     @BeforeEach
     void setUp() {
         var idempotency = mock(IdempotentCommandExecutor.class);
         when(idempotency.execute(any(), any())).thenAnswer(call ->
                 IdempotencyExecutionResult.executed(call.<Supplier<StoredCommandResult>>getArgument(1).get()));
-        service = new WorkItemService(items, relations, contents, mock(WorkItemUpdateRepository.class),
-                access, guard, members, labels, mock(MinimalUserSnapshotQuery.class), idempotency,
-                events, JsonMapper.builder().build(), Clock.fixed(now, ZoneOffset.UTC),
-                mock(TimeTrackingRepository.class), sanitizer,
-                mock(com.yumpoo.platform.catalog.api.ProjectConnectionTargetQuery.class));
+        var json = JsonMapper.builder().build();
+        var clock = Clock.fixed(now, ZoneOffset.UTC);
+        var views = new WorkItemViews(contents, access, mock(MinimalUserSnapshotQuery.class), json);
+        var workItemEvents = new WorkItemEvents(events, json);
+        var ordering = new WorkItemOrderingService(items, relations, contents, guard, labels,
+                idempotency, clock, views, workItemEvents);
+        service = new WorkItemCommandService(items, relations, contents, guard, members, labels,
+                idempotency, clock, sanitizer, ordering, views, workItemEvents);
         when(access.findVisible(actor, project)).thenReturn(Optional.of(new ProjectAccessSnapshot(
                 project, company, ProjectAccessSnapshot.ProjectLifecycle.ACTIVE,
                 ProjectAccessSnapshot.ActorProjectAccess.MEMBER, 0, OptionalLong.of(0))));

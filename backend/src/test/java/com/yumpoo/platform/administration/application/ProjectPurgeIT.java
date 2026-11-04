@@ -17,7 +17,7 @@ import com.yumpoo.platform.workitem.application.DueTimeChange;
 import com.yumpoo.platform.workitem.application.WorkItemCommands;
 import com.yumpoo.platform.workitem.application.connection.WorkItemConnectionCommands;
 import com.yumpoo.platform.workitem.application.connection.WorkItemConnectionService;
-import com.yumpoo.platform.workitem.application.WorkItemService;
+import com.yumpoo.platform.workitem.application.WorkItemCommandService;
 import com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateCommands;
 import com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateService;
 import org.junit.jupiter.api.BeforeEach;
@@ -91,7 +91,7 @@ class ProjectPurgeIT {
     @Autowired private ProjectPurgeQueue queue;
     @Autowired private ProjectCreationOrchestrator creation;
     @Autowired private ProjectDeletionOperations deletion;
-    @Autowired private WorkItemService items;
+    @Autowired private WorkItemCommandService items;
     @Autowired private WorkItemUpdateService discussions;
     @Autowired private ConnectColumnService columns;
     @Autowired private WorkItemConnectionService connections;

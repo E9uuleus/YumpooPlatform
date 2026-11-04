@@ -9,17 +9,18 @@ const manifest = readFreezeManifest(repositoryRoot)
 const applicationRoot = path.join(repositoryRoot, 'backend', 'src', 'main', 'java',
   'com', 'yumpoo', 'platform', 'workitem', 'application')
 const serviceFiles = new Map([
-  ['WorkItemService', path.join(applicationRoot, 'WorkItemService.java')],
-  ['WorkItemUpdateService', path.join(applicationRoot, 'discussion', 'WorkItemUpdateService.java')],
-  ['WorkItemRelationService', path.join(applicationRoot, 'WorkItemRelationService.java')],
+  ['WorkItemService', [path.join(applicationRoot, 'WorkItemEvents.java'),
+    path.join(applicationRoot, 'WorkItemLifecycleService.java')]],
+  ['WorkItemUpdateService', [path.join(applicationRoot, 'discussion', 'WorkItemUpdateService.java')]],
+  ['WorkItemRelationService', [path.join(applicationRoot, 'WorkItemRelationService.java')]],
 ])
 const eventPattern = /workitem\.work_item_[a-z0-9_]+/gu
 const currentBundle = loadCurrentBundle(repositoryRoot, manifest)
 const registered = new Set(currentBundle.events.map(event => event.eventType))
 const produced = new Set()
 
-for (const [producer, file] of serviceFiles) {
-  const actual = matches(read(file), eventPattern)
+for (const [producer, files] of serviceFiles) {
+  const actual = matches(files.map(read).join('\n'), eventPattern)
   const expected = new Set(manifest.events
     .filter((event) => event.producers.includes(producer))
     .map((event) => event.eventType))
