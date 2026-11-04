@@ -66,6 +66,8 @@ audience: [developer]
 | [已归档工作项](../../../../../../.agents/notes/implemented/product/2026-10-30-archived-work-items.md) | 工具栏抽屉查看与恢复归档的工作项 |
 | [工作项表格骨架加载](../../../../../../.agents/notes/implemented/product/2026-10-30-work-item-table-skeleton-loading.md) | 加载时显示与列对齐的骨架和扫光 |
 | [菜单项目排序](../../../../../../.agents/notes/implemented/product/2026-10-30-sidebar-project-order.md) | 置顶 → 最近打开 → 其余按名称 |
+| [工作项字段图标](../../../../../../.agents/notes/implemented/product/2026-11-04-work-item-field-identity.md) | 字段图标与颜色只在一处登记，全局一致 |
+| [工作项看板卡片](../../../../../../.agents/notes/implemented/product/2026-11-04-work-item-kanban-cards.md) | 卡片标签直接编辑，各列独立滚动 |
 
 ## 流程
 
