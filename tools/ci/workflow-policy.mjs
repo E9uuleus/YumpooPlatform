@@ -44,6 +44,7 @@ export function assertWorkflowSafety(workflow) {
       && step.with?.name?.startsWith(`ci-${id}-`))
     const download = workflow.jobs.linux.steps.find(step => step.uses?.startsWith('actions/download-artifact@')
       && step.with?.name?.startsWith(`ci-${id}-`))
+    assert(upload && download, `${id} 阶段结果必须由 ${id} 上传、由 linux 下载`)
     assert.equal(upload.with.name, download.with.name)
     assert(upload.with.name.includes('github.run_id') && upload.with.name.includes('github.run_attempt'))
     assert.equal(upload.with['if-no-files-found'], 'error')
