@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { useMinuteClock } from '../../composables/useMinuteClock'
 import { ElTooltip } from 'element-plus'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed } from 'vue'
 import { useSession } from '../../composables/useSession'
 import { formatChineseTimestamp, formatRelativeTime } from '../../design-system/dates'
 import YpAssignee from '../yp/YpAssignee.vue'
@@ -10,12 +11,9 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ openActivity: [] }>()
 const session = useSession()
-const now = ref(new Date())
+const now = useMinuteClock()
 const memberName = computed(() => props.item.updatedByDisplayName?.trim() || '历史成员')
 const tooltip = computed(() => `由${memberName.value}更新于${formatChineseTimestamp(props.item.updatedAt, session.authentication.value?.company.timezone ?? 'Asia/Shanghai')}`)
-let timer: ReturnType<typeof setInterval> | undefined
-onMounted(() => { timer = setInterval(() => { now.value = new Date() }, 60_000) })
-onBeforeUnmount(() => { if (timer) clearInterval(timer) })
 </script>
 
 <template>

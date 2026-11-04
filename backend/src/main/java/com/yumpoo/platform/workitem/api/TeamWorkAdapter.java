@@ -1,8 +1,8 @@
 package com.yumpoo.platform.workitem.api;
 
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
-import com.yumpoo.platform.workitem.application.TeamWorkRepository;
-import com.yumpoo.platform.workitem.application.TeamWorkService;
+import com.yumpoo.platform.workitem.application.time.TeamWorkRepository;
+import com.yumpoo.platform.workitem.application.time.TeamWorkService;
 import org.springframework.stereotype.Component;
 import java.time.Instant;
 import java.time.LocalDate;

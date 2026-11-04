@@ -19,6 +19,8 @@ audience: [developer]
 
 不使用 Pinia。共享状态写成**模块级的组合式函数**（例如 `useSession`、`useTimeTracker`、`useAppearance`）：模块内持有 `ref`，多个组件调用得到同一份状态。跨窗口同步计时状态用 BroadcastChannel，桌面端另有 IPC 通知。
 
+工作项最后更新、讨论、活动记录和归档项目倒计时共用 `useMinuteClock`，按整分钟刷新；最后一个使用者卸载时停止时钟，页面重新可见或获得焦点时刷新。
+
 ## API 接入
 
 - 页面通过生成的 `@yumpoo/api-client` 调用后端，客户端由 OpenAPI 生成，见 [API 契约与客户端生成](api-contracts.md)。
@@ -27,6 +29,7 @@ audience: [developer]
 
 ## 路由与守卫
 
+- 项目与公司管理页面按需加载，首次进入沿用顶部加载进度；应用外壳、登录页、状态页与桌面计时窗保持静态加载。
 - 进入任何非公开路由前，守卫会确认会话，未登录跳转登录页并记住返回地址；账号停用、需要升级客户端、服务不可用分别进入对应状态页。
 - 路由 `meta.requiredRoles` 声明角色要求，不满足时进入无权限页。
 - `meta.public` 的路由不需要登录：登录页、`/download` 和本文档站 `/docs`。
