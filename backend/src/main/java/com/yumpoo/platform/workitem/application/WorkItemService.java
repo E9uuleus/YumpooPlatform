@@ -1,5 +1,12 @@
 package com.yumpoo.platform.workitem.application;
 
+import com.yumpoo.platform.workitem.application.content.ContentModels;
+import com.yumpoo.platform.workitem.application.content.ContentRepository;
+import com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateRepository;
+import com.yumpoo.platform.workitem.application.label.WorkItemLabelModels;
+import com.yumpoo.platform.workitem.application.label.WorkItemLabelRepository;
+import com.yumpoo.platform.workitem.application.time.TimeTrackingModels;
+import com.yumpoo.platform.workitem.application.time.TimeTrackingRepository;
 import com.yumpoo.platform.catalog.api.ProjectAccessSnapshot;
 import com.yumpoo.platform.catalog.api.ProjectAccessSnapshotQuery;
 import com.yumpoo.platform.catalog.api.ProjectConnectionTargetQuery;

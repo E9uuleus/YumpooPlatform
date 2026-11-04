@@ -2,8 +2,8 @@ package com.yumpoo.platform.workitem.api;
 
 import com.yumpoo.platform.foundation.api.http.IfMatchParser;
 import com.yumpoo.platform.identityaccess.api.CurrentActorProvider;
-import com.yumpoo.platform.workitem.application.WorkItemLabelModels.LabelCatalog;
-import com.yumpoo.platform.workitem.application.WorkItemLabelService;
+import com.yumpoo.platform.workitem.application.label.WorkItemLabelModels.LabelCatalog;
+import com.yumpoo.platform.workitem.application.label.WorkItemLabelService;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;

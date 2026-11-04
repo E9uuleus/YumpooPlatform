@@ -1,7 +1,7 @@
 package com.yumpoo.platform.workitem.infrastructure;
 
-import com.yumpoo.platform.workitem.application.ContentModels.ContentLocator;
-import com.yumpoo.platform.workitem.application.ContentRepository;
+import com.yumpoo.platform.workitem.application.content.ContentModels.ContentLocator;
+import com.yumpoo.platform.workitem.application.content.ContentRepository;
 import com.yumpoo.platform.workitem.domain.Content;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;

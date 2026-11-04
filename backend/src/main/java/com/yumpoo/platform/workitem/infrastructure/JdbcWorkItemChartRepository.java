@@ -1,8 +1,8 @@
 package com.yumpoo.platform.workitem.infrastructure;
 
-import com.yumpoo.platform.workitem.application.ChartStatistics;
-import com.yumpoo.platform.workitem.application.WorkItemChartRepository;
-import com.yumpoo.platform.workitem.application.WorkItemStatisticsRepository;
+import com.yumpoo.platform.workitem.application.statistics.ChartStatistics;
+import com.yumpoo.platform.workitem.application.statistics.WorkItemChartRepository;
+import com.yumpoo.platform.workitem.application.statistics.WorkItemStatisticsRepository;
 import com.yumpoo.platform.workitem.domain.StatisticsFilter;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;

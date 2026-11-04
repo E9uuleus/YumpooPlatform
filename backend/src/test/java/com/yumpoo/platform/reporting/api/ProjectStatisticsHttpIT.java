@@ -11,7 +11,7 @@ import com.yumpoo.platform.identityaccess.application.session.SessionService;
 import com.yumpoo.platform.identityaccess.application.verification.IdentityAcceptanceFixtureProvisioner;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
 import com.yumpoo.platform.testing.HttpIntegrationTest;
-import com.yumpoo.platform.workitem.application.WorkItemLabelRepository;
+import com.yumpoo.platform.workitem.application.label.WorkItemLabelRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

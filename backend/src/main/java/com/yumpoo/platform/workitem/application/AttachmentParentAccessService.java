@@ -1,5 +1,7 @@
 package com.yumpoo.platform.workitem.application;
 
+import com.yumpoo.platform.workitem.application.content.ContentRepository;
+import com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateRepository;
 import com.yumpoo.platform.catalog.api.ProjectAccessSnapshot;
 import com.yumpoo.platform.catalog.api.ProjectAccessSnapshotQuery;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
@@ -8,7 +10,7 @@ import com.yumpoo.platform.identityaccess.api.ActiveUserSnapshot;
 import com.yumpoo.platform.identityaccess.api.ActiveUserSnapshotQuery;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.workitem.application.WorkItemModels.WorkItemLocator;
-import com.yumpoo.platform.workitem.application.WorkItemUpdateModels.UpdateLocator;
+import com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateModels.UpdateLocator;
 import com.yumpoo.platform.workitem.domain.Content;
 import com.yumpoo.platform.workitem.domain.WorkItem;
 import com.yumpoo.platform.workitem.domain.WorkItemUpdate;

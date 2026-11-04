@@ -1,7 +1,7 @@
 package com.yumpoo.platform.workitem.infrastructure;
 
 import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
-import com.yumpoo.platform.workitem.application.WorkItemConnectionRepository;
+import com.yumpoo.platform.workitem.application.connection.WorkItemConnectionRepository;
 import com.yumpoo.platform.workitem.domain.WorkItemConnection;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -20,7 +20,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-import static com.yumpoo.platform.workitem.application.WorkItemConnectionModels.*;
+import static com.yumpoo.platform.workitem.application.connection.WorkItemConnectionModels.*;
 
 @Repository
 public class JdbcWorkItemConnectionRepository implements WorkItemConnectionRepository {

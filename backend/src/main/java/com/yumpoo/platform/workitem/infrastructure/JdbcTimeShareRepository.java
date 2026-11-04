@@ -1,13 +1,13 @@
 package com.yumpoo.platform.workitem.infrastructure;
 
-import com.yumpoo.platform.workitem.application.TimeShareRepository;
+import com.yumpoo.platform.workitem.application.time.TimeShareRepository;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.*;
-import static com.yumpoo.platform.workitem.application.TimeTrackingModels.Session;
-import static com.yumpoo.platform.workitem.application.TimeShareCalculator.Share;
+import static com.yumpoo.platform.workitem.application.time.TimeTrackingModels.Session;
+import static com.yumpoo.platform.workitem.application.time.TimeShareCalculator.Share;
 
 @Repository
 public class JdbcTimeShareRepository implements TimeShareRepository {

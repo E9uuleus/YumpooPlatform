@@ -1,7 +1,7 @@
 package com.yumpoo.platform.workitem.infrastructure;
 
-import com.yumpoo.platform.workitem.application.WorkItemUpdateModels.UpdateCursor;
-import com.yumpoo.platform.workitem.application.WorkItemUpdateRepository;
+import com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateModels.UpdateCursor;
+import com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateRepository;
 import com.yumpoo.platform.workitem.domain.WorkItemUpdate;
 import com.yumpoo.platform.workitem.domain.WorkItemUpdateStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -18,7 +18,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
-import static com.yumpoo.platform.workitem.application.WorkItemUpdateModels.UpdateLocator;
+import static com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateModels.UpdateLocator;
 
 @Repository
 public class JdbcWorkItemUpdateRepository implements WorkItemUpdateRepository {

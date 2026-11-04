@@ -1,9 +1,9 @@
 package com.yumpoo.platform.workitem.infrastructure;
 
-import com.yumpoo.platform.workitem.application.TimeCategory;
-import com.yumpoo.platform.workitem.application.TimeTrackingModels;
-import com.yumpoo.platform.workitem.application.TimeSubject;
-import com.yumpoo.platform.workitem.application.TimeTrackingRepository;
+import com.yumpoo.platform.workitem.application.time.TimeCategory;
+import com.yumpoo.platform.workitem.application.time.TimeTrackingModels;
+import com.yumpoo.platform.workitem.application.time.TimeSubject;
+import com.yumpoo.platform.workitem.application.time.TimeTrackingRepository;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import java.sql.ResultSet;
@@ -11,7 +11,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.*;
-import static com.yumpoo.platform.workitem.application.TimeTrackingModels.*;
+import static com.yumpoo.platform.workitem.application.time.TimeTrackingModels.*;
 
 @Repository
 public class JdbcTimeTrackingRepository implements TimeTrackingRepository {

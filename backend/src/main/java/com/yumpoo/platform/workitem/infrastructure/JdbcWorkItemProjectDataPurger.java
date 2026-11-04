@@ -1,8 +1,8 @@
 package com.yumpoo.platform.workitem.infrastructure;
 
 import com.yumpoo.platform.foundation.application.purge.ProjectDataPurger;
-import com.yumpoo.platform.workitem.application.TimeShareMaintainer;
-import com.yumpoo.platform.workitem.application.TimeTrackingRepository;
+import com.yumpoo.platform.workitem.application.time.TimeShareMaintainer;
+import com.yumpoo.platform.workitem.application.time.TimeTrackingRepository;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;

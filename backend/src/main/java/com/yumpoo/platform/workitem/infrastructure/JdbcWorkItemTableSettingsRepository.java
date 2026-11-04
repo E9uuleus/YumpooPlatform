@@ -1,11 +1,11 @@
 package com.yumpoo.platform.workitem.infrastructure;
 
-import com.yumpoo.platform.workitem.application.WorkItemTableSettingsModels.ColoringRule;
-import com.yumpoo.platform.workitem.application.WorkItemTableSettingsModels.DefaultValues;
-import com.yumpoo.platform.workitem.application.WorkItemTableSettingsModels.Grouping;
-import com.yumpoo.platform.workitem.application.WorkItemTableSettingsModels.Height;
-import com.yumpoo.platform.workitem.application.WorkItemTableSettingsModels.Write;
-import com.yumpoo.platform.workitem.application.WorkItemTableSettingsRepository;
+import com.yumpoo.platform.workitem.application.settings.WorkItemTableSettingsModels.ColoringRule;
+import com.yumpoo.platform.workitem.application.settings.WorkItemTableSettingsModels.DefaultValues;
+import com.yumpoo.platform.workitem.application.settings.WorkItemTableSettingsModels.Grouping;
+import com.yumpoo.platform.workitem.application.settings.WorkItemTableSettingsModels.Height;
+import com.yumpoo.platform.workitem.application.settings.WorkItemTableSettingsModels.Write;
+import com.yumpoo.platform.workitem.application.settings.WorkItemTableSettingsRepository;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import tools.jackson.databind.ObjectMapper;

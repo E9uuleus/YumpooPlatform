@@ -1,9 +1,9 @@
 package com.yumpoo.platform.workitem.infrastructure;
 
-import com.yumpoo.platform.workitem.application.WorkItemLabelModels.PriorityLabel;
-import com.yumpoo.platform.workitem.application.WorkItemLabelModels.StatusLabel;
-import com.yumpoo.platform.workitem.application.WorkItemLabelRepository;
-import com.yumpoo.platform.workitem.application.DefaultProjectStructure;
+import com.yumpoo.platform.workitem.application.label.WorkItemLabelModels.PriorityLabel;
+import com.yumpoo.platform.workitem.application.label.WorkItemLabelModels.StatusLabel;
+import com.yumpoo.platform.workitem.application.label.WorkItemLabelRepository;
+import com.yumpoo.platform.workitem.application.content.DefaultProjectStructure;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 

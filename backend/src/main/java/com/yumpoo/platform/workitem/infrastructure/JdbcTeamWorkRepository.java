@@ -1,6 +1,6 @@
 package com.yumpoo.platform.workitem.infrastructure;
 
-import com.yumpoo.platform.workitem.application.TeamWorkRepository;
+import com.yumpoo.platform.workitem.application.time.TeamWorkRepository;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import java.sql.Timestamp;

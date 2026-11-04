@@ -1,7 +1,7 @@
 package com.yumpoo.platform.workitem.api;
 
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
-import com.yumpoo.platform.workitem.application.TimeTrackingService;
+import com.yumpoo.platform.workitem.application.time.TimeTrackingService;
 import org.springframework.stereotype.Component;
 import java.util.UUID;
 

@@ -1,6 +1,6 @@
 package com.yumpoo.platform.workitem.infrastructure;
 
-import com.yumpoo.platform.workitem.application.ConnectColumnRepository;
+import com.yumpoo.platform.workitem.application.connection.ConnectColumnRepository;
 import com.yumpoo.platform.workitem.domain.ConnectColumn;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;

@@ -8,7 +8,7 @@ import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
 import com.yumpoo.platform.foundation.api.web.ApiV1Controller;
 import com.yumpoo.platform.foundation.application.idempotency.StoredCommandResult;
 import com.yumpoo.platform.identityaccess.api.CurrentActorProvider;
-import com.yumpoo.platform.workitem.application.ConnectColumnService;
+import com.yumpoo.platform.workitem.application.connection.ConnectColumnService;
 import jakarta.validation.Valid;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
@@ -18,8 +18,8 @@ import java.net.URI;
 import java.util.Map;
 import java.util.UUID;
 
-import static com.yumpoo.platform.workitem.application.ConnectColumnCommands.*;
-import static com.yumpoo.platform.workitem.application.ConnectColumnModels.*;
+import static com.yumpoo.platform.workitem.application.connection.ConnectColumnCommands.*;
+import static com.yumpoo.platform.workitem.application.connection.ConnectColumnModels.*;
 
 @ApiV1Controller
 public final class ConnectColumnController {

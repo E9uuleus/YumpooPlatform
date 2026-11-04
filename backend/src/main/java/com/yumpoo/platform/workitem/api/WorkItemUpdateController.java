@@ -7,12 +7,12 @@ import com.yumpoo.platform.foundation.api.web.ApiV1Controller;
 import com.yumpoo.platform.foundation.application.idempotency.StoredCommandResult;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.CurrentActorProvider;
-import com.yumpoo.platform.workitem.application.WorkItemUpdateCommands.Publish;
-import com.yumpoo.platform.workitem.application.WorkItemUpdateCommands.Edit;
-import com.yumpoo.platform.workitem.application.WorkItemUpdateCommands.Delete;
-import com.yumpoo.platform.workitem.application.WorkItemUpdateModels.WorkItemUpdatePage;
-import com.yumpoo.platform.workitem.application.WorkItemUpdateModels.WorkItemUpdateView;
-import com.yumpoo.platform.workitem.application.WorkItemUpdateService;
+import com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateCommands.Publish;
+import com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateCommands.Edit;
+import com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateCommands.Delete;
+import com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateModels.WorkItemUpdatePage;
+import com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateModels.WorkItemUpdateView;
+import com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateService;
 import jakarta.validation.Valid;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
@@ -113,7 +113,7 @@ public final class WorkItemUpdateController {
         CurrentActor actor = actors.requiredActive();
         service.find(actor, updateId);
         long expectedVersion = ifMatch.parseForVisibleResource(true, ifMatchHeader);
-        WorkItemUpdateView view = service.pin(new com.yumpoo.platform.workitem.application.WorkItemUpdateCommands.Pin(
+        WorkItemUpdateView view = service.pin(new com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateCommands.Pin(
                 actor, updateId, expectedVersion, body.pinned()));
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).eTag(Long.toString(view.rowVersion())).body(view);
     }

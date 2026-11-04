@@ -7,9 +7,9 @@ import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
 import com.yumpoo.platform.foundation.api.web.ApiV1Controller;
 import com.yumpoo.platform.foundation.application.idempotency.StoredCommandResult;
 import com.yumpoo.platform.identityaccess.api.CurrentActorProvider;
-import com.yumpoo.platform.workitem.application.ConnectCandidateSearch;
-import com.yumpoo.platform.workitem.application.WorkItemConnectionCommands;
-import com.yumpoo.platform.workitem.application.WorkItemConnectionService;
+import com.yumpoo.platform.workitem.application.connection.ConnectCandidateSearch;
+import com.yumpoo.platform.workitem.application.connection.WorkItemConnectionCommands;
+import com.yumpoo.platform.workitem.application.connection.WorkItemConnectionService;
 import jakarta.validation.Valid;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
@@ -20,7 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import static com.yumpoo.platform.workitem.application.WorkItemConnectionModels.*;
+import static com.yumpoo.platform.workitem.application.connection.WorkItemConnectionModels.*;
 
 @ApiV1Controller
 public final class WorkItemConnectionController {
