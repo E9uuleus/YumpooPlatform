@@ -3521,6 +3521,9 @@ onBeforeUnmount(() => {
                     :error="subitemState((scope.row.parent as ProjectWorkItemListItem).id).error"
                     :sort-rules="subitemState((scope.row.parent as ProjectWorkItemListItem).id).sortRules"
                     :columns="visibleSubitemColumns"
+                    :row-height="tableRowHeight"
+                    :coloring-rules="tableViewSettings.coloringRules"
+                    :today="companyToday"
                     :connect-columns="connect.visibleColumns"
                     :connect-cells="connect.cells"
                     :connect-read-only="connect.readOnly"
@@ -4761,7 +4764,7 @@ onBeforeUnmount(() => {
   background-color: var(--work-item-condition-row-bg);
 }
 
-:deep(.monday-table .el-table__body tr.work-item-table-row > td.el-table__cell.work-item-cell--colored:not(.work-item-menu-column):not(.monday-expand-column)) {
+:deep(.monday-table .el-table__body tr:is(.work-item-table-row, .subitem-table-row) > td.el-table__cell.work-item-cell--colored:not(.work-item-menu-column):not(.monday-expand-column)) {
   background-color: var(--work-item-condition-cell-bg);
 }
 
