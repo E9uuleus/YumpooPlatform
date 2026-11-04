@@ -13,6 +13,8 @@ export function assertWorkflowSafety(workflow) {
   const gate = workflow.jobs.windows
   assert.equal(gate.name, 'M0 Windows x64 Gate')
   assert.equal(workflow.jobs.linux.name, 'M0 Portable Gate')
+  assert.equal(workflow.jobs.static.name, 'Static Checks')
+  assert.equal(workflow.jobs.backend.name, 'Backend Checks')
   assert.equal(gate.if, '${{ always() }}')
   assert.deepEqual([...gate.needs].sort(), [...requiredJobs].sort())
   assert.deepEqual(Object.keys(workflow.jobs).filter(id => id !== 'windows').sort(), [...requiredJobs].sort(), '新增任务也必须进入合并门禁')
@@ -21,7 +23,9 @@ export function assertWorkflowSafety(workflow) {
   const cancellationIndex = gate.steps.findIndex(step => step.if === '${{ cancelled() }}' && step.run === 'exit 1')
   assert(gateIndex >= 0 && cancellationIndex >= 0 && cancellationIndex < gateIndex, '取消状态必须在正常门禁前明确失败')
   for (const [id, commands] of Object.entries({
-    linux: ['pnpm ci:static', 'pnpm ci:backend', 'pnpm ci:portable'],
+    static: ['pnpm ci:static'],
+    backend: ['pnpm ci:backend'],
+    linux: ['pnpm ci:portable'],
     windows_delivery: ['pnpm ci:windows'],
   })) {
     const job = workflow.jobs[id]
@@ -33,6 +37,17 @@ export function assertWorkflowSafety(workflow) {
       const index = job.steps.findIndex(step => step.run === command)
       assert(index >= 0 && index < completionIndex && !job.steps[index].if, `必需命令不能缺失或跳过：${command}`)
     }
+  }
+  assert.deepEqual([...workflow.jobs.linux.needs].sort(), ['backend', 'static'])
+  for (const id of ['static', 'backend']) {
+    const upload = workflow.jobs[id].steps.find(step => step.uses?.startsWith('actions/upload-artifact@')
+      && step.with?.name?.startsWith(`ci-${id}-`))
+    const download = workflow.jobs.linux.steps.find(step => step.uses?.startsWith('actions/download-artifact@')
+      && step.with?.name?.startsWith(`ci-${id}-`))
+    assert(upload && download, `${id} 阶段结果必须由 ${id} 上传、由 linux 下载`)
+    assert.equal(upload.with.name, download.with.name)
+    assert(upload.with.name.includes('github.run_id') && upload.with.name.includes('github.run_attempt'))
+    assert.equal(upload.with['if-no-files-found'], 'error')
   }
   assert.deepEqual(workflow.jobs.windows_delivery.needs, ['linux'])
   for (const job of Object.values(workflow.jobs)) {
