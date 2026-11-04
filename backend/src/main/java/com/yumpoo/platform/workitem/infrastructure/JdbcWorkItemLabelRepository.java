@@ -24,7 +24,8 @@ public class JdbcWorkItemLabelRepository implements WorkItemLabelRepository {
     }
 
     @Override
-    public void initialize(UUID companyId, UUID projectId, Instant now) {
+    public void initialize(UUID companyId, UUID projectId, Map<String, String> statusColors,
+            Map<String, String> priorityColors, Instant now) {
         OffsetDateTime timestamp = OffsetDateTime.ofInstant(now, ZoneOffset.UTC);
         jdbc.sql("""
                 INSERT INTO yumpoo.project_work_item_label_catalog
@@ -43,7 +44,7 @@ public class JdbcWorkItemLabelRepository implements WorkItemLabelRepository {
                     ON CONFLICT (project_id, status_code) DO NOTHING
                     """).param("projectId", projectId).param("companyId", companyId)
                     .param("code", label.code()).param("name", label.displayName())
-                    .param("color", label.colorToken()).param("category", label.category())
+                    .param("color", statusColors.getOrDefault(label.code(), label.colorToken())).param("category", label.category())
                     .param("sortOrder", label.sortOrder()).param("protected", label.protectedLabel())
                     .param("now", timestamp).update();
         }
@@ -56,7 +57,7 @@ public class JdbcWorkItemLabelRepository implements WorkItemLabelRepository {
                     ON CONFLICT (project_id, priority_code) DO NOTHING
                     """).param("projectId", projectId).param("companyId", companyId)
                     .param("code", label.code()).param("name", label.displayName())
-                    .param("color", label.colorToken()).param("sortOrder", label.sortOrder())
+                    .param("color", priorityColors.getOrDefault(label.code(), label.colorToken())).param("sortOrder", label.sortOrder())
                     .param("now", timestamp).update();
         }
     }

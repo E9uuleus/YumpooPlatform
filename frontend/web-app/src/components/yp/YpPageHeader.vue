@@ -57,8 +57,6 @@ defineProps<{
   justify-content: space-between;
   gap: var(--yp-space-6);
   margin-bottom: var(--yp-space-5);
-  padding-bottom: var(--yp-space-5);
-  border-bottom: 1px solid var(--yp-border-subtle);
 }
 
 .yp-page-header__leading {

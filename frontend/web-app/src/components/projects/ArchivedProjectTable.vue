@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import YpSkeleton from '../yp/YpSkeleton.vue'
+import { usePageLoad } from '../../brand/page-progress'
+
 import { ProjectLifecycleFilter, readCsrfToken, type ProjectActorAccess, type ProjectPage, type ProjectSummary } from '@yumpoo/api-client'
 import { ElButton, ElInput, ElMessage, ElMessageBox, ElPagination, ElTable, ElTableColumn } from 'element-plus'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
@@ -14,6 +17,7 @@ import { notifyProjectLifecycleChanged } from '../../composables/projectLifecycl
 import { useSession } from '../../composables/useSession'
 import { formatTimestamp } from '../../design-system/dates'
 
+const pageLoad = usePageLoad()
 const props = defineProps<{ actorAccesses?: ProjectActorAccess[] }>()
 const router = useRouter(), session = useSession()
 const result = ref<ProjectPage>(), error = ref<ApiProblem>(), query = ref(''), page = ref(0)
@@ -78,7 +82,7 @@ async function restore(project: ProjectSummary): Promise<void> {
   } finally { busyProjectId.value = '' }
 }
 onMounted(() => {
-  void load()
+  void pageLoad.track(() => load())
   countdownTimer = setInterval(() => { now.value = Date.now() }, 60_000)
 })
 onBeforeUnmount(() => {
@@ -106,13 +110,19 @@ onBeforeUnmount(() => {
         />
         <el-button
           :loading="loading"
+          text
           @click="load"
         >
           刷新
         </el-button>
       </div>
+      <yp-skeleton
+        v-if="loading && !result?.items.length"
+        variant="table"
+        :rows="6"
+      />
       <div
-        v-if="loading || result?.items.length"
+        v-else-if="loading || result?.items.length"
         v-loading="loading"
         class="table-scroll"
         :aria-busy="loading"

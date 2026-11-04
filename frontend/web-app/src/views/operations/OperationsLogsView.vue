@@ -1,9 +1,9 @@
 <script setup lang="ts">
+import YpNotice from '../../components/yp/YpNotice.vue'
 import { Close, Filter, Search } from '@element-plus/icons-vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  ElAlert,
   ElButton,
   ElCheckbox,
   ElDrawer,
@@ -34,6 +34,7 @@ const q = ref(initial('q')),
   event = ref(initial('event')),
   userId = ref(initial('userId')),
   modules = ref(initial('modules').split(',').filter(Boolean))
+const failed = ref(initial('failed') === '1')
 const levels = ref((initial('levels') || 'INFO,WARN,ERROR').split(','))
 const range = ref<[Date, Date]>([new Date(Date.now() - 900000), new Date()])
 const following = ref(!initial('from')),
@@ -61,8 +62,14 @@ const filters = () => ({
   requestId: requestId.value,
   event: event.value,
   userId: userId.value,
+  failed: failed.value ? '1' : '',
 })
 const applied = ref(filters())
+/** 接口参数：URL 中的 failed=1 转为布尔筛选。 */
+const apiFilters = () => {
+  const { failed: only, ...rest } = applied.value
+  return { ...rest, ...(only ? { failed: true } : {}) }
+}
 const routeKey = (value: object) =>
   JSON.stringify(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)))
 let lastRouteKey = routeKey(route.query)
@@ -78,13 +85,13 @@ const query = useOperationsQuery(
       }
     }
   },
-  { interval: () => (following.value ? (more ? 500 : 3000) : 0) },
+  { pageLoad: true, interval: () => (following.value ? (more ? 500 : 3000) : 0) },
 )
 async function loadEntries(signal: AbortSignal) {
   if (following.value) {
     const result = await operationsApi.tailOperationsLogs(
       {
-        ...applied.value,
+        ...apiFilters(),
         ...(bootId.value ? { bootId: bootId.value } : {}),
         ...(afterSeq.value ? { afterSeq: afterSeq.value } : {}),
         limit: 500,
@@ -112,7 +119,7 @@ async function loadEntries(signal: AbortSignal) {
     if (result.droppedCount) warning.value = '部分超长日志未进入缓冲，请查询历史文件。'
   } else {
     const result = await operationsApi.queryOperationsLogs(
-      { ...applied.value, from: appliedRange.value[0], to: appliedRange.value[1], limit: 100 },
+      { ...apiFilters(), from: appliedRange.value[0], to: appliedRange.value[1], limit: 100 },
       { signal },
     )
     if (signal.aborted) return
@@ -134,7 +141,7 @@ const histogram = useOperationsQuery(
   (signal) =>
     operationsApi.getOperationsLogHistogram(
       {
-        ...applied.value,
+        ...apiFilters(),
         levels: 'TRACE,DEBUG,INFO,WARN,ERROR',
         from: histogramRange.value[0],
         to: histogramRange.value[1],
@@ -248,6 +255,7 @@ const activeFilters = computed(() =>
           .map((module) => moduleLabel(module))
           .join('、'),
     },
+    applied.value.failed && { key: 'failed', label: '失败请求（HTTP ≥ 400）' },
     applied.value.q && { key: 'q', label: '关键字：' + applied.value.q },
     applied.value.requestId && { key: 'requestId', label: '请求：' + shortId(applied.value.requestId) },
     applied.value.event && { key: 'event', label: '事件：' + applied.value.event },
@@ -261,9 +269,11 @@ function removeFilter(key: string) {
   else if (key === 'requestId') requestId.value = ''
   else if (key === 'event') event.value = ''
   else if (key === 'userId') userId.value = ''
+  else if (key === 'failed') failed.value = false
   search()
 }
 function clearFilters() {
+  failed.value = false
   restoreTimeSelection()
   modules.value = []
   q.value = ''
@@ -278,6 +288,12 @@ function restoreTimeSelection() {
   if (timeBeforeSelection) range.value = timeBeforeSelection.range
   customRange.value = false
   timeBeforeSelection = undefined
+}
+/** 4xx 记为 INFO、403 与 5xx 记为 WARN，开启时确保这两级在查询范围内。 */
+function toggleFailed() {
+  failed.value = !failed.value
+  if (failed.value) levels.value = [...new Set([...levels.value, 'INFO', 'WARN'])]
+  search()
 }
 function toggleLevel(level: string) {
   if (levels.value.includes(level)) {
@@ -346,7 +362,7 @@ const pagination = useOperationsQuery(
     if (!cursor.value || following.value) return
     const result = await operationsApi.queryOperationsLogs(
       {
-        ...applied.value,
+        ...apiFilters(),
         from: appliedRange.value[0],
         to: appliedRange.value[1],
         cursor: cursor.value,
@@ -418,6 +434,7 @@ watch(
     q.value = initial('q')
     event.value = initial('event')
     userId.value = initial('userId')
+    failed.value = initial('failed') === '1'
     modules.value = initial('modules').split(',').filter(Boolean)
     levels.value = (initial('levels') || 'INFO,WARN,ERROR').split(',')
     const live = !initial('from')
@@ -452,6 +469,7 @@ watch(
         ><i aria-hidden="true" />{{ paused ? '已暂停' : '实时' }}</span>
         <el-button
           v-if="following && !paused"
+          text
           @click="paused = true"
         >
           暂停显示
@@ -470,6 +488,15 @@ watch(
       </span>
     </div>
     <div class="log-toolbar__row">
+      <el-button
+        class="log-filter-button"
+        :class="{ active: failed }"
+        :aria-pressed="failed"
+        text
+        @click="toggleFailed"
+      >
+        失败请求
+      </el-button>
       <el-popover
         v-model:visible="modulesOpen"
         placement="bottom-start"
@@ -483,6 +510,7 @@ watch(
             :class="{ active: modules.length }"
             :icon="Filter"
             :aria-expanded="modulesOpen"
+            text
           >
             模块{{ modules.length ? ` · ${modules.length}` : '' }}
           </el-button>
@@ -545,6 +573,7 @@ watch(
               class="log-filter-button"
               :class="{ active: moreFilterCount }"
               :aria-expanded="moreOpen"
+              text
             >
               更多筛选{{ moreFilterCount ? ` · ${moreFilterCount}` : '' }}
             </el-button>
@@ -581,7 +610,10 @@ watch(
               />
             </label>
             <div class="log-panel__foot">
-              <el-button @click="clearMoreFilters">
+              <el-button
+                text
+                @click="clearMoreFilters"
+              >
                 清除
               </el-button>
               <el-button
@@ -649,13 +681,13 @@ watch(
       <span>{{ entries.length }} 条（最多保留 500 条）</span>
     </div>
   </div>
-  <el-alert
+  <yp-notice
     v-if="warning || histogram.data.value?.partial"
     class="log-notice"
-    type="warning"
-    :title="warning || '直方图为部分结果，请缩小范围重查。'"
-    :closable="false"
-  />
+    tone="warning"
+  >
+    {{ warning || '直方图为部分结果，请缩小范围重查。' }}
+  </yp-notice>
   <inline-problem
     v-if="histogram.error.value"
     :problem="histogram.error.value"
@@ -686,6 +718,7 @@ watch(
   >
     <el-button
       :loading="pagination.loading.value"
+      text
       @click="pagination.refresh"
     >
       加载更早
@@ -704,12 +737,12 @@ watch(
     <inline-problem
       v-if="trace.error.value"
       :problem="trace.error.value"
-    /><el-alert
+    /><yp-notice
       v-if="trace.data.value?.partial || trace.data.value?.nextCursor"
-      title="仅显示部分关联记录，可用 Request ID 在历史查询中缩小范围查看。"
-      type="warning"
-      :closable="false"
-    /><operations-log-stream
+      tone="warning"
+    >
+      仅显示部分关联记录，可用 Request ID 在历史查询中缩小范围查看。
+    </yp-notice><operations-log-stream
       :entries="[...(trace.data.value?.items ?? [])].reverse()"
       :relative-to="trace.data.value?.items.at(-1)?.record.time"
     />
@@ -721,7 +754,6 @@ watch(
   display: grid;
   gap: var(--yp-space-2);
   margin-bottom: var(--yp-space-3);
-  border-bottom: 1px solid var(--yp-border-subtle);
 }
 
 .log-toolbar__row {
@@ -741,7 +773,6 @@ watch(
 }
 
 .log-filter-button.active {
-  border-color: color-mix(in srgb, var(--yp-action-primary) 50%, var(--yp-border-default));
   color: var(--yp-action-primary);
   background: var(--yp-bg-selected);
 }
@@ -814,6 +845,8 @@ watch(
 
 .log-chip {
   cursor: pointer;
+  border: 0;
+  background: var(--yp-fill-neutral);
 }
 
 .log-chip__remove {
@@ -841,7 +874,6 @@ watch(
 }
 
 .log-chip:hover {
-  border-color: var(--yp-border-strong);
   color: var(--yp-text-primary);
 }
 

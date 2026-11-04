@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { inject, reactive } from 'vue'
 import { isWorkItemViewControl } from './workItemViewControls'
-import { vBrandLoading as vLoading } from '../../brand/loading'
+import './workItemSkeleton.css'
 import WorkItemDiscussionIcon from './WorkItemDiscussionIcon.vue'
 import WorkItemRowActions from './WorkItemRowActions.vue'
 import WorkItemNameCell from './WorkItemNameCell.vue'
@@ -93,8 +93,10 @@ const props = defineProps<{
   workflowStatuses: StatusOption[]
   priorityOptions: PriorityOption[]
   labelCatalog?: WorkItemLabelCatalog | undefined
-  /** 隐没已完成开启时，按本人完成定义淡化的子项。 */
+  /** 隐藏已完成开启时，按本人完成定义淡化的子项。 */
   completed?: ((item: ProjectWorkItemListItem) => boolean) | undefined
+  /** 勾选、单元格选中或详情打开的行，显示选中底色。 */
+  selected?: ((item: ProjectWorkItemListItem) => boolean) | undefined
   canCreate: boolean
   editingCell: boolean
   selectedCellKey?: string | undefined
@@ -384,6 +386,7 @@ function subitemRowElements(): HTMLTableRowElement[] {
 function subitemRowClassName({ row: item }: { row: ProjectWorkItemListItem }): string {
   return ['subitem-table-row', isDraft(item) ? 'work-item-draft-row' : '',
     draggingItem.value?.id === item.id ? 'subitem-table-row--dragging' : '',
+    props.selected?.(item) ? 'subitem-table-row--selected' : '',
     props.completed?.(item) ? 'work-item-table-row--completed' : ''].filter(Boolean).join(' ')
 }
 
@@ -917,7 +920,6 @@ onBeforeUnmount(() => {
 
       <el-table
         ref="subitemTableRef"
-        v-loading="loading"
         :data="displayItems"
         :row-class-name="subitemRowClassName"
         :row-style="subitemRowStyle"
@@ -925,9 +927,10 @@ onBeforeUnmount(() => {
         class="monday-subitem-table"
         :class="{
           'monday-subitem-table--empty': !loading && !error && !items.length,
+          'monday-subitem-table--loading': loading && !items.length,
           'monday-subitem-table--column-dragging': columnDraggingKey,
         }"
-        empty-text="暂无子项，可在下方快速添加"
+        :aria-busy="loading"
         border
         :cell-style="subitemCellStyle"
         :header-cell-style="subitemHeaderCellStyle"
@@ -1175,6 +1178,20 @@ onBeforeUnmount(() => {
           </template>
         </el-table-column>
 
+        <template #empty>
+          <span
+            v-if="loading"
+            class="subitem-loading-skeleton work-item-skeleton"
+            role="status"
+            aria-label="正在加载子项"
+          >
+            <i class="work-item-skeleton-block" />
+            <i class="work-item-skeleton-block" />
+          </span>
+          <template v-else>
+            暂无子项，可在下方快速添加
+          </template>
+        </template>
         <template #append>
           <div v-if="quickOpen" ref="quickRow" class="subitem-quick-row">
             <span class="subitem-quick-lead" aria-hidden="true" />
@@ -1471,6 +1488,9 @@ onBeforeUnmount(() => {
 :deep(.monday-subitem-table .subitem-selection-column) {
   border-left: 0;
 }
+:deep(.monday-subitem-table .el-table__body tr.subitem-table-row--selected > td.el-table__cell:not(.work-item-menu-column)) {
+  background-color: var(--yp-bg-selected-strong) !important;
+}
 :deep(.monday-subitem-table .el-table__header th.subitem-selection-column) {
   border-top: 0 !important;
   background-image: linear-gradient(
@@ -1527,6 +1547,18 @@ onBeforeUnmount(() => {
   min-height: var(--subitem-table-empty-height);
 }
 :deep(.monday-subitem-table--empty .el-table__empty-block) { display: none; }
+:deep(.monday-subitem-table--loading .el-table__empty-text) { width: 100%; line-height: normal; }
+.subitem-loading-skeleton {
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  width: 100%;
+  height: var(--subitem-table-empty-height);
+  box-sizing: border-box;
+  padding-left: calc(var(--subitem-menu-column-width) + 48px + 32px);
+}
+.subitem-loading-skeleton .work-item-skeleton-block:first-child { width: min(260px, 40%); height: 12px; }
+.subitem-loading-skeleton .work-item-skeleton-block:last-child { width: min(180px, 28%); }
 :deep(.monday-subitem-table th.subitem-movable-column-header),
 :deep(.monday-subitem-table td.subitem-movable-column) {
   transition: none;

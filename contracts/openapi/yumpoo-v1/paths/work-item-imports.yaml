@@ -1,0 +1,44 @@
+paths:
+  /projects/{projectId}/work-item-imports:
+    post:
+      tags:
+        - WorkItems
+      operationId: importWorkItems
+      summary: 批量导入或预览导入工作项
+      description: 仅项目内可创建工作项的成员可用，项目已归档或已结束时与新建工作项同样拒绝。每行按 title（trim 后）匹配本项目内未删除、未归档的工作项，duplicateMode 决定全部新增、跳过已有或更新已有；UPDATE 只覆盖 fields 列出的字段，值为 null 表示清空。dryRun 为 true 时只返回规划结果、不写入；为 false 时在单事务内提交，报错行跳过、其余行照常写入。父项按标题在本次文件与项目已有项中查找，并压平到根祖先。导入不发工作项事件与通知，整次只写一条安全审计。不处理工时。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkItemImportRequest"
+      responses:
+        "200":
+          description: 逐行规划结果；dryRun 为 false 时同时表示已提交，幂等重放返回同一结果。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemImportResult"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"

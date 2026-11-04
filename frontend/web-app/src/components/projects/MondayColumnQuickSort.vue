@@ -180,7 +180,7 @@ const tooltipText = computed(() => props.direction === 'ASC'
 
 .sort-trigger:hover,
 .sort-trigger:focus-visible {
-  color: var(--yp-text-inverse);
+  color: var(--yp-on-solid);
   background: var(--yp-action-primary);
   border-color: transparent;
   outline: none;
@@ -188,7 +188,7 @@ const tooltipText = computed(() => props.direction === 'ASC'
 }
 
 .sort-by-column--active .sort-trigger {
-  color: var(--yp-text-inverse);
+  color: var(--yp-on-solid);
   background: var(--yp-action-primary);
   border-color: transparent;
   box-shadow: 0 2px 6px color-mix(in srgb, var(--yp-action-primary) 35%, transparent);
@@ -231,29 +231,29 @@ const tooltipText = computed(() => props.direction === 'ASC'
 .sort-trigger:hover .desc-icon,
 .sort-trigger:focus-visible .asc-icon,
 .sort-trigger:focus-visible .desc-icon {
-  fill: var(--yp-text-inverse);
+  fill: var(--yp-on-solid);
   opacity: 1;
 }
 
 /* 激活-升序（图4：上方亮白，下方半透明淡蓝） */
 .sort-by-column--asc .asc-icon {
-  fill: var(--yp-text-inverse) !important;
+  fill: var(--yp-on-solid) !important;
   opacity: 1 !important;
 }
 
 .sort-by-column--asc .desc-icon {
-  fill: var(--yp-text-inverse) !important;
+  fill: var(--yp-on-solid) !important;
   opacity: 0.42 !important;
 }
 
 /* 激活-降序（图3：上方半透明淡蓝，下方亮白） */
 .sort-by-column--desc .asc-icon {
-  fill: var(--yp-text-inverse) !important;
+  fill: var(--yp-on-solid) !important;
   opacity: 0.42 !important;
 }
 
 .sort-by-column--desc .desc-icon {
-  fill: var(--yp-text-inverse) !important;
+  fill: var(--yp-on-solid) !important;
   opacity: 1 !important;
 }
 

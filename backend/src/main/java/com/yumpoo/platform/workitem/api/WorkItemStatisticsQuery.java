@@ -23,7 +23,8 @@ public interface WorkItemStatisticsQuery {
     record TableCriteria(String q, List<String> status, List<String> priority, List<UUID> assigneeUserId,
             List<UUID> contentId, LocalDate dueFrom, LocalDate dueTo, Instant updatedAfter, List<String> sort,
             String timeTrackingState, Long timeTrackingMinMs, Long timeTrackingMaxMs, String emptyField,
-            String cursor, Integer limit, String field, UUID parentWorkItemId, List<UUID> assigneeSetUserId) {}
+            String cursor, Integer limit, String field, UUID parentWorkItemId, List<UUID> assigneeSetUserId, String groupStatus, String groupPriority, UUID groupContentId,
+            LocalDate groupDueFrom, LocalDate groupDueTo, Boolean countSubitems) {}
     record TablePage(List<com.yumpoo.platform.workitem.application.WorkItemModels.ProjectWorkItemListItem> items,
             List<com.yumpoo.platform.workitem.application.WorkItemModels.ProjectWorkItemFilterOption> options,
             String nextCursor, List<UUID> contextIds, java.util.Map<UUID, Long> subitemCounts) {}

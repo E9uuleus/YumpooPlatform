@@ -113,7 +113,7 @@ onBeforeUnmount(() => { clearTimeout(timer); controller?.abort() })
 .assignee-picker__option:hover:not(:disabled) { background: var(--yp-bg-hover); }
 .assignee-picker__option:disabled { cursor: not-allowed; opacity: .55; }
 .assignee-picker__empty { display: inline-grid; width: 24px; height: 24px; place-items: center; border: 1px dashed var(--yp-border-strong); border-radius: 50%; color: var(--yp-text-muted); }
-.assignee-picker__footer { display: flex; justify-content: flex-end; gap: 8px; padding-top: 8px; border-top: 1px solid var(--yp-border-default); }
+.assignee-picker__footer { display: flex; justify-content: flex-end; gap: 8px; padding-top: 8px;  }
 .assignee-picker__footer button { min-height: 30px; padding: 0 14px; border: 0; border-radius: var(--yp-radius-sm); background: transparent; color: var(--yp-text-primary); font: inherit; font-size: 13px; cursor: pointer; }
 .assignee-picker__footer button:hover:not(:disabled) { background: var(--yp-bg-hover); }
 .assignee-picker__footer .assignee-picker__primary { background: var(--yp-action-primary); color: var(--yp-status-blue-foreground); }

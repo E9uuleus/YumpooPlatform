@@ -132,7 +132,7 @@ async function remove(archive: boolean): Promise<void> {
     if (props.beforeRemove && !await props.beforeRemove()) return
     const action = archive ? '归档' : '删除'
     await ElMessageBox.confirm(
-      `确定${action}“${props.item.title}”？${archive ? '归档后将从列表隐藏，可通过工作项链接恢复。' : '工作项将移出列表，历史记录将保留。'}${props.item.subitemCount ? '其子工作项将随父项从主表隐藏，父子关系保留。' : ''}`,
+      `确定${action}“${props.item.title}”？${archive ? '归档后将从列表隐藏，可在「已归档」中恢复。' : '工作项将移出列表，历史记录将保留。'}${props.item.subitemCount ? '其子工作项将随父项从主表隐藏，父子关系保留。' : ''}`,
       `${action}工作项`, { confirmButtonText: action, cancelButtonText: '取消', type: 'warning' },
     )
     const common = { workItemId: props.item.id, xXSRFTOKEN: csrf(), ifMatch: props.item.etag, idempotencyKey: crypto.randomUUID() }
@@ -214,7 +214,10 @@ async function makeIndependent(): Promise<void> {
           >
             <work-item-action-icon name="link" />复制工作项链接
           </el-dropdown-item>
-          <el-dropdown-item :disabled="!canCreate || locked" @click="duplicate">
+          <el-dropdown-item
+            :disabled="!canCreate || locked"
+            @click="duplicate"
+          >
             <work-item-action-icon name="duplicate" />复制工作项
           </el-dropdown-item>
           <el-dropdown-item
@@ -259,7 +262,10 @@ async function makeIndependent(): Promise<void> {
             @keydown.right.stop.prevent="showParentPicker($event, true)"
           >
             <work-item-action-icon name="convert" />转为子工作项
-            <work-item-action-icon name="chevron" class="row-action-submenu-arrow" />
+            <work-item-action-icon
+              name="chevron"
+              class="row-action-submenu-arrow"
+            />
           </el-dropdown-item>
           <el-dropdown-item
             v-if="parentId"
@@ -274,7 +280,10 @@ async function makeIndependent(): Promise<void> {
             @keydown.right.stop.prevent="showParentPicker($event, true)"
           >
             <work-item-action-icon name="move" />移到其他父项
-            <work-item-action-icon name="chevron" class="row-action-submenu-arrow" />
+            <work-item-action-icon
+              name="chevron"
+              class="row-action-submenu-arrow"
+            />
           </el-dropdown-item>
           <el-dropdown-item
             v-if="parentId"
@@ -316,7 +325,7 @@ async function makeIndependent(): Promise<void> {
             <work-item-action-icon name="archive" />归档
           </el-dropdown-item>
           <el-dropdown-item
-            class="row-action-delete"
+            class="yp-menu-item--danger"
             :disabled="!item.capabilities.canDelete"
             @click="remove(false)"
           >
@@ -341,13 +350,13 @@ tr.el-table__row.hover-row > td > .cell > .work-item-row-actions .work-item-row-
 @media (hover: none) { .work-item-row-menu-trigger { opacity: 1; } }
 .work-item-row-menu .el-dropdown-menu { min-width: 232px; padding: 8px; }
 .work-item-row-menu .el-scrollbar, .work-item-row-menu .el-scrollbar__wrap { overflow: visible; }
-.work-item-row-menu .el-dropdown-menu__item { min-height: 34px; padding: 0 10px; gap: 10px; border-radius: 4px; font-size: 14px; }
-.work-item-row-menu .el-dropdown-menu__item--divided { margin: 7px 0 0; }
+.work-item-row-menu .el-dropdown-menu__item { gap: 10px; }
+
 .work-item-row-menu .row-action-icon { display: inline-flex; width: 18px; height: 18px; flex: 0 0 18px; align-items: center; justify-content: center; font-size: 20px; line-height: 18px; }
-.work-item-row-menu .row-action-delete:not(.is-disabled) { color: var(--el-color-danger); }
+
 .work-item-row-menu .row-action-convert--open { background: var(--yp-bg-hover); }
 .row-action-submenu-arrow { width: 14px; height: 14px; margin-left: auto; }
-.work-item-parent-popover.el-popover { max-width: calc(100vw - 24px); padding: 16px; border-radius: 8px; box-sizing: border-box; }
+.work-item-parent-popover.el-popover { max-width: calc(100vw - 24px); padding: 16px;  box-sizing: border-box; }
 .monday-table td.work-item-menu-column, .monday-table th.work-item-menu-column,
 .monday-subitem-table td.work-item-menu-column, .monday-subitem-table th.work-item-menu-column { border: 0 !important; background: var(--yp-bg-surface) !important; }
 .monday-table .work-item-menu-column > .cell, .monday-subitem-table .work-item-menu-column > .cell { overflow: visible; padding: 0; }

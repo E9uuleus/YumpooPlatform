@@ -1,14 +1,26 @@
 <script setup lang="ts">
-import YpPageHeader from '../../components/yp/YpPageHeader.vue'
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
+import YpModulePage from '../../components/yp/YpModulePage.vue'
+
+const TITLES: Record<string, string> = {
+  'company-overview': '概览',
+  'company-projects': '项目',
+  'company-members': '成员与角色',
+  'company-activity': '活动日志',
+  'company-sync-runs': '同步运行',
+  'company-scheduled-jobs': '定时任务',
+  'company-work-calendar': '工作日历',
+}
+const route = useRoute()
+const title = computed(() => TITLES[String(route.name)] ?? '公司管理')
 </script>
 
 <template>
-  <section class="identity-admin">
-    <yp-page-header
-      eyebrow="公司与组织"
-      title="公司管理"
-      description="总览全公司项目与活动，查看公司与企微状态，管理通讯录同步、定时任务以及成员账号与角色。"
-    />
+  <yp-module-page
+    module="company"
+    :title="title"
+  >
     <router-view />
-  </section>
+  </yp-module-page>
 </template>

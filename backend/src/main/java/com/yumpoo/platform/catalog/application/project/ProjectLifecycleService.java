@@ -92,6 +92,9 @@ public class ProjectLifecycleService {
             throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION,
                     "PROJECT_ARCHIVED");
         }
+        if (project.ended()) {
+            throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION, "PROJECT_ENDED");
+        }
         return snapshot(project);
     }
 
@@ -99,6 +102,30 @@ public class ProjectLifecycleService {
     public ProjectApplicationSnapshot lockForModeration(java.util.UUID companyId,
                                                          java.util.UUID projectId) {
         return lockForNewFact(companyId, projectId);
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public ProjectApplicationSnapshot lockForEnded(ProjectEndCommand command) {
+        return snapshot(requireEndable(command));
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public ProjectApplicationSnapshot changeEnded(ProjectEndCommand command) {
+        Project before = requireEndable(command);
+        var now = clock.instant();
+        Project next = command.ended() ? before.end(command.actorUserId(), now) : before.resume(command.actorUserId(), now);
+        return snapshot(projects.changeEnded(next, command.expectedRowVersion())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT)));
+    }
+
+    private Project requireEndable(ProjectEndCommand command) {
+        Project project = requiredLocked(command.companyId(), command.projectId());
+        requireVersion(project, command.expectedRowVersion());
+        if (!command.admin() && !project.ownerUserId().equals(command.actorUserId()))
+            throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
+        requireLifecycle(project, ProjectLifecycle.ACTIVE);
+        if (project.ended() == command.ended()) throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
+        return project;
     }
 
     private Project requiredLocked(java.util.UUID companyId, java.util.UUID projectId) {
@@ -127,6 +154,6 @@ public class ProjectLifecycleService {
     private static ProjectApplicationSnapshot snapshot(Project project) {
         return new ProjectApplicationSnapshot(project.id(), project.companyId(), project.workspaceId(),
                 project.code(), project.name(), project.description(),
-                project.lifecycle().name(), project.ownerUserId(), project.rowVersion());
+                project.lifecycle().name(), project.ownerUserId(), project.rowVersion(), project.endedAt());
     }
 }

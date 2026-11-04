@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import YpNotice from '../yp/YpNotice.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type { TimerOrbChange, TimerOrbLayout, TimerPreferences, TimerPreferencesChange, TimerWindowMode } from '@yumpoo/preload-contract'
@@ -427,18 +428,21 @@ function keydown(event: KeyboardEvent) {
           </button>
         </div>
       </header>
-      <p
+      <yp-notice
         v-if="error"
         class="panel-problem"
-        role="alert"
+        size="small"
+        tone="danger"
       >
-        {{ error }} <button
-          class="text-button"
-          @click="retry"
-        >
-          重试
-        </button>
-      </p>
+        {{ error }} <template #actions>
+          <button
+            class="text-button"
+            @click="retry"
+          >
+            重试
+          </button>
+        </template>
+      </yp-notice>
       <TimerSettings
         v-if="view === 'settings' && preferences"
         :preferences="preferences"
@@ -535,13 +539,13 @@ function keydown(event: KeyboardEvent) {
             </button>
           </div>
         </div>
-        <p
+        <yp-notice
           v-if="!error && !tracker.connected.value"
-          class="panel-problem is-waiting"
-          role="status"
+          class="panel-problem"
+          size="small"
         >
           等待连接
-        </p>
+        </yp-notice>
         <div class="picker-search">
           <TimerIcon name="search" />
           <input
@@ -726,7 +730,7 @@ button:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:2px
 .picker-scope{display:flex;padding:2px;border-radius:9px;background:var(--yp-timer-sunken);box-shadow:inset 0 0 0 1px var(--yp-timer-hairline);flex-shrink:0}
 .picker-scope button{border:0;border-radius:7px;background:transparent;padding:4px 12px;font-size:11.5px;color:var(--yp-text-secondary)}
 .picker-scope button.is-active{background:var(--yp-timer-chip);color:var(--yp-text-primary);font-weight:600;box-shadow:var(--yp-timer-shadow-soft)}
-.picker-results{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:4px 8px 10px}
+.picker-results{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:4px 8px 10px}
 .candidate{position:relative;box-sizing:border-box;display:flex;align-items:center;gap:10px;width:100%;padding:9px 10px;text-align:left;border:0;border-radius:10px;background:transparent;margin:1px 0;animation:candidate-in .24s ease both}
 .candidate::before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--yp-timer-accent);opacity:0;transform:scaleY(.4);transition:opacity .16s ease,transform .2s var(--yp-timer-ease)}
 .candidate.is-selected,.candidate:hover{background:var(--yp-timer-hover)}
@@ -744,8 +748,7 @@ button:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:2px
 .text-button{color:var(--yp-timer-accent);border:0;background:transparent;padding:3px;font-size:12px}
 .picker-status{margin:6px 0;color:var(--yp-text-muted);font-size:12px;text-align:center}
 .picker-sentinel{height:1px}
-.panel-problem{margin:0 12px 10px;padding:7px 10px;font-size:11px;color:var(--yp-status-red);background:color-mix(in srgb,var(--yp-status-red) 8%,var(--yp-bg-raised));border-radius:8px}
-.panel-problem.is-waiting{color:var(--yp-text-secondary);background:var(--yp-timer-sunken)}
+.panel-problem{margin:0 12px 10px}
 .saved-feedback{display:flex;align-items:center;gap:7px;color:var(--yp-timer-saved);font-size:13px;font-weight:600}
 .saved-feedback svg{width:22px;height:22px;stroke-dasharray:36;animation:saved-check .42s ease both}
 .spinning{animation:orb-spin 1s linear infinite}

@@ -9,7 +9,7 @@ import { ElMessageBox } from 'element-plus'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ProjectLifecycleActions from './ProjectLifecycleActions.vue'
 
-const api = vi.hoisted(() => ({ archiveProject: vi.fn(), restoreProject: vi.fn(), getProjectWorkItemLabels: vi.fn(), listProjectWorkItemFilterOptions: vi.fn() }))
+const api = vi.hoisted(() => ({ archiveProject: vi.fn(), restoreProject: vi.fn(), endProject: vi.fn(), resumeProject: vi.fn(), getProjectWorkItemLabels: vi.fn(), listProjectWorkItemFilterOptions: vi.fn() }))
 vi.mock('../../api/client', () => ({ projectsApi: api, workItemsApi: api }))
 vi.mock('@yumpoo/api-client', async (importOriginal) => ({
   ...await importOriginal<typeof import('@yumpoo/api-client')>(),
@@ -25,6 +25,7 @@ const activeProject: ProjectDetail = {
   capabilities: {
     canUpdateSettings: true, canManageMembers: true,
     canReassignOwner: false, canArchive: true,
+    canEnd: false, canResume: false,
     canRestore: false, canMoveWorkspace: false, canOverrideArchive: true,
   },
   rowVersion: 3, etag: '"3"', createdAt: new Date(), updatedAt: new Date(),
@@ -62,6 +63,7 @@ describe('ProjectLifecycleActions', () => {
       capabilities: {
         canUpdateSettings: false,  canManageMembers: false,
         canReassignOwner: false, canArchive: false,
+        canEnd: false, canResume: false,
         canRestore: true, canMoveWorkspace: false, canOverrideArchive: false,
       },
       archivedAt: new Date(),
@@ -74,6 +76,22 @@ describe('ProjectLifecycleActions', () => {
     await wrapper.findAll('button').find(button => button.text() === '恢复项目')!.trigger('click')
     await flushPromises()
     expect(api.restoreProject).toHaveBeenCalledWith(expect.objectContaining({ projectId: archived.id, ifMatch: archived.etag, xXSRFTOKEN: 'csrf-token' }))
+    expect(wrapper.emitted('changed')).toHaveLength(1)
+  })
+
+  it('已结束项目可以确认后重新打开并通知刷新', async () => {
+    const ended: ProjectDetail = {
+      ...activeProject,
+      endedAt: new Date(),
+      capabilities: { ...activeProject.capabilities, canArchive: false, canResume: true },
+    }
+    const wrapper = mount(ProjectLifecycleActions, { props: { project: ended } })
+
+    expect(wrapper.text()).toContain('重新打开项目')
+    await wrapper.findAll('button').find(button => button.text() === '重新打开项目')!.trigger('click')
+    await flushPromises()
+    expect(ElMessageBox.confirm).toHaveBeenCalledWith(expect.stringContaining('成员可以继续编辑'), '重新打开项目', expect.any(Object))
+    expect(api.resumeProject).toHaveBeenCalledWith(expect.objectContaining({ projectId: ended.id, ifMatch: ended.etag, xXSRFTOKEN: 'csrf-token' }))
     expect(wrapper.emitted('changed')).toHaveLength(1)
   })
 

@@ -211,6 +211,10 @@ public final class ApiExceptionHandler extends ResponseEntityExceptionHandler {
             WebRequest request,
             List<ApiFieldError> fieldErrors
     ) {
+        if (request instanceof ServletWebRequest web) {
+            HttpAccessLog.rejected(web.getRequest(), code.name(), null, fieldErrors.stream()
+                    .map(error -> error.field() + ":" + error.code()).toList());
+        }
         String requestId = requestId(request);
         ApiErrorResponse body = ApiErrorResponses.create(
                 code,

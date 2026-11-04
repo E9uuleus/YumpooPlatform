@@ -157,7 +157,7 @@ const summary = computed(() => `${props.pinned ? '浮在其他应用上方' : '�
           <div class="settings-row">
             <div class="settings-row__label">
               <strong>顶部显示计时</strong>
-              <span>计时器开启时，在侧边栏顶部显示当前计时，取代原「计时侧边栏」；关闭后改用悬浮球。</span>
+              <span>计时器开启时，在侧边栏顶部显示当前计时；关闭后改用悬浮球。</span>
             </div>
             <el-switch
               :model-value="timer.display === 'dock'"

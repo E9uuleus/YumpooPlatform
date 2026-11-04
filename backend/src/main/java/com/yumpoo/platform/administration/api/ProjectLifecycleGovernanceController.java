@@ -1,6 +1,7 @@
 package com.yumpoo.platform.administration.api;
 
 import com.yumpoo.platform.administration.application.ProjectArchiveOperationCommand;
+import com.yumpoo.platform.administration.application.ProjectEndOperationCommand;
 import com.yumpoo.platform.administration.application.ProjectLifecycleGovernanceService;
 import com.yumpoo.platform.administration.application.ProjectRestoreOperationCommand;
 import com.yumpoo.platform.catalog.api.ProjectAccessSnapshotQuery;
@@ -73,6 +74,29 @@ public final class ProjectLifecycleGovernanceController {
                 Map.of("projectId", projectId.toString(), "ifMatch", Long.toString(version)),
                 objectMapper.createObjectNode()))).result();
         return stored(result);
+    }
+
+    @PostMapping("/projects/{projectId}/end")
+    ResponseEntity<String> end(@PathVariable UUID projectId,
+            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader,
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String keyHeader) {
+        return changeEnded(projectId, true, "endProject", ifMatchHeader, keyHeader);
+    }
+
+    @PostMapping("/projects/{projectId}/resume")
+    ResponseEntity<String> resume(@PathVariable UUID projectId,
+            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader,
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String keyHeader) {
+        return changeEnded(projectId, false, "resumeProject", ifMatchHeader, keyHeader);
+    }
+
+    private ResponseEntity<String> changeEnded(UUID projectId, boolean ended, String route, String ifMatchHeader, String keyHeader) {
+        CurrentActor actor = visible(projectId);
+        long version = ifMatch.parseForVisibleResource(true, ifMatchHeader);
+        UUID key = keys.parseRequired(keyHeader);
+        return stored(service.changeEnded(new ProjectEndOperationCommand(actor, projectId, version, key,
+                hasher.hash(route, Map.of("projectId", projectId.toString(), "ifMatch", Long.toString(version)),
+                        objectMapper.createObjectNode()), ended)).result());
     }
 
     @Deprecated(forRemoval = false)

@@ -91,18 +91,14 @@ watch(active, () => { query.value = '' })
             type="date"
             placeholder="不限"
             @update:model-value="draft.dueTo = $event; dateValue('dueTo', $event ? new Date($event).toLocaleDateString('sv-SE') : null)"
-          /><p class="dialog-intro">
-            按工作项截止日期筛选；耗时仍汇总这些工作项的全部实际计时。
-          </p>
+          />
         </template>
         <template v-else>
           <el-checkbox v-model="draft.includeArchived">
             包含已归档工作项
           </el-checkbox><el-checkbox v-model="draft.hasTime">
             仅显示有计时记录的工作项
-          </el-checkbox><p class="dialog-intro">
-            已删除的工作项和计时记录始终排除。
-          </p>
+          </el-checkbox>
         </template>
       </div>
     </div>

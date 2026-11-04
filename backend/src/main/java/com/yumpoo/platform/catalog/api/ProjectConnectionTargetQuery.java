@@ -12,9 +12,9 @@ public interface ProjectConnectionTargetQuery {
     record ConnectTargetProjectPage(List<ConnectTargetProject> items, int page, int size,
             long totalElements, int totalPages) {}
     record ConnectTargetProjectSnapshot(UUID projectId, String code, String name,
-            ProjectAccessSnapshot.ProjectLifecycle lifecycle,boolean purging) {
+            ProjectAccessSnapshot.ProjectLifecycle lifecycle,boolean purging,boolean ended) {
         public ConnectTargetProjectSnapshot(UUID id,String code,String name,ProjectAccessSnapshot.ProjectLifecycle lifecycle) {
-            this(id,code,name,lifecycle,false);
+            this(id,code,name,lifecycle,false,false);
         }
     }
 

@@ -38,7 +38,7 @@ Status: implemented
 
 ### 计时器开关与上班时间
 
-`work_item_timer_state` 增加 `timer_enabled`（默认 true）、`workday_start_minute`、`workday_end_minute`（默认 540、1080），通过 `CurrentTimeTracker.preferences` 返回，`PUT /me/time-tracker/preferences` 以计时状态 ETag 保存。偏好与计时状态共用用户状态锁和版本号：关闭时在同一事务内停止本人全部运行计时，关闭后 start、switch 返回 409 `TIMER_DISABLED`，stop 与 stop-all 仍可用。代价是保存偏好会让其他窗口进行中的计时命令以 412 刷新重试。
+`work_item_timer_state` 增加 `timer_enabled`（V78 默认 true；V88 起列默认值与无状态行时的默认偏好均为 false，已有行保持原值）、`workday_start_minute`、`workday_end_minute`（默认 540、1080），通过 `CurrentTimeTracker.preferences` 返回，`PUT /me/time-tracker/preferences` 以计时状态 ETag 保存。偏好与计时状态共用用户状态锁和版本号：关闭时在同一事务内停止本人全部运行计时，关闭后 start、switch 返回 409 `TIMER_DISABLED`，stop 与 stop-all 仍可用。代价是保存偏好会让其他窗口进行中的计时命令以 412 刷新重试。
 
 工时设置和工作项表格“时长追踪”列菜单的“设置”中提供同一开关，与上下班时间编辑共用计时器的忙状态，保存期间互斥。计时器关闭后，Web 隐藏右下角入口并忽略打开事件，工作项表格不再显示启停按钮（该项仍在运行时除外），时长居中显示，首页计时卡改为“记录工时”进入今天，项目工作项工具栏隐藏“小计时器”。桌面状态增加可选的 `timerEnabled`：关闭时主进程不再自动弹出悬浮球，`show` 改为打开主界面，托盘与快捷面板去掉继续、查找、显示方式和置顶；旧版桌面壳不认识该字段，由 Web 调用 `hide()` 兜底。Web 按浏览器缓存最近一次的开关，避免计时入口在首次轮询前闪现，退出登录时清除。
 
@@ -66,6 +66,8 @@ Status: implemented
 15 分钟是 Web 新建时的输入约束，不是服务端持久化约束。已有记录编辑和服务端 GAPS 裁剪仍沿用原有行为，直接 API 调用或按真实空白裁剪后的结果可以短于 15 分钟；这些记录按最小绘制高度显示，统计仍取真实时长。
 
 计时器关闭会停止全部运行计时，保留已记录的会话、报表与统计，同时隐藏入口并拒绝新的计时；重新开启只恢复入口，不自动恢复已停止的计时。桌面需要随本次发布更新才能完全隐藏托盘入口，旧版桌面仅隐藏悬浮窗。偏好保存推进计时状态版本，属于用户状态锁上的少量额外冲突。
+
+2026-11-02 起计时器默认关闭：从未产生计时状态行的成员（新成员、从未计时或补录的成员）需在计时偏好中开启后才能计时，已有状态行的成员不受影响。前端缓存的偏好在首次轮询前沿用上次值，没有缓存时按关闭处理。
 
 ## Verification
 

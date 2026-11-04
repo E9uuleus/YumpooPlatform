@@ -93,6 +93,7 @@ async function act() {
         size="small"
         :disabled="action.disabled"
         :loading="acting"
+        text
         @click="act"
       >
         {{ action.label }}

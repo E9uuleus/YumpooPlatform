@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import YpSkeleton from '../yp/YpSkeleton.vue'
+import { usePageLoad } from '../../brand/page-progress'
 import { Refresh } from '@element-plus/icons-vue'
 import type { ActivityItem } from '@yumpoo/api-client'
 import { ElButton, ElDatePicker, ElIcon, ElTooltip } from 'element-plus'
@@ -13,6 +15,7 @@ import YpEmptyState from '../yp/YpEmptyState.vue'
 import YpSegmented from '../yp/YpSegmented.vue'
 import { ACTIVITY_CATEGORIES, ACTIVITY_CATEGORY_ORDER, activityCategory, type ActivityCategory } from './activityPresentation'
 
+const pageLoad = usePageLoad()
 const props = defineProps<{
   projectId?: string | undefined
   workItemId?: string | undefined
@@ -24,7 +27,6 @@ const session = useSession()
 const timezone = computed(() => session.authentication.value?.company.timezone ?? 'Asia/Shanghai')
 const items = ref<ActivityItem[]>([])
 const nextCursor = ref<string | null>(null)
-const historyStartedAt = ref<Date>()
 const category = ref<'all' | ActivityCategory>('all')
 const dateRange = ref<[Date, Date] | null>(null)
 const loading = ref(false)
@@ -98,7 +100,6 @@ async function load(): Promise<void> {
     if (sequence !== requestSequence) return
     items.value = page.items
     nextCursor.value = page.nextCursor
-    historyStartedAt.value = page.historyStartedAt
   } catch (reason) {
     if (sequence === requestSequence) error.value = await toApiProblem(reason)
   } finally {
@@ -125,10 +126,14 @@ async function loadOlder(): Promise<void> {
   }
 }
 
-watch([() => props.projectId, () => props.workItemId], () => void load())
+watch([() => props.projectId, () => props.workItemId], () => {
+  if (props.workItemId) void load()
+  else void pageLoad.track(load)
+})
 watch([category, dateRange], () => void load())
 onMounted(() => {
-  void load()
+  if (props.workItemId) void load()
+  else void pageLoad.track(load)
   clock = setInterval(() => { now.value = Date.now() }, 60_000)
 })
 onBeforeUnmount(() => clearInterval(clock))
@@ -169,6 +174,7 @@ onBeforeUnmount(() => clearInterval(clock))
             :icon="Refresh"
             :loading="loading"
             aria-label="刷新动态"
+            text
             @click="load"
           />
         </el-tooltip>
@@ -184,13 +190,18 @@ onBeforeUnmount(() => clearInterval(clock))
       />
       <el-button
         type="primary"
-        plain
         @click="load"
       >
         重试
       </el-button>
     </div>
+    <yp-skeleton
+      v-if="loading && !items.length"
+      variant="list"
+      :rows="6"
+    />
     <div
+      v-else
       v-loading="loading"
       class="activity-timeline__feed"
       aria-live="polite"
@@ -262,7 +273,7 @@ onBeforeUnmount(() => clearInterval(clock))
         compact
       />
       <div
-        v-if="nextCursor || historyStartedAt"
+        v-if="nextCursor"
         class="activity-timeline__footer"
       >
         <el-button
@@ -273,12 +284,6 @@ onBeforeUnmount(() => clearInterval(clock))
         >
           加载更早动态
         </el-button>
-        <p
-          v-if="historyStartedAt"
-          class="activity-timeline__cutover"
-        >
-          动态从 {{ formatTimestamp(historyStartedAt, timezone) }} 开始记录，更早历史未回填。
-        </p>
       </div>
     </div>
   </section>
@@ -323,7 +328,6 @@ onBeforeUnmount(() => clearInterval(clock))
 .activity-timeline__feed {
   min-height: 200px;
   padding: 0 var(--yp-space-5) var(--yp-space-5);
-  border: 1px solid var(--yp-border-subtle);
   border-radius: var(--yp-radius-md);
   background: var(--yp-bg-surface);
 }
@@ -436,12 +440,6 @@ onBeforeUnmount(() => clearInterval(clock))
   justify-items: center;
   gap: var(--yp-space-2);
   padding-top: var(--yp-space-4);
-}
-
-.activity-timeline__cutover {
-  margin: 0;
-  color: var(--yp-text-muted);
-  font-size: var(--yp-type-caption-size);
 }
 
 .activity-timeline--compact .activity-timeline__feed {

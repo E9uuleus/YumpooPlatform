@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { Brush as AppearanceIcon } from '@element-plus/icons-vue'
-import { ElButton, ElIcon, ElPopover, ElRadioButton, ElRadioGroup } from 'element-plus'
+import { ElPopover, ElRadioButton, ElRadioGroup, ElTooltip } from 'element-plus'
+import { ref } from 'vue'
 import type { DensityMode, ThemeMode } from '../../composables/useAppearance'
+import ShellIcon from '../shell/ShellIcon.vue'
 
 defineProps<{
   theme: ThemeMode
@@ -12,61 +13,75 @@ defineEmits<{
   'update:theme': [value: ThemeMode]
   'update:density': [value: DensityMode]
 }>()
+
+const panelOpen = ref(false)
 </script>
 
 <template>
-  <el-popover
-    placement="bottom-end"
-    :width="300"
-    trigger="click"
+  <el-tooltip
+    content="外观"
+    placement="bottom"
+    :show-after="400"
+    :popper-class="panelOpen ? 'yp-tooltip--suppressed' : undefined"
   >
-    <template #reference>
-      <el-button class="yp-theme-trigger">
-        <el-icon aria-hidden="true">
-          <appearance-icon />
-        </el-icon>
-        外观
-      </el-button>
-    </template>
-    <div class="yp-theme-panel">
-      <fieldset>
-        <legend>主题</legend>
-        <el-radio-group
-          :model-value="theme"
-          aria-label="主题"
-          @update:model-value="$emit('update:theme', $event as ThemeMode)"
-        >
-          <el-radio-button value="system">
-            跟随系统
-          </el-radio-button>
-          <el-radio-button value="light">
-            浅色
-          </el-radio-button>
-          <el-radio-button value="dark">
-            深色
-          </el-radio-button>
-          <el-radio-button value="night">
-            夜间
-          </el-radio-button>
-        </el-radio-group>
-      </fieldset>
-      <fieldset>
-        <legend>密度</legend>
-        <el-radio-group
-          :model-value="density"
-          aria-label="界面密度"
-          @update:model-value="$emit('update:density', $event as DensityMode)"
-        >
-          <el-radio-button value="comfortable">
-            舒适
-          </el-radio-button>
-          <el-radio-button value="compact">
-            紧凑
-          </el-radio-button>
-        </el-radio-group>
-      </fieldset>
-    </div>
-  </el-popover>
+    <span class="yp-theme-reference">
+      <el-popover
+        v-model:visible="panelOpen"
+        placement="bottom-end"
+        :width="300"
+        trigger="click"
+      >
+        <template #reference>
+          <button
+            type="button"
+            class="yp-tool-button yp-theme-trigger"
+            :class="{ 'is-active': panelOpen }"
+            aria-label="外观"
+          >
+            <shell-icon name="appearance" />
+          </button>
+        </template>
+        <div class="yp-theme-panel">
+          <fieldset>
+            <legend>主题</legend>
+            <el-radio-group
+              :model-value="theme"
+              aria-label="主题"
+              @update:model-value="$emit('update:theme', $event as ThemeMode)"
+            >
+              <el-radio-button value="system">
+                跟随系统
+              </el-radio-button>
+              <el-radio-button value="light">
+                浅色
+              </el-radio-button>
+              <el-radio-button value="dark">
+                深色
+              </el-radio-button>
+              <el-radio-button value="night">
+                夜间
+              </el-radio-button>
+            </el-radio-group>
+          </fieldset>
+          <fieldset>
+            <legend>密度</legend>
+            <el-radio-group
+              :model-value="density"
+              aria-label="界面密度"
+              @update:model-value="$emit('update:density', $event as DensityMode)"
+            >
+              <el-radio-button value="comfortable">
+                舒适
+              </el-radio-button>
+              <el-radio-button value="compact">
+                紧凑
+              </el-radio-button>
+            </el-radio-group>
+          </fieldset>
+        </div>
+      </el-popover>
+    </span>
+  </el-tooltip>
 </template>
 
 <style scoped>
@@ -94,7 +109,7 @@ legend {
   flex-wrap: wrap;
 }
 
-.yp-theme-trigger .el-icon {
-  font-size: 18px;
+.yp-theme-reference {
+  display: inline-flex;
 }
 </style>

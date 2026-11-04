@@ -48,9 +48,8 @@ defineProps<{
   gap: 2px;
   min-width: 0;
   padding: var(--yp-space-4) var(--yp-space-4) var(--yp-space-3);
-  border: 1px solid var(--yp-border-subtle);
   border-radius: var(--yp-radius-md);
-  background: var(--yp-bg-surface);
+  background: var(--yp-bg-sunken);
 }
 
 .ops-tile__label {

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { usePageLoad } from '../../brand/page-progress'
+
 import { DataAnalysis, DataLine, Monitor, FolderOpened, Message, OfficeBuilding, Timer } from '@element-plus/icons-vue'
 import { ProjectLifecycleFilter, TeamMemberTaskStatusCategoryEnum, type DashboardProject, type TeamMemberTask, type TeamTimesheet } from '@yumpoo/api-client'
 import { ElTooltip } from 'element-plus'
@@ -18,9 +20,10 @@ import { useSession } from '../../composables/useSession'
 import { formatDuration, onTimeTrackingChanged, useTimeTracker } from '../../composables/useTimeTracker'
 import { onWorkItemChanged } from '../../composables/workItemChanges'
 import { usePageOnboarding } from '../../onboarding/useOnboarding'
-import { daypart, greeting, heroDate, hubProjects, sortTasks, type HubProject, type TaskFilter } from './homeModel'
+import { daypart, filterTasks, greeting, heroDate, hubProjects, isInProgressTask, isNotStartedTask, openCount, sortTasks, type HubProject, type TaskFilter } from './homeModel'
 import { timerTitle } from '../../components/timer/timeCategories'
 
+const pageLoad = usePageLoad()
 interface JumpCard { key: string; label: string; meta: string; icon: Component; tone: JumpTone; open: () => void }
 
 const router = useRouter(), session = useSession(), tracker = useTimeTracker(), inbox = useInbox()
@@ -43,12 +46,12 @@ const runningTitle = computed(() => {
 })
 
 const counts = computed(() => ({
-  inProgress: tasks.value.filter(task => task.statusCategory === TeamMemberTaskStatusCategoryEnum.InProgress).length,
-  todo: tasks.value.filter(task => task.statusCategory === TeamMemberTaskStatusCategoryEnum.Todo).length,
+  inProgress: tasks.value.filter(isInProgressTask).length,
+  todo: tasks.value.filter(isNotStartedTask).length,
   overdue: tasks.value.filter(task => task.overdue).length,
 }))
 const sortedTasks = computed(() => sortTasks(tasks.value))
-const visibleTasks = computed(() => filter.value === 'ALL' ? sortedTasks.value : sortedTasks.value.filter(task => task.statusCategory === filter.value))
+const visibleTasks = computed(() => filterTasks(sortedTasks.value, filter.value))
 const taskOptions = computed<{ value: TaskFilter; label: string }[]>(() => [
   { value: 'ALL', label: `全部 ${tasks.value.length}` },
   { value: TeamMemberTaskStatusCategoryEnum.InProgress, label: `进行中 ${counts.value.inProgress}` },
@@ -110,17 +113,17 @@ function calendarDuration(ms: number): string {
 }
 
 const quiet = () => undefined
-function loadMonth(): void {
-  void myWorkApi.getMyTimesheet({ from: toApiDate(`${month.value}-01`), to: toApiDate(addDays(`${shiftMonth(month.value, 1)}-01`, -1)) })
+function loadMonth() {
+  return myWorkApi.getMyTimesheet({ from: toApiDate(`${month.value}-01`), to: toApiDate(addDays(`${shiftMonth(month.value, 1)}-01`, -1)) })
     .then(sheet => { monthSheet.value = sheet }, quiet)
 }
-function loadTasks(): void {
-  void myWorkApi.listMyCurrentTasks({ offset: 0, limit: 100 }).then(page => { tasks.value = page.items }, quiet)
+function loadTasks() {
+  return myWorkApi.listMyCurrentTasks({ offset: 0, limit: 100 }).then(page => { tasks.value = page.items }, quiet)
 }
-loadTasks()
-void dashboardsApi.listDashboardProjects({ includeArchived: false, limit: 50 }).then(page => { projects.value = page.items }, quiet)
-void projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.Active, actorAccesses: MY_PROJECT_ACCESSES, page: 0, size: 1 }).then(page => { projectTotal.value = page.totalElements }, quiet)
-loadMonth()
+void pageLoad.track(loadTasks)
+void pageLoad.track(() => dashboardsApi.listDashboardProjects({ includeArchived: false, limit: 50 }).then(page => { projects.value = page.items }, quiet))
+void pageLoad.track(() => projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.Active, ended: false, actorAccesses: MY_PROJECT_ACCESSES, page: 0, size: 1 }).then(page => { projectTotal.value = page.totalElements }, quiet))
+void pageLoad.track(loadMonth)
 onBeforeUnmount(onTimeTrackingChanged(loadMonth))
 onBeforeUnmount(onWorkItemChanged(loadTasks))
 onMounted(() => { void onboarding.ready() })
@@ -255,8 +258,10 @@ onMounted(() => { void onboarding.ready() })
             >{{ project.name.slice(0, 1) }}</span>
             <span class="home-project__text">
               <strong>{{ project.name }}</strong>
-              <small v-if="project.inProgress + project.todo">
-                {{ project.inProgress }} 进行中 · {{ project.todo }} 待开始<b
+              <small v-if="openCount(project)">
+                {{ project.inProgress }} 进行中 · {{ project.todo }} 待开始<template v-if="project.other">
+                  · {{ project.other }} 其他
+                </template><b
                   v-if="project.overdue"
                   class="home-project__overdue"
                 > · {{ project.overdue }} 逾期</b>
@@ -270,6 +275,10 @@ onMounted(() => { void onboarding.ready() })
                 v-if="project.todo"
                 class="is-todo"
                 :style="{ flex: project.todo }"
+              /><i
+                v-if="project.other"
+                class="is-other"
+                :style="{ flex: project.other }"
               /></span>
             </span>
           </button>
@@ -340,29 +349,12 @@ onMounted(() => { void onboarding.ready() })
   gap: var(--yp-space-5);
 }
 
-/* Static aurora wash behind the page so the translucent cards pick up colour. */
-.home-hub::before {
-  position: absolute;
-  z-index: -1;
-  top: calc(0px - var(--yp-space-8));
-  right: 0;
-  left: calc(0px - var(--yp-space-10));
-  height: 560px;
-  background:
-    radial-gradient(60% 70% at 85% 0%, color-mix(in srgb, var(--yp-label-bright-blue) 12%, transparent), transparent 70%),
-    radial-gradient(45% 60% at 10% 35%, color-mix(in srgb, var(--yp-label-aquamarine) 9%, transparent), transparent 70%);
-  content: "";
-  pointer-events: none;
-}
-
 .home-hero {
   position: relative;
   overflow: hidden;
   min-height: 220px;
-  border: 1px solid var(--yp-border-subtle);
   border-radius: var(--yp-radius-xl);
   background: var(--yp-bg-surface);
-  box-shadow: var(--yp-shadow-card);
 }
 
 .home-hero__text {
@@ -407,13 +399,11 @@ onMounted(() => { void onboarding.ready() })
   gap: 6px;
   height: 24px;
   padding: 0 10px;
-  border: 1px solid color-mix(in srgb, var(--yp-bg-surface) 70%, var(--yp-border-subtle));
   border-radius: var(--yp-radius-pill);
-  background: color-mix(in srgb, var(--yp-bg-surface) 60%, transparent);
   color: var(--yp-text-primary);
   font-size: 12px;
   white-space: nowrap;
-  backdrop-filter: blur(8px);
+  background: var(--yp-fill-neutral);
 }
 
 .home-chip--danger {
@@ -525,13 +515,10 @@ onMounted(() => { void onboarding.ready() })
 .home-panel {
   min-width: 0;
   padding: var(--yp-space-4) var(--yp-space-5);
-  border: 1px solid color-mix(in srgb, var(--yp-border-subtle) 80%, transparent);
   border-radius: var(--yp-radius-xl);
-  background: color-mix(in srgb, var(--yp-bg-surface) 76%, transparent);
-  box-shadow: var(--yp-shadow-card);
-  backdrop-filter: blur(14px) saturate(1.3);
   animation: home-rise 360ms var(--yp-ease-standard) backwards;
   animation-delay: 320ms;
+  background: var(--yp-bg-surface);
 }
 
 .home-panel--projects {
@@ -663,11 +650,11 @@ onMounted(() => { void onboarding.ready() })
   height: 34px;
   place-items: center;
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--mark), color-mix(in srgb, var(--mark) 70%, var(--yp-bg-surface)));
   color: var(--yp-status-blue-foreground);
   font-family: var(--yp-font-heading);
   font-size: 14px;
   font-weight: 600;
+  background: var(--mark);
 }
 
 .home-project__overdue {
@@ -690,6 +677,10 @@ onMounted(() => { void onboarding.ready() })
 
 .home-project__bar .is-todo {
   background: var(--yp-label-gray);
+}
+
+.home-project__bar .is-other {
+  background: var(--yp-border-strong);
 }
 
 .home-link {

@@ -22,7 +22,7 @@ describe('设置页连接概览', () => {
     const wrapper = mount(ProjectConnectionsOverview, { props: { projectId: 'source-project' }, global })
     await flushPromises()
     expect(wrapper.text()).toContain('重新加载连接概览')
-    expect(wrapper.find('.unified-project-settings__empty').exists()).toBe(false)
+    expect(wrapper.find('.project-connections-overview__empty').exists()).toBe(false)
     api.listConnectColumns.mockResolvedValue({ ...connectionCatalog, items: [] })
     await wrapper.get('button').trigger('click'); await flushPromises()
     expect(wrapper.text()).toContain('还没有连接。')

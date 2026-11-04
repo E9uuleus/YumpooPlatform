@@ -1,3 +1,4 @@
+import { usePageLoad } from '../brand/page-progress'
 import { computed, onScopeDispose, ref, shallowRef, watch, type Ref } from 'vue'
 import { readCsrfToken, NotificationListState, NotificationGroup, NotificationState, type NotificationItem, type NotificationUnreadCounts, type ListNotificationsRequest } from '@yumpoo/api-client'
 import { notificationsApi } from '../api/client'
@@ -122,6 +123,7 @@ function readAll(upTo: Date, filter: InboxFilter) {
 }
 
 export function useInboxList(filter: Ref<InboxFilter>, active: Ref<boolean> = ref(true)) {
+  const pageLoad = usePageLoad()
   const items = shallowRef<NotificationItem[]>([])
   const loading = ref(false)
   const error = ref('')
@@ -149,7 +151,8 @@ export function useInboxList(filter: Ref<InboxFilter>, active: Ref<boolean> = re
       listGeneration = generation
     }
     if (!active.value || !enabled) { items.value = []; cursor.value = undefined; serverNow.value = undefined; return }
-    void load()
+    if (!previous || nextFilter !== previous[0]) void pageLoad.track(() => load())
+    else void load()
   }, { immediate: true })
   onScopeDispose(() => { ++request })
   async function setState(item: NotificationItem, action: 'read' | 'unread' | 'archive') {

@@ -101,9 +101,9 @@ public class TimeTrackingService {
         resume.forEach(item -> projectIds.add(item.projectId()));
         var visibleProjects=access.findVisible(actor,projectIds);
         var recentItems=recent.stream().filter(item -> visibleProjects.containsKey(item.projectId())
-                && visibleProjects.get(item.projectId()).lifecycle()==ProjectAccessSnapshot.ProjectLifecycle.ACTIVE).limit(5).toList();
+                && visibleProjects.get(item.projectId()).contentWritable()).limit(5).toList();
         var resumeItems=resume.stream().filter(item -> visibleProjects.containsKey(item.projectId())
-                && visibleProjects.get(item.projectId()).lifecycle()==ProjectAccessSnapshot.ProjectLifecycle.ACTIVE).toList();
+                && visibleProjects.get(item.projectId()).contentWritable()).toList();
         var titles=new HashMap<UUID,String>();
         running.stream().filter(s -> s.projectId()!=null && visibleProjects.containsKey(s.projectId())).collect(java.util.stream.Collectors.groupingBy(Session::projectId))
                 .forEach((projectId,rows) -> items.findByIds(actor.companyId(),projectId,rows.stream().map(Session::workItemId).toList())
@@ -135,8 +135,10 @@ public class TimeTrackingService {
         int start=command.workdayStartMinute(), end=command.workdayEndMinute();
         if(start<0 || start>1439 || end<1 || end>1440 || end<=start)
             throw validation("workdayEndMinute","INVALID_RANGE","下班时间须晚于上班时间，且都在当天之内");
+        var currentPreferences=preferences(actor);
         var next=new TimeTrackingPreferences(command.timerEnabled(),start,end,
-                command.hideCompleted()==null ? preferences(actor).hideCompleted() : command.hideCompleted());
+                command.hideCompleted()==null ? currentPreferences.hideCompleted() : command.hideCompleted(),
+                command.hideCompletedEffect()==null ? currentPreferences.hideCompletedEffect() : command.hideCompletedEffect());
         Set<UUID> projects=new TreeSet<>();
         if(!next.timerEnabled()) {
             timers.running(actor.companyId(),actor.userId()).stream().map(Session::projectId).filter(Objects::nonNull).forEach(projects::add);
@@ -212,7 +214,7 @@ public class TimeTrackingService {
             // Category records remain personal; a linked project name is disclosed only while visible.
             if(row.session().timeCategory()!=null) {
                 UUID tagged=row.session().categoryProjectId();
-                return new MyTimeSession(view(row.session(),actor,true,now,true,names,allocated,null,null),
+                return new MyTimeSession(view(row.session(),actor,row.session().timeCategory().userSelectable(),now,true,names,allocated,null,null),
                         tagged!=null && projectSnapshots.containsKey(tagged) ? projectSnapshots.get(tagged).name() : null,null,null,null);
             }
             var project=projects.get(row.session().projectId());
@@ -255,6 +257,7 @@ public class TimeTrackingService {
         var target=TimeSubject.of(body.workItemId(),body.timeCategory(),body.categoryProjectId());
         Session session=timers.find(actor.companyId(),sessionId).filter(s -> s.userId().equals(actor.userId()))
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        requireNotMigrated(session);
         requireVersion(session.rowVersion(),expectedVersion);
         if(session.stoppedAt()==null || session.deletedAt()!=null) throw invalid("SESSION_NOT_EDITABLE");
         if(session.subject().equals(target))
@@ -268,6 +271,7 @@ public class TimeTrackingService {
     private TimeSessionFillResult applyFill(CurrentActor actor,TimeSessionFillMode mode,List<TimeSessionFillEntry> entries,
             Session removing,long expectedVersion) {
         Instant now=now();
+        requireSelectable(entries.stream().map(TimeSessionFillEntry::subject).toList());
         var merged=TimeSessionFillPlanner.mergeEntries(entries);
         if(TimeSessionFillPlanner.slotsOverlap(merged))
             throw validation("entries","CATEGORY_OVERLAP","同一分类在同一时段只能关联一个项目");
@@ -358,6 +362,7 @@ public class TimeTrackingService {
     private Set<UUID> editableSessionIds(CurrentActor actor,List<MySessionRow> rows) {
         var projects=access.findVisible(actor,rows.stream().map(row -> row.session().projectId()).filter(Objects::nonNull).distinct().toList());
         return rows.stream().filter(row -> row.session().stoppedAt()!=null && row.session().deletedAt()==null
+                && !row.session().migratedImport()
                 && (row.session().timeCategory()!=null || !row.archived() && !row.itemDeleted() && projects.containsKey(row.session().projectId())
                 && canWrite(projects.get(row.session().projectId()))))
                 .map(row -> row.session().id()).collect(java.util.stream.Collectors.toSet());
@@ -383,6 +388,7 @@ public class TimeTrackingService {
             requestedSubjects=batch;
         } else requestedSubjects=List.of(TimeSubject.of(input.workItemId(),input.timeCategory(),input.categoryProjectId()));
         var subjects=requestedSubjects.stream().distinct().toList();
+        requireSelectable(subjects);
         var categories=subjects.stream().map(TimeSubject::timeCategory).filter(Objects::nonNull).toList();
         if(categories.size()!=categories.stream().distinct().count())
             throw validation("timeCategorySubjects","DUPLICATE_CATEGORY","同一分类一次只能关联一个项目");
@@ -448,6 +454,7 @@ public class TimeTrackingService {
             if(before!=null) {
                 if(!input.workItemId().equals(before.workItemId())) throw new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND);
                 if(!before.userId().equals(actor.userId())) throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
+                requireNotMigrated(before);
                 requireVersion(before.rowVersion(),expectedVersion);
                 if(before.stoppedAt()==null || before.deletedAt()!=null) throw invalid("SESSION_NOT_EDITABLE");
             }
@@ -480,6 +487,7 @@ public class TimeTrackingService {
     private StoredCommandResult ownSession(CurrentActor actor,String action,UUID sessionId,Input input,long expectedVersion) {
         Session session=timers.find(actor.companyId(),sessionId).filter(s -> s.userId().equals(actor.userId()))
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        requireNotMigrated(session);
         if(session.workItemId()!=null) return mutate(actor,action,new Input(session.workItemId(),sessionId,input.startedAt(),
                 input.stoppedAt(),input.reason(),null,null,null,null,null),expectedVersion);
         timers.stateVersion(actor.companyId(),actor.userId(),true);
@@ -507,8 +515,18 @@ public class TimeTrackingService {
     /** Runs inside the archive transaction after the project row lock, matching the project-then-timer_state order of timer commands. */
     @Transactional(propagation=Propagation.MANDATORY)
     public int stopRunningInArchivedProject(CurrentActor actor, UUID projectId) {
+        return stopRunningInProject(actor, projectId, timers.runningUserIds(actor.companyId(), projectId));
+    }
+
+    /** Runs inside the leave transaction after the project row lock; stops only the leaving member's timers in that project. */
+    @Transactional(propagation=Propagation.MANDATORY)
+    public int stopRunningForLeavingMember(CurrentActor actor, UUID projectId) {
+        return stopRunningInProject(actor, projectId, List.of(actor.userId()));
+    }
+
+    private int stopRunningInProject(CurrentActor actor, UUID projectId, List<UUID> userIds) {
         Instant now=now(); int stoppedCount=0; Set<UUID> affected=new TreeSet<>();
-        for(UUID userId:timers.runningUserIds(actor.companyId(),projectId)) {
+        for(UUID userId:userIds) {
             timers.stateVersion(actor.companyId(),userId,true);
             var running=timers.running(actor.companyId(),userId).stream().filter(s -> projectId.equals(s.projectId())).toList();
             if(running.isEmpty()) continue;
@@ -591,7 +609,7 @@ public class TimeTrackingService {
         long[] share=allocated.getOrDefault(s.id(),new long[2]);
         return new TimeTrackingSession(s.id(),disclose ? s.projectId() : null,disclose ? s.workItemId() : null,
                 s.userId(),displayName,s.startedAt(),s.stoppedAt(),s.source(),Math.max(0,Duration.between(s.startedAt(),s.stoppedAt()==null ? now : s.stoppedAt()).toMillis()),
-                s.rowVersion(),StrongEtag.format(s.rowVersion()),writable && s.userId().equals(actor.userId()) && s.stoppedAt()!=null && s.deletedAt()==null,s.deletedAt()!=null,s.changeReason(),share[0],(int)share[1],itemNo,itemTitle,s.timeCategory(),s.categoryProjectId());
+                s.rowVersion(),StrongEtag.format(s.rowVersion()),writable && !s.migratedImport() && s.userId().equals(actor.userId()) && s.stoppedAt()!=null && s.deletedAt()==null,s.deletedAt()!=null,s.changeReason(),share[0],(int)share[1],itemNo,itemTitle,s.timeCategory(),s.categoryProjectId(),s.migratedImport());
     }
     private static String reason(Input input) {
         String reason=input.reason()==null || input.reason().isBlank() ? null : input.reason().strip();
@@ -602,6 +620,14 @@ public class TimeTrackingService {
     private static void requireRange(Instant start,Instant stop,Instant now) {
         if(start==null || stop==null || !stop.isAfter(start) || stop.isAfter(now))
             throw validation("stoppedAt","INVALID_RANGE","结束时间须晚于开始时间且不能在未来");
+    }
+    /** Reserved categories are written by the system only, never chosen by a user. */
+    private static void requireSelectable(Collection<TimeSubject> subjects) {
+        if(subjects.stream().map(TimeSubject::timeCategory).anyMatch(category -> category!=null && !category.userSelectable()))
+            throw validation("timeCategory","TIME_CATEGORY_RESERVED","该工时分类由系统写入，不能选择");
+    }
+    private static void requireNotMigrated(Session session) {
+        if(session.migratedImport()) throw invalid("MIGRATED_TIME_READ_ONLY");
     }
     /** Categories may name a project only among the actor's writable ones; categories take no project lock. */
     private void requireCategoryProjects(CurrentActor actor,Collection<TimeSubject> subjects) {
@@ -619,7 +645,7 @@ public class TimeTrackingService {
         return access.findVisible(actor,projectId).orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
     }
     private static boolean canWrite(ProjectAccessSnapshot p) {
-        return p.lifecycle()!=ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED && p.actorAccess()!=ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY;
+        return p.contentWritable() && p.actorAccess()!=ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY;
     }
     private Instant now() { return clock.instant().truncatedTo(ChronoUnit.MILLIS); }
     private static void requireVersion(long actual,long expected) { if(actual!=expected) throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT); }

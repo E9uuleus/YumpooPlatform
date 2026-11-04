@@ -235,7 +235,7 @@ public class WorkItemLabelService {
     }
 
     private static boolean canManage(ProjectAccessSnapshot project) {
-        return project.lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED
+        return project.contentWritable()
                 && project.actorAccess() != ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY;
     }
 
@@ -250,7 +250,7 @@ public class WorkItemLabelService {
         return value.strip();
     }
 
-    private static String color(String value) {
+    static String color(String value) {
         String normalized = value == null ? null : value.strip().toUpperCase(Locale.ROOT);
         if (!COLORS.contains(normalized))
             throw validation("colorToken", "INVALID_COLOR", "标签颜色不在允许的色板中");

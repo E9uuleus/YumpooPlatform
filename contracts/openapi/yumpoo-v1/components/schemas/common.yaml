@@ -440,7 +440,7 @@ components:
           $ref: "#/components/schemas/DashboardTableCriteria"
     DashboardTableCriteria:
       type: object
-      description: 复用项目工作项查询语义；图表条件与表格条件取交集，field 查询分组选项，parentWorkItemId 查询匹配子项。主表保留命中子项的父项作为上下文。
+      description: 复用项目工作项查询语义；图表条件与表格条件取交集，field 查询分组选项，parentWorkItemId 查询匹配子项。主表保留命中子项的父项作为上下文。group* 只约束主行；countSubitems 与筛选选项接口相同。
       properties:
         q:
           type: string
@@ -504,6 +504,21 @@ components:
             - ASSIGNEE
             - PRIORITY
             - DUE_DATE
+        groupStatus:
+          type: string
+        groupPriority:
+          type: string
+        groupContentId:
+          type: string
+          format: uuid
+        groupDueFrom:
+          type: string
+          format: date
+        groupDueTo:
+          type: string
+          format: date
+        countSubitems:
+          type: boolean
         cursor:
           type: string
         limit:
@@ -747,6 +762,11 @@ components:
           type: integer
           format: int64
           minimum: 1
+        migratedDurationMs:
+          type: integer
+          format: int64
+          minimum: 0
+          description: durationMs 中来自迁入工时的部分。服务端总是返回。
     TeamTimesheetCategoryEntry:
       type: object
       additionalProperties: false
@@ -852,6 +872,7 @@ components:
         - projectName
         - itemNo
         - title
+        - statusCode
         - statusName
         - statusCategory
         - statusColor
@@ -872,6 +893,10 @@ components:
           type: string
         title:
           type: string
+        statusCode:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]{1,31}$
+          description: 项目状态代码；NOT_STARTED 为项目初始状态，成员新增的状态使用生成的代码。
         statusName:
           type: string
         statusCategory:
@@ -1374,6 +1399,12 @@ components:
           format: int64
           minimum: 0
           readOnly: true
+        matchedSubitemCount:
+          type: integer
+          format: int64
+          minimum: 0
+          readOnly: true
+          description: TABLE 列表带筛选条件时，直接子项中本身满足这些条件的数量；未带条件、KANBAN 与子项列表为 0。
         discussionCount:
           type: integer
           format: int64

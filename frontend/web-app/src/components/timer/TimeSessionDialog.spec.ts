@@ -73,7 +73,7 @@ describe('计时日志分页与写入', () => {
     await wrapper.get('.record-date').trigger('click')
     expect(wrapper.text()).toContain('编辑时长记录')
     expect(wrapper.text()).not.toContain('修正原因')
-    expect(wrapper.get('input[type="time"]').attributes('step')).toBe('60')
+    expect(wrapper.findAllComponents({ name: 'ElTimePicker' })).toHaveLength(2)
     await wrapper.get('header button').trigger('click')
     await wrapper.get('.time-range').trigger('click')
     await wrapper.get('form').trigger('submit')

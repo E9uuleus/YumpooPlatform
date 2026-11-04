@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, type DefineComponent } from 'vue'
 import { TimeSessionFillMode, type MyTimeSession } from '@yumpoo/api-client'
 import { timeTrackingApi } from '../../api/client'
 import OverlapModeControl from '../my-time/day/OverlapModeControl.vue'
 import { blockFromSession, defaultMode, MIN_BLOCK_MS, overlapEffect, type DayBlock, type Range } from '../my-time/day/dayModel'
-import TimeCalendar from './TimeCalendar.vue'
+import YpCalendar from '../yp/YpCalendar.vue'
+import { ElOption as ElOptionRaw, ElSelect as ElSelectRaw, ElTimePicker } from 'element-plus'
 import { companyDateTime, parseCompanyDateTime } from './timeFormat'
+
+const ElOption = ElOptionRaw as unknown as DefineComponent
+const ElSelect = ElSelectRaw as unknown as DefineComponent
 
 const props = withDefaults(defineProps<{ start: string; end: string; timezone: string; editing: boolean; busy: boolean; problem?: string
   mode?: TimeSessionFillMode; workItemId?: string }>(), { mode: TimeSessionFillMode.Gaps, problem: '', workItemId: '' })
@@ -60,14 +64,13 @@ function selectDay(day: string) {
   emit('update:start', `${day}T${props.start.slice(11)}`)
   emit('update:end', `${dayString(dateNumber(day) + offset * dayMs)}T${props.end.slice(11)}`)
 }
-function setTime(which: 'start' | 'end', event: Event) {
-  const value = (event.target as HTMLInputElement).value
-  const timestamp = `${props[which].slice(0, 10)}T${value.length === 5 ? `${value}:00` : value}`
+function setTime(which: 'start' | 'end', value: string) {
+  const timestamp = `${props[which].slice(0, 10)}T${value}:00`
   if (which === 'start') emit('update:start', timestamp)
   else emit('update:end', timestamp)
 }
-function setOffset(event: Event) {
-  emit('update:end', `${dayString(dateNumber(selectedDay.value) + Number((event.target as HTMLSelectElement).value) * dayMs)}T${props.end.slice(11)}`)
+function setOffset(value: number) {
+  emit('update:end', `${dayString(dateNumber(selectedDay.value) + value * dayMs)}T${props.end.slice(11)}`)
 }
 </script>
 
@@ -76,7 +79,7 @@ function setOffset(event: Event) {
     class="manual-session"
     @submit.prevent="emit('save')"
   >
-    <TimeCalendar
+    <YpCalendar
       :model-value="selectedDay"
       :timezone="timezone"
       :disabled="busy"
@@ -84,43 +87,47 @@ function setOffset(event: Event) {
       @expand="emit('expand', $event)"
     />
     <div class="session-times">
-      <label>开始时间<span class="time-input"><span aria-hidden="true">◷</span><input
+      <label>开始时间<el-time-picker
+        :model-value="start.slice(11, 16)"
+        format="HH:mm"
+        value-format="HH:mm"
+        :clearable="false"
+        :disabled="busy"
         aria-label="开始时间"
-        type="time"
-        step="60"
-        :value="start.slice(11, 16)"
+        @update:model-value="setTime('start', $event)"
+      /></label>
+      <label>结束时间<el-time-picker
+        :model-value="end.slice(11, 16)"
+        format="HH:mm"
+        value-format="HH:mm"
+        :clearable="false"
         :disabled="busy"
-        required
-        @input="setTime('start', $event)"
-      ></span></label>
-      <label>结束时间<span class="time-input"><span aria-hidden="true">◷</span><input
         aria-label="结束时间"
-        type="time"
-        step="60"
-        :value="end.slice(11, 16)"
-        :disabled="busy"
-        required
-        @input="setTime('end', $event)"
-      ></span></label>
+        @update:model-value="setTime('end', $event)"
+      /></label>
     </div>
     <div class="end-day">
-      <select
-        aria-label="结束日期"
-        :value="endOffset"
+      <el-select
+        :model-value="endOffset"
+        size="small"
         :disabled="busy"
-        @change="setOffset"
+        aria-label="结束日期"
+        @update:model-value="setOffset"
       >
-        <option :value="0">
-          当天结束
-        </option><option :value="1">
-          次日结束
-        </option><option
+        <el-option
+          :value="0"
+          label="当天结束"
+        />
+        <el-option
+          :value="1"
+          label="次日结束"
+        />
+        <el-option
           v-if="endOffset > 1"
           :value="endOffset"
-        >
-          {{ endOffset }} 天后结束
-        </option>
-      </select>
+          :label="`${endOffset} 天后结束`"
+        />
+      </el-select>
     </div>
     <OverlapModeControl
       v-if="effect && range && effect.overlapping.length"
@@ -168,11 +175,12 @@ function setOffset(event: Event) {
 </template>
 
 <style scoped>
-.save-error{margin:0;color:var(--el-color-danger);font-size:13px}
-.existing-sessions{display:grid;gap:5px;font-size:11px;color:var(--el-text-color-secondary)}.existing-sessions strong{font-weight:500}.existing-sessions ul{list-style:none;margin:0;padding:0;display:grid;gap:4px}.existing-sessions li{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.save-error{margin:0;color:var(--yp-status-red);font-size:13px}
+.existing-sessions{display:grid;gap:5px;font-size:11px;color:var(--yp-text-secondary)}.existing-sessions strong{font-weight:500}.existing-sessions ul{list-style:none;margin:0;padding:0;display:grid;gap:4px}.existing-sessions li{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .manual-session{display:flex;flex-direction:column;gap:12px;padding:4px 12px 8px}
-button,select,input{font:inherit;color:inherit}button{border:0;background:transparent;cursor:pointer;border-radius:5px}button:hover:not(:disabled){background:#f0f1f3;color:var(--el-text-color-primary)}button:disabled{opacity:.4;cursor:default}button:focus-visible,select:focus-visible{outline:2px solid var(--el-color-primary);outline-offset:2px}
-.end-day select{border:0;background:var(--el-bg-color);padding:5px 2px;cursor:pointer}
-.session-times{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:8px}label{display:grid;gap:10px;font-size:14px}.time-input{display:flex;gap:5px;align-items:center;border:1px solid var(--yp-input-border);border-radius:var(--yp-input-radius);padding:10px 8px;transition:border-color var(--yp-motion-fast) var(--yp-ease-standard)}.time-input:hover{border-color:var(--yp-input-border-hover)}.time-input:focus-within{border-color:var(--yp-input-border-focus)}.time-input>span{font-size:18px;color:var(--el-text-color-secondary)}.time-input input{width:100%;min-width:0;border:0;outline:none;background:transparent;font-size:14px}.time-input input::-webkit-calendar-picker-indicator{display:none}
-.end-day{display:flex;justify-content:flex-end;font-size:12px;margin-top:-8px;color:var(--el-text-color-secondary)}footer{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:2px}output{font-size:21px;font-variant-numeric:tabular-nums;white-space:nowrap}.save-session{background:var(--el-color-primary);color:white;padding:11px 20px;font-size:16px}.save-session:hover:not(:disabled){background:#f0f1f3;color:var(--el-text-color-primary)}
+button{font:inherit;color:inherit}button{border:0;background:transparent;cursor:pointer;border-radius:5px}button:hover:not(:disabled){background:var(--yp-bg-hover);color:var(--yp-text-primary)}button:disabled{opacity:.4;cursor:default}button:focus-visible{outline:2px solid var(--yp-focus-ring);outline-offset:2px}
+.session-times{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:8px}label{display:grid;gap:10px;font-size:14px}
+.session-times :deep(.el-date-editor){width:100%}
+.end-day :deep(.el-select){width:112px}
+.end-day{display:flex;justify-content:flex-end;font-size:12px;margin-top:-8px;color:var(--yp-text-secondary)}footer{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:2px}output{font-size:21px;font-variant-numeric:tabular-nums;white-space:nowrap}.save-session{background:var(--yp-action-primary);color:var(--yp-on-solid);padding:11px 20px;font-size:16px}.save-session:hover:not(:disabled){background:var(--yp-action-primary-hover);color:var(--yp-on-solid)}
 </style>

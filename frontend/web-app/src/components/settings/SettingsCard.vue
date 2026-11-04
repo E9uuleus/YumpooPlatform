@@ -37,8 +37,8 @@ const open = defineModel<boolean>('open', { default: true })
 </template>
 
 <style scoped>
-.settings-card{overflow:hidden;border:1px solid var(--yp-border-subtle);border-radius:var(--yp-radius-xl);background:var(--yp-bg-surface)}
-.settings-card__head{display:flex;align-items:center;gap:10px;width:100%;height:48px;padding:0 16px;border:0;border-bottom:1px solid var(--yp-border-subtle);background:none;color:var(--yp-text-primary);font:inherit;cursor:pointer;text-align:left;transition:border-color .2s}
+.settings-card{overflow:hidden;border-radius:var(--yp-radius-xl);background:var(--yp-bg-sunken);}
+.settings-card__head{display:flex;align-items:center;gap:10px;width:100%;height:48px;padding:0 16px;border:0;background:none;color:var(--yp-text-primary);font:inherit;cursor:pointer;text-align:left;transition:border-color .2s}
 .is-closed .settings-card__head{border-bottom-color:transparent}
 .settings-card__head:focus-visible{outline:2px solid var(--yp-action-primary);outline-offset:-2px}
 .settings-card__icon{color:var(--yp-text-secondary);font-size:18px}

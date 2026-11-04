@@ -184,7 +184,6 @@ async function toggleSearch(): Promise<void> {
 <style scoped>
 .yp-filter-bar {
   margin-bottom: var(--yp-space-5);
-  border-bottom: 1px solid var(--yp-border-subtle);
 }
 
 .yp-filter-bar__toolbar {
@@ -250,18 +249,14 @@ async function toggleSearch(): Promise<void> {
 
 .yp-filter-bar__tool:hover {
   color: var(--yp-text-primary);
-  background: var(--yp-bg-sunken);
+  background: var(--yp-bg-hover);
 }
 
-.yp-filter-bar__tool.active {
-  color: var(--yp-action-primary);
-  background: color-mix(in srgb, var(--yp-action-primary) 18%, var(--yp-bg-surface));
-  font-weight: 500;
-}
-
+.yp-filter-bar__tool.active,
 .yp-filter-bar__tool.active:hover {
   color: var(--yp-action-primary);
-  background: color-mix(in srgb, var(--yp-action-primary) 24%, var(--yp-bg-surface));
+  background: var(--yp-bg-selected);
+  font-weight: 500;
 }
 
 .yp-filter-bar__tool .el-icon {
@@ -280,15 +275,14 @@ async function toggleSearch(): Promise<void> {
   padding: 0 4px;
   place-items: center;
   border-radius: var(--yp-radius-pill);
-  color: var(--yp-text-inverse);
-  background: var(--yp-text-primary);
+  color: var(--yp-on-solid);
+  background: var(--yp-action-primary);
   font-size: 10px;
   line-height: 1;
 }
 
 .yp-filter-bar__search {
   padding: var(--yp-space-3) 0;
-  border-top: 1px solid var(--yp-border-subtle);
 }
 
 .yp-filter-bar__search :deep(.el-input) {
@@ -305,10 +299,6 @@ async function toggleSearch(): Promise<void> {
 .yp-filter-popover.el-popover {
   max-width: calc(100vw - var(--yp-space-6));
   padding: 0;
-  border-color: var(--yp-border-default);
-  border-radius: var(--yp-radius-md);
-  background: var(--yp-bg-raised);
-  box-shadow: var(--yp-shadow-popover);
 }
 
 .yp-filter-panel {
@@ -320,8 +310,6 @@ async function toggleSearch(): Promise<void> {
   align-items: center;
   justify-content: space-between;
   margin-bottom: var(--yp-space-3);
-  padding-bottom: var(--yp-space-2);
-  border-bottom: 1px solid var(--yp-border-subtle);
   font-size: 13px;
 }
 
@@ -332,27 +320,21 @@ async function toggleSearch(): Promise<void> {
 }
 
 .yp-filter-panel__clear-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   height: 26px;
-  padding: 0 10px;
-  border: 1px solid transparent;
-  border-radius: var(--yp-radius-xs);
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--yp-radius-sm);
+  color: var(--yp-action-primary);
+  background: transparent;
   font: inherit;
   font-size: 12.5px;
   font-weight: 500;
-  color: var(--yp-text-primary);
-  background: var(--yp-bg-sunken);
   cursor: pointer;
-  line-height: 1;
-  transition: background-color var(--yp-motion-fast) var(--yp-ease-standard),
-              color var(--yp-motion-fast) var(--yp-ease-standard);
+  transition: background-color var(--yp-motion-fast) var(--yp-ease-standard);
 }
 
 .yp-filter-panel__clear-btn:hover {
   background: var(--yp-bg-hover);
-  color: var(--yp-action-primary);
 }
 
 .yp-filter-panel__controls {

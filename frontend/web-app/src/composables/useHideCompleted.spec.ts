@@ -9,7 +9,7 @@ vi.mock('./useTimeTracker', async () => {
 })
 import { hideCompleted, setHideCompleted } from './useHideCompleted'
 
-describe('隐没已完成', () => {
+describe('隐藏已完成', () => {
   it('读取本人计时偏好，并经原保存流程更新', async () => {
     const preferences = tracker.preferences as Ref<Record<string, unknown>>
     expect(hideCompleted.value).toBe(false)

@@ -5,7 +5,7 @@ import { getStatusPresentation, type StatusDomain } from '../../design-system/st
 const props = withDefaults(defineProps<{
   domain: StatusDomain
   status: string
-  effect?: 'solid' | 'soft' | 'cell' | 'dot'
+  effect?: 'solid' | 'cell' | 'dot'
   size?: 'small' | 'default'
 }>(), {
   effect: 'solid',
@@ -54,11 +54,7 @@ const presentation = computed(() => getStatusPresentation(props.domain, props.st
   background: var(--yp-status-color);
 }
 
-.yp-status-tag--soft {
-  color: var(--yp-text-primary);
-  border-color: color-mix(in srgb, var(--yp-status-color) var(--yp-status-border-mix), var(--yp-border-default));
-  background: color-mix(in srgb, var(--yp-status-color) var(--yp-status-surface-mix), var(--yp-bg-surface));
-}
+
 
 .yp-status-tag--cell {
   width: 100%;

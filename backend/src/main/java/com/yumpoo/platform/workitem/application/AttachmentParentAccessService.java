@@ -78,7 +78,7 @@ public class AttachmentParentAccessService {
     private static void requireWritable(ProjectAccessSnapshot project,Content content,WorkItem item) {
         if(project.actorAccess()==ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY)
             throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
-        if(project.lifecycle()==ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED || item.archived())
+        if(!project.contentWritable() || item.archived())
             throw notWritable();
     }
     private static ApplicationException notFound(){return new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND);}

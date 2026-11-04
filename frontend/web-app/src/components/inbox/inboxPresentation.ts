@@ -29,7 +29,7 @@ export function notificationText(item: NotificationItem, readerId?: string, time
     case 'ASSIGNED': return `将 ${target} 指派给你`
     case 'CONNECTION_CREATED': return `向你负责的项目新建了 ${target}`
     case 'PROJECT_MEMBER_ADDED': return `将${subject}加入项目 ${project}`
-    case 'PROJECT_MEMBER_REMOVED': return `将${subject}移出项目 ${project}`
+    case 'PROJECT_MEMBER_REMOVED': return item.actor?.id === item.subject?.id ? `退出了项目 ${project}` : `将${subject}移出项目 ${project}`
     case 'PROJECT_OWNER_ASSIGNED': return `将项目 ${project} 的负责人转交给你`
     case 'PROJECT_OWNER_TRANSFERRED': return `将项目 ${project} 的负责人转交给 ${subject}`
     case 'PROJECT_DELETION_SCHEDULED': return `已申请删除项目 ${project}${purgeDate ? `，将于 ${purgeDate} 永久删除` : ''}`

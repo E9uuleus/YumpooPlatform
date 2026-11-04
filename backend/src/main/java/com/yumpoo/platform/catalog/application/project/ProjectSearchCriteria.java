@@ -12,8 +12,22 @@ public record ProjectSearchCriteria(
         List<UUID> ownerUserIds,
         List<ProjectActorAccess> actorAccesses,
         Instant updatedSince,
-        ProjectLifecycleFilter lifecycle
+        ProjectLifecycleFilter lifecycle,
+        Boolean ended,
+        List<UUID> ids
 ) {
+    public static final int MAX_IDS = 50;
+
+    public ProjectSearchCriteria(String query, List<UUID> ownerUserIds, List<ProjectActorAccess> actorAccesses,
+            Instant updatedSince, ProjectLifecycleFilter lifecycle) {
+        this(query, ownerUserIds, actorAccesses, updatedSince, lifecycle, null, null);
+    }
+
+    public ProjectSearchCriteria(String query, List<UUID> ownerUserIds, List<ProjectActorAccess> actorAccesses,
+            Instant updatedSince, ProjectLifecycleFilter lifecycle, Boolean ended) {
+        this(query, ownerUserIds, actorAccesses, updatedSince, lifecycle, ended, null);
+    }
+
     public ProjectSearchCriteria {
         query = query == null || query.isBlank() ? null : query.strip();
         if (query != null && query.length() > 80) {
@@ -23,5 +37,10 @@ public record ProjectSearchCriteria(
         ownerUserIds = ownerUserIds == null ? List.of() : List.copyOf(ownerUserIds);
         lifecycle = lifecycle == null ? ProjectLifecycleFilter.ALL : lifecycle;
         actorAccesses = actorAccesses == null ? List.of() : List.copyOf(actorAccesses);
+        ids = ids == null ? List.of() : List.copyOf(ids);
+        if (ids.size() > MAX_IDS) {
+            throw ApplicationException.validation(new FieldViolation(
+                    "ids", "SIZE", "最多按 " + MAX_IDS + " 个项目筛选"));
+        }
     }
 }
