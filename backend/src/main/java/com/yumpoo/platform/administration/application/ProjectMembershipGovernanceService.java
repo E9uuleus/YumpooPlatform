@@ -26,20 +26,22 @@ public class ProjectMembershipGovernanceService {
     private final SecurityAuditAppendPort audits;
     private final ObjectMapper objectMapper;
     private final Clock clock;
+    private final com.yumpoo.platform.workitem.api.ProjectTimerStopPort timers;
 
     public ProjectMembershipGovernanceService(ProjectMembershipQuery query,
             ProjectMembershipCommandPort commands, MinimalUserSnapshotQuery users,
             IdempotentCommandExecutor idempotency, TransactionalEventPort events,
-            SecurityAuditAppendPort audits, ObjectMapper objectMapper, Clock clock) {
+            SecurityAuditAppendPort audits, ObjectMapper objectMapper, Clock clock,
+            com.yumpoo.platform.workitem.api.ProjectTimerStopPort timers) {
         this.query = query; this.commands = commands; this.users = users;
         this.idempotency = idempotency; this.events = events; this.audits = audits;
-        this.objectMapper = objectMapper; this.clock = clock;
+        this.objectMapper = objectMapper; this.clock = clock; this.timers = timers;
     }
 
     public IdempotencyExecutionResult add(ProjectMemberGovernanceCommand command) {
         return execute(command.actor(), "POST", "addProjectMember", command.idempotencyKey(), command.requestHash(), () -> {
-            ProjectAccessSnapshot access = requireOwnerOrAdmin(command.actor(), command.projectId(), true);
-            requireReasonForAdminPath(command.actor(), access, command.reason());
+            requireOwnerOrAdmin(command.actor(), command.projectId(), true);
+            requireReasonLength(command.reason());
             requireAvailableUser(command.actor().companyId(), command.userId(), "userId");
             ProjectMemberMutationResult result = commands.add(new ProjectMemberMutation(
                     command.actor().companyId(), command.projectId(), command.userId(),
@@ -54,8 +56,8 @@ public class ProjectMembershipGovernanceService {
 
     public IdempotencyExecutionResult remove(ProjectMemberGovernanceCommand command) {
         return execute(command.actor(), "DELETE", "removeProjectMember", command.idempotencyKey(), command.requestHash(), () -> {
-            ProjectAccessSnapshot access = requireOwnerOrAdmin(command.actor(), command.projectId(), true);
-            requireReasonForAdminPath(command.actor(), access, command.reason());
+            requireOwnerOrAdmin(command.actor(), command.projectId(), true);
+            requireReasonLength(command.reason());
             ProjectMemberMutationResult result = commands.remove(new ProjectMemberMutation(
                     command.actor().companyId(), command.projectId(), command.userId(),
                     command.expectedMembershipVersion(), command.actor().userId(), normalized(command.reason())));
@@ -67,10 +69,27 @@ public class ProjectMembershipGovernanceService {
         });
     }
 
+    /** 成员自行退出：版本取自调用者当前的成员关系；负责人由成员服务拒绝，只读访问的公司管理员没有成员关系。 */
+    public IdempotencyExecutionResult leave(ProjectMemberGovernanceCommand command) {
+        return execute(command.actor(), "POST", "leaveProject", command.idempotencyKey(), command.requestHash(), () -> {
+            ProjectAccessSnapshot access = query.requireVisible(command.actor(), command.projectId());
+            if (!access.actorAccess().membershipBacked()) throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
+            ProjectMemberMutationResult result = commands.remove(new ProjectMemberMutation(
+                    command.actor().companyId(), command.projectId(), command.actor().userId(),
+                    access.membershipVersion().getAsLong(), command.actor().userId(), null));
+            timers.stopLeavingMemberTimers(command.actor(), command.projectId());
+            appendMemberEvent("catalog.project_member_removed", result.member(), command.actor(), "DIRECT");
+            appendAudit("PROJECT_MEMBER_LEFT", result.member().membershipId(), command.actor(),
+                    null, command.idempotencyKey(), command.clientType(), command.clientVersion(),
+                    null, memberAudit(result.member()));
+            return stored(200, result.member(), result.member().etag());
+        });
+    }
+
     public IdempotencyExecutionResult reassignOwner(ProjectOwnerReassignmentCommand command) {
         return execute(command.actor(), "POST", "reassignProjectOwner", command.idempotencyKey(), command.requestHash(), () -> {
-            requireCompanyAdmin(command.actor());
-            requireReason(command.reason());
+            requireOwnerOrAdmin(command.actor(), command.projectId(), true);
+            requireReasonLength(command.reason());
             requireAvailableUser(command.actor().companyId(), command.newOwnerUserId(), "newOwnerUserId");
             ProjectOwnerReassignmentResult result = commands.reassignOwner(
                     new ProjectOwnerReassignmentMutation(command.actor().companyId(), command.projectId(),
@@ -135,23 +154,11 @@ public class ProjectMembershipGovernanceService {
         }
     }
 
-    private static void requireReasonForAdminPath(CurrentActor actor, ProjectAccessSnapshot access,
-                                                  String reason) {
-        if (access.actorAccess() != ProjectAccessSnapshot.ActorProjectAccess.OWNER
-                && actor.hasRole(PlatformRoleCode.COMPANY_ADMIN)) {
-            requireReason(reason);
-            return;
-        }
+    /** 理由可选，只写入安全审计。 */
+    private static void requireReasonLength(String reason) {
         if (reason != null && reason.strip().length() > 500) {
             throw ApplicationException.validation(new FieldViolation(
                     "reason", "INVALID_LENGTH", "理由长度不能超过 500 字符"));
-        }
-    }
-
-    private static void requireReason(String reason) {
-        if (reason == null || reason.strip().length() < 10 || reason.strip().length() > 500) {
-            throw ApplicationException.validation(new FieldViolation(
-                    "reason", "INVALID_LENGTH", "治理理由长度必须在 10 到 500 字符之间"));
         }
     }
 
@@ -209,11 +216,5 @@ public class ProjectMembershipGovernanceService {
     private static String normalized(String value) {
         if (value == null || value.isBlank()) return null;
         return value.strip();
-    }
-
-    private static void requireCompanyAdmin(CurrentActor actor) {
-        if (actor == null) throw new ApplicationException(StandardErrorCode.AUTHENTICATION_REQUIRED);
-        if (!actor.hasRole(PlatformRoleCode.COMPANY_ADMIN))
-            throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
     }
 }

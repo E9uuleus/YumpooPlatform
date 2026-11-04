@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import YpSkeleton from '../../components/yp/YpSkeleton.vue'
+import { usePageLoad } from '../../brand/page-progress'
+
 import { Download, Refresh } from '@element-plus/icons-vue'
 import { ProjectLifecycleFilter, type CompanyActivityItem } from '@yumpoo/api-client'
 import {
@@ -36,6 +39,7 @@ import { useSession } from '../../composables/useSession'
 import { formatTimestamp, zonedStartOfDay } from '../../design-system/dates'
 import type { ActiveFilter } from '../../design-system/types'
 
+const pageLoad = usePageLoad()
 interface Option { value: string; label: string }
 
 const ElOption = ElOptionRaw as unknown as DefineComponent
@@ -48,7 +52,6 @@ const router = useRouter(), session = useSession()
 const timezone = computed(() => session.authentication.value?.company.timezone ?? 'Asia/Shanghai')
 const items = ref<CompanyActivityItem[]>([])
 const nextCursor = ref<string | null>(null)
-const historyStartedAt = ref<Date>()
 const loading = ref(false), loadingMore = ref(false), exporting = ref(false)
 const error = ref<ApiProblem>()
 const dateRange = ref<[Date, Date] | null>(null)
@@ -118,7 +121,6 @@ async function load(): Promise<void> {
     if (sequence !== requestSequence) return
     items.value = page.items
     nextCursor.value = page.nextCursor
-    historyStartedAt.value = page.historyStartedAt
   } catch (reason) {
     if (sequence === requestSequence) error.value = await toApiProblem(reason)
   } finally {
@@ -142,23 +144,34 @@ async function loadMore(): Promise<void> {
   }
 }
 
-const quiet = () => undefined
+const actorSearch = ref<'idle' | 'loading' | 'failed'>('idle')
+const projectSearch = ref<'idle' | 'loading' | 'failed'>('idle')
 
 function searchActors(query: string): void {
+  actorSearch.value = 'loading'
   void identityAdministrationApi.listMembers({ ...(query.trim() ? { name: query.trim() } : {}), page: 0, size: 20 })
     .then(page => {
       page.items.forEach(member => actorLabels.set(member.userId, member.displayName))
       actorOptions.value = page.items.map(member => ({ value: member.userId, label: member.displayName }))
-    }, quiet)
+      actorSearch.value = 'idle'
+    }, () => {
+      actorOptions.value = []
+      actorSearch.value = 'failed'
+    })
 }
 
 // No actorAccesses: for COMPANY_ADMIN the server searches every project, archived ones included.
 function searchProjects(query: string): void {
+  projectSearch.value = 'loading'
   void projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.All, ...(query.trim() ? { query: query.trim() } : {}), page: 0, size: 20 })
     .then(page => {
       page.items.forEach(project => projectLabels.set(project.id, project.name))
       projectOptions.value = page.items.map(project => ({ value: project.id, label: project.name }))
-    }, quiet)
+      projectSearch.value = 'idle'
+    }, () => {
+      projectOptions.value = []
+      projectSearch.value = 'failed'
+    })
 }
 
 function removeFilter(key: string): void {
@@ -225,7 +238,7 @@ async function exportExcel(): Promise<void> {
 watch([dateRange, actorIds, projectIds, categories], () => void load())
 
 onMounted(() => {
-  void load()
+  void pageLoad.track(() => load())
   searchActors('')
   searchProjects('')
   if (typeof IntersectionObserver === 'undefined' || !sentinel.value) return
@@ -274,6 +287,10 @@ onBeforeUnmount(() => {
             filterable
             remote
             :remote-method="searchActors"
+            :loading="actorSearch === 'loading'"
+            loading-text="正在搜索成员…"
+            :no-data-text="actorSearch === 'failed' ? '成员搜索失败，请修改关键字重试' : '没有匹配的成员'"
+            :no-match-text="actorSearch === 'failed' ? '成员搜索失败，请修改关键字重试' : '没有匹配的成员'"
             placeholder="搜索成员"
             aria-label="操作人"
           >
@@ -294,6 +311,10 @@ onBeforeUnmount(() => {
             filterable
             remote
             :remote-method="searchProjects"
+            :loading="projectSearch === 'loading'"
+            loading-text="正在搜索项目…"
+            :no-data-text="projectSearch === 'failed' ? '项目搜索失败，请修改关键字重试' : '没有匹配的项目'"
+            :no-match-text="projectSearch === 'failed' ? '项目搜索失败，请修改关键字重试' : '没有匹配的项目'"
             placeholder="搜索项目"
             aria-label="项目"
           >
@@ -329,6 +350,7 @@ onBeforeUnmount(() => {
           placement="top"
         >
           <el-button
+            text
             :icon="Refresh"
             :loading="loading"
             aria-label="刷新活动日志"
@@ -336,6 +358,7 @@ onBeforeUnmount(() => {
           />
         </el-tooltip>
         <el-button
+            text
           :icon="Download"
           :loading="exporting"
           :disabled="loading || !items.length"
@@ -353,8 +376,15 @@ onBeforeUnmount(() => {
     />
 
     <div class="table-surface company-activity__surface">
+      <yp-skeleton
+        v-if="loading && !items.length"
+        variant="table"
+        :rows="8"
+        :columns="5"
+        label="正在加载活动日志"
+      />
       <div
-        v-if="loading || items.length"
+        v-else-if="items.length"
         class="table-scroll"
       >
         <el-table
@@ -450,9 +480,6 @@ onBeforeUnmount(() => {
           加载更多
         </el-button>
         <span v-else-if="items.length">已显示全部 {{ items.length }} 条</span>
-        <span v-if="historyStartedAt">
-          活动从 {{ formatTimestamp(historyStartedAt, timezone) }} 开始记录，更早历史未回填。
-        </span>
       </footer>
     </div>
   </section>
@@ -490,8 +517,6 @@ onBeforeUnmount(() => {
 }
 
 .company-activity__surface {
-  border-color: var(--yp-border-subtle);
-  border-radius: var(--yp-radius-md);
   background: var(--yp-bg-surface);
 }
 

@@ -83,7 +83,7 @@ export function useWorkItemBatchActions(options: Options) {
         if (!await options.beforeRemove(eligible.map(target => options.resolve(target.id)!))) return
         const children = targets.filter(target => target.parentId).length
         const withChildren = eligible.some(target => options.resolve(target.id)!.subitemCount > 0)
-        await ElMessageBox.confirm(`将${labels[action]} ${eligible.length} 项，含 ${children} 个子工作项；跳过 ${targets.length - eligible.length} 项（无权限或已不在列表）。${withChildren ? '父项的子工作项也将从主表隐藏，父子关系保留。' : ''}`,
+        await ElMessageBox.confirm(`将${labels[action]} ${eligible.length} 项，含 ${children} 个子工作项；跳过 ${targets.length - eligible.length} 项（无权限或已不在列表）。${withChildren ? '父项的子工作项也将从主表隐藏，父子关系保留。' : ''}${action === 'archive' ? '归档后可在「已归档」中恢复。' : ''}`,
           `批量${labels[action]}`, { confirmButtonText: labels[action], cancelButtonText: '取消', type: 'warning' })
       } else if (action === 'duplicate' && targets.length > 20) {
         await ElMessageBox.confirm(`将复制 ${targets.length} 个工作项（含子工作项），是否继续？`, '批量复制', { confirmButtonText: '复制', cancelButtonText: '取消' })

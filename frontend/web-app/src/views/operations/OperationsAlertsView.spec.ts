@@ -171,7 +171,7 @@ describe('告警详情时间线', () => {
     await flushPromises()
     const signal = api.getOperationsAlert.mock.lastCall![1].signal as AbortSignal
     expect(wrapper.find('.alert-detail__summary').exists()).toBe(false)
-    expect(wrapper.get('[role="status"]').text()).toContain('正在加载')
+    expect(wrapper.get('[role="status"]').attributes('aria-label')).toContain('正在加载')
     reactive(navigation).query = { alert: 'alert-3' }
     await flushPromises()
     expect(signal.aborted).toBe(true)

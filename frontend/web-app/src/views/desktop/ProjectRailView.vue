@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { ProjectLifecycle } from '@yumpoo/api-client'
+import { ProjectLifecycle, ProjectLifecycleFilter } from '@yumpoo/api-client'
 import type { RailProject, RailState } from '@yumpoo/preload-contract'
 import { Plus } from '@element-plus/icons-vue'
+import { projectsApi } from '../../api/client'
 import { useSession } from '../../composables/useSession'
 import { useTimeTracker } from '../../composables/useTimeTracker'
 import { useProjectRecents } from '../../composables/useProjectRecents'
@@ -13,6 +14,7 @@ import TimerIcon from '../../components/timer/TimerIcon.vue'
 import { railLabel } from '../../components/desktop/quickTime'
 import { plainRailProjects } from '../../components/desktop/railProjects'
 import { resumeSubjects } from '../../components/timer/timeCategories'
+import { MY_PROJECT_ACCESSES } from '../../components/projects/projectScope'
 
 // Mirrors RAIL_ICONS and the 10px padding, 8px gaps and 14px time label that timer-geometry.ts sizes the window by.
 const ICONS = { small: 30, medium: 34, large: 40 } as const
@@ -28,24 +30,56 @@ const scope = computed(() => {
 })
 const recents = useProjectRecents(() => scope.value)
 const projects = computed(() => state.value?.projects && state.value.projects.owner === scope.value ? state.value.projects.items : [])
-const tones = computed(() => projectColors(projects.value.map(project => project.id)))
+const available = ref<Set<string>>()
+const visibleProjects = computed(() => available.value ? projects.value.filter(project => available.value!.has(project.id)) : projects.value)
+watch(() => visibleProjects.value.length, count => { void bridge?.setVisibleCount?.(count) }, { immediate: true })
+const tones = computed(() => projectColors(visibleProjects.value.map(project => project.id)))
 const icon = computed(() => ICONS[state.value?.size ?? 'medium'])
 const running = computed(() => tracker.running.value.length > 0)
 const resume = computed(() => resumeSubjects(tracker.current.value))
 const slotLabel = computed(() => running.value ? orbDuration(tracker.wallDuration.value) : resume.value.length ? '继续' : '计时')
 
+let availabilityRequest = 0
+let availabilityInFlight: Promise<void> | undefined
 const offState = bridge?.onState(value => { state.value = value })
 void bridge?.getState().then(value => { state.value ??= value }).catch(() => undefined)
-onBeforeUnmount(() => offState?.())
+window.addEventListener('focus', readAvailableProjects)
+document.addEventListener('visibilitychange', refreshWhenVisible)
+onBeforeUnmount(() => {
+  availabilityRequest++
+  offState?.()
+  window.removeEventListener('focus', readAvailableProjects)
+  document.removeEventListener('visibilitychange', refreshWhenVisible)
+})
 
 // Until the person arranges it, the rail starts from their most recent projects; another account's list is replaced the same way.
 // With no recents yet (a fresh install or partition) nothing is saved, so the rail seeds once the main window records some.
 watch([state, scope, () => recents.items.value], ([value, owner]) => {
   if (!bridge || !value || !owner || value.projects?.owner === owner) return
-  const items = recents.items.value.filter(project => project.lifecycle === ProjectLifecycle.Active).slice(0, 6)
+  const items = recents.items.value.filter(project => project.lifecycle === ProjectLifecycle.Active && !project.endedAt).slice(0, 6)
     .map(project => ({ id: project.id, name: project.name.slice(0, 64) }))
   if (items.length) void bridge.setProjects({ owner, items }).catch(() => undefined)
 })
+
+watch(scope, () => {
+  availabilityRequest++
+  availabilityInFlight = undefined
+  available.value = undefined
+  void readAvailableProjects()
+}, { immediate: true })
+function readAvailableProjects(): Promise<void> {
+  if (availabilityInFlight) return availabilityInFlight
+  if (!scope.value) return Promise.resolve()
+  const request = ++availabilityRequest
+  availabilityInFlight = projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.Active, ended: false, actorAccesses: MY_PROJECT_ACCESSES, page: 0, size: 100 })
+    .then(result => { if (request === availabilityRequest) available.value = new Set(result.items.map(project => project.id)) })
+    .catch(() => undefined)
+    .finally(() => { if (request === availabilityRequest) availabilityInFlight = undefined })
+  return availabilityInFlight
+}
+function refreshWhenVisible() {
+  if (document.visibilityState === 'visible') void readAvailableProjects()
+}
 
 async function toggleTimer() {
   if (tracker.busy.value) return
@@ -59,9 +93,12 @@ function drop(target: number) {
   const from = dragging.value
   dragging.value = null
   if (from === null || from === target || !scope.value) return
-  const items = [...projects.value]
-  const [moved] = items.splice(from, 1)
-  items.splice(target, 0, moved!)
+  const ordered = [...visibleProjects.value]
+  const [moved] = ordered.splice(from, 1)
+  ordered.splice(target, 0, moved!)
+  const visibleIds = new Set(visibleProjects.value.map(project => project.id))
+  let next = 0
+  const items = projects.value.map(project => visibleIds.has(project.id) ? ordered[next++]! : project)
   void bridge?.setProjects({ owner: scope.value, items: plainRailProjects(items) })
 }
 </script>
@@ -99,7 +136,7 @@ function drop(target: number) {
         <span class="rail-sep" />
       </template>
       <button
-        v-for="(project, index) in projects"
+        v-for="(project, index) in visibleProjects"
         :key="project.id"
         type="button"
         class="rail-project"

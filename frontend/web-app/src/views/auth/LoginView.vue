@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import YpNotice from '../../components/yp/YpNotice.vue'
 import type { DesktopAuthErrorCode, DesktopAuthStatus } from '@yumpoo/preload-contract'
-import { ElAlert, ElButton, ElCard, ElCheckbox } from 'element-plus'
+import { ElButton, ElCard, ElCheckbox } from 'element-plus'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -142,14 +143,13 @@ onBeforeUnmount(() => stopStatus?.())
         <p class="description">
           {{ isDesktop ? '登录将在系统默认浏览器中完成。' : '点击后打开企业微信官方扫码页面。' }}
         </p>
-        <el-alert
+        <yp-notice
           v-if="visibleMessage"
           class="login-alert"
-          :title="visibleMessage"
-          :type="messageType"
-          :closable="false"
-          show-icon
-        />
+          :tone="messageType"
+        >
+          {{ visibleMessage }}
+        </yp-notice>
         <el-button
           class="login-action"
           type="primary"

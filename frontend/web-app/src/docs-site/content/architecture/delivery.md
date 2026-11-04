@@ -22,7 +22,7 @@ CI 由统一入口 [tools/ci/run.mjs](../../../../../../tools/ci/run.mjs) 驱动
 | portable | 监控告警规则测试、备份恢复输出、打包后的 HTTP 冒烟、可移植交付包的生成与校验 |
 | windows | Windows 工具链、发布恢复、桌面冒烟、打包、安装器与更新签名校验 |
 
-交付步骤按能力命名，本地可以用 `pnpm run ci` 或单独跑某个阶段。历史上的里程碑门禁已经退役。
+交付步骤按能力命名，本地可以用 `pnpm run ci` 或单独跑某个阶段。历史上的里程碑门禁已经退役。在 GitHub Actions 中，static 与 backend 两个阶段并行运行。
 
 ## 本地浏览器冒烟
 

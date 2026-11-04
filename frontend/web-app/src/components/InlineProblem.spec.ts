@@ -6,7 +6,7 @@ import InlineProblem from './InlineProblem.vue'
 describe('统一内联错误', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('显示安全消息、requestId、Retry-After 并支持复制', async () => {
+  it('显示安全消息、请求 ID、Retry-After 并支持复制诊断信息', async () => {
     const writeText = vi.fn(async () => undefined)
     vi.stubGlobal('navigator', { clipboard: { writeText } })
     const error: ErrorResponse = {
@@ -23,10 +23,10 @@ describe('统一内联错误', () => {
       },
     })
     expect(wrapper.text()).toContain('请求较多，请稍后重试。')
-    expect(wrapper.text()).toContain('req-copy')
+    expect(wrapper.text()).toContain('请求 ID：req-copy')
     expect(wrapper.text()).toContain('30 秒')
-    await wrapper.get('button').trigger('click')
-    expect(writeText).toHaveBeenCalledWith('req-copy')
+    await wrapper.findAll('button').find(button => button.text() === '复制诊断信息')!.trigger('click')
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('请求 ID：req-copy'))
     expect(wrapper.text()).toContain('已复制')
   })
 })

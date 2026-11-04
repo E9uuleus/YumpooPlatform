@@ -1,11 +1,13 @@
+import { usePageLoad } from '../brand/page-progress'
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch, type WatchStopHandle } from 'vue'
 import { toApiProblem, type ApiProblem } from '../api/problems'
 import { ensureAuthentication } from './useSession'
 
 export function useOperationsQuery<T>(
   load: (signal: AbortSignal) => Promise<T>,
-  options: { interval?: () => number; enabled?: () => boolean; immediate?: boolean } = {},
+  options: { interval?: () => number; enabled?: () => boolean; immediate?: boolean; pageLoad?: boolean } = {},
 ) {
+  const pageLoad = usePageLoad()
   const data = shallowRef<T>(),
     error = shallowRef<ApiProblem>(),
     updatedAt = ref<Date>()
@@ -105,7 +107,10 @@ export function useOperationsQuery<T>(
         } else schedule()
       },
     )
-    if (options.immediate !== false) void refresh()
+    if (options.immediate !== false) {
+      if (options.pageLoad) void pageLoad.track(refresh)
+      else void refresh()
+    }
   })
   onBeforeUnmount(() => {
     disposed = true

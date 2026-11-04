@@ -97,6 +97,7 @@ components:
       required:
         - todo
         - inProgress
+        - other
         - overdue
       properties:
         todo:
@@ -107,6 +108,11 @@ components:
           type: integer
           format: int64
           minimum: 0
+        other:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 成员新增的状态（兼容分类 TODO）中的工作项；todo 只统计项目初始状态 NOT_STARTED。
         overdue:
           type: integer
           format: int64
@@ -120,6 +126,7 @@ components:
         - active
         - todo
         - inProgress
+        - other
         - overdue
       properties:
         userId:
@@ -137,6 +144,11 @@ components:
           type: integer
           format: int64
           minimum: 0
+        other:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 成员新增的状态（兼容分类 TODO）中的工作项；todo 只统计项目初始状态 NOT_STARTED。
         overdue:
           type: integer
           format: int64

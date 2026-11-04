@@ -1,6 +1,8 @@
 package com.yumpoo.platform.catalog.api;
 
 public interface ProjectLifecycleCommandPort {
+    ProjectSnapshot lockForEnded(ProjectEndMutation mutation);
+    ProjectSnapshot changeEnded(ProjectEndMutation mutation);
     ProjectSnapshot create(ProjectCreationMutation mutation);
     ProjectSnapshot lockForArchive(ProjectArchiveMutation mutation);
     ProjectSnapshot archive(ProjectArchiveMutation mutation);

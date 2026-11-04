@@ -87,7 +87,7 @@ public class ProjectCreationOrchestrator {
                 command.actor().userId()));
 
         List<InitializedProjectContent> contents = initializeContentsPort.initialize(
-                new ProjectContentInitialization(project.companyId(), project.projectId(), command.actor().userId()));
+                new ProjectContentInitialization(project.companyId(), project.projectId(), command.actor().userId(), command.initialColors()));
         appendAudit(project, contents.size(), command);
         appendCreated(project, contents.size(), command.actor());
         return stored(project);

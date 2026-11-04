@@ -78,10 +78,12 @@ public class WorkItemStatisticsAdapter implements WorkItemStatisticsQuery {
         var request = new com.yumpoo.platform.workitem.application.WorkItemQuery.Request(c.q(), c.status(), c.priority(),
                 c.assigneeUserId(), c.contentId(), c.dueFrom(), c.dueTo(), c.updatedAfter(), c.sort(),
                 new com.yumpoo.platform.workitem.application.WorkItemQuery.TimeFilter(c.timeTrackingState(),
-                        c.timeTrackingMinMs(), c.timeTrackingMaxMs(), scope.asOf(), 0, 0), c.emptyField()).withScope(scope).withAssigneeSet(c.assigneeSetUserId());
+                        c.timeTrackingMinMs(), c.timeTrackingMaxMs(), scope.asOf(), 0, 0), c.emptyField()).withScope(scope).withAssigneeSet(c.assigneeSetUserId())
+                .withGroup(new com.yumpoo.platform.workitem.application.WorkItemQuery.GroupFilter(
+                        c.groupStatus(), c.groupPriority(), c.groupContentId(), c.groupDueFrom(), c.groupDueTo()));
         var page = com.yumpoo.platform.foundation.api.pagination.CursorPageRequest.of(c.cursor(), c.limit());
         if (c.field() != null) {
-            var result = workItems.listProjectFilterOptions(actor, projectId, c.field(), request, page);
+            var result = workItems.listProjectFilterOptions(actor, projectId, c.field(), Boolean.TRUE.equals(c.countSubitems()), request, page);
             return new TablePage(List.of(), result.items(), result.nextCursor(), List.of(), java.util.Map.of());
         }
         List<com.yumpoo.platform.workitem.application.WorkItemModels.ProjectWorkItemListItem> items;

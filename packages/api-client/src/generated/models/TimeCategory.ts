@@ -12,7 +12,7 @@
  */
 
 /**
- * 固定工时分类：出差、学习、商务、会议；可选关联一个项目，但不关联工作项。
+ * 固定工时分类：出差、学习、商务、会议，以及仅由系统写入、成员只读的迁入工时；可选关联一个项目，但不关联工作项。
  * @export
  * @enum {string}
  */
@@ -21,6 +21,7 @@ export enum TimeCategory {
     Learning = 'LEARNING',
     Business = 'BUSINESS',
     Meeting = 'MEETING',
+    Migrated = 'MIGRATED',
     UnknownDefaultOpenApi = '11184809'
 }
 

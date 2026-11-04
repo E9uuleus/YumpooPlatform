@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import YpSkeleton from '../../components/yp/YpSkeleton.vue'
+import { usePageLoad } from '../../brand/page-progress'
+
 import { readCsrfToken, type ScheduledJob } from '@yumpoo/api-client'
 import {
-  ElAlert,
   ElButton,
   ElDialog,
   ElMessage,
@@ -35,6 +37,7 @@ import { useIdentityAdmin } from '../../composables/useIdentityAdmin'
 import { useSession } from '../../composables/useSession'
 import { formatTimestamp } from '../../design-system/dates'
 
+const pageLoad = usePageLoad()
 const ElOption = ElOptionRaw as unknown as DefineComponent
 const ElSelect = ElSelectRaw as unknown as DefineComponent
 
@@ -114,19 +117,11 @@ async function submitEditor(): Promise<void> {
   }
 }
 
-onMounted(load)
+onMounted(() => pageLoad.track(load))
 </script>
 
 <template>
   <section class="scheduled-jobs">
-    <el-alert
-      type="info"
-      :closable="false"
-      show-icon
-      :title="`定时任务按公司时区（${timezone}）在服务端执行`"
-      description="同一计划时刻只会执行一次；服务停机错过的计划在恢复后最多补跑一次。手动同步请到「同步运行」页面操作。"
-    />
-
     <inline-problem
       v-if="error"
       :problem="error"
@@ -136,7 +131,13 @@ onMounted(load)
       v-if="loading || jobs.length"
       class="table-surface table-scroll scheduled-jobs__surface"
     >
+      <yp-skeleton
+        v-if="loading && !jobs.length"
+        variant="table"
+        :rows="6"
+      />
       <el-table
+        v-else
         v-loading="loading"
         :data="jobs"
         row-key="code"
@@ -194,7 +195,6 @@ onMounted(load)
               <yp-status-tag
                 domain="scheduled-job"
                 :status="lastState(scope.row as ScheduledJob)!"
-                effect="soft"
               />
               <span class="numeric">{{ formatTime(scope.row.lastStartedAt) }}</span>
               <span
@@ -318,12 +318,6 @@ onMounted(load)
 .scheduled-jobs {
   display: grid;
   gap: var(--yp-space-4);
-}
-
-.scheduled-jobs__surface {
-  border-color: var(--yp-border-subtle);
-  border-radius: var(--yp-radius-md);
-  background: var(--yp-bg-surface);
 }
 
 .scheduled-job__name {

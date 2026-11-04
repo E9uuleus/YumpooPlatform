@@ -70,17 +70,17 @@ describe('工作项分组规则', () => {
     ], sources, '2026-09-14', {})
     expect(groups.map(group => [group.key, group.count])).toEqual([['PAST', 1], ['THIS_WEEK', 7], [EMPTY_GROUP, 3]])
   })
-  it('组内查询与原筛选交集，不覆盖日期边界', () => {
+  it('表段条件写入只约束主行的 group 参数，原筛选原样保留', () => {
     const group = dateGroups('2026-09-14').find(group => group.key === 'THIS_WEEK')!
     const request = groupListRequest({ ...base, dueFrom: new Date('2026-09-17'), dueTo: new Date('2026-09-18') }, 'DUE_DATE', group)!
+    expect(request.groupDueFrom!.toISOString().slice(0, 10)).toBe('2026-09-16')
+    expect(request.groupDueTo!.toISOString().slice(0, 10)).toBe('2026-09-20')
     expect(request.dueFrom!.toISOString().slice(0, 10)).toBe('2026-09-17')
-    expect(request.dueTo!.toISOString().slice(0, 10)).toBe('2026-09-18')
-    expect(groupListRequest({ ...base, dueTo: new Date('2026-09-15') }, 'DUE_DATE', group)).toBeNull()
-    expect(groupListRequest({ ...base, status: new Set(['DONE']) }, 'STATUS', { ...group, key: 'TODO' })).toBeNull()
-    const combo = groupListRequest({ ...base, assigneeUserId: new Set(['b']) }, 'ASSIGNEE', { ...group, key: 'a,b' })!
+    expect(groupListRequest({ ...base, status: new Set(['DONE']) }, 'STATUS', { ...group, key: 'TODO' }))
+      .toMatchObject({ status: new Set(['DONE']), groupStatus: 'TODO' })
+    const combo = groupListRequest({ ...base, assigneeUserId: new Set(['c']) }, 'ASSIGNEE', { ...group, key: 'a,b' })!
     expect(combo.assigneeSetUserId).toEqual(new Set(['a', 'b']))
-    expect(combo.assigneeUserId).toEqual(new Set(['b']))
-    expect(groupListRequest({ ...base, assigneeUserId: new Set(['c']) }, 'ASSIGNEE', { ...group, key: 'a,b' })).toBeNull()
+    expect(combo.assigneeUserId).toEqual(new Set(['c']))
   })
   it('空值组使用新增查询参数，并保留互斥筛选供服务端求交集', () => {
     const group = dateGroups('2026-09-14').at(-1)!

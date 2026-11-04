@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
-export const requiredJobs = ['linux', 'windows_delivery']
+export const requiredJobs = ['static', 'backend', 'linux', 'windows_delivery']
 
 export function assertRequiredJobs(needs, required = requiredJobs) {
   if (!needs || typeof needs !== 'object' || Array.isArray(needs)

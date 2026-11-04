@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import YpNotice from '../../components/yp/YpNotice.vue'
+import { usePageLoad } from '../../brand/page-progress'
+
 import { ArrowLeft, ArrowRight, Refresh } from '@element-plus/icons-vue'
 import { ProjectLifecycle, readCsrfToken, type DashboardChartResult, type DashboardChartSelection, type DashboardWidget, type ProjectDetail, type ProjectWorklog } from '@yumpoo/api-client'
-import { ElAlert, ElButton, ElTag, ElTooltip } from 'element-plus'
+import { ElButton, ElTag, ElTooltip } from 'element-plus'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { projectStatisticsApi, projectsApi } from '../../api/client'
@@ -17,6 +20,7 @@ import YpEmptyState from '../../components/yp/YpEmptyState.vue'
 import { useSession } from '../../composables/useSession'
 import { formatTimestamp } from '../../design-system/dates'
 
+const pageLoad = usePageLoad()
 const route = useRoute(), router = useRouter(), session = useSession()
 const projectId = String(route.params.projectId)
 const timezone = computed(() => session.authentication.value?.company.timezone ?? 'Asia/Shanghai')
@@ -36,6 +40,8 @@ const worklog = ref<ProjectWorklog>(), worklogLoading = ref(false), worklogError
 const groups = computed(() => worklog.value ? worklogGroups(worklog.value) : [])
 const weekTotal = computed(() => groups.value.reduce((sum, group) => sum + group.totalMs, 0))
 let worklogSequence = 0
+
+async function reloadProject(): Promise<void> { project.value = await projectsApi.getProject({ projectId }) }
 
 async function loadCharts(): Promise<void> {
   loading.value = true
@@ -79,12 +85,12 @@ function openWorkItem(workItemId: string): void {
 watch(period, () => void loadWorklog())
 onMounted(async () => {
   try {
-    project.value = await projectsApi.getProject({ projectId })
+    project.value = await pageLoad.track(() => projectsApi.getProject({ projectId }))
   } catch (reason) {
     projectError.value = await toApiProblem(reason)
     return
   }
-  if (project.value.lifecycle !== ProjectLifecycle.Archived) refresh()
+  if (project.value.lifecycle !== ProjectLifecycle.Archived) await pageLoad.track(() => Promise.all([loadCharts(), loadWorklog()]))
 })
 </script>
 
@@ -94,6 +100,7 @@ onMounted(async () => {
       section="statistics"
       :project="project"
       title="项目统计"
+      @changed="reloadProject"
     />
     <inline-problem
       v-if="projectError"
@@ -114,7 +121,9 @@ onMounted(async () => {
           <h2 id="project-statistics-title">
             统计
           </h2>
-          <p>{{ asOf ? `统计至 ${formatTimestamp(asOf, timezone).slice(11)}` : '统计当前项目的进度、投入与成员工作量。' }}</p>
+          <p v-if="asOf">
+            统计至 {{ formatTimestamp(asOf, timezone).slice(11) }}
+          </p>
         </div>
         <el-tooltip content="刷新">
           <el-button
@@ -126,12 +135,12 @@ onMounted(async () => {
           />
         </el-tooltip>
       </header>
-      <el-alert
+      <yp-notice
         v-if="error"
-        type="error"
-        :title="error"
-        :closable="false"
-      />
+        tone="danger"
+      >
+        {{ error }}
+      </yp-notice>
       <div class="project-statistics__metrics">
         <article
           v-for="widget in metrics"
@@ -187,12 +196,12 @@ onMounted(async () => {
           </div>
           <span class="project-statistics__total">合计 {{ hoursMinutes(weekTotal) }}</span>
         </div>
-        <el-alert
+        <yp-notice
           v-if="worklogError"
-          type="error"
-          :title="worklogError"
-          :closable="false"
-        />
+          tone="danger"
+        >
+          {{ worklogError }}
+        </yp-notice>
         <yp-empty-state
           v-else-if="worklog && !groups.length"
           compact
@@ -249,7 +258,7 @@ onMounted(async () => {
 .project-statistics { display: grid; gap: var(--yp-space-4); }
 .project-statistics__metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--yp-space-3); }
 .project-statistics__charts { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--yp-space-3); }
-.project-statistics__card { display: flex; flex-direction: column; min-width: 0; padding: var(--yp-space-4); border: 1px solid var(--yp-border-subtle); border-radius: var(--yp-radius-md); background: var(--yp-bg-surface); }
+.project-statistics__card { display: flex; flex-direction: column; min-width: 0; padding: var(--yp-space-4);  border-radius: var(--yp-radius-md);  background:var(--yp-bg-sunken);}
 .project-statistics__card h3 { margin: 0 0 var(--yp-space-2); font-size: 14px; font-weight: 600; }
 .project-statistics__chart { height: 320px; min-height: 0; }
 .project-statistics__card--metric .project-statistics__chart { height: 120px; }

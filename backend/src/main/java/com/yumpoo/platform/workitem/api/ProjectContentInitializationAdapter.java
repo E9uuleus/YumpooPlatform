@@ -18,7 +18,8 @@ public class ProjectContentInitializationAdapter implements InitializeProjectCon
     @Override
     public List<InitializedProjectContent> initialize(ProjectContentInitialization initialization) {
         ContentInitializationCommand command = new ContentInitializationCommand(
-                initialization.companyId(), initialization.projectId(), initialization.actorUserId());
+                initialization.companyId(), initialization.projectId(), initialization.actorUserId(),
+                initialization.colors().categories(), initialization.colors().statuses(), initialization.colors().priorities());
         return service.initialize(command).stream()
                 .map(content -> new InitializedProjectContent(
                         content.contentId(), content.code()))

@@ -14,6 +14,7 @@
 
 import * as runtime from '../runtime';
 import type {
+  ArchivedWorkItemPage,
   ConnectCandidateField,
   ConnectCandidatePage,
   ConnectCandidateSort,
@@ -44,6 +45,8 @@ import type {
   WorkItemDescriptionPatchRequest,
   WorkItemDetail,
   WorkItemDueDatePatchRequest,
+  WorkItemImportRequest,
+  WorkItemImportResult,
   WorkItemLabelCatalog,
   WorkItemLabelCreateRequest,
   WorkItemLabelUpdateRequest,
@@ -66,6 +69,8 @@ import type {
   WorkItemViewType,
 } from '../models/index';
 import {
+    ArchivedWorkItemPageFromJSON,
+    ArchivedWorkItemPageToJSON,
     ConnectCandidateFieldFromJSON,
     ConnectCandidateFieldToJSON,
     ConnectCandidatePageFromJSON,
@@ -126,6 +131,10 @@ import {
     WorkItemDetailToJSON,
     WorkItemDueDatePatchRequestFromJSON,
     WorkItemDueDatePatchRequestToJSON,
+    WorkItemImportRequestFromJSON,
+    WorkItemImportRequestToJSON,
+    WorkItemImportResultFromJSON,
+    WorkItemImportResultToJSON,
     WorkItemLabelCatalogFromJSON,
     WorkItemLabelCatalogToJSON,
     WorkItemLabelCreateRequestFromJSON,
@@ -304,11 +313,25 @@ export interface GetWorkItemConnectionRequest {
     connectionId: string;
 }
 
+export interface ImportWorkItemsRequest {
+    projectId: string;
+    xXSRFTOKEN: string;
+    idempotencyKey: string;
+    workItemImportRequest: WorkItemImportRequest;
+}
+
 export interface LinkWorkItemConnectionRequest {
     workItemId: string;
     xXSRFTOKEN: string;
     idempotencyKey: string;
     workItemConnectionLinkRequest: WorkItemConnectionLinkRequest;
+}
+
+export interface ListArchivedWorkItemsRequest {
+    projectId: string;
+    q?: string;
+    page?: number;
+    size?: number;
 }
 
 export interface ListConnectColumnsRequest {
@@ -334,6 +357,7 @@ export interface ListProjectWorkItemFilterOptionsRequest {
     timeTrackingMaxMs?: number;
     cursor?: string;
     limit?: number;
+    countSubitems?: boolean;
     q?: string;
     status?: Set<string>;
     priority?: Set<string>;
@@ -358,6 +382,11 @@ export interface ListProjectWorkItemsRequest {
     limit?: number;
     view?: WorkItemViewType;
     emptyField?: ListProjectWorkItemsEmptyFieldEnum;
+    groupStatus?: string;
+    groupPriority?: string;
+    groupContentId?: string;
+    groupDueFrom?: Date;
+    groupDueTo?: Date;
     status?: Set<string>;
     q?: string;
     priority?: Set<string>;
@@ -396,6 +425,14 @@ export interface ListWorkItemSubitemsRequest {
     timeTrackingState?: TimeTrackingState;
     timeTrackingMinMs?: number;
     timeTrackingMaxMs?: number;
+    status?: Set<string>;
+    q?: string;
+    priority?: Set<string>;
+    assigneeUserId?: Set<string>;
+    contentId?: Set<string>;
+    dueFrom?: Date;
+    dueTo?: Date;
+    updatedAfter?: Date;
     sort?: Array<string>;
 }
 
@@ -1916,6 +1953,77 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
+     * 仅项目内可创建工作项的成员可用，项目已归档或已结束时与新建工作项同样拒绝。每行按 title（trim 后）匹配本项目内未删除、未归档的工作项，duplicateMode 决定全部新增、跳过已有或更新已有；UPDATE 只覆盖 fields 列出的字段，值为 null 表示清空。dryRun 为 true 时只返回规划结果、不写入；为 false 时在单事务内提交，报错行跳过、其余行照常写入。父项按标题在本次文件与项目已有项中查找，并压平到根祖先。导入不发工作项事件与通知，整次只写一条安全审计。不处理工时。
+     * 批量导入或预览导入工作项
+     */
+    async importWorkItemsRaw(requestParameters: ImportWorkItemsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemImportResult>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling importWorkItems().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling importWorkItems().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling importWorkItems().'
+            );
+        }
+
+        if (requestParameters['workItemImportRequest'] == null) {
+            throw new runtime.RequiredError(
+                'workItemImportRequest',
+                'Required parameter "workItemImportRequest" was null or undefined when calling importWorkItems().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/projects/{projectId}/work-item-imports`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: WorkItemImportRequestToJSON(requestParameters['workItemImportRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemImportResultFromJSON(jsonValue));
+    }
+
+    /**
+     * 仅项目内可创建工作项的成员可用，项目已归档或已结束时与新建工作项同样拒绝。每行按 title（trim 后）匹配本项目内未删除、未归档的工作项，duplicateMode 决定全部新增、跳过已有或更新已有；UPDATE 只覆盖 fields 列出的字段，值为 null 表示清空。dryRun 为 true 时只返回规划结果、不写入；为 false 时在单事务内提交，报错行跳过、其余行照常写入。父项按标题在本次文件与项目已有项中查找，并压平到根祖先。导入不发工作项事件与通知，整次只写一条安全审计。不处理工时。
+     * 批量导入或预览导入工作项
+     */
+    async importWorkItems(requestParameters: ImportWorkItemsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemImportResult> {
+        const response = await this.importWorkItemsRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
      * 双侧项目成员关联已有工作项
      */
     async linkWorkItemConnectionRaw(requestParameters: LinkWorkItemConnectionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemConnection>> {
@@ -1981,6 +2089,57 @@ export class WorkItemsApi extends runtime.BaseAPI {
      */
     async linkWorkItemConnection(requestParameters: LinkWorkItemConnectionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemConnection> {
         const response = await this.linkWorkItemConnectionRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 返回本 Project 内已归档且未删除的工作项（含单独归档的子项），按 updatedAt 倒序。归档项只读，updatedAt 即归档时刻。随已归档父项一起隐藏的子项不单独列出，计入父项的 subitemCount。项目成员与同企业 CompanyAdmin 可读。
+     * 分页查询 Project 中已归档的工作项
+     */
+    async listArchivedWorkItemsRaw(requestParameters: ListArchivedWorkItemsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ArchivedWorkItemPage>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling listArchivedWorkItems().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        if (requestParameters['q'] != null) {
+            queryParameters['q'] = requestParameters['q'];
+        }
+
+        if (requestParameters['page'] != null) {
+            queryParameters['page'] = requestParameters['page'];
+        }
+
+        if (requestParameters['size'] != null) {
+            queryParameters['size'] = requestParameters['size'];
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/projects/{projectId}/archived-work-items`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ArchivedWorkItemPageFromJSON(jsonValue));
+    }
+
+    /**
+     * 返回本 Project 内已归档且未删除的工作项（含单独归档的子项），按 updatedAt 倒序。归档项只读，updatedAt 即归档时刻。随已归档父项一起隐藏的子项不单独列出，计入父项的 subitemCount。项目成员与同企业 CompanyAdmin 可读。
+     * 分页查询 Project 中已归档的工作项
+     */
+    async listArchivedWorkItems(requestParameters: ListArchivedWorkItemsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ArchivedWorkItemPage> {
+        const response = await this.listArchivedWorkItemsRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -2073,7 +2232,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * ASSIGNEE 按成员分别计数，同一工作项可计入多个成员；ASSIGNEE_SET 按处理人组合计数。
+     * ASSIGNEE 按成员分别计数，同一工作项可计入多个成员；ASSIGNEE_SET 按处理人组合计数。省略 countSubitems 时按表格主行计数：主行本身或其任一子项满足条件即计入，按主行本身的字段值归类；countSubitems=true 时主行与子项各自满足全部条件才计入，按自身字段值归类。
      * 按当前项目查询上下文分页取得筛选选项及动态计数
      */
     async listProjectWorkItemFilterOptionsRaw(requestParameters: ListProjectWorkItemFilterOptionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectWorkItemFilterOptionCursorPage>> {
@@ -2133,6 +2292,10 @@ export class WorkItemsApi extends runtime.BaseAPI {
             queryParameters['limit'] = requestParameters['limit'];
         }
 
+        if (requestParameters['countSubitems'] != null) {
+            queryParameters['countSubitems'] = requestParameters['countSubitems'];
+        }
+
         if (requestParameters['q'] != null) {
             queryParameters['q'] = requestParameters['q'];
         }
@@ -2186,7 +2349,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * ASSIGNEE 按成员分别计数，同一工作项可计入多个成员；ASSIGNEE_SET 按处理人组合计数。
+     * ASSIGNEE 按成员分别计数，同一工作项可计入多个成员；ASSIGNEE_SET 按处理人组合计数。省略 countSubitems 时按表格主行计数：主行本身或其任一子项满足条件即计入，按主行本身的字段值归类；countSubitems=true 时主行与子项各自满足全部条件才计入，按自身字段值归类。
      * 按当前项目查询上下文分页取得筛选选项及动态计数
      */
     async listProjectWorkItemFilterOptions(requestParameters: ListProjectWorkItemFilterOptionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectWorkItemFilterOptionCursorPage> {
@@ -2195,7 +2358,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 聚合 Project 内全部类别的非删除工作项。TABLE 复用白名单筛选与排序； KANBAN 必须指定单一 status，并使用项目级状态泳道 rank。
+     * 聚合 Project 内全部类别的非删除工作项。TABLE 返回主行（顶层工作项）：主行本身或其任一未删除、未归档的直接子项满足 q、status、priority、assigneeUserId、contentId、dueFrom、dueTo、updatedAfter、计时与连接条件时返回；assigneeSetUserId、emptyField 与 group* 只约束主行本身。KANBAN 必须指定单一 status，全部条件只作用于卡片本身，并使用项目级状态泳道 rank。
      * 分页查询 Project 下全部工作项
      */
     async listProjectWorkItemsRaw(requestParameters: ListProjectWorkItemsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectWorkItemCursorPage>> {
@@ -2252,6 +2415,26 @@ export class WorkItemsApi extends runtime.BaseAPI {
             queryParameters['emptyField'] = requestParameters['emptyField'];
         }
 
+        if (requestParameters['groupStatus'] != null) {
+            queryParameters['groupStatus'] = requestParameters['groupStatus'];
+        }
+
+        if (requestParameters['groupPriority'] != null) {
+            queryParameters['groupPriority'] = requestParameters['groupPriority'];
+        }
+
+        if (requestParameters['groupContentId'] != null) {
+            queryParameters['groupContentId'] = requestParameters['groupContentId'];
+        }
+
+        if (requestParameters['groupDueFrom'] != null) {
+            queryParameters['groupDueFrom'] = (requestParameters['groupDueFrom'] as any).toISOString().substring(0,10);
+        }
+
+        if (requestParameters['groupDueTo'] != null) {
+            queryParameters['groupDueTo'] = (requestParameters['groupDueTo'] as any).toISOString().substring(0,10);
+        }
+
         if (requestParameters['status'] != null) {
             queryParameters['status'] = requestParameters['status'];
         }
@@ -2305,7 +2488,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 聚合 Project 内全部类别的非删除工作项。TABLE 复用白名单筛选与排序； KANBAN 必须指定单一 status，并使用项目级状态泳道 rank。
+     * 聚合 Project 内全部类别的非删除工作项。TABLE 返回主行（顶层工作项）：主行本身或其任一未删除、未归档的直接子项满足 q、status、priority、assigneeUserId、contentId、dueFrom、dueTo、updatedAfter、计时与连接条件时返回；assigneeSetUserId、emptyField 与 group* 只约束主行本身。KANBAN 必须指定单一 status，全部条件只作用于卡片本身，并使用项目级状态泳道 rank。
      * 分页查询 Project 下全部工作项
      */
     async listProjectWorkItems(requestParameters: ListProjectWorkItemsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectWorkItemCursorPage> {
@@ -2497,7 +2680,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 仅返回未删除的直接子项；未指定 sort 时按项目共享手工顺序返回。
+     * 仅返回未删除、未归档的直接子项；带 q、status、priority、assigneeUserId、contentId、dueFrom、dueTo、updatedAfter 或计时条件时只返回本身满足全部条件的子项。未指定 sort 时按项目共享手工顺序返回。
      * 查询 Work Item 的直接子项
      */
     async listWorkItemSubitemsRaw(requestParameters: ListWorkItemSubitemsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemSubitemList>> {
@@ -2522,6 +2705,38 @@ export class WorkItemsApi extends runtime.BaseAPI {
             queryParameters['timeTrackingMaxMs'] = requestParameters['timeTrackingMaxMs'];
         }
 
+        if (requestParameters['status'] != null) {
+            queryParameters['status'] = requestParameters['status'];
+        }
+
+        if (requestParameters['q'] != null) {
+            queryParameters['q'] = requestParameters['q'];
+        }
+
+        if (requestParameters['priority'] != null) {
+            queryParameters['priority'] = requestParameters['priority'];
+        }
+
+        if (requestParameters['assigneeUserId'] != null) {
+            queryParameters['assigneeUserId'] = requestParameters['assigneeUserId'];
+        }
+
+        if (requestParameters['contentId'] != null) {
+            queryParameters['contentId'] = requestParameters['contentId'];
+        }
+
+        if (requestParameters['dueFrom'] != null) {
+            queryParameters['dueFrom'] = (requestParameters['dueFrom'] as any).toISOString().substring(0,10);
+        }
+
+        if (requestParameters['dueTo'] != null) {
+            queryParameters['dueTo'] = (requestParameters['dueTo'] as any).toISOString().substring(0,10);
+        }
+
+        if (requestParameters['updatedAfter'] != null) {
+            queryParameters['updatedAfter'] = (requestParameters['updatedAfter'] as any).toISOString();
+        }
+
         if (requestParameters['sort'] != null) {
             queryParameters['sort'] = requestParameters['sort'];
         }
@@ -2543,7 +2758,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 仅返回未删除的直接子项；未指定 sort 时按项目共享手工顺序返回。
+     * 仅返回未删除、未归档的直接子项；带 q、status、priority、assigneeUserId、contentId、dueFrom、dueTo、updatedAfter 或计时条件时只返回本身满足全部条件的子项。未指定 sort 时按项目共享手工顺序返回。
      * 查询 Work Item 的直接子项
      */
     async listWorkItemSubitems(requestParameters: ListWorkItemSubitemsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemSubitemList> {

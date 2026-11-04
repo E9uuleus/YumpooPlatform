@@ -71,6 +71,8 @@ import static com.yumpoo.platform.workitem.application.WorkItemRelationRepositor
 
 @Service
 public class WorkItemService {
+    private static final String INVALID_WORK_ITEM_MESSAGE =
+            "工作项字段不符合要求，请检查标题（1～300 字）、备注（最多 16384 字）、处理人（最多 20 位且不重复）、截止时间与时间线日期";
     private static final String CREATED = "workitem.work_item_created";
     private static final String FIELDS_CHANGED = "workitem.work_item_fields_changed";
     private static final String ASSIGNED = "workitem.work_item_assigned";
@@ -209,6 +211,11 @@ public class WorkItemService {
         boolean hasMore = rows.size() > page.limit();
         if (hasMore) rows = new ArrayList<>(rows.subList(0, page.limit()));
         List<ProjectWorkItemListItem> items = tableItems(actor, project, rows, timeAsOf);
+        if (effectiveView == WorkItemViewType.TABLE) {
+            Map<UUID, Long> matched = workItems.countMatchingChildren(project.companyId(), project.projectId(), query,
+                    rows.stream().map(WorkItem::id).toList());
+            items = items.stream().map(item -> item.withMatchedSubitemCount(matched.getOrDefault(item.id(), 0L))).toList();
+        }
         String nextCursor = hasMore && !rows.isEmpty()
                 ? projectCursors.encode(new ProjectWorkItemCursorCodec.Cursor(
                         fingerprint, effectiveView,
@@ -260,7 +267,7 @@ public class WorkItemService {
 
     @Transactional(readOnly = true)
     public ProjectWorkItemFilterOptionCursorPage listProjectFilterOptions(CurrentActor actor,
-            UUID projectId, String field, WorkItemQuery.Request request, CursorPageRequest page) {
+            UUID projectId, String field, boolean countSubitems, WorkItemQuery.Request request, CursorPageRequest page) {
         requireActor(actor);
         ProjectAccessSnapshot project = visible(actor, projectId);
         List<WorkItemLabelModels.StatusLabel> statusLabels = labels.statuses(
@@ -280,14 +287,14 @@ public class WorkItemService {
             throw validation("field", "INVALID_VALUE", "筛选选项字段不受支持");
         }
         String fingerprint = projectCursorFingerprint(projectId, WorkItemViewType.TABLE, query)
-                + ":" + normalizedField;
+                + ":" + normalizedField + (countSubitems ? ":items" : "");
         ProjectWorkItemFilterCursorCodec.Cursor decoded = projectFilterCursors.decode(page.cursor());
         if (decoded != null && (!decoded.fingerprint().equals(fingerprint)
                 || !decoded.field().equals(normalizedField)))
             throw validation("cursor", "CURSOR_QUERY_MISMATCH", "筛选选项游标不属于当前查询");
         List<WorkItemRepository.FilterOptionCount> rows = new ArrayList<>(
                 workItems.findProjectFilterOptions(project.companyId(), project.projectId(), query,
-                        normalizedField, decoded == null ? null : decoded.lastValue(), page.limit() + 1));
+                        normalizedField, countSubitems, decoded == null ? null : decoded.lastValue(), page.limit() + 1));
         boolean hasMore = rows.size() > page.limit();
         if (hasMore) rows = new ArrayList<>(rows.subList(0, page.limit()));
         Map<UUID, String> contentNames = contents.findAll(project.companyId(), project.projectId())
@@ -332,6 +339,26 @@ public class WorkItemService {
                 new ProjectWorkItemFilterCursorCodec.Cursor(fingerprint, normalizedField,
                         rows.getLast().value())) : null;
         return new ProjectWorkItemFilterOptionCursorPage(items, nextCursor);
+    }
+
+    @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
+    public ArchivedWorkItemPage listArchived(CurrentActor actor, UUID projectId, String query, OffsetPageRequest page) {
+        requireActor(actor);
+        ProjectAccessSnapshot project = visible(actor, projectId);
+        String q = query == null || query.isBlank() ? null : query.strip();
+        List<WorkItemRepository.ArchivedRow> rows = workItems.findArchived(project.companyId(), projectId, q,
+                page.page() * page.size(), page.size());
+        long total = workItems.countArchived(project.companyId(), projectId, q);
+        List<WorkItem> items = rows.stream().map(WorkItemRepository.ArchivedRow::item).toList();
+        Map<UUID, MinimalUserSnapshot> people = people(project.companyId(), items);
+        Map<UUID, Long> subitemCounts = relations.countActiveChildren(project.companyId(),
+                items.stream().map(WorkItem::id).toList());
+        return new ArchivedWorkItemPage(rows.stream().map(row -> new ArchivedWorkItem(row.item().id(),
+                        row.item().itemNo(), row.item().title(), row.item().statusCode(),
+                        row.item().statusCategory().name(), row.parentTitle(),
+                        subitemCounts.getOrDefault(row.item().id(), 0L), row.item().updatedAt(),
+                        updatedByDisplayName(row.item(), people), StrongEtag.format(row.item().rowVersion()))).toList(),
+                page.page(), page.size(), total, (int) ((total + page.size() - 1) / page.size()));
     }
 
     @Transactional(readOnly = true)
@@ -455,7 +482,7 @@ public class WorkItemService {
                 null, null, null, DueTimeChange.unchanged()), actor).item();
     }
 
-    private Optional<Content> lockCreationContent(UUID companyId, UUID projectId, UUID contentId) {
+    Optional<Content> lockCreationContent(UUID companyId, UUID projectId, UUID contentId) {
         var snapshot = contents.find(companyId, projectId, contentId);
         if (snapshot.isEmpty()) return Optional.empty();
         // First-use writers must wait for the catalog without holding a category share lock.
@@ -500,7 +527,7 @@ public class WorkItemService {
                     draft.dueTime().resolve(draft.dueDate(), null), rank,
                     projectSortKey, actor.userId(), now).assign(draft.assigneeUserIds(), actor.userId(), now);
         } catch (IllegalArgumentException exception) {
-            throw validation("body", "INVALID_WORK_ITEM", exception.getMessage());
+            throw validation("body", "INVALID_WORK_ITEM", INVALID_WORK_ITEM_MESSAGE);
         }
         if (!workItems.insert(item)) throw new IllegalStateException("work item insert failed");
         appendCreated(item, actor);
@@ -514,7 +541,7 @@ public class WorkItemService {
     private record CreatedWorkItem(WorkItem item,
             List<WorkItemLabelModels.StatusLabel> statusLabels) {}
 
-    private void markContentUsed(ItemWriteTarget project, Content content, CurrentActor actor) {
+    void markContentUsed(ItemWriteTarget project, Content content, CurrentActor actor) {
         if (content.everUsed()) return;
         long catalogVersion = contents.lockCatalogVersion(project.companyId(), project.projectId());
         Content locked = contents.lock(project.companyId(), project.projectId(), content.id())
@@ -561,7 +588,7 @@ public class WorkItemService {
                     command.actor().userId(), clock.instant());
             candidate = candidate.assign(assignees, command.actor().userId(), candidate.updatedAt());
         } catch (IllegalArgumentException exception) {
-            throw validation("body", "INVALID_WORK_ITEM", exception.getMessage());
+            throw validation("body", "INVALID_WORK_ITEM", INVALID_WORK_ITEM_MESSAGE);
         }
         List<String> changedFields = changed(before, candidate);
         if (changedFields.isEmpty()) {
@@ -1085,7 +1112,7 @@ public class WorkItemService {
                     command.actor().userId(), clock.instant());
             candidate = candidate.assign(assignees, command.actor().userId(), candidate.updatedAt());
         } catch (IllegalArgumentException exception) {
-            throw validation("body", "INVALID_WORK_ITEM", exception.getMessage());
+            throw validation("body", "INVALID_WORK_ITEM", INVALID_WORK_ITEM_MESSAGE);
         }
         List<String> changedFields = changed(before, candidate);
         if (changedFields.isEmpty())
@@ -1284,6 +1311,7 @@ public class WorkItemService {
                 query.timeTracking()==null ? "" : Objects.toString(query.timeTracking().state(),"")+":"+query.timeTracking().minMs()+":"+query.timeTracking().maxMs());
         if (!query.assigneeSetUserIds().isEmpty()) canonical += "\nassigneeSet=" + query.assigneeSetKey();
         if (query.emptyField() != null) canonical += "\nemptyField=" + query.emptyField();
+        if (!query.group().equals(WorkItemQuery.GroupFilter.NONE)) canonical += "\ngroup=" + query.group().fingerprint();
         if (query.scope() != null) canonical += "\nchart=" + query.scope().fingerprint();
         canonical += "\nconnections=" + query.connections().fingerprint();
         try {
@@ -1295,7 +1323,7 @@ public class WorkItemService {
         }
     }
 
-    private RankAllocation allocateRank(UUID companyId, UUID projectId,
+    RankAllocation allocateRank(UUID companyId, UUID projectId,
             String statusCode, WorkItemRankPlacement placement, UUID anchorWorkItemId,
             UUID movingWorkItemId) {
         List<RankedWorkItem> lane = workItems.findRankOrder(companyId, projectId, statusCode);
@@ -1601,7 +1629,7 @@ public class WorkItemService {
     }
 
     private static boolean canEdit(ProjectAccessSnapshot project, Content content) {
-        return project.lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED
+        return project.contentWritable()
                 && content != null
                 && project.actorAccess() != ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY;
     }
@@ -1625,6 +1653,8 @@ public class WorkItemService {
                 .collect(java.util.stream.Collectors.toSet());
         if (!allowed.containsAll(query.priorities()))
             throw validation("priority", "INVALID_VALUE", "优先级筛选值无效");
+        if (query.group().priority() != null && !allowed.contains(query.group().priority()))
+            throw validation("groupPriority", "INVALID_VALUE", "优先级分组值无效");
     }
 
     private static void requireSelectablePriority(String requested,
@@ -1675,7 +1705,7 @@ public class WorkItemService {
         return ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION, reason);
     }
 
-    private static void requireActiveContent(Content content) {
+    static void requireActiveContent(Content content) {
         if (!content.active()) {
             throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION,
                     "CONTENT_ARCHIVED");
@@ -1687,12 +1717,12 @@ public class WorkItemService {
             throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
     }
 
-    private static void requireWritableAccess(ProjectAccessSnapshot.ActorProjectAccess actorAccess) {
+    static void requireWritableAccess(ProjectAccessSnapshot.ActorProjectAccess actorAccess) {
         if (actorAccess == ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY)
             throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
     }
 
-    private static void requireWritableAccess(ProjectFactWriteSnapshot.ActorProjectAccess actorAccess) {
+    static void requireWritableAccess(ProjectFactWriteSnapshot.ActorProjectAccess actorAccess) {
         if (actorAccess == ProjectFactWriteSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY)
             throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
     }
@@ -1706,7 +1736,7 @@ public class WorkItemService {
         try {
             return sanitizer.sanitizeDescription(untrustedHtml);
         } catch (IllegalArgumentException exception) {
-            throw validation("description", "INVALID_DESCRIPTION", exception.getMessage());
+            throw validation("description", "INVALID_DESCRIPTION", "描述格式无效或超过长度上限");
         }
     }
 
@@ -1714,6 +1744,6 @@ public class WorkItemService {
         return ApplicationException.validation(new FieldViolation(field, code, message));
     }
 
-    private record RankAllocation(String rank, boolean noOp) {}
+    record RankAllocation(String rank, boolean noOp) {}
     private record VisibleContent(ProjectAccessSnapshot project, Content content) {}
 }

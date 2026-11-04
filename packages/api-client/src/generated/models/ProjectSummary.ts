@@ -48,6 +48,12 @@ import {
  */
 export interface ProjectSummary {
     /**
+     * 项目结束时间；为 null 时项目未结束。已结束项目 lifecycle 仍为 ACTIVE。
+     * @type {Date}
+     * @memberof ProjectSummary
+     */
+    readonly endedAt?: Date | null;
+    /**
      * 不透明 UUID；客户端不得从值中推导业务语义。
      * @type {string}
      * @memberof ProjectSummary
@@ -185,6 +191,7 @@ export function ProjectSummaryFromJSONTyped(json: any, ignoreDiscriminator: bool
     }
     return {
 
+        ...(json['endedAt'] === undefined ? {} : { 'endedAt': json['endedAt'] === null ? null : (new Date(json['endedAt'])) }),
         'id': json['id'],
         'workspaceId': json['workspaceId'],
         'workspaceCode': json['workspaceCode'],
@@ -209,7 +216,7 @@ export function ProjectSummaryToJSON(json: any): ProjectSummary {
     return ProjectSummaryToJSONTyped(json, false);
 }
 
-export function ProjectSummaryToJSONTyped(value?: Omit<ProjectSummary, 'rowVersion'|'etag'|'createdAt'|'updatedAt'|'archivedAt'> | null, ignoreDiscriminator: boolean = false): any {
+export function ProjectSummaryToJSONTyped(value?: Omit<ProjectSummary, 'endedAt'|'rowVersion'|'etag'|'createdAt'|'updatedAt'|'archivedAt'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }

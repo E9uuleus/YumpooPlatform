@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import YpSkeleton from '../../components/yp/YpSkeleton.vue'
+import YpNotice from '../../components/yp/YpNotice.vue'
+import { usePageLoad } from '../../brand/page-progress'
+
 import { AlarmClock, EditPen, FolderOpened, Refresh, Tickets, User, WarningFilled } from '@element-plus/icons-vue'
 import {
   EmploymentStatus,
@@ -8,7 +12,7 @@ import {
   type ScheduledJob,
   type WeComIntegrationStatus,
 } from '@yumpoo/api-client'
-import { ElAlert, ElButton, ElIcon, ElMessage, ElMessageBox, ElSkeleton } from 'element-plus'
+import { ElButton, ElIcon, ElMessage, ElMessageBox } from 'element-plus'
 import { computed, onMounted, ref, watch, type Component } from 'vue'
 import { useRouter } from 'vue-router'
 import { administrationApi, identityAdministrationApi, projectsApi } from '../../api/client'
@@ -22,6 +26,7 @@ import { ensureAuthentication, useSession } from '../../composables/useSession'
 import { formatRelativeTime, formatTimestamp } from '../../design-system/dates'
 import { usePageOnboarding } from '../../onboarding/useOnboarding'
 
+const pageLoad = usePageLoad()
 interface EntryCard { key: string; label: string; meta: string; icon: Component; tone: JumpTone; routeName: string }
 
 const router = useRouter(), session = useSession()
@@ -125,26 +130,29 @@ async function load(): Promise<void> {
 }
 
 // Entry-card counts are decorative; a failure keeps the default meta text instead of blocking the page.
-function loadCounts(): void {
-  void projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.Active, page: 0, size: 1 })
-    .then(page => { projectTotal.value = page.totalElements }, quiet)
-  void identityAdministrationApi.listMembers({ employmentStatus: EmploymentStatus.Active, page: 0, size: 1 })
-    .then(page => { memberTotal.value = page.totalElements }, quiet)
-  void administrationApi.listScheduledJobs()
+function loadCounts(): Promise<unknown[]> {
+  return Promise.allSettled([
+    projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.Active, page: 0, size: 1 })
+    .then(page => { projectTotal.value = page.totalElements }, quiet),
+    identityAdministrationApi.listMembers({ employmentStatus: EmploymentStatus.Active, page: 0, size: 1 })
+    .then(page => { memberTotal.value = page.totalElements }, quiet),
+    administrationApi.listScheduledJobs()
     .then(result => { jobs.value = result.items }, quiet)
+  ])
 }
 
 onMounted(() => {
-  void load()
-  loadCounts()
+  void pageLoad.track(() => load())
+  pageLoad.track(() => loadCounts())
 })
 </script>
 
 <template>
-  <el-skeleton
+  <yp-skeleton
     v-if="loading"
+    variant="cards"
     :rows="6"
-    animated
+    label="正在加载公司概览"
   />
   <inline-problem
     v-else-if="error"
@@ -246,14 +254,13 @@ onMounted(() => {
       </yp-surface>
     </div>
 
-    <el-alert
+    <yp-notice
       class="security-note"
-      type="info"
-      :closable="false"
+      tone="info"
       title="凭据由外部安全配置注入"
-      description="此页面和 API 只显示配置状态，不读取、编辑或回显任何 Secret。"
-      show-icon
-    />
+    >
+      此页面和 API 只显示配置状态，不读取、编辑或回显任何 Secret。
+    </yp-notice>
   </div>
 </template>
 

@@ -8,7 +8,7 @@ import type {
 } from '@yumpoo/api-client'
 import { WorkItemCellActivityTimeRange as WorkItemCellActivityTimeRangeValue } from '@yumpoo/api-client'
 import { Refresh as RefreshIcon } from '@element-plus/icons-vue'
-import { ElAlert, ElButton, ElPopover, ElTooltip } from 'element-plus'
+import { ElButton, ElPopover, ElTooltip } from 'element-plus'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { activityApi } from '../../api/client'
 import { toApiProblem, type ApiProblem } from '../../api/problems'
@@ -26,7 +26,6 @@ const timezone = computed(() => session.authentication.value?.company.timezone ?
 const items = ref<WorkItemCellActivityEntry[]>([])
 const facets = ref<WorkItemCellActivityFacets>()
 const nextCursor = ref<string | null>(null)
-const historyStartedAt = ref<Date>()
 const selectedTime = ref<WorkItemCellActivityTimeRange>()
 const selectedActors = ref<string[]>([])
 const selectedColumns = ref<WorkItemCellActivityColumn[]>([])
@@ -80,7 +79,6 @@ async function load(): Promise<void> {
     if (sequence !== requestSequence) return
     items.value = page.items
     nextCursor.value = page.nextCursor
-    historyStartedAt.value = page.historyStartedAt
     facets.value = page.facets
   } catch (reason) {
     if (sequence === requestSequence) error.value = await toApiProblem(reason)
@@ -151,15 +149,6 @@ onBeforeUnmount(() => { if (minuteTimer) clearInterval(minuteTimer) })
     class="cell-activity"
     aria-label="工作项动态"
   >
-    <el-alert
-      v-if="historyStartedAt"
-      class="cell-activity__cutover"
-      type="info"
-      :closable="false"
-      show-icon
-      :title="`单元格动态从 ${formatChineseTimestamp(historyStartedAt, timezone)} 开始记录，更早历史未回填。`"
-    />
-
     <div class="cell-activity__toolbar">
       <el-popover
         v-model:visible="filterVisible"
@@ -256,6 +245,7 @@ onBeforeUnmount(() => { if (minuteTimer) clearInterval(minuteTimer) })
           class="cell-activity__refresh"
           :loading="loading"
           aria-label="刷新动态"
+          text
           @click="load"
         >
           <refresh-icon
@@ -277,7 +267,6 @@ onBeforeUnmount(() => { if (minuteTimer) clearInterval(minuteTimer) })
       />
       <el-button
         type="primary"
-        plain
         @click="load"
       >
         重试
@@ -379,7 +368,11 @@ onBeforeUnmount(() => { if (minuteTimer) clearInterval(minuteTimer) })
           >{{ item.column === 'TIME_TRACKING' ? '删除计时记录' : '移除' }}</span>
 
           <template v-if="item.changeType === 'REMOVED'">
-            <el-tooltip v-if="item.column === 'TIME_TRACKING'" :content="valueText(item.beforeValue, item.column)" placement="top">
+            <el-tooltip
+              v-if="item.column === 'TIME_TRACKING'"
+              :content="valueText(item.beforeValue, item.column)"
+              placement="top"
+            >
               <span class="cell-entry__value">{{ valueText(item.beforeValue, item.column) }}</span>
             </el-tooltip>
             <yp-assignee
@@ -485,13 +478,14 @@ onBeforeUnmount(() => { if (minuteTimer) clearInterval(minuteTimer) })
       <yp-empty-state
         v-if="!loading && !items.length && !error"
         :title="hasFilters ? '没有符合筛选条件的动态' : '还没有单元格动态'"
-        :description="hasFilters ? '调整或清除筛选条件后再试。' : '切点后的字段操作会显示在这里。'"
+        :description="hasFilters ? '调整或清除筛选条件后再试。' : '字段操作会显示在这里。'"
       />
     </div>
     <el-button
       v-if="nextCursor"
       class="cell-activity__older"
       :loading="loadingOlder"
+      text
       @click="loadOlder"
     >
       加载更早动态
@@ -534,7 +528,7 @@ onBeforeUnmount(() => { if (minuteTimer) clearInterval(minuteTimer) })
 
 <style>
 .cell-activity-filter-popover.el-popover { padding: 0; overflow: visible; }
-.cell-activity-filter-popover .activity-filter { overflow: hidden; border-radius: var(--el-popover-border-radius, 4px); background: var(--yp-bg-raised); }
+.cell-activity-filter-popover .activity-filter { overflow: hidden;   }
 .activity-filter__header { display: flex; min-height: 62px; align-items: center; gap: 16px; padding: 0 16px; }
 .activity-filter__header strong { flex: 0 0 auto; color: var(--yp-text-primary); font-size: 15px; font-weight: 600; }
 .activity-filter__summary { flex: 0 1 auto; color: var(--yp-text-secondary); font-size: 13px; white-space: nowrap; }

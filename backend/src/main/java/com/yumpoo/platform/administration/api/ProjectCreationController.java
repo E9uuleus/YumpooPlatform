@@ -59,7 +59,7 @@ public final class ProjectCreationController {
         ProjectCreationCommand command = new ProjectCreationCommand(
                 actor, body.name(), body.description(), idempotencyKey,
                 requestHasher.hash("createProject", Map.of(), objectMapper.valueToTree(body)),
-                null, null);
+                null, null, body.initialColors());
         return stored(orchestrator.create(command).result());
     }
 

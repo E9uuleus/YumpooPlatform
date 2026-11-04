@@ -25,6 +25,7 @@ public class ActivityProjectionService implements OutboxEventConsumer {
     private static final Set<String> PROJECT_EVENTS = Set.of(
             "catalog.project_created", "catalog.project_updated",
             "catalog.project_archived", "catalog.project_reopened",
+            "catalog.project_ended", "catalog.project_resumed",
             "catalog.project_moved_to_workspace",
             "catalog.project_member_added", "catalog.project_member_removed",
             "catalog.project_owner_reassigned");
@@ -127,8 +128,10 @@ public class ActivityProjectionService implements OutboxEventConsumer {
         } else if (event.eventType().endsWith("owner_reassigned")) {
             safe.put("memberDisplayName", user(event, uuid(payload, "newOwnerUserId")));
         }
+        String templateCode = event.eventType().endsWith("member_removed")
+                && uuid(payload, "userId").equals(event.actor().userId()) ? "PROJECT_MEMBER_LEFT" : template(event.eventType());
         append(event, ActivityAudienceType.PROJECT, projectId, entityType, entityId, ref,
-                template(event.eventType()), safe, null, null);
+                templateCode, safe, null, null);
     }
 
     private void appendContent(DomainEventEnvelope event) {

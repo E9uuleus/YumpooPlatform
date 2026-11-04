@@ -22,11 +22,11 @@ Status: implemented
 
 验证子进程清除继承的应用配置、认证 fixture 和 JVM/Maven/Node 注入选项，再显式注入当前验证参数。阶段报告记录源码指纹、基线提交及逐步完成状态；后续交付拒绝旧源码、旧基线和缺失步骤。Windows 在校验 handoff 后对同一 JAR/Web 字节执行 smoke 和组包，服务器包再次逐文件对照 handoff。
 
-保留远端 required check 名称 `M0 Portable Gate` 与 `M0 Windows x64 Gate`。实际 Windows 工作任务为 `Windows Delivery`；最终门禁使用 `always()`，要求每个工作任务为 success 且有完成凭据。失败、取消、意外 skipped、未知或缺失结果都不能成功；没有路径过滤。PR/ref 新轮次取消旧轮次，保留合入 `dev` 或晋升到 `main` 后对实际提交的验证；指向 `dev`、`main` 的 PR 与两者的推送运行同一套门禁（发布线见 [main 发布线决策](2026-10-15-main-release-line.md)）。无论成功与否都尝试上传阶段记录和 Maven 诊断；必要交付物缺失仍失败。
+保留远端 required check 名称 `M0 Portable Gate` 与 `M0 Windows x64 Gate`。static 与 backend 阶段分别在 `Static Checks`、`Backend Checks` 两个并行任务执行，portable 由 `M0 Portable Gate` 在两者成功后用 artifact 接力；最终门禁要求四个工作任务都成功。实际 Windows 工作任务为 `Windows Delivery`；最终门禁使用 `always()`，要求每个工作任务为 success 且有完成凭据。失败、取消、意外 skipped、未知或缺失结果都不能成功；没有路径过滤。PR/ref 新轮次取消旧轮次，保留合入 `dev` 或晋升到 `main` 后对实际提交的验证；指向 `dev`、`main` 的 PR 与两者的推送运行同一套门禁（发布线见 [main 发布线决策](2026-10-15-main-release-line.md)）。无论成功与否都尝试上传阶段记录和 Maven 诊断；必要交付物缺失仍失败。
 
 生产部署校验完整保留回环监听、Secret 与普通配置分离、会话时限、日志路径与轮转、Nginx/IIS 响应头与代理规则、内部端点隔离、SPA 路由不被遮蔽、WinSW 锁定摘要与服务策略；不再断言 RUNBOOK 或清单的文字。Windows 安装与更新验证继续保留 `CI=true` 门槛和本机配置备份恢复。
 
-冻结标识包括 `.github/workflows/m0-18-ci.yml`、`Platform CI`、三个 Job ID 与名称、`m1-15-server-*`/`desktop-*` artifact、`out/m1-15/` 与服务器 ZIP 名、服务器 manifest/report 字段、`collect-desktop-release.mjs` 路径，以及后端 Java 类、profile 和配置标识（只迁移备份输出环境变量）。这些标识分别绑定发布工具、Sigstore、主机引擎或后端测试，后续先兼容新旧标识再协调切换，回退窗口结束后退役旧标识。
+冻结标识包括 `.github/workflows/m0-18-ci.yml`、`Platform CI`、`linux`、`windows_delivery`、`windows` 三个 Job ID 与名称（新增的 `static`、`backend` 不被外部系统引用）、`m1-15-server-*`/`desktop-*` artifact、`out/m1-15/` 与服务器 ZIP 名、服务器 manifest/report 字段、`collect-desktop-release.mjs` 路径，以及后端 Java 类、profile 和配置标识（只迁移备份输出环境变量）。这些标识分别绑定发布工具、Sigstore、主机引擎或后端测试，后续先兼容新旧标识再协调切换，回退窗口结束后退役旧标识。
 
 ## Alternatives considered
 

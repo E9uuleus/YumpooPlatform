@@ -51,6 +51,7 @@ onBeforeUnmount(stop)
     <el-button
       size="small"
       :disabled="busy"
+      text
       @click="recording ? stop() : start()"
     >
       {{ recording ? '取消' : '录制' }}
@@ -58,6 +59,7 @@ onBeforeUnmount(stop)
     <el-button
       size="small"
       :disabled="busy || !value"
+      text
       @click="emit('change', null)"
     >
       清除

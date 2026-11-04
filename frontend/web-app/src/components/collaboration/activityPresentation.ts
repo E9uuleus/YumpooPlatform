@@ -71,7 +71,7 @@ export const ACTIVITY_CATEGORIES: Record<ActivityCategory, ActivityCategoryDefin
     tone: 'var(--yp-status-green)',
     eventTypes: [
       'catalog.project_created', 'catalog.project_updated', 'catalog.project_archived',
-      'catalog.project_reopened', 'catalog.project_moved_to_workspace',
+      'catalog.project_reopened', 'catalog.project_ended', 'catalog.project_resumed', 'catalog.project_moved_to_workspace',
     ],
   },
 }

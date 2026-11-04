@@ -176,6 +176,16 @@ events:
     schema: schemas/catalog.project-reopened-v1.schema.json
     validExamples: [examples/catalog.project-reopened-v1.json]
     invalidExamples: [examples/catalog.project-reopened-v1.invalid.json]
+  - eventType: catalog.project_ended
+    eventVersion: 1
+    schema: schemas/catalog.project-ended-v1.schema.json
+    validExamples: [examples/catalog.project-ended-v1.json]
+    invalidExamples: [examples/catalog.project-ended-v1.invalid.json]
+  - eventType: catalog.project_resumed
+    eventVersion: 1
+    schema: schemas/catalog.project-resumed-v1.schema.json
+    validExamples: [examples/catalog.project-resumed-v1.json]
+    invalidExamples: [examples/catalog.project-resumed-v1.invalid.json]
   - eventType: catalog.project_moved_to_workspace
     eventVersion: 1
     schema: schemas/catalog.project-moved-to-workspace-v1.schema.json

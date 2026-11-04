@@ -27,6 +27,7 @@ public interface WorkItemRelationRepository {
             Endpoint activeParentItem) {}
 
     boolean insertParentChild(ParentChildRelation relation);
+    List<WorkItemImportPlanner.ParentLink> findActiveParentLinks(UUID companyId, UUID projectId);
     boolean insert(WorkItemRelation relation);
     Optional<WorkItemRelation> findById(UUID companyId, UUID relationId);
     Optional<WorkItemRelation> lock(UUID companyId, UUID relationId);

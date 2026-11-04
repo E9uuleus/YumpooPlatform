@@ -584,6 +584,7 @@ onBeforeUnmount(() => {
     />
     <el-button
       v-if="loadProblem"
+      text
       @click="loadLatest()"
     >
       重试加载讨论
@@ -670,7 +671,10 @@ onBeforeUnmount(() => {
         正在加载更早讨论…
       </template>
       <template v-else-if="olderProblem">
-        <inline-problem :problem="olderProblem" /><el-button @click="loadOlder(true)">
+        <inline-problem :problem="olderProblem" /><el-button
+          text
+          @click="loadOlder(true)"
+        >
           重试加载更早讨论
         </el-button>
       </template>

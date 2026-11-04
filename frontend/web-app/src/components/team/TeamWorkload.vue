@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import YpSkeleton from '../yp/YpSkeleton.vue'
+import YpNotice from '../yp/YpNotice.vue'
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElAlert, ElButton, ElIcon } from 'element-plus'
+import { ElButton, ElIcon } from 'element-plus'
 import { ArrowRight } from '@element-plus/icons-vue'
 import type { TeamMemberTask, TeamWorkload } from '@yumpoo/api-client'
 import YpAssignee from '../yp/YpAssignee.vue'
@@ -15,24 +17,25 @@ const props = defineProps<{ workload?: TeamWorkload | undefined; loading: boolea
 const emit = defineEmits<{ retry: []; load: [key: string, append: boolean] }>()
 const router = useRouter()
 const expanded = ref(new Set<string>()), showIdle = ref(false)
-interface Row { key: string; userId: string | null; name: string; active: boolean; color: string; todo: number; inProgress: number; overdue: number; total: number }
+interface Row { key: string; userId: string | null; name: string; active: boolean; color: string; todo: number; inProgress: number; other: number; overdue: number; total: number }
 const rows = computed<Row[]>(() => {
   const source = props.workload?.members ?? [], assigned: Record<string, string> = {}
   // Colour in id order so a member keeps the same accent when the workload ranking changes.
   source.map(member => member.userId).sort().forEach(id => assigneeGroupColor(id, assigned))
   const members = source.map(m => ({ key: m.userId, userId: m.userId, name: m.displayName, active: m.active, color: assigneeGroupColor(m.userId, assigned),
-    todo: m.todo, inProgress: m.inProgress, overdue: m.overdue, total: m.todo + m.inProgress }))
+    todo: m.todo, inProgress: m.inProgress, other: m.other, overdue: m.overdue, total: m.todo + m.inProgress + m.other }))
   members.sort((a, b) => b.total - a.total || b.inProgress - a.inProgress || a.name.localeCompare(b.name, 'zh-CN'))
   const unassigned = props.workload?.unassigned
-  return unassigned && unassigned.todo + unassigned.inProgress ? [...members, { key: '', userId: null, name: '未分配', active: true, color: workItemLabelColorValue(),
-    todo: unassigned.todo, inProgress: unassigned.inProgress, overdue: unassigned.overdue, total: unassigned.todo + unassigned.inProgress }] : members
+  const unassignedTotal = unassigned ? unassigned.todo + unassigned.inProgress + unassigned.other : 0
+  return unassigned && unassignedTotal ? [...members, { key: '', userId: null, name: '未分配', active: true, color: workItemLabelColorValue(),
+    todo: unassigned.todo, inProgress: unassigned.inProgress, other: unassigned.other, overdue: unassigned.overdue, total: unassignedTotal }] : members
 })
 const busy = computed(() => rows.value.filter(row => row.total > 0))
 const idle = computed(() => rows.value.filter(row => row.total === 0))
 const visible = computed(() => showIdle.value ? [...busy.value, ...idle.value] : busy.value)
 const max = computed(() => Math.max(1, ...rows.value.map(row => row.total)))
-const totals = computed(() => busy.value.filter(row => row.userId).reduce((sum, row) => ({ inProgress: sum.inProgress + row.inProgress, todo: sum.todo + row.todo, overdue: sum.overdue + row.overdue }), { inProgress: 0, todo: 0, overdue: 0 }))
-const shownInProgress = useTweenedNumber(() => totals.value.inProgress), shownTodo = useTweenedNumber(() => totals.value.todo), shownOverdue = useTweenedNumber(() => totals.value.overdue)
+const totals = computed(() => busy.value.filter(row => row.userId).reduce((sum, row) => ({ inProgress: sum.inProgress + row.inProgress, todo: sum.todo + row.todo, other: sum.other + row.other, overdue: sum.overdue + row.overdue }), { inProgress: 0, todo: 0, other: 0, overdue: 0 }))
+const shownInProgress = useTweenedNumber(() => totals.value.inProgress), shownTodo = useTweenedNumber(() => totals.value.todo), shownOther = useTweenedNumber(() => totals.value.other), shownOverdue = useTweenedNumber(() => totals.value.overdue)
 
 watch(() => props.workload, () => {
   expanded.value = new Set(busy.value.filter(row => expanded.value.has(row.key)).map(row => row.key))
@@ -65,26 +68,35 @@ const labelStyle = (token: string | null | undefined) => ({ backgroundColor: wor
       <div class="team-toolbar__end team-legend">
         <span><i class="team-legend__swatch team-legend__swatch--progress" />进行中 <b>{{ Math.round(shownInProgress) }}</b></span>
         <span><i class="team-legend__swatch team-legend__swatch--todo" />待开始 <b>{{ Math.round(shownTodo) }}</b></span>
+        <span v-if="totals.other"><i class="team-legend__swatch team-legend__swatch--other" />其他 <b>{{ Math.round(shownOther) }}</b></span>
         <span class="team-overdue">逾期 <b>{{ Math.round(shownOverdue) }}</b></span>
       </div>
     </div>
+    <yp-skeleton
+      v-if="loading && !workload"
+      variant="list"
+      :rows="6"
+    />
     <div
+      v-else
       v-loading="loading"
       class="team-body"
     >
-      <el-alert
+      <yp-notice
         v-if="error"
-        :title="workload ? `刷新失败，当前显示上次数据。${error}` : error"
-        type="error"
-        :closable="false"
+        tone="danger"
       >
-        <el-button
-          text
-          @click="emit('retry')"
-        >
-          重试
-        </el-button>
-      </el-alert>
+        {{ workload ? `刷新失败，当前显示上次数据。${error}` : error }}
+
+        <template #actions>
+          <el-button
+            text
+            @click="emit('retry')"
+          >
+            重试
+          </el-button>
+        </template>
+      </yp-notice>
       <div class="team-groups">
         <div
           v-for="(row, index) in visible"
@@ -126,9 +138,14 @@ const labelStyle = (token: string | null | undefined) => ({ backgroundColor: wor
               /><i
                 class="team-workload__segment team-workload__segment--todo"
                 :style="{ width: width(row.todo) }"
+              /><i
+                class="team-workload__segment team-workload__segment--other"
+                :style="{ width: width(row.other) }"
               />
             </span>
-            <small>进行中 {{ row.inProgress }} · 待开始 {{ row.todo }}</small>
+            <small>进行中 {{ row.inProgress }} · 待开始 {{ row.todo }}<template v-if="row.other">
+              · 其他 {{ row.other }}
+            </template></small>
             <small
               v-if="row.overdue"
               class="team-overdue"
@@ -140,13 +157,19 @@ const labelStyle = (token: string | null | undefined) => ({ backgroundColor: wor
               class="team-workload__tasks"
             >
               <div class="team-workload__tasks-inner">
-                <el-alert
+                <yp-notice
                   v-if="tasks.get(row.key)?.error"
-                  :title="tasks.get(row.key)!.error"
-                  type="error"
-                  :closable="false"
+                  tone="danger"
+                >
+                  {{ tasks.get(row.key)!.error }}
+                </yp-notice>
+                <yp-skeleton
+                  v-if="tasks.get(row.key)?.loading && !tasks.get(row.key)?.items.length"
+                  variant="list"
+                  :rows="2"
                 />
                 <div
+                  v-else
                   v-loading="tasks.get(row.key)?.loading && !tasks.get(row.key)?.items.length"
                   class="team-tasks-wrap work-item-accent-bar"
                 >

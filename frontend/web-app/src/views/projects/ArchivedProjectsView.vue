@@ -11,7 +11,7 @@ const OWNED = [ProjectActorAccess.Owner]
     <project-workspace-header
       section="catalog"
       title="归档项目"
-      description="仅展示你负责的归档项目。归档项目不计入统计，可在这里只读浏览、恢复或计划删除。"
+      description="仅展示你负责的归档项目。"
     />
     <archived-project-table :actor-accesses="OWNED" />
   </section>

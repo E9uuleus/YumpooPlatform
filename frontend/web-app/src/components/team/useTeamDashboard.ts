@@ -1,3 +1,4 @@
+import { usePageLoad } from '../../brand/page-progress'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { readCsrfToken, type TeamDashboardOptions, type TeamMemberTask, type TeamTimesheet, type TeamWorkload } from '@yumpoo/api-client'
@@ -10,6 +11,7 @@ export interface MemberTasks { items: TeamMemberTask[]; total: number; loading: 
 
 /** Company-wide team reporting; the view has no project or member filter, so every query sends empty sets. */
 export function useTeamDashboard() {
+  const pageLoad = usePageLoad()
   const session = useSession()
   const route = useRoute()
   const linkedDate = () => typeof route.query.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(route.query.date) ? route.query.date : undefined
@@ -62,9 +64,9 @@ export function useTeamDashboard() {
   }
   function refresh() { void loadOptions(); void loadTimesheet(); void loadWorkload() }
 
-  watch(period, () => void loadTimesheet())
+  watch(period, () => void pageLoad.track(loadTimesheet))
   onBeforeUnmount(() => { ++timesheetToken; ++workloadToken })
-  refresh()
+  void pageLoad.track(() => Promise.all([loadOptions(), loadTimesheet(), loadWorkload()]))
 
   return { options, optionsError, timezone, period, timesheet, timesheetLoading, timesheetError,
     workload, workloadLoading, workloadError, tasks, loadTimesheet, loadWorkload, loadTasks, refresh }

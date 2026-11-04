@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import YpSkeleton from '../../components/yp/YpSkeleton.vue'
 import { ElOption, ElTabs } from '../../components/operations/elementPlus'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
@@ -9,7 +10,6 @@ import {
   ElInputNumber,
   ElPagination,
   ElSelect,
-  ElSkeleton,
   ElSwitch,
   ElTable,
   ElTableColumn,
@@ -69,9 +69,9 @@ const query = useOperationsQuery(
       },
       { signal },
     ),
-  { interval: () => (tab.value === 'active' ? 15000 : 0) },
+  { pageLoad: true, interval: () => (tab.value === 'active' ? 15000 : 0) },
 )
-const ruleQuery = useOperationsQuery((signal) => operationsApi.listOperationsAlertRules({ signal }))
+const ruleQuery = useOperationsQuery((signal) => operationsApi.listOperationsAlertRules({ signal }), { pageLoad: true })
 const rules = ref<OperationsRule[]>([]),
   baselines = ref(new Map<string, string>())
 const signature = (rule: OperationsRule) =>
@@ -314,7 +314,6 @@ function logLink(alert: OperationsAlert) {
           <yp-status-tag
             domain="operations"
             :status="alert.severity"
-            effect="soft"
             size="small"
           />
           <h3>{{ ruleNames[alert.ruleCode] ?? alert.ruleCode }} · {{ subject(alert) }}</h3>
@@ -357,7 +356,10 @@ function logLink(alert: OperationsAlert) {
         >
           确认
         </el-button>
-        <el-button @click="open(alert)">
+        <el-button
+          text
+          @click="open(alert)"
+        >
           详情与时间线
         </el-button>
         <div class="alert-card__links">
@@ -382,7 +384,7 @@ function logLink(alert: OperationsAlert) {
     >
       <yp-empty-state
         title="没有活跃告警"
-        description="内置规则每 15 秒评估一次，恢复需连续正常 1 分钟。"
+        description=""
       />
     </section>
   </template>
@@ -403,7 +405,6 @@ function logLink(alert: OperationsAlert) {
           <yp-status-tag
             domain="operations"
             :status="row.severity"
-            effect="soft"
             size="small"
           />
         </template>
@@ -456,7 +457,7 @@ function logLink(alert: OperationsAlert) {
       :problem="ruleQuery.error.value"
     />
     <p class="ops-muted rules-hint">
-      比例使用百分比；磁盘以剩余比例低于阈值触发，其他规则以达到阈值触发。恢复需连续正常 1 分钟。每次保存都会写入安全审计。
+      比例使用百分比；磁盘以剩余比例低于阈值触发，其他规则以达到阈值触发。
     </p>
     <section class="ops-card flush">
       <el-table
@@ -620,38 +621,32 @@ function logLink(alert: OperationsAlert) {
           <yp-status-tag
             domain="operations"
             :status="detail.data.value.alert.severity"
-            effect="soft"
             size="small"
           />
           <yp-status-tag
             domain="operations"
             :status="detail.data.value.alert.status"
-            effect="soft"
             size="small"
           />
           <span class="ops-muted">{{ subject(detail.data.value.alert) }}</span>
         </div>
       </div>
     </template>
-    <div
+    <yp-skeleton
       v-if="detail.loading.value && !detail.data.value"
-      class="alert-detail__loading"
-      role="status"
-    >
-      <p class="ops-muted">
-        正在加载告警详情…
-      </p>
-      <el-skeleton
-        :rows="5"
-        animated
-      />
-    </div>
+      variant="list"
+      :rows="5"
+      label="正在加载告警详情"
+    />
     <div
       v-if="detail.error.value"
       class="alert-detail__error"
     >
       <inline-problem :problem="detail.error.value" />
-      <el-button @click="detail.refresh">
+      <el-button
+        text
+        @click="detail.refresh"
+      >
         重新加载
       </el-button>
     </div>
@@ -767,7 +762,6 @@ function logLink(alert: OperationsAlert) {
   gap: 0 var(--yp-space-4);
   margin-bottom: var(--yp-space-3);
   overflow: hidden;
-  border: 1px solid var(--yp-border-subtle);
   border-radius: var(--yp-radius-md);
   background: var(--yp-bg-surface);
 }
@@ -893,7 +887,6 @@ function logLink(alert: OperationsAlert) {
 :global(.alert-detail-dialog .el-dialog__header) {
   flex: none;
   padding-bottom: var(--yp-space-4);
-  border-bottom: 1px solid var(--yp-border-subtle);
 }
 
 :global(.alert-detail-dialog .el-dialog__body) {
@@ -905,7 +898,6 @@ function logLink(alert: OperationsAlert) {
 :global(.alert-detail-dialog .el-dialog__footer) {
   flex: none;
   padding-top: var(--yp-space-4);
-  border-top: 1px solid var(--yp-border-subtle);
 }
 
 .alert-detail__content {
@@ -926,7 +918,6 @@ function logLink(alert: OperationsAlert) {
   gap: 1px;
   margin: 0;
   overflow: hidden;
-  border: 1px solid var(--yp-border-subtle);
   border-radius: var(--yp-radius-md);
   background: var(--yp-border-subtle);
 }

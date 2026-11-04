@@ -12,6 +12,14 @@
  */
 
 import { mapValues } from '../runtime';
+import type { HideCompletedEffect } from './HideCompletedEffect';
+import {
+    HideCompletedEffectFromJSON,
+    HideCompletedEffectFromJSONTyped,
+    HideCompletedEffectToJSON,
+    HideCompletedEffectToJSONTyped,
+} from './HideCompletedEffect';
+
 /**
  *
  * @export
@@ -42,7 +50,15 @@ export interface TimeTrackingPreferences {
      * @memberof TimeTrackingPreferences
      */
     hideCompleted?: boolean;
+    /**
+     *
+     * @type {HideCompletedEffect}
+     * @memberof TimeTrackingPreferences
+     */
+    hideCompletedEffect?: HideCompletedEffect;
 }
+
+
 
 /**
  * Check if a given object implements the TimeTrackingPreferences interface.
@@ -68,6 +84,7 @@ export function TimeTrackingPreferencesFromJSONTyped(json: any, ignoreDiscrimina
         'workdayStartMinute': json['workdayStartMinute'],
         'workdayEndMinute': json['workdayEndMinute'],
         'hideCompleted': json['hideCompleted'] == null ? undefined : json['hideCompleted'],
+        ...(json['hideCompletedEffect'] == null ? {} : { 'hideCompletedEffect': HideCompletedEffectFromJSON(json['hideCompletedEffect']) }),
     };
 }
 
@@ -86,5 +103,6 @@ export function TimeTrackingPreferencesToJSONTyped(value?: TimeTrackingPreferenc
         'workdayStartMinute': value['workdayStartMinute'],
         'workdayEndMinute': value['workdayEndMinute'],
         'hideCompleted': value['hideCompleted'],
+        'hideCompletedEffect': HideCompletedEffectToJSON(value['hideCompletedEffect']),
     };
 }

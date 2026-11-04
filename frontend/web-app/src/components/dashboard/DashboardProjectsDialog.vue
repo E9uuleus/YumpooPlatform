@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ElDialog, ElInput, ElCheckbox, ElTag, ElAlert, ElCheckboxGroup, ElButton } from 'element-plus'
+import YpNotice from '../yp/YpNotice.vue'
+import { ElDialog, ElInput, ElCheckbox, ElTag, ElCheckboxGroup, ElButton } from 'element-plus'
 import { computed, ref, watch } from 'vue'
 import type { DashboardConnection, DashboardProject } from '@yumpoo/api-client'
 import YpEmptyState from '../yp/YpEmptyState.vue'
@@ -28,9 +29,6 @@ watch([query, archived], () => { clearTimeout(timer); timer = setTimeout(() => v
     class="dashboard-dialog"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <p class="dialog-intro">
-      选择要汇总的项目。此设置只影响你的仪表板。
-    </p>
     <el-input
       v-model="query"
       placeholder="搜索项目名称或编码"
@@ -55,12 +53,12 @@ watch([query, archived], () => { clearTimeout(timer); timer = setTimeout(() => v
         {{ p!.name || '无法访问的项目' }}{{ p!.lifecycle === 'ARCHIVED' ? ' · 已归档（不计入统计）' : '' }}
       </el-tag>
     </div>
-    <el-alert
+    <yp-notice
       v-if="error"
-      :title="error"
-      type="error"
-      :closable="false"
-    />
+      tone="danger"
+    >
+      {{ error }}
+    </yp-notice>
     <el-checkbox-group
       v-model="draft"
       class="project-selector-list"

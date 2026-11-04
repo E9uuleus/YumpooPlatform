@@ -57,6 +57,12 @@ export interface TimeTrackingSession {
      */
     timeCategory?: TimeCategory | null;
     /**
+     * 迁入工时导入写入的记录（含首版的 MIGRATED 分类记录）为 true，只读，时段由系统排布。服务端总是返回。
+     * @type {boolean}
+     * @memberof TimeTrackingSession
+     */
+    migrated?: boolean;
+    /**
      *
      * @type {string}
      * @memberof TimeTrackingSession
@@ -199,6 +205,7 @@ export function TimeTrackingSessionFromJSONTyped(json: any, ignoreDiscriminator:
         'projectId': json['projectId'],
         'workItemId': json['workItemId'],
         ...(json['timeCategory'] === undefined ? {} : { 'timeCategory': json['timeCategory'] === null ? null : TimeCategoryFromJSON(json['timeCategory']) }),
+        ...(json['migrated'] === undefined ? {} : { 'migrated': json['migrated'] === null ? null : json['migrated'] }),
         'userId': json['userId'],
         'displayName': json['displayName'],
         'startedAt': (new Date(json['startedAt'])),
@@ -233,6 +240,7 @@ export function TimeTrackingSessionToJSONTyped(value?: TimeTrackingSession | nul
         'projectId': value['projectId'],
         'workItemId': value['workItemId'],
         'timeCategory': TimeCategoryToJSON(value['timeCategory']),
+        'migrated': value['migrated'],
         'userId': value['userId'],
         'displayName': value['displayName'],
         'startedAt': value['startedAt'].toISOString(),
