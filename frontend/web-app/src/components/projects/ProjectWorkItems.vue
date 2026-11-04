@@ -106,7 +106,7 @@ import { useWorkItemGrouping, isGroupDisplayRow, type WorkItemGroupDisplayRow } 
 import { EMPTY_GROUP, type GroupField, type WorkItemGroup } from './workItemGrouping'
 import { useWorkItemGroupCreate } from './useWorkItemGroupCreate'
 import { useSession } from '../../composables/useSession'
-import { useWorkItemDueClock } from './useWorkItemDueClock'
+import { useMinuteClock } from '../../composables/useMinuteClock'
 import { apiDate, companyDate, dueDateKey } from './workItemDueDate'
 import ConnectColumnAddButton from './connect/ConnectColumnAddButton.vue'
 import ConnectTableColumnHeader from './connect/ConnectTableColumnHeader.vue'
@@ -732,7 +732,7 @@ const { draft: inlineDraft, rows: displayWorkItemRows, isDraft, start: createBel
   },
 })
 const session = useSession()
-const groupingClock = useWorkItemDueClock()
+const groupingClock = useMinuteClock()
 const { settings: tableViewSettings, state: tableSettingsState, update: updateTableSettings, load: reloadTableSettings,
   saveState: tableSettingsSaveState, saveError: tableSettingsSaveError, retrySave: retrySaveTableSettings }
   = useWorkItemTableSettings(() => projectId.value)
