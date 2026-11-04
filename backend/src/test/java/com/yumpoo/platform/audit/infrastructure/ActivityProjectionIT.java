@@ -7,12 +7,10 @@ import com.yumpoo.platform.audit.application.WorkItemCellActivityRepository;
 import com.yumpoo.platform.audit.application.WorkItemCellActivityStoredEvent;
 import com.yumpoo.platform.foundation.application.event.DomainEventEnvelope;
 import com.yumpoo.platform.foundation.application.event.EventActor;
-import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
+import com.yumpoo.platform.testing.JdbcIntegrationTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import tools.jackson.databind.ObjectMapper;
@@ -28,11 +26,7 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@Import(PostgreSqlTestContainerConfiguration.class)
-@SpringBootTest(
-        webEnvironment = SpringBootTest.WebEnvironment.NONE,
-        properties = "yumpoo.outbox.enabled=false"
-)
+@JdbcIntegrationTest
 class ActivityProjectionIT {
     private static final UUID COMPANY = UUID.fromString("00000000-0000-4000-8000-000000000001");
     private static final UUID PROJECT = UUID.fromString("44000000-0000-4000-8000-000000000101");

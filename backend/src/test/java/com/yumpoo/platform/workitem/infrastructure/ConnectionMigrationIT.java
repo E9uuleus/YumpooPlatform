@@ -1,5 +1,7 @@
 package com.yumpoo.platform.workitem.infrastructure;
 
+import com.yumpoo.platform.workitem.infrastructure.content.JdbcContentRepository;
+import com.yumpoo.platform.workitem.infrastructure.label.JdbcWorkItemLabelRepository;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

@@ -53,6 +53,10 @@ static 同时构建 `@yumpoo/monitor-hub` 与 `@yumpoo/monitor-dashboard`，执�
 
 工作流在指向 `dev` 或 `main` 的 PR、`dev`/`main` 合并后和显式手动运行时执行；`main` 的推送 CI 产物是唯一可发布的服务器包。合并后的执行保留，用于验证实际集成提交；分支 push 不另起重复工作流。新一轮运行取消同一 PR/ref 的旧轮次。没有按路径跳过必需任务。
 
+`Static Checks` 与 `Backend Checks` 并行运行，各自把阶段记录与产物（Web dist、OpenAPI 基线；后端 JAR、备份恢复输出）上传为本次运行专用的 artifact；`M0 Portable Gate` 下载两者后执行 portable，阶段记录仍按源码指纹与基线校验。
+
+CI 失败后使用 **Re-run all jobs** 整轮重跑：阶段产物与 handoff 名称都绑定 `github.run_attempt`，只重跑失败任务会因缺少新 attempt 的上游产物而失败。
+
 `M0 Portable Gate` 保持已有必需状态名。`Windows Delivery` 只在 portable 成功后运行。最终 `M0 Windows x64 Gate` 使用 `always()` 检查所有工作任务，逐项要求 `success` 和完成凭据；失败、取消、跳过、未知结果、缺失依赖/凭据均不能通过。工作流结构测试会拒绝新增任务未进入最终门禁、条件性跳过必需命令或 `continue-on-error`。
 
 Actions 始终尝试上传故障诊断：`out/ci` 阶段记录和 Maven Surefire/Failsafe 报告。未产生诊断文件时只警告；交付所需的 handoff/报告缺失必须失败。handoff 名称绑定 run ID 与 attempt，Windows 校验提交、文件集合和哈希。SHA 固定的 Actions、只读 token 与不持久化 checkout 凭据继续保留。

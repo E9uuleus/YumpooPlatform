@@ -1,5 +1,9 @@
 package com.yumpoo.platform.workitem.application;
 
+import com.yumpoo.platform.workitem.application.content.ContentRepository;
+import com.yumpoo.platform.workitem.application.label.WorkItemLabelModels;
+import com.yumpoo.platform.workitem.application.label.WorkItemLabelRepository;
+import com.yumpoo.platform.workitem.application.time.TimeTrackingRepository;
 import com.yumpoo.platform.audit.api.SecurityAuditActor;
 import com.yumpoo.platform.audit.api.SecurityAuditAppendPort;
 import com.yumpoo.platform.audit.api.SecurityAuditDraft;

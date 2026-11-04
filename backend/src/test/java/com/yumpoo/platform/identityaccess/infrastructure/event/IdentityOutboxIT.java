@@ -10,14 +10,12 @@ import com.yumpoo.platform.foundation.application.outbox.OutboxDispatcher;
 import com.yumpoo.platform.foundation.application.outbox.OutboxFailure;
 import com.yumpoo.platform.foundation.application.outbox.OutboxStorePort;
 import com.yumpoo.platform.identityaccess.application.event.IdentityCommittedFactConsumer;
-import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
+import com.yumpoo.platform.testing.JdbcIntegrationTest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.DefaultApplicationArguments;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -36,11 +34,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@Import(PostgreSqlTestContainerConfiguration.class)
-@SpringBootTest(
-        webEnvironment = SpringBootTest.WebEnvironment.NONE,
-        properties = "yumpoo.outbox.enabled=false"
-)
+@JdbcIntegrationTest
 class IdentityOutboxIT {
 
     private static final UUID COMPANY_ID = UUID.fromString("00000000-0000-4000-8000-000000000001");
