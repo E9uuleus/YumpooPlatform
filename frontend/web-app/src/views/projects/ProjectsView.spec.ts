@@ -90,6 +90,9 @@ describe('项目管理页', () => {
     useSession().authentication.value = authentication(AuthenticationRole.CompanyMember)
     const wrapper = mount(ProjectsView, { attachTo: document.body })
     await flushPromises()
+    expect(wrapper.get('#project-recent-tab').attributes('aria-selected')).toBe('true')
+    await wrapper.get('#project-content-tab').trigger('click')
+    await flushPromises()
     expect(api.listProjects).toHaveBeenCalledWith({ lifecycle: ProjectLifecycleFilter.Active, actorAccesses: [ProjectActorAccess.Owner, ProjectActorAccess.Member], page: 0, size: 20 })
     expect(wrapper.findAll('.project-management-table th').map(cell => cell.text())).toEqual([
       '项目名称', '状态', '我的角色',
@@ -111,6 +114,7 @@ describe('项目管理页', () => {
     const wrapper = mount(ProjectsView, { attachTo: document.body })
     await flushPromises()
 
+    await wrapper.get('#project-content-tab').trigger('click')
     await wrapper.get('.project-name-cell__link').trigger('click')
     expect(push).toHaveBeenCalledWith({ name: 'project-overview', params: { projectId: summary.id } })
     await wrapper.get('#project-recent-tab').trigger('click')
@@ -138,6 +142,7 @@ describe('项目管理页', () => {
       ownerUserIds: ['owner-1'],
       lifecycle: ProjectLifecycleFilter.Active,
     }))
+    wrapper.unmount()
   })
 
   it('最近项目实时校验并移除已归档或不可见的本地记录', async () => {
@@ -153,8 +158,7 @@ describe('项目管理页', () => {
     })
     const wrapper = mount(ProjectsView, { attachTo: document.body })
     await flushPromises()
-    await wrapper.get('#project-recent-tab').trigger('click')
-    await flushPromises()
+    expect(wrapper.get('#project-recent-tab').attributes('aria-selected')).toBe('true')
     expect(api.getProject).toHaveBeenCalledTimes(3)
     expect(wrapper.findAll('#project-recent-panel .project-desktop-table .project-name-cell__link')).toHaveLength(1)
     expect(window.localStorage.getItem('yumpoo.projects.recents.v1.company-1%3Auser-1')).not.toContain('archived')
