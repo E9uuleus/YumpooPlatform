@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -27,6 +28,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @ActiveProfiles("test")
 @JdbcIntegrationTest
+@TestPropertySource(properties = {"yumpoo.projects.deletion.purge-poll-delay=1d", "yumpoo.attachments.maintenance-initial-delay=1d", "yumpoo.attachments.scan-enabled=false"})
 class WorkItemTableSettingsPurgeIT {
     private static final UUID COMPANY = UUID.fromString("00000000-0000-4000-8000-000000000001");
     private static final UUID WORKSPACE = UUID.fromString("a460aa25-7180-490b-ab14-f9ec09049024");

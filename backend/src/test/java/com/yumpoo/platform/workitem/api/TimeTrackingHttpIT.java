@@ -17,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.JsonNode;
@@ -39,6 +40,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @ActiveProfiles("test")
 @HttpIntegrationTest
+@TestPropertySource(properties = {"yumpoo.projects.deletion.purge-poll-delay=24h", "yumpoo.attachments.scan-enabled=false", "yumpoo.attachments.maintenance-initial-delay=24h"})
 class TimeTrackingHttpIT {
     private static final UUID COMPANY = UUID.fromString("00000000-0000-4000-8000-000000000001");
     private record Actor(UUID userId, IssuedSession session) {}

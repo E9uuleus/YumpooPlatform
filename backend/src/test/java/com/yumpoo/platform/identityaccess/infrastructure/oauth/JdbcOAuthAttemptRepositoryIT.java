@@ -12,10 +12,12 @@ import com.yumpoo.platform.identityaccess.application.oauth.WeComIdentityGateway
 import com.yumpoo.platform.identityaccess.application.oauth.WeComMemberIdentity;
 import com.yumpoo.platform.identityaccess.application.oauth.WeComOAuthAuthorization;
 import com.yumpoo.platform.identityaccess.application.oauth.WeComOAuthVerificationService;
-import com.yumpoo.platform.testing.JdbcIntegrationTest;
+import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 import java.net.URI;
@@ -36,7 +38,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@JdbcIntegrationTest
+@Import(PostgreSqlTestContainerConfiguration.class)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 class JdbcOAuthAttemptRepositoryIT {
 
     private static final Instant CREATED_AT = Instant.parse("2026-08-10T02:00:00Z");

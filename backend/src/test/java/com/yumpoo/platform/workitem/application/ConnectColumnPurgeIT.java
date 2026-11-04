@@ -13,6 +13,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
@@ -34,6 +35,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @ActiveProfiles("test")
 @JdbcIntegrationTest
+@TestPropertySource(properties = {"yumpoo.projects.deletion.purge-poll-delay=1d", "yumpoo.attachments.maintenance-initial-delay=1d", "yumpoo.attachments.scan-enabled=false"})
 class ConnectColumnPurgeIT {
     @Autowired private JdbcClient jdbc;
     @Autowired private PlatformTransactionManager transactions;
