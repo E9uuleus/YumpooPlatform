@@ -23,13 +23,15 @@ import { useWorkItemBatchActions, type WorkItemSelection } from './useWorkItemBa
 import { useWorkItemCellPopover } from './useWorkItemCellPopover'
 import WorkItemBatchEditScope from './WorkItemBatchEditScope.vue'
 import { dueDateBatchEdit, workItemBatchEditScopeKey, type WorkItemBatchAssigneeMode, type WorkItemBatchEdit } from './workItemBatchEdit'
-import { workItemOrderSiblings } from './workItemOrder'
+import { moveWorkItemOrder, workItemOrderSiblings } from './workItemOrder'
 import WorkItemNameCell from './WorkItemNameCell.vue'
 import WorkItemDraftCell from './WorkItemDraftCell.vue'
 import { useWorkItemInlineCreate } from './useWorkItemInlineCreate'
 import WorkItemUpdatedCell from './WorkItemUpdatedCell.vue'
 import WorkItemTableSkeleton from './WorkItemTableSkeleton.vue'
 import WorkItemKanbanSkeleton from './WorkItemKanbanSkeleton.vue'
+import WorkItemKanbanBoard, { type KanbanBoardStatus } from './WorkItemKanbanBoard.vue'
+import WorkItemKanbanCard, { type KanbanCardField } from './WorkItemKanbanCard.vue'
 import { ArrowDown, Box, Filter as FilterIcon, Hide, Plus, Search, Sort, Upload, User } from '@element-plus/icons-vue'
 import {
   HideCompletedEffect,
@@ -93,7 +95,6 @@ import WorkItemAssigneePicker from './WorkItemAssigneePicker.vue'
 import { workItemAssignees, workItemAssigneeIds } from './workItemAssignees'
 import YpAssigneeStack from '../yp/YpAssigneeStack.vue'
 import YpAssignee from '../../components/yp/YpAssignee.vue'
-import YpPriorityBadge from '../../components/yp/YpPriorityBadge.vue'
 import WorkItemGroupingPopover from './WorkItemGroupingPopover.vue'
 import WorkItemTableSettingsMenu from './WorkItemTableSettingsMenu.vue'
 import WorkItemCompletedMenu from './WorkItemCompletedMenu.vue'
@@ -570,7 +571,6 @@ let loadRevision = 0
 let searchTimer: number | undefined
 let memberSearchTimer: number | undefined
 let tableObserver: IntersectionObserver | undefined
-let kanbanObserver: IntersectionObserver | undefined
 let activeController: AbortController | undefined
 
 const TABLE_PREFS_VERSION = 1
@@ -1586,7 +1586,6 @@ async function loadLane(statusCode: string, cursor: string | null = null, revisi
     const merged = cursor ? [...state.items, ...result.items] : result.items
     state.items = [...new Map(merged.map(item => [item.id, item])).values()]
     state.nextCursor = result.nextCursor
-    await nextTick(bindKanbanSentinels)
   } catch (reason) {
     if (revision === loadRevision) state.error = await toApiProblem(reason)
   } finally {
@@ -1596,13 +1595,108 @@ async function loadLane(statusCode: string, cursor: string | null = null, revisi
 
 async function loadKanban(revision = loadRevision): Promise<void> {
   Object.keys(lanes).forEach(key => delete lanes[key])
-  await Promise.all(workflowStatuses.value.map(status => loadLane(status.statusCode, null, revision)))
-  await nextTick(bindKanbanSentinels)
+  await Promise.all([...kanbanLaneStatuses.value.map(status => loadLane(status.statusCode, null, revision)), loadKanbanCounts(revision)])
 }
 
-function bindKanbanSentinels(): void {
-  kanbanObserver?.disconnect()
-  document.querySelectorAll<HTMLElement>('.lane-cursor-sentinel').forEach(element => kanbanObserver?.observe(element))
+// 看板：卡片字段跟随「隐藏」列设置；列头数量与分组计数同源，按当前筛选统计根工作项。
+const KANBAN_CARD_FIELDS: readonly string[] = ['content', 'status', 'priority', 'dueDate', 'timeTracking']
+const kanbanLaneStatuses = computed<KanbanBoardStatus[]>(() => workflowStatuses.value)
+const kanbanCardFields = computed(() => movableVisibleColumns.value.map(column => column.key)
+  .filter((key): key is KanbanCardField => KANBAN_CARD_FIELDS.includes(key)))
+const kanbanCounts = ref<Map<string, number>>()
+const kanbanExpandedIds = ref(new Set<string>())
+
+async function loadKanbanCounts(revision = loadRevision): Promise<void> {
+  kanbanCounts.value = undefined
+  const counts = new Map<string, number>()
+  let cursor: string | null = null
+  try {
+    do {
+      const page = await tableSource.listProjectWorkItemFilterOptions({ projectId: projectId.value, ...filterRequest(),
+        field: ListProjectWorkItemFilterOptionsFieldEnum.Status, limit: 100, ...(cursor ? { cursor } : {}) },
+      { signal: activeController?.signal ?? null })
+      if (revision !== loadRevision) return
+      page.items.forEach(option => counts.set(option.value, option.count))
+      cursor = page.nextCursor
+    } while (cursor)
+    kanbanCounts.value = new Map(workflowStatuses.value.map(status => [status.statusCode, counts.get(status.statusCode) ?? 0]))
+  } catch {
+    // 计数失败时列头退回已加载数量，不影响看板本身。
+  }
+}
+
+function loadMoreLane(statusCode: string): void {
+  const state = lane(statusCode)
+  if (state.nextCursor && !state.loading) void loadLane(statusCode, state.nextCursor)
+}
+
+function toggleKanbanSubitems(item: ProjectWorkItemListItem): void {
+  const next = new Set(kanbanExpandedIds.value)
+  if (next.has(item.id)) next.delete(item.id)
+  else { next.add(item.id); void loadSubitems(item.id) }
+  kanbanExpandedIds.value = next
+}
+
+function onKanbanSubitemCreated(parent: ProjectWorkItemListItem): void {
+  kanbanExpandedIds.value = new Set([...kanbanExpandedIds.value, parent.id])
+  onSubitemCreated(parent)
+}
+
+async function reloadLane(statusCode: string): Promise<void> {
+  await Promise.all([loadLane(statusCode), loadKanbanCounts()])
+}
+
+type LanePlacement = { edge: 'top' | 'bottom' } | { edge: 'after'; anchorId: string }
+const lanePlacements = new Map<string, LanePlacement>()
+function laneGroup(statusCode: string): WorkItemGroup {
+  return { key: statusCode, label: statusCode, color: '', count: 0, rank: 0 }
+}
+function laneCreateDisabledReason(group: WorkItemGroup): string {
+  if (!canCreate.value || !defaultContentId.value) return '当前无法添加工作项'
+  return workflowStatuses.value.some(item => item.code === group.key && item.active) ? '' : '此状态已停用'
+}
+/** 列尾新建在当前列最后一项之后；列头「+」与「在下方创建」先建「新工作项」，再进入改名。 */
+async function onLaneCreated(created: WorkItemDetail, placement: LanePlacement | undefined): Promise<void> {
+  notifyChanged()
+  const statusCode = created.statusCode
+  const state = lane(statusCode)
+  try {
+    if (placement?.edge === 'after') await moveWorkItemOrder(created, undefined, placement.anchorId, null)
+    else if (placement?.edge === 'bottom' && !state.nextCursor) {
+      const last = state.items.filter(item => item.id !== created.id).at(-1)
+      if (last) await moveWorkItemOrder(created, undefined, last.id, null)
+    }
+  } catch (reason) {
+    error.value = await toApiProblem(reason)
+  }
+  await reloadLane(statusCode)
+  if (placement?.edge === 'bottom') return
+  if (!lane(statusCode).items.some(item => item.id === created.id)) {
+    ElMessage.success(`已创建 ${created.itemNo}，当前筛选下不显示`)
+    return
+  }
+  await nextTick()
+  autoEditId.value = created.id
+}
+const laneTopCreate = useWorkItemGroupCreate({
+  defaults: () => createDefaults.value, projectId: () => projectId.value, field: () => 'STATUS',
+  contentId: () => defaultContentId.value, disabledReason: laneCreateDisabledReason,
+  changed: created => onLaneCreated(created, lanePlacements.get(`top:${created.statusCode}`)),
+})
+const laneBottomCreate = useWorkItemGroupCreate({
+  defaults: () => createDefaults.value, projectId: () => projectId.value, field: () => 'STATUS',
+  contentId: () => defaultContentId.value, disabledReason: laneCreateDisabledReason,
+  changed: created => onLaneCreated(created, { edge: 'bottom' }),
+})
+async function createInLane(statusCode: string, placement: LanePlacement): Promise<void> {
+  const group = laneGroup(statusCode)
+  const draft = laneTopCreate.draft(group)
+  if (draft.saving || laneCreateDisabledReason(group)) return
+  autoEditId.value = ''
+  draft.title = '新工作项'
+  lanePlacements.set(`top:${statusCode}`, placement)
+  await laneTopCreate.save(group)
+  if (draft.error) { error.value = draft.error; laneTopCreate.cancel(group) }
 }
 
 async function refreshCurrentView(): Promise<void> {
@@ -3073,13 +3167,6 @@ onMounted(() => {
   }, { rootMargin: '240px 0px' })
   groupSentinels.forEach(element => groupObserver?.observe(element))
   groupHeadings.forEach(element => groupObserver?.observe(element))
-  kanbanObserver = new IntersectionObserver(entries => {
-    entries.filter(entry => entry.isIntersecting).forEach(entry => {
-      const status = (entry.target as HTMLElement).dataset.status
-      if (status && lane(status).nextCursor && !lane(status).loading)
-        void loadLane(status, lane(status).nextCursor)
-    })
-  }, { rootMargin: '240px' })
   watch(tableSentinel, (next, previous) => { if (previous) tableObserver?.unobserve(previous); if (next) tableObserver?.observe(next) }, { immediate: true })
 })
 onBeforeUnmount(() => {
@@ -3091,7 +3178,7 @@ onBeforeUnmount(() => {
   if (suppressTableClickTimer) window.clearTimeout(suppressTableClickTimer)
   if (responsiveTableLayoutFrame !== undefined) window.cancelAnimationFrame(responsiveTableLayoutFrame)
   projectPageResizeObserver?.disconnect()
-  tableObserver?.disconnect(); kanbanObserver?.disconnect()
+  tableObserver?.disconnect()
   document.removeEventListener('pointerdown', onDocumentPointerDown)
   window.removeEventListener('resize', scheduleResponsiveTableLayout)
   bindTableScrollElement(undefined)
@@ -3137,12 +3224,12 @@ onBeforeUnmount(() => {
       </div>
       <div
         v-if="selectedView === 'kanban'"
-        class="kanban-board"
+        class="kanban-page-skeleton"
       >
         <section
           v-for="lane in 4"
           :key="lane"
-          class="kanban-lane"
+          class="kanban-page-skeleton__lane"
         >
           <work-item-kanban-skeleton />
         </section>
@@ -4156,65 +4243,69 @@ onBeforeUnmount(() => {
           />
         </div>
 
-        <div
+        <work-item-kanban-board
           v-else
-          class="kanban-board"
+          :statuses="kanbanLaneStatuses"
+          :lane="lane"
+          :counts="kanbanCounts"
+          :create-disabled-reason="status => laneCreateDisabledReason(laneGroup(status.statusCode))"
+          :creating-top="statusCode => laneTopCreate.draft(laneGroup(statusCode)).saving"
+          :draft="statusCode => laneBottomCreate.draft(laneGroup(statusCode))"
+          :dragging="Boolean(dragging)"
+          @load-more="loadMoreLane"
+          @drop="dropInto"
+          @create-top="statusCode => createInLane(statusCode, { edge: 'top' })"
+          @open-draft="statusCode => laneBottomCreate.open(laneGroup(statusCode))"
+          @draft-keydown="(statusCode, event) => laneBottomCreate.keydown(laneGroup(statusCode), event)"
+          @cancel-draft="statusCode => laneBottomCreate.cancel(laneGroup(statusCode))"
+          @draft-input="(statusCode, input) => laneBottomCreate.setInput(laneGroup(statusCode), input)"
         >
-          <section
-            v-for="status in workflowStatuses"
-            :key="status.statusCode"
-            class="kanban-lane"
-            @dragover.prevent
-            @drop.prevent="status.active && dropInto(status.statusCode)"
-          >
-            <header><strong>{{ status.displayName }}</strong><span>{{ lane(status.statusCode).items.length }}{{ lane(status.statusCode).nextCursor ? '+' : '' }}</span></header>
-            <inline-problem
-              v-if="lane(status.statusCode).error"
-              :problem="lane(status.statusCode).error!"
-            />
-            <work-item-kanban-skeleton v-if="lane(status.statusCode).loading && !lane(status.statusCode).items.length" />
-            <article
-              v-for="item in lane(status.statusCode).items"
-              :key="item.id"
-              class="kanban-card"
-              draggable="true"
-              @dragstart="dragging = item"
+          <template #card="{ item }">
+            <work-item-kanban-card
+              :item="item as ProjectWorkItemListItem"
+              :project-id="projectId"
+              :fields="kanbanCardFields"
+              :show-assignee="!hiddenColumns.has('assignee')"
+              :label-catalog="labelCatalog"
+              :content-catalog="catalog"
+              :workflow-statuses="workflowStatuses"
+              :priority-options="priorityOptions"
+              :active-contents="activeContents"
+              :can-create="canCreate"
+              :busy="Boolean(editingCell) || batchBusy"
+              :subitem-count="visibleSubitemCount(item as ProjectWorkItemListItem)"
+              :expanded="kanbanExpandedIds.has(item.id)"
+              :subitems="subitems[item.id]"
+              :auto-edit="autoEditId === item.id"
+              @open="openDetail"
+              @updated="replaceLightItem"
+              @editing="active => { if (active) { autoEditId = ''; editingNames.add(item.id) } else editingNames.delete(item.id) }"
+              @transition="transitionItem"
+              @patch="patchCell"
+              @deadline="onDeadlineChange"
+              @labels-updated="onLabelsUpdated"
+              @contents-updated="onContentsUpdated"
+              @timer-changed="notifyChanged"
+              @toggle-subitems="toggleKanbanSubitems"
+              @subitem-created="onKanbanSubitemCreated"
+              @duplicate="duplicateRow"
+              @moved="moved => reloadLane(moved.statusCode)"
+              @changed="onRelationsChanged"
+              @removed="removed => { void onRowRemoved(removed); void reloadLane(removed.statusCode) }"
+              @create-below="anchor => createInLane(anchor.statusCode, { edge: 'after', anchorId: anchor.id })"
+              @dragstart="started => dragging = started"
               @dragend="dragging = undefined"
-              @click="openDetail(item, 'details')"
             >
-              <button
-                type="button"
-                class="kanban-card__open"
-                :aria-label="`打开工作项：${item.title}`"
-                @click.stop="openDetail(item, 'details')"
-              >
-                <small>{{ contentName(item.contentId) }} · {{ item.itemNo }}</small>
-                <strong>{{ item.title }}</strong>
-              </button>
-              <connect-kanban-connections
-                v-if="!embedded"
-                :cell="connect.cells.get(item.id)"
-                @open-card="connect.openCard"
-              />
-              <span><yp-priority-badge :priority="item.priority" /></span>
-            </article>
-            <div
-              v-if="lane(status.statusCode).nextCursor"
-              class="lane-cursor-sentinel incremental-state"
-              :class="{ 'lane-cursor-sentinel--loading': lane(status.statusCode).loading }"
-              :data-status="status.statusCode"
-            >
-              <work-item-kanban-skeleton
-                v-if="lane(status.statusCode).loading"
-                :cards="1"
-                label="正在加载更多工作项"
-              />
-              <template v-else>
-                继续滚动以加载更多
+              <template #connections>
+                <connect-kanban-connections
+                  v-if="!embedded"
+                  :cell="connect.cells.get(item.id)"
+                  @open-card="connect.openCard"
+                />
               </template>
-            </div>
-          </section>
-        </div>
+            </work-item-kanban-card>
+          </template>
+        </work-item-kanban-board>
       </section>
     </template>
 
@@ -5723,68 +5814,19 @@ onBeforeUnmount(() => {
   padding: var(--yp-space-4) 0;
 }
 
-.kanban-board {
-  display: grid;
-  grid-auto-columns: minmax(280px, 1fr);
-  grid-auto-flow: column;
-  gap: var(--yp-space-4);
-  overflow-x: auto;
-  padding: var(--yp-space-4) 0;
-  background: transparent;
+.kanban-page-skeleton {
+  display: flex;
+  gap: 16px;
+  padding: 4px 0 8px;
+  overflow: hidden;
 }
 
-.kanban-lane {
-  min-height: 320px;
-  padding: var(--yp-space-3);
-  border: 1px solid var(--yp-border-subtle);
+.kanban-page-skeleton__lane {
+  flex: 0 0 272px;
+  padding: 0 8px 12px;
   border-radius: var(--yp-radius-md);
-  background: var(--yp-bg-surface);
+  background: var(--yp-bg-sunken);
 }
-
-.kanban-lane header {
-  display: flex;
-  justify-content: space-between;
-  padding: var(--yp-space-2);
-}
-
-.kanban-lane header span {
-  color: var(--yp-text-muted);
-}
-
-.kanban-card {
-  display: flex;
-  width: 100%;
-  flex-direction: column;
-  gap: var(--yp-space-2);
-  margin-top: var(--yp-space-3);
-  padding: var(--yp-space-4);
-  border: 1px solid var(--yp-border-subtle);
-  border-radius: var(--yp-radius-md);
-  color: var(--yp-text-primary);
-  background: var(--yp-bg-surface);
-  box-shadow: var(--yp-shadow-card);
-  text-align: left;
-  cursor: grab;
-}
-
-.kanban-card:hover {
-  border-color: var(--yp-border-strong);
-}
-
-.kanban-card__open {
-  display: flex;
-  flex-direction: column;
-  gap: var(--yp-space-2);
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  font: inherit;
-  cursor: pointer;
-}
-
-.kanban-card__open:focus-visible { outline: 2px solid var(--yp-action-primary); outline-offset: 2px; }
 
 .detail-heading h2 {
   margin: var(--yp-space-1) 0 var(--yp-space-4);

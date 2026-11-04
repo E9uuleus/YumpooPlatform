@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import './workItemTableSettings.css'
-import { WorkItemTableHeight, type WorkItemTableSettingsUpdateRequest } from '@yumpoo/api-client'
+import { WorkItemTableHeight } from '@yumpoo/api-client'
 import { ElCheckbox, ElPopover, ElTooltip } from 'element-plus'
 import { computed, onBeforeUnmount, ref, useId, watch } from 'vue'
 import WorkItemColoringRulesPanel from './WorkItemColoringRulesPanel.vue'
@@ -12,6 +12,7 @@ import {
   heightOption,
   isColoringRuleComplete,
   type DefaultValueColumnKey,
+  type TableSettings,
   type TableSettingsCatalog,
 } from './workItemTableSettings'
 
@@ -21,7 +22,7 @@ type PinColumn = { key: string; label: string; width: number }
 type PinTable = 'items' | 'subitems'
 
 const props = defineProps<{
-  settings: WorkItemTableSettingsUpdateRequest
+  settings: TableSettings
   state: 'loading' | 'ready' | 'error'
   saveState: TableSettingsSaveState
   saveError?: string | undefined
@@ -37,7 +38,7 @@ const props = defineProps<{
   catalog: TableSettingsCatalog
   defaultColumns: Array<{ key: DefaultValueColumnKey; label: string }>
 }>()
-const emit = defineEmits<{ update: [patch: Partial<WorkItemTableSettingsUpdateRequest>]; retry: []; retrySave: [] }>()
+const emit = defineEmits<{ update: [patch: Partial<TableSettings>]; retry: []; retrySave: [] }>()
 
 const PANEL_WIDTHS: Record<Panel, number> = { menu: 240, pin: 300, coloring: 820, defaults: 480 }
 const HEIGHT_FIELDS: Array<{ field: HeightField; label: string; icon: string }> = [
@@ -53,7 +54,7 @@ const openHeight = ref<HeightField | null>(null)
 const popperClass = `table-settings-owner-${useId().replace(/[^\w-]/g, '-')}`
 
 const pinnedCount = computed(() => Math.min(props.settings.pinnedColumnCount, Math.max(0, props.pinColumns.length - 1)))
-const subitemPinnedCount = computed(() => Math.min(props.settings.subitemPinnedColumnCount ?? 0,
+const subitemPinnedCount = computed(() => Math.min(props.settings.subitemPinnedColumnCount,
   Math.max(0, (props.subitemPinColumns?.length ?? 0) - 1)))
 const totalPinnedCount = computed(() => pinnedCount.value + subitemPinnedCount.value)
 const coloringCount = computed(() => props.settings.coloringRules.filter(isColoringRuleComplete).length)

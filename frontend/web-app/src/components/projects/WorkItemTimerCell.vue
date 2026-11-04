@@ -5,9 +5,14 @@ import { ElPopover, ElTooltip } from 'element-plus'
 import { formatTrackingDuration, observeTimer, useTimeTracker } from '../../composables/useTimeTracker'
 import TimeSessionDialog from '../timer/TimeSessionDialog.vue'
 import { timeLogPlacement, type TimeLogPlacement } from '../timer/timeLogPlacement'
+import WorkItemFieldGlyph from './WorkItemFieldGlyph.vue'
 import './workItemTimer.css'
 
-const props = defineProps<{ item: ProjectWorkItemListItem; projectId: string; disabled?: boolean }>()
+const props = defineProps<{
+  item: ProjectWorkItemListItem; projectId: string; disabled?: boolean
+  /** tag：看板卡片上的标签外观，计时按钮与记录弹窗与表格单元格相同。 */
+  variant?: 'cell' | 'tag'
+}>()
 const emit = defineEmits<{ changed: [] }>()
 async function toggle() { if (await tracker.toggle(props.item.id)) emit('changed') }
 const tracker = useTimeTracker()
@@ -60,6 +65,7 @@ const total = computed(() => {
   const entry = summary.value
   return entry ? entry.value.rollupDurationMs + (tracker.now.value - entry.at) * entry.value.rollupRunningRate : props.item.timeTracking?.rollupDurationMs ?? 0
 })
+const empty = computed(() => total.value <= 0 && !running.value)
 const durationTitle = computed(() => {
   const value = summary.value?.value ?? props.item.timeTracking
   const rollup = value?.rollupDurationMs ?? 0, allocated = value?.allocatedDurationMs ?? 0
@@ -82,8 +88,10 @@ const durationTitle = computed(() => {
     <template #reference>
       <div
         ref="anchor"
-        class="timer-cell"
-        data-tour="work-item-timer"
+        :class="variant === 'tag'
+          ? ['work-item-kanban-tag', 'timer-cell--tag', empty ? 'work-item-kanban-tag--placeholder' : 'work-item-kanban-tag--plain']
+          : 'timer-cell'"
+        :data-tour="variant === 'tag' ? undefined : 'work-item-timer'"
         role="button"
         tabindex="0"
         aria-label="查看计时日志"
@@ -94,6 +102,11 @@ const durationTitle = computed(() => {
         @keydown.stop
         @keydown.esc="open = false"
       >
+        <work-item-field-glyph
+          v-if="variant === 'tag' && !(tracker.timerEnabled.value || running)"
+          field="timeTracking"
+          plain
+        />
         <el-tooltip
           v-if="tracker.timerEnabled.value || running"
           :content="running ? '暂停本人计时' : '开始本人计时'"
@@ -130,7 +143,7 @@ const durationTitle = computed(() => {
           :enterable="false"
           :disabled="open"
         >
-          <span class="duration">{{ formatTrackingDuration(total) }}</span>
+          <span class="duration">{{ variant === 'tag' && empty ? '时长追踪' : formatTrackingDuration(total) }}</span>
         </el-tooltip>
       </div>
     </template>
@@ -147,6 +160,9 @@ const durationTitle = computed(() => {
 
 <style scoped>
 .timer-cell,.timer-toggle{cursor:pointer}
+.timer-cell--tag .timer-toggle{display:grid;place-items:center;width:18px;height:18px;box-sizing:border-box;padding:3px;border:0;border-radius:4px;background:var(--yp-action-primary);color:var(--yp-on-solid)}
+.timer-cell--tag .timer-toggle svg{width:12px;height:12px;fill:currentColor}
+.timer-cell--tag .duration{font-variant-numeric:tabular-nums}
 .timer-toggle:hover{background:var(--yp-action-primary-hover)}.timer-toggle:disabled{cursor:default}.timer-toggle.is-unavailable{opacity:.45}
 .timer-cell:focus-visible{outline:2px solid var(--yp-focus-ring);outline-offset:-2px}
 :global(.time-log-popover.el-popover){padding:0;max-width:calc(100vw - 24px);box-sizing:border-box;}

@@ -34,7 +34,8 @@ beforeEach(() => {
   }) => {
     if (request.ifMatch && request.ifMatch !== server.etag)
       throw new ResponseError(new Response(JSON.stringify({ code: 'VERSION_CONFLICT', message: '版本冲突', requestId: 'r', retryable: false, fieldErrors: [], details: {} }), { status: 412 }))
-    server = { ...server, ...structuredClone(request.workItemTableSettingsUpdateRequest), etag: `"${++version}"` }
+    const body = structuredClone(request.workItemTableSettingsUpdateRequest)
+    server = { ...server, ...body, subitemPinnedColumnCount: body.subitemPinnedColumnCount ?? server.subitemPinnedColumnCount, etag: `"${++version}"` }
     return structuredClone(server)
   })
 })

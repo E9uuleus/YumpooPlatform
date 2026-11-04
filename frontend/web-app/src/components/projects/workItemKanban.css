@@ -1,0 +1,61 @@
+/* 看板卡片标签：卡片、截止日期与时长追踪的 tag 外观共用。
+   有色条标签悬停时颜色从左向右铺满、文字变白，离开时从右向左褪去；无色条标签悬停加深灰底。 */
+.work-item-kanban-tag {
+  --kanban-tag-motion: 160ms;
+  position: relative;
+  display: inline-flex;
+  max-width: 100%;
+  height: 24px;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  overflow: hidden;
+  isolation: isolate;
+  border: 0;
+  border-radius: var(--yp-radius-xs);
+  background: var(--yp-fill-neutral);
+  color: var(--yp-text-primary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 24px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--kanban-tag-motion) var(--yp-ease-standard), background-color var(--kanban-tag-motion) var(--yp-ease-standard);
+}
+
+.work-item-kanban-tag > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.work-item-kanban-tag:disabled { cursor: default; }
+.work-item-kanban-tag:focus-visible { outline: 2px solid var(--yp-focus-ring); outline-offset: 1px; }
+
+.work-item-kanban-tag--bar { padding-left: 11px; }
+.work-item-kanban-tag--bar::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: var(--kanban-tag-color, var(--yp-label-gray));
+  clip-path: inset(0 calc(100% - 3px) 0 0);
+  content: '';
+  transition: clip-path var(--kanban-tag-motion) var(--yp-ease-standard);
+}
+.work-item-kanban-tag--bar:hover:not(:disabled),
+.work-item-kanban-tag--bar[aria-expanded='true'] { color: var(--yp-on-solid); }
+.work-item-kanban-tag--bar:hover:not(:disabled)::before,
+.work-item-kanban-tag--bar[aria-expanded='true']::before { clip-path: inset(0 0 0 0); }
+
+.work-item-kanban-tag--plain:hover:not(:disabled) { background: var(--yp-fill-neutral-active); }
+
+.work-item-kanban-tag--placeholder {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--yp-border-default);
+  color: var(--yp-text-muted);
+}
+.work-item-kanban-tag--placeholder:hover:not(:disabled) { background: var(--yp-fill-neutral); }
+
+/* 空字段的占位标签只在悬停或聚焦卡片时出现。 */
+.kanban-card:not(:hover):not(:focus-within):not(.kanban-card--active) .kanban-card__field--empty { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .work-item-kanban-tag, .work-item-kanban-tag--bar::before { transition: none; }
+}
