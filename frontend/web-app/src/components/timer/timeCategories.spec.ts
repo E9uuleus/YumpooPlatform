@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { TimeCategory } from '@yumpoo/api-client'
-import { categoryKey, categoryOf, matchCategories, resumeSubjects, sessionKey, subjectFields, subjectSlot, TIME_CATEGORIES, timerTitle } from './timeCategories'
+import { categoryKey, categoryOf, isMigratedCategory, matchCategories, resumeSubjects, sessionKey, subjectFields, subjectSlot, TIME_CATEGORIES, timeCategory, timerTitle } from './timeCategories'
 
 describe('非项目分类', () => {
   it('按固定顺序列出四类，键与线上枚举一致', () => {
@@ -32,5 +32,15 @@ describe('非项目分类', () => {
     expect(matchCategories('')).toHaveLength(4)
     expect(matchCategories(' 会 ').map(option => option.label)).toEqual(['会议'])
     expect(matchCategories('周报')).toEqual([])
+  })
+
+  it('迁入工时有展示元数据，但不进入可选列表', () => {
+    expect(timeCategory(TimeCategory.Migrated)?.label).toBe('迁入工时')
+    expect(categoryOf(categoryKey(TimeCategory.Migrated, 'p1'))?.label).toBe('迁入工时')
+    expect(isMigratedCategory(TimeCategory.Migrated)).toBe(true)
+    expect(isMigratedCategory(TimeCategory.Meeting)).toBe(false)
+    expect(TIME_CATEGORIES.map(option => option.code)).not.toContain(TimeCategory.Migrated)
+    expect(matchCategories('迁入')).toEqual([])
+    expect(timerTitle({ session: { timeCategory: TimeCategory.Migrated }, workItemTitle: null })).toBe('迁入工时')
   })
 })

@@ -122,6 +122,24 @@ export interface TimerCandidate {
      * @memberof TimerCandidate
      */
     ownDurationMs: number;
+    /**
+     * 父工作项 ID；顶层工作项为 null。
+     * @type {string}
+     * @memberof TimerCandidate
+     */
+    parentWorkItemId?: string | null;
+    /**
+     * 父工作项标题，父项不在当前列表中时用于显示父项标题行。
+     * @type {string}
+     * @memberof TimerCandidate
+     */
+    parentTitle?: string | null;
+    /**
+     * 父工作项按本人对该项目的完成定义是否已完成；没有父项时为 false。
+     * @type {boolean}
+     * @memberof TimerCandidate
+     */
+    parentCompleted?: boolean;
 }
 
 
@@ -170,6 +188,9 @@ export function TimerCandidateFromJSONTyped(json: any, ignoreDiscriminator: bool
         'assignedToMe': json['assignedToMe'],
         'lastTrackedAt': (json['lastTrackedAt'] == null ? null : new Date(json['lastTrackedAt'])),
         'ownDurationMs': json['ownDurationMs'],
+        'parentWorkItemId': json['parentWorkItemId'] == null ? undefined : json['parentWorkItemId'],
+        'parentTitle': json['parentTitle'] == null ? undefined : json['parentTitle'],
+        'parentCompleted': json['parentCompleted'] == null ? undefined : json['parentCompleted'],
     };
 }
 
@@ -200,5 +221,8 @@ export function TimerCandidateToJSONTyped(value?: TimerCandidate | null, ignoreD
         'assignedToMe': value['assignedToMe'],
         'lastTrackedAt': value['lastTrackedAt'] == null ? value['lastTrackedAt'] : value['lastTrackedAt'].toISOString(),
         'ownDurationMs': value['ownDurationMs'],
+        'parentWorkItemId': value['parentWorkItemId'],
+        'parentTitle': value['parentTitle'],
+        'parentCompleted': value['parentCompleted'],
     };
 }

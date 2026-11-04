@@ -87,7 +87,7 @@ public class ProjectService {
             throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
         }
         requireVersion(before, command.expectedRowVersion());
-        if (before.lifecycle() == ProjectLifecycle.ARCHIVED) {
+        if (before.lifecycle() == ProjectLifecycle.ARCHIVED || before.ended()) {
             throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
         }
         if (before.hasSameDetails(command.name(), command.description())) {
@@ -130,7 +130,7 @@ public class ProjectService {
     private RuntimeException conditionalFailure(CurrentActor actor, UUID projectId, long version) {
         Project current = requiredVisible(actor, projectId).project();
         requireVersion(current, version);
-        if (current.lifecycle() == ProjectLifecycle.ARCHIVED) {
+        if (current.lifecycle() == ProjectLifecycle.ARCHIVED || current.ended()) {
             return new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
         }
         return new IllegalStateException("project conditional update failed without changed condition");
@@ -151,16 +151,16 @@ public class ProjectService {
         return new ProjectSummary(project.id(), project.workspaceId(), row.workspaceCode(),
                 row.workspaceName(), project.code(), project.name(),
                 project.lifecycle().name(), project.ownerUserId(), ownerName, access(row),
-                capabilities(actor, project), project.rowVersion(), StrongEtag.format(project.rowVersion()),
-                project.createdAt(), project.updatedAt(), project.archivedAt(), deletion(project));
+                capabilities(actor, row), project.rowVersion(), StrongEtag.format(project.rowVersion()),
+                project.createdAt(), project.updatedAt(), project.archivedAt(), project.endedAt(), deletion(project));
     }
 
     private static ProjectDetail detail(CurrentActor actor, ProjectQueryRow row, String ownerName) {
         Project project = row.project();
         return new ProjectDetail(project.id(), project.workspaceId(), row.workspaceCode(),
                 row.workspaceName(), project.code(), project.name(), project.description(), project.lifecycle().name(), project.ownerUserId(), ownerName, access(row),
-                capabilities(actor, project), project.rowVersion(), StrongEtag.format(project.rowVersion()),
-                project.createdAt(), project.updatedAt(), project.archivedAt(), deletion(project));
+                capabilities(actor, row), project.rowVersion(), StrongEtag.format(project.rowVersion()),
+                project.createdAt(), project.updatedAt(), project.archivedAt(), project.endedAt(), deletion(project));
     }
 
     private static ProjectActorAccess access(ProjectQueryRow row) {
@@ -171,18 +171,19 @@ public class ProjectService {
         };
     }
 
-    private static ProjectCapabilities capabilities(CurrentActor actor, Project project) {
+    private static ProjectCapabilities capabilities(CurrentActor actor, ProjectQueryRow row) {
+        Project project = row.project();
         boolean owner = project.ownerUserId().equals(actor.userId());
         boolean admin = actor.hasRole(PlatformRoleCode.COMPANY_ADMIN);
-        boolean mutable = project.lifecycle() != ProjectLifecycle.ARCHIVED;
-        return new ProjectCapabilities(owner && mutable,
-                (owner || admin) && mutable, admin && mutable,
-                (owner || admin) && project.lifecycle() == ProjectLifecycle.ACTIVE,
-                (owner || admin) && !mutable && project.deletionRequestedAt() == null,
-                false,
-                admin && project.lifecycle() == ProjectLifecycle.ACTIVE,
-                (owner || admin) && !mutable && project.deletionRequestedAt() == null,
-                (owner || admin) && !mutable && project.deletionRequestedAt() != null);
+        boolean steward = owner || admin;
+        boolean archived = project.lifecycle() == ProjectLifecycle.ARCHIVED;
+        boolean running = !archived && !project.ended();
+        boolean deletion = project.deletionRequestedAt() != null;
+        return new ProjectCapabilities(owner && running, steward && running, steward && running,
+                steward && !archived, steward && archived && !deletion, false, admin && !archived,
+                steward && archived && !deletion, steward && archived && deletion,
+                steward && running, steward && !archived && project.ended(),
+                row.actorAccess() == ProjectMembershipModels.ActorAccess.MEMBER && running);
     }
 
     private static ProjectDeletion deletion(Project project) {

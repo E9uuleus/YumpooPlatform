@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { usePageLoad } from '../../brand/page-progress'
+
 import type { ProjectDetail } from '@yumpoo/api-client'
 import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
@@ -8,6 +10,7 @@ import ActivityTimeline from '../../components/collaboration/ActivityTimeline.vu
 import InlineProblem from '../../components/InlineProblem.vue'
 import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHeader.vue'
 
+const pageLoad = usePageLoad()
 const route = useRoute()
 const projectId = String(route.params.projectId)
 const project = ref<ProjectDetail>()
@@ -19,7 +22,7 @@ async function loadProject(): Promise<void> {
   catch (reason) { error.value = await toApiProblem(reason) }
 }
 
-onMounted(() => void loadProject())
+onMounted(() => void pageLoad.track(loadProject))
 </script>
 
 <template>
@@ -28,6 +31,7 @@ onMounted(() => void loadProject())
       section="activity"
       :project="project"
       title="项目动态"
+      @changed="loadProject"
     />
     <inline-problem
       v-if="error"
@@ -43,7 +47,6 @@ onMounted(() => void loadProject())
           <h2 id="project-activity-title">
             动态
           </h2>
-          <p>按时间查看工作项、讨论、成员与计时的变化。</p>
         </div>
       </header>
       <activity-timeline :project-id="projectId" />

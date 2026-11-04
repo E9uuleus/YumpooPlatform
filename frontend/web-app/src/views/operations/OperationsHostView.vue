@@ -24,9 +24,9 @@ const readRange = () =>
 const range = ref<GetOperationsMetricsRangeEnum>(readRange())
 const query = useOperationsQuery(
   (signal) => operationsApi.getOperationsMetrics({ range: range.value }, { signal }),
-  { interval: () => overview.interval.value * 1000 },
+  { pageLoad: true, interval: () => overview.interval.value * 1000 },
 )
-const rules = useOperationsQuery((signal) => operationsApi.listOperationsAlertRules({ signal }))
+const rules = useOperationsQuery((signal) => operationsApi.listOperationsAlertRules({ signal }), { pageLoad: true })
 watch(overview.refreshVersion, () => {
   void query.refresh()
   void rules.refresh()
@@ -206,7 +206,7 @@ function threshold(code?: string): number | undefined {
       磁盘信息暂不可用
     </div>
     <p class="ops-muted">
-      按存储卷合并显示用途，不显示绝对路径。剩余低于 20% 标黄，低于 10% 标红。
+      剩余低于 20% 标黄，低于 10% 标红。
     </p>
   </section>
   <div class="ops-toolbar ops-sticky host-toolbar">

@@ -46,7 +46,7 @@ defineProps<{ count?: number | undefined }>()
   box-sizing: border-box;
   border-radius: 999px;
   background: var(--yp-action-primary);
-  color: var(--yp-text-inverse);
+  color: var(--yp-on-solid);
   font-size: 10px;
   font-weight: 600;
   line-height: 1;

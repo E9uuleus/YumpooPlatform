@@ -23,7 +23,8 @@ public record Project(
         Instant deletionRequestedAt,
         UUID deletionRequestedBy,
         Instant purgeAfter,
-        Instant purgeStartedAt
+        Instant purgeStartedAt,
+        Instant endedAt
 ) {
 
     public Project(UUID id, UUID companyId, UUID workspaceId, String code, String name,
@@ -31,7 +32,7 @@ public record Project(
             Instant createdAt, UUID createdByUserId, Instant updatedAt, UUID updatedByUserId,
             Instant archivedAt) {
         this(id, companyId, workspaceId, code, name, description, lifecycle, ownerUserId, rowVersion,
-                createdAt, createdByUserId, updatedAt, updatedByUserId, archivedAt, null, null, null, null);
+                createdAt, createdByUserId, updatedAt, updatedByUserId, archivedAt, null, null, null, null, null);
     }
 
     private static final Pattern CODE = Pattern.compile("^[A-Z][A-Z0-9_]{1,31}$");
@@ -56,6 +57,8 @@ public record Project(
                 || (archivedAt != null && (archivedAt.isBefore(createdAt) || archivedAt.isAfter(updatedAt)))) {
             throw new IllegalArgumentException("project lifecycle timestamps are invalid");
         }
+        if (endedAt != null && (endedAt.isBefore(createdAt) || endedAt.isAfter(updatedAt)))
+            throw new IllegalArgumentException("project ended timestamp is invalid");
         if (deletionRequestedAt == null) {
             if (deletionRequestedBy != null || purgeAfter != null || purgeStartedAt != null)
                 throw new IllegalArgumentException("project deletion facts are incomplete");
@@ -85,7 +88,7 @@ public record Project(
         Objects.requireNonNull(newOwnerUserId, "newOwnerUserId must not be null");
         Objects.requireNonNull(actorUserId, "actorUserId must not be null");
         Objects.requireNonNull(now, "now must not be null");
-        if (lifecycle == ProjectLifecycle.ARCHIVED) {
+        if (lifecycle == ProjectLifecycle.ARCHIVED || endedAt != null) {
             throw new IllegalStateException("archived project cannot change owner");
         }
         if (ownerUserId.equals(newOwnerUserId)) {
@@ -104,7 +107,7 @@ public record Project(
     public Project updateDetails(String nextName, String nextDescription, UUID actorUserId, Instant now) {
         Objects.requireNonNull(actorUserId, "actorUserId must not be null");
         Objects.requireNonNull(now, "now must not be null");
-        if (lifecycle == ProjectLifecycle.ARCHIVED) {
+        if (lifecycle == ProjectLifecycle.ARCHIVED || endedAt != null) {
             throw new IllegalStateException("archived project cannot change settings");
         }
         return new Project(id, companyId, workspaceId, code, nextName, nextDescription,
@@ -119,7 +122,7 @@ public record Project(
         }
         return new Project(id, companyId, workspaceId, code, name, description,
                 ProjectLifecycle.ARCHIVED, ownerUserId, rowVersion + 1, createdAt,
-                createdByUserId, now, actorUserId, now);
+                createdByUserId, now, actorUserId, now, null, null, null, null, endedAt);
     }
 
     public Project reopen(UUID actorUserId, Instant now) {
@@ -131,7 +134,21 @@ public record Project(
         if (deletionRequestedAt != null) throw new IllegalStateException("scheduled deletion must be cancelled before restore");
         return new Project(id, companyId, workspaceId, code, name, description,
                 ProjectLifecycle.ACTIVE, ownerUserId, rowVersion + 1, createdAt,
-                createdByUserId, now, actorUserId, null);
+                createdByUserId, now, actorUserId, null, null, null, null, null, endedAt);
+    }
+
+    public boolean ended() { return endedAt != null; }
+
+    public Project end(UUID actorUserId, Instant now) {
+        if (lifecycle != ProjectLifecycle.ACTIVE || endedAt != null) throw new IllegalStateException("only running project can be ended");
+        return new Project(id, companyId, workspaceId, code, name, description, lifecycle, ownerUserId, rowVersion + 1,
+                createdAt, createdByUserId, now, actorUserId, null, null, null, null, null, now);
+    }
+
+    public Project resume(UUID actorUserId, Instant now) {
+        if (lifecycle != ProjectLifecycle.ACTIVE || endedAt == null) throw new IllegalStateException("only ended project can be resumed");
+        return new Project(id, companyId, workspaceId, code, name, description, lifecycle, ownerUserId, rowVersion + 1,
+                createdAt, createdByUserId, now, actorUserId, null, null, null, null, null, null);
     }
 
     private static String requireCode(String value) {

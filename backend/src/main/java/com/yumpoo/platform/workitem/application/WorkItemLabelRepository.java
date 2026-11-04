@@ -10,8 +10,12 @@ import static com.yumpoo.platform.workitem.application.WorkItemLabelModels.Prior
 import static com.yumpoo.platform.workitem.application.WorkItemLabelModels.StatusLabel;
 
 public interface WorkItemLabelRepository {
-    void initialize(UUID companyId, UUID projectId,
-            Instant now);
+    default void initialize(UUID companyId, UUID projectId, Instant now) {
+        initialize(companyId, projectId, Map.of(), Map.of(), now);
+    }
+
+    void initialize(UUID companyId, UUID projectId, Map<String, String> statusColors,
+            Map<String, String> priorityColors, Instant now);
 
     OptionalLong version(UUID companyId, UUID projectId, boolean lock);
 

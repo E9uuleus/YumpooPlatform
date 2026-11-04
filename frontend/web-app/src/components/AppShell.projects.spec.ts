@@ -13,6 +13,8 @@ import {
 } from '@yumpoo/api-client'
 import { DOMWrapper, flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { defineComponent } from 'vue'
+import { useProjectRecents } from '../composables/useProjectRecents'
 import { useSession } from '../composables/useSession'
 import AppShell from './AppShell.vue'
 import { notifyProjectSettingsChanged } from '../composables/projectSettingsEvents'
@@ -79,6 +81,7 @@ const authentication: CurrentAuthentication = {
 
 describe('项目侧栏导航', () => {
   beforeEach(() => {
+    route.params = { workspaceSlug: 'member' }
     route.name = 'workspace'
     route.meta.shellSection = 'work'
     window.localStorage.clear()
@@ -116,14 +119,15 @@ describe('项目侧栏导航', () => {
   })
 
   it('箭头紧跟标题并在管理入口后展示最多十个项目与省略号', async () => {
-    const wrapper = mount(AppShell, { global: { stubs: { RouterView: true } } })
+    const wrapper = mount(AppShell, { attachTo: document.body, global: { stubs: { RouterView: true } } })
     await flushPromises()
 
     expect(api.listProjects).toHaveBeenCalledWith({
       lifecycle: ProjectLifecycleFilter.Active,
+      ended: false,
       actorAccesses: [ProjectActorAccess.Owner, ProjectActorAccess.Member],
       page: 0,
-      size: 11,
+      size: 20,
     })
     const toggle = wrapper.get('.context-navigation .project-navigation__toggle')
     expect(wrapper.get('.workspace-navigation-heading__identity').text()).toBe('工作台')
@@ -136,6 +140,12 @@ describe('项目侧栏导航', () => {
     expect(projects.every(item => item.find('svg').exists())).toBe(true)
     expect(projects.every(item => item.attributes('title') === undefined)).toBe(true)
     expect(wrapper.findAll('#desktop-project-navigation .project-navigation__more svg circle')).toHaveLength(3)
+    await wrapper.get('#desktop-project-navigation .project-navigation__more').trigger('click')
+    await flushPromises()
+    expect(document.body.querySelector('.project-navigation-more')?.textContent).toContain('项目 11')
+    expect(push).not.toHaveBeenCalledWith(expect.objectContaining({ name: 'workspace' }))
+    await wrapper.findAll('#desktop-project-navigation .project-navigation__item')[2]!.get('.project-pin-button').trigger('click')
+    expect(wrapper.get('#desktop-project-navigation .project-navigation__project').text()).toBe('项目 3')
     expect(wrapper.get('#desktop-project-navigation').text()).not.toContain('产品')
     const archived = wrapper.findAll('#desktop-project-navigation button').find(button => button.text() === '归档项目')!
     await archived.trigger('click')
@@ -144,6 +154,88 @@ describe('项目侧栏导航', () => {
     await projects[0]?.trigger('click')
     expect(push).toHaveBeenCalledWith({ name: 'project-overview', params: { projectId: 'project-1' } })
     wrapper.unmount()
+  })
+
+  it('当前项目入口排在项目列表之前，收起项目列表时仍显示', async () => {
+    route.params = { workspaceSlug: 'member', projectId: 'project-3' }
+    route.name = 'project-overview'
+    const wrapper = mount(AppShell, { attachTo: document.body, global: { stubs: { RouterView: true } } })
+    await flushPromises()
+    const navigation = wrapper.get('.context-navigation .global-navigation')
+    const visibleItems = () => navigation.findAll('.context-item').filter(item => item.isVisible()).map(item => item.text())
+    expect(visibleItems()).toEqual(['工作项', '统计', '成员', '动态', '设置'])
+    const group = navigation.get('.context-navigation__group-label').element
+    expect(group.compareDocumentPosition(navigation.get('.project-navigation__head').element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    await navigation.get('.project-navigation__toggle').trigger('click')
+    expect(wrapper.get('#desktop-project-navigation').isVisible()).toBe(false)
+    expect(visibleItems()).toEqual(['工作项', '统计', '成员', '动态', '设置'])
+    wrapper.unmount()
+  })
+
+  it('置顶与最近打开的项目排在菜单前面，经服务端确认可见，并随置顶变化重排', async () => {
+    const recent = (item: ProjectSummary, openedAt: number, pinned = false) => ({
+      ...item, createdAt: item.createdAt.toISOString(), updatedAt: item.updatedAt.toISOString(), endedAt: null, openedAt, pinned,
+    })
+    window.localStorage.setItem('yumpoo.projects.recents.v1.company-1%3Auser-1', JSON.stringify([
+      recent(project(5), 1, true), recent(project(14), 3), recent(project(30), 2),
+    ]))
+    api.listProjects.mockImplementation(async (request: { ids?: string[] }) => {
+      if (request.ids) {
+        const items = [project(5), project(14)]
+        return { items, page: 0, size: request.ids.length, totalElements: items.length, totalPages: 1 }
+      }
+      return { items: Array.from({ length: 11 }, (_, index) => project(index + 1)), page: 0, size: 11, totalElements: 20, totalPages: 2 }
+    })
+    const wrapper = mount(AppShell, { global: { stubs: { RouterView: true } } })
+    await flushPromises()
+
+    expect(api.listProjects).toHaveBeenCalledWith(expect.objectContaining({
+      ids: ['project-5', 'project-14', 'project-30'], size: 3, lifecycle: ProjectLifecycleFilter.Active, ended: false,
+    }))
+    const names = () => wrapper.findAll('#desktop-project-navigation .project-navigation__project').map(item => item.text())
+    expect(names()).toEqual(['项目 5', '项目 14', '项目 1', '项目 2', '项目 3', '项目 4', '项目 6', '项目 7', '项目 8', '项目 9'])
+    expect(wrapper.findAll('#desktop-project-navigation .project-pin-button--active')).toHaveLength(1)
+    expect(wrapper.find('#desktop-project-navigation .project-navigation__more').exists()).toBe(true)
+
+    const elsewhere = mount(defineComponent({ setup: () => useProjectRecents(() => 'company-1:user-1'), template: '<div />' }))
+    elsewhere.vm.togglePinned(elsewhere.vm.items.find(item => item.id === 'project-14')!)
+    await flushPromises()
+    expect(names().slice(0, 3)).toEqual(['项目 14', '项目 5', '项目 1'])
+    expect(wrapper.findAll('#desktop-project-navigation .project-pin-button--active')).toHaveLength(2)
+
+    await wrapper.findAll('#desktop-project-navigation .project-navigation__project')[3]?.trigger('click')
+    await flushPromises()
+    expect(names().slice(0, 4)).toEqual(['项目 14', '项目 5', '项目 2', '项目 1'])
+    elsewhere.unmount()
+    wrapper.unmount()
+  })
+
+  it('十个置顶项目与当前路由项目一并校验，不会反复补取最后一个置顶项', async () => {
+    route.params.projectId = 'project-99'
+    const pinned = Array.from({ length: 10 }, (_, index) => project(20 + index))
+    window.localStorage.setItem('yumpoo.projects.recents.v1.company-1%3Auser-1', JSON.stringify(pinned.map(item => ({
+      ...item, openedAt: 1, pinned: true,
+    }))))
+    let idRequests = 0
+    api.listProjects.mockImplementation(async (request: { ids?: string[] }) => {
+      if (request.ids && ++idRequests > 3) throw new Error('重复补取')
+      const items = request.ids
+        ? [...pinned, project(99)].filter(item => request.ids!.includes(item.id))
+        : [project(1)]
+      return { items, page: 0, size: items.length, totalElements: 11, totalPages: 1 }
+    })
+    const wrapper = mount(AppShell, { global: { stubs: { RouterView: true } } })
+    try {
+      for (let i = 0; i < 4; i++) await flushPromises()
+      expect(api.listProjects).toHaveBeenCalledWith(expect.objectContaining({
+        ids: ['project-99', ...pinned.map(item => item.id)], size: 11,
+      }))
+      expect(idRequests).toBe(1)
+      expect(wrapper.findAll('#desktop-project-navigation .project-navigation__project').map(item => item.text()))
+        .toEqual(pinned.map(item => item.name))
+    } finally {
+      wrapper.unmount()
+    }
   })
 
   it('移动导航保留管理项目与项目跳转，移除产品入口', async () => {
@@ -185,9 +277,10 @@ describe('项目侧栏导航', () => {
     expect(api.listProjects).toHaveBeenLastCalledWith({
       query: 'YP_02',
       lifecycle: ProjectLifecycleFilter.Active,
+      ended: false,
       actorAccesses: [ProjectActorAccess.Owner, ProjectActorAccess.Member],
       page: 0,
-      size: 11,
+      size: 20,
     })
 
     await input.trigger('keydown', { key: 'Escape' })

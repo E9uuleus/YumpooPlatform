@@ -53,6 +53,7 @@ class WorkItemHttpIT {
     @Autowired private ObjectMapper json;
     @Autowired private PlatformTransactionManager transactionManager;
     @Autowired private WorkItemLabelRepository labels;
+    @Autowired private com.yumpoo.platform.foundation.application.outbox.OutboxDispatcher dispatcher;
     @Autowired private com.yumpoo.platform.identityaccess.application.authorization.PlatformRoleMaintenanceUseCase maintenance;
     @Autowired private com.yumpoo.platform.organization.api.CompanyConfigurationQuery company;
 
@@ -70,10 +71,19 @@ class WorkItemHttpIT {
             DirectoryMemberProvisioningResult memberUser = provisioner.provision("work-category-member", "Work Category Member");
             owner = actor(ownerUser.userId());
             member = actor(memberUser.userId());
+            enableTimer(owner.userId());
+            enableTimer(member.userId());
             createProject(owner.userId(), member.userId());
             requirementsId = createContent("需求", "BRIGHT_BLUE");
             tasksId = createContent("任务", "BRIGHT_GREEN");
         }
+    }
+
+    /** 计时器默认关闭（V88）：直接写入开启的状态行，row_version 保持 0，既有 "0" ETag 用例不变。 */
+    private void enableTimer(UUID userId) {
+        jdbc.sql("INSERT INTO yumpoo.work_item_timer_state(company_id,user_id,timer_enabled) VALUES (:company,:user,true) "
+                + "ON CONFLICT (company_id,user_id) DO UPDATE SET timer_enabled=true")
+                .param("company", COMPANY_ID).param("user", userId).update();
     }
 
     @AfterEach
@@ -235,6 +245,43 @@ class WorkItemHttpIT {
     }
 
     @Test
+    void searchAndFiltersMatchSubitemsWhileGroupConditionsConstrainRootsOnly() throws Exception {
+        String collection = "/api/v1/projects/" + PROJECT_ID + "/work-items";
+        JsonNode parent = created(mutate("POST", collection, member, workItemBody(tasksId, "plain parent"), null, UUID.randomUUID()));
+        var childBody = (tools.jackson.databind.node.ObjectNode) json.readTree(subitemBody(tasksId, "zz-subhit child"));
+        childBody.put("priority", "HIGH");
+        JsonNode child = created(mutate("POST", "/api/v1/work-items/" + parent.path("id").asText() + "/subitems", member,
+                json.writeValueAsString(childBody), null, UUID.randomUUID()));
+        created(mutate("POST", "/api/v1/work-items/" + parent.path("id").asText() + "/subitems", member,
+                subitemBody(tasksId, "other child"), null, UUID.randomUUID()));
+
+        JsonNode searched = ok(get(collection + "?q=zz-subhit", member)).path("items");
+        assertThat(searched).hasSize(1);
+        assertThat(searched.get(0).path("id").asText()).isEqualTo(parent.path("id").asText());
+        assertThat(searched.get(0).path("matchedSubitemCount").asLong()).isEqualTo(1);
+        assertThat(ok(get(collection, member)).path("items").get(0).path("matchedSubitemCount").asLong()).isZero();
+
+        String subitems = "/api/v1/work-items/" + parent.path("id").asText() + "/subitems";
+        JsonNode matched = ok(get(subitems + "?q=zz-subhit", member)).path("items");
+        assertThat(matched).hasSize(1);
+        assertThat(matched.get(0).path("id").asText()).isEqualTo(child.path("id").asText());
+        assertThat(ok(get(subitems, member)).path("items")).hasSize(2);
+
+        assertThat(ok(get(collection + "?priority=HIGH", member)).path("items")).hasSize(1);
+        assertThat(ok(get(collection + "?priority=HIGH&groupPriority=HIGH", member)).path("items")).isEmpty();
+        assertThat(ok(get(collection + "?priority=HIGH&emptyField=PRIORITY", member)).path("items")).hasSize(1);
+        JsonNode rowCounts = ok(get(collection + "/filter-options?field=PRIORITY&priority=HIGH", member)).path("items");
+        assertThat(rowCounts).hasSize(1);
+        assertThat(rowCounts.get(0).path("value").asText()).isEqualTo("__NULL__");
+        JsonNode itemCounts = ok(get(collection + "/filter-options?field=PRIORITY&priority=HIGH&countSubitems=true", member)).path("items");
+        assertThat(itemCounts).hasSize(1);
+        assertThat(itemCounts.get(0).path("value").asText()).isEqualTo("HIGH");
+        assertThat(ok(get(collection + "?view=KANBAN&status=" + parent.path("statusCode").asText() + "&q=zz-subhit", member))
+                .path("items")).isEmpty();
+        assertThat(get(collection + "?groupStatus=NOT_A_STATUS", member).statusCode()).isEqualTo(422);
+    }
+
+    @Test
     void lastUpdaterIsReturnedInDetailsListsAndSubitemsIndependentlyOfAssignee() throws Exception {
         JsonNode item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
                 workItemBody(tasksId, "更新成员"), null, UUID.randomUUID()));
@@ -281,6 +328,12 @@ class WorkItemHttpIT {
         JsonNode archived = ok(response);
         assertThat(archived.path("archived").asBoolean()).isTrue();
         assertThat(archived.path("deleted").asBoolean()).isFalse();
+        String archivedCollection = "/api/v1/projects/" + PROJECT_ID + "/archived-work-items";
+        JsonNode archivedPage = ok(get(archivedCollection, member));
+        assertThat(archivedPage.path("totalElements").asLong()).isEqualTo(1);
+        assertThat(archivedPage.path("items").get(0).path("id").asText()).isEqualTo(parentId);
+        assertThat(archivedPage.path("items").get(0).path("etag").asText())
+                .isEqualTo(response.headers().firstValue("ETag").orElseThrow());
         assertThat(archived.path("statusCode")).isEqualTo(parent.path("statusCode"));
         assertThat(archived.path("capabilities").path("canEditFields").asBoolean()).isFalse();
         assertThat(archived.path("capabilities").path("canDiscuss").asBoolean()).isFalse();
@@ -292,6 +345,7 @@ class WorkItemHttpIT {
         assertThat(mutate("POST", path + "/subitems", member, subitemBody(tasksId, "不允许新增"), null, UUID.randomUUID()).statusCode()).isEqualTo(404);
         JsonNode restored = ok(mutate("POST", path + "/unarchive", member, "", archived.path("etag").asText(), UUID.randomUUID()));
         assertThat(restored.path("archived").asBoolean()).isFalse();
+        assertThat(ok(get(archivedCollection, member)).path("totalElements").asLong()).isZero();
         JsonNode listed = ok(get(collection, member)).path("items").get(0);
         assertThat(listed.path("id").asText()).isEqualTo(parentId);
         assertThat(listed.path("subitemCount").asInt()).isEqualTo(1);
@@ -1040,6 +1094,33 @@ class WorkItemHttpIT {
         assertThat(ok(get(candidates+"?scope=ALL",member)).path("items").size()).isZero();
     }
 
+    @Test
+    void endedProjectStaysVisibleAndReadOnlyUntilResumedAndRecordsActivity() throws Exception {
+        String projectPath = "/api/v1/projects/" + PROJECT_ID;
+        JsonNode project = ok(get(projectPath, owner));
+        ok(mutate("POST", projectPath + "/end", owner, "", project.path("etag").asText(), UUID.randomUUID()));
+        JsonNode ended = ok(get(projectPath, member));
+        assertThat(ended.path("endedAt").isTextual()).isTrue();
+        var rejected = mutate("POST", projectPath + "/work-items", member,
+                workItemBody(tasksId, "结束后事项"), null, UUID.randomUUID());
+        assertThat(rejected.statusCode()).as(rejected.body()).isEqualTo(409);
+        assertThat(json.readTree(rejected.body()).path("details").path("reason").asText()).isEqualTo("PROJECT_ENDED");
+        dispatcher.dispatchOnce();
+        var endedActivity = ok(get(projectPath + "/activity", member)).path("items");
+        assertThat(endedActivity.get(0).path("summary").asText()).isEqualTo("结束了项目");
+
+        ok(mutate("POST", projectPath + "/resume", owner, "", ended.path("etag").asText(), UUID.randomUUID()));
+        created(mutate("POST", projectPath + "/work-items", member,
+                workItemBody(tasksId, "重新打开后事项"), null, UUID.randomUUID()));
+        dispatcher.dispatchOnce();
+        var summaries = new java.util.ArrayList<String>();
+        for (var activity : ok(get(projectPath + "/activity", member)).path("items")) {
+            if (List.of("catalog.project_ended", "catalog.project_resumed").contains(activity.path("sourceEventType").asText()))
+                summaries.add(activity.path("summary").asText());
+        }
+        assertThat(summaries).containsExactly("重新打开了项目", "结束了项目");
+    }
+
     private String commentBody(String text, String parent) throws Exception {
         var body = json.createObjectNode().put("bodyHtml", "<p>" + text + "</p>");
         if (parent != null) body.put("parentUpdateId", parent);
@@ -1146,6 +1227,8 @@ class WorkItemHttpIT {
     }
 
     private void cleanUp() {
+        jdbc.sql("DELETE FROM yumpoo.activity_event WHERE company_id=:id").param("id", COMPANY_ID).update();
+        jdbc.sql("DELETE FROM yumpoo.work_item_cell_activity WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.attachment_scan_task WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.attachment WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.attachment_quota_usage WHERE company_id=:id").param("id", COMPANY_ID).update();

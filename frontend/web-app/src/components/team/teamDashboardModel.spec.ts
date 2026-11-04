@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CalendarDayType, TimeCategory, type TeamTimesheet } from '@yumpoo/api-client'
-import { buildProjectHours, buildTimesheet, dayBreakdown, hoursMinutes, periodFor, periodLabel, projectColors, rangeDays, restrictTimesheet, shiftPeriod, shortHours, timesheetColors, timesheetColumns, toApiDate } from './teamDashboardModel'
+import { buildProjectHours, buildTimesheet, dayBreakdown, hoursMinutes, migratedDays, periodFor, periodLabel, projectColors, rangeDays, restrictTimesheet, shiftPeriod, shortHours, timesheetColors, timesheetColumns, toApiDate } from './teamDashboardModel'
 
 describe('team dashboard periods', () => {
   it('汇总项目内两位成员和关联分类，未关联分类排在最后', () => {
@@ -121,5 +121,21 @@ describe('team dashboard periods', () => {
     const colors = projectColors([...ids, 'project-0'])
     expect(new Set(colors.values()).size).toBe(10)
     expect(projectColors([...ids].reverse())).toEqual(colors)
+  })
+
+  it('标出迁入工时的天和明细项，分类名显示为迁入工时', () => {
+    const sheet = { from: toApiDate('2026-10-05'), to: toApiDate('2026-10-06'), timezone: 'Asia/Shanghai', asOf: new Date(), days: [],
+      members: [{ userId: 'u1', displayName: '李四', active: true }], workItems: [{ id: 'w1', projectId: 'p1', projectName: '交付', itemNo: 'DEL-1', title: '登录页' }],
+      entries: [{ userId: 'u1', workItemId: 'w1', date: toApiDate('2026-10-05'), durationMs: 3_600_000 }],
+      categoryEntries: [{ userId: 'u1', timeCategory: TimeCategory.Migrated, projectId: null, projectName: null, date: toApiDate('2026-10-05'), durationMs: 14_400_000 },
+        { userId: 'u1', timeCategory: TimeCategory.Migrated, projectId: null, projectName: null, date: toApiDate('2026-10-06'), durationMs: 27_000_000 },
+        { userId: 'u1', timeCategory: TimeCategory.Meeting, projectId: null, projectName: null, date: toApiDate('2026-10-06'), durationMs: 3_600_000 }],
+    } as TeamTimesheet
+    const row = buildTimesheet(sheet).rows[0]!
+    expect(migratedDays(row)).toEqual({ '2026-10-05': 14_400_000, '2026-10-06': 27_000_000 })
+    expect(migratedDays(undefined)).toEqual({})
+    const items = dayBreakdown(row, '2026-10-05').flatMap(project => project.items)
+    expect(items.map(item => [item.title, item.migrated])).toEqual([['迁入工时', true], ['登录页', false]])
+    expect(dayBreakdown(row, '2026-10-06').flatMap(project => project.items).map(item => [item.title, item.migrated])).toEqual([['迁入工时', true], ['会议', false]])
   })
 })

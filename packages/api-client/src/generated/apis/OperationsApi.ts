@@ -82,6 +82,7 @@ export interface GetOperationsLogHistogramRequest {
     requestId?: string;
     event?: string;
     userId?: string;
+    failed?: boolean;
 }
 
 export interface GetOperationsMetricsRequest {
@@ -115,6 +116,7 @@ export interface QueryOperationsLogsRequest {
     userId?: string;
     cursor?: string;
     limit?: number;
+    failed?: boolean;
 }
 
 export interface TailOperationsLogsRequest {
@@ -127,6 +129,7 @@ export interface TailOperationsLogsRequest {
     event?: string;
     userId?: string;
     limit?: number;
+    failed?: boolean;
 }
 
 export interface UpdateOperationsAlertRuleRequest {
@@ -353,6 +356,10 @@ export class OperationsApi extends runtime.BaseAPI {
 
         if (requestParameters['userId'] != null) {
             queryParameters['userId'] = requestParameters['userId'];
+        }
+
+        if (requestParameters['failed'] != null) {
+            queryParameters['failed'] = requestParameters['failed'];
         }
 
         const headerParameters: runtime.HTTPHeaders = {};
@@ -656,6 +663,10 @@ export class OperationsApi extends runtime.BaseAPI {
             queryParameters['limit'] = requestParameters['limit'];
         }
 
+        if (requestParameters['failed'] != null) {
+            queryParameters['failed'] = requestParameters['failed'];
+        }
+
         const headerParameters: runtime.HTTPHeaders = {};
 
 
@@ -721,6 +732,10 @@ export class OperationsApi extends runtime.BaseAPI {
 
         if (requestParameters['limit'] != null) {
             queryParameters['limit'] = requestParameters['limit'];
+        }
+
+        if (requestParameters['failed'] != null) {
+            queryParameters['failed'] = requestParameters['failed'];
         }
 
         const headerParameters: runtime.HTTPHeaders = {};

@@ -60,6 +60,7 @@ const dayKind = computed(() => {
       <el-button
         size="small"
         :disabled="date === today"
+        text
         @click="emit('navigate', today)"
       >
         今天
@@ -83,7 +84,7 @@ const dayKind = computed(() => {
 </template>
 
 <style scoped>
-.day-header{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;min-height:56px;padding:8px 16px 8px 12px;border-bottom:1px solid var(--yp-border-default);background:var(--yp-bg-surface)}
+.day-header{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;min-height:56px;padding:8px 16px 8px 12px;background:var(--yp-bg-surface)}
 .day-header__back{color:var(--yp-text-secondary)}
 .day-header__date{display:flex;align-items:center;gap:2px}
 .day-header__date .el-button+.el-button{margin-left:0}

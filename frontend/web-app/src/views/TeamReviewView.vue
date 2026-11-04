@@ -4,6 +4,7 @@ import { ElButton, ElTooltip } from 'element-plus'
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import TeamDashboard from '../components/team/TeamDashboard.vue'
+import YpModuleHeader from '../components/yp/YpModuleHeader.vue'
 import { usePageOnboarding } from '../onboarding/useOnboarding'
 
 const VIEWS = {
@@ -23,11 +24,11 @@ watch(onboardingReady, ready => { if (ready) void onboarding.ready() }, { flush:
 
 <template>
   <section class="dashboard-page">
-    <header class="dashboard-header">
-      <h1 class="review-page-title">
-        {{ current.title }}
-      </h1>
-      <div class="dashboard-header-actions">
+    <yp-module-header
+      module="team"
+      :title="current.title"
+    >
+      <template #actions>
         <el-tooltip content="刷新数据">
           <el-button
             :icon="Refresh"
@@ -37,8 +38,8 @@ watch(onboardingReady, ready => { if (ready) void onboarding.ready() }, { flush:
             @click="team?.refresh()"
           />
         </el-tooltip>
-      </div>
-    </header>
+      </template>
+    </yp-module-header>
     <TeamDashboard
       ref="team"
       :view="current.view"
@@ -47,11 +48,3 @@ watch(onboardingReady, ready => { if (ready) void onboarding.ready() }, { flush:
 </template>
 
 <style src="../components/dashboard/dashboard.css" />
-<style scoped>
-.review-page-title {
-  align-self: center;
-  margin: 0;
-  font-size: var(--yp-type-card-title-size);
-  font-weight: 600;
-}
-</style>

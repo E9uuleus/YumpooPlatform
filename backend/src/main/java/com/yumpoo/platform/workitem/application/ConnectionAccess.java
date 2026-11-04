@@ -19,12 +19,13 @@ final class ConnectionAccess {
     }
 
     static boolean writable(ProjectAccessSnapshot project) {
-        return member(project) && project.lifecycle() == ProjectAccessSnapshot.ProjectLifecycle.ACTIVE;
+        return member(project) && project.contentWritable();
     }
 
     static void requireWritable(ProjectAccessSnapshot project) {
         if (!member(project)) throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
-        if (project.lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ACTIVE) throw conflict("PROJECT_ARCHIVED");
+        if (!project.contentWritable()) throw conflict(project.lifecycle() == ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED
+                ? "PROJECT_ARCHIVED" : "PROJECT_ENDED");
     }
 
     static void requireWritable(ProjectFactWriteSnapshot project) {

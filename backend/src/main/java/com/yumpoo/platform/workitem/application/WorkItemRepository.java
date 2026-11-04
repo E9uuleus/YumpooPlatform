@@ -14,6 +14,7 @@ import java.util.Set;
 import java.util.UUID;
 
 public interface WorkItemRepository {
+    record WorkItemTitle(UUID id, String title, boolean archived) {}
     record RankedWorkItem(UUID id, String rank) {}
     record RankedProjectWorkItem(UUID id, String rank) {}
     record FilterOptionCount(String value, long count) {}
@@ -30,6 +31,16 @@ public interface WorkItemRepository {
     }
 
     long nextSequence(UUID companyId, UUID projectId);
+    List<WorkItemImportPlanner.Existing> findImportTargets(UUID companyId, UUID projectId);
+    /** Every work item of the project that is not deleted, archived ones included. */
+    List<WorkItemTitle> findTitles(UUID companyId, UUID projectId);
+    /** Archived, non-deleted items of a project, latest change first, with the active parent's title. */
+    List<ArchivedRow> findArchived(UUID companyId, UUID projectId, String query, int offset, int limit);
+
+    long countArchived(UUID companyId, UUID projectId, String query);
+
+    record ArchivedRow(WorkItem item, String parentTitle) {}
+
     boolean insert(WorkItem workItem);
     void replaceAssignees(WorkItem workItem);
     Optional<WorkItemModels.WorkItemLocator> findLocator(UUID companyId, UUID workItemId);
@@ -85,7 +96,10 @@ public interface WorkItemRepository {
     List<WorkItem> findSubitems(UUID companyId, UUID projectId, UUID parentWorkItemId,
             WorkItemQuery query, WorkItemSortRanks ranks);
     List<FilterOptionCount> findProjectFilterOptions(UUID companyId, UUID projectId,
-            WorkItemQuery query, String field, String afterValue, int limit);
+            WorkItemQuery query, String field, boolean countSubitems, String afterValue, int limit);
+    /** 每个主行的直接子项中本身满足查询条件的数量；查询没有条件时为空。 */
+    Map<UUID, Long> countMatchingChildren(UUID companyId, UUID projectId, WorkItemQuery query,
+            Collection<UUID> parentWorkItemIds);
     long countProjectPage(UUID companyId, UUID projectId, WorkItemQuery query);
     long countOpenByProject(UUID companyId, UUID projectId);
     long countOpenByContent(UUID companyId, UUID projectId, UUID contentId);

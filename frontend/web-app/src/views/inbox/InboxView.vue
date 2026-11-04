@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import YpSkeleton from '../../components/yp/YpSkeleton.vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElButton, ElIcon, ElSkeleton, ElSkeletonItem } from 'element-plus'
+import { ElButton, ElIcon } from 'element-plus'
 import { Check, Loading, WarningFilled } from '@element-plus/icons-vue'
 import type { NotificationItem } from '@yumpoo/api-client'
 import { useInbox, useInboxList } from '../../composables/useInbox'
@@ -23,7 +24,6 @@ const now = computed(() => inbox.counts.value?.serverNow || new Date())
 const timezone = computed(() => session.authentication.value?.company.timezone || 'UTC')
 const emptyCopy = computed(() => inboxEmptyCopy(filter.value))
 const initialLoading = computed(() => list.loading.value && !list.items.value.length)
-const skeletonWidths = [72, 54, 66, 48]
 const groups = computed(() => {
   const result: { label: string; items: NotificationItem[] }[] = []
   for (const item of list.items.value) {
@@ -76,6 +76,7 @@ onBeforeUnmount(() => observer?.disconnect())
           :icon="Check"
           :disabled="!inbox.unread.value || !list.serverNow.value"
           :loading="marking"
+          text
           @click="readAll"
         >
           全部标为已读
@@ -87,36 +88,12 @@ onBeforeUnmount(() => observer?.disconnect())
       data-tour="inbox-list"
       :aria-busy="list.loading.value"
     >
-      <div
+      <yp-skeleton
         v-if="initialLoading"
-        class="inbox-skeleton"
-        role="status"
-        aria-label="正在加载通知"
-      >
-        <el-skeleton
-          v-for="width in skeletonWidths"
-          :key="width"
-          class="inbox-skeleton__row"
-          animated
-        >
-          <template #template>
-            <el-skeleton-item
-              variant="circle"
-              class="inbox-skeleton__avatar"
-            />
-            <div class="inbox-skeleton__lines">
-              <el-skeleton-item
-                variant="text"
-                :style="{ width: `${width}%` }"
-              />
-              <el-skeleton-item
-                variant="text"
-                :style="{ width: `${width / 2}%` }"
-              />
-            </div>
-          </template>
-        </el-skeleton>
-      </div>
+        variant="list"
+        :rows="4"
+        label="正在加载通知"
+      />
       <section
         v-for="group in groups"
         :key="group.label"
@@ -148,7 +125,10 @@ onBeforeUnmount(() => observer?.disconnect())
           v-if="filter === 'unread'"
           #action
         >
-          <el-button @click="router.push({ query: { ...route.query, filter: 'all' } })">
+          <el-button
+            text
+            @click="router.push({ query: { ...route.query, filter: 'all' } })"
+          >
             查看全部通知
           </el-button>
         </template>
@@ -227,20 +207,13 @@ onBeforeUnmount(() => observer?.disconnect())
   line-height: 20px;
 }
 .inbox-date-group__header span { color: var(--yp-text-muted); font-size: var(--yp-type-caption-size); font-variant-numeric: tabular-nums; }
-.inbox-date-group__rows,
-.inbox-skeleton {
+.inbox-date-group__rows {
   overflow: hidden;
-  border: 1px solid var(--yp-border-subtle);
   border-radius: var(--yp-radius-md);
   background: var(--yp-bg-surface);
 }
 .inbox-date-group__rows > .inbox-row + .inbox-row { border-top: 1px solid var(--yp-border-subtle); }
 
-.inbox-skeleton { margin-top: 38px; }
-.inbox-skeleton__row { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 12px; padding: 16px 20px; }
-.inbox-skeleton__row + .inbox-skeleton__row { border-top: 1px solid var(--yp-border-subtle); }
-.inbox-skeleton__avatar { width: 32px; height: 32px; }
-.inbox-skeleton__lines { display: grid; gap: 10px; padding-top: 3px; }
 
 .inbox-page__more {
   display: flex;

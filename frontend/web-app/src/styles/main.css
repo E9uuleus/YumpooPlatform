@@ -12,6 +12,37 @@
   box-sizing: border-box;
 }
 
+/* 滚动条：透明轨道上的胶囊滑块，悬停加粗加深。Chromium 与桌面端用 ::-webkit-scrollbar；
+   元素一旦声明 scrollbar-color / scrollbar-width，Chromium 会改用标准属性并忽略这里，因此其余样式不再声明它们（隐藏滚动条的 none 除外）。 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: var(--yp-radius-pill);
+  background: var(--yp-scrollbar-thumb) padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  border-width: 1px;
+  background-color: var(--yp-scrollbar-thumb-hover);
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-color: var(--yp-scrollbar-thumb) transparent;
+    scrollbar-width: thin;
+  }
+}
+
 body {
   margin: 0;
   min-width: 320px;
@@ -151,8 +182,12 @@ code {
 }
 
 .module-rail__item:hover,
-.module-rail__item.active,
 .module-rail__expand:hover {
+  color: var(--yp-link);
+  background: var(--yp-bg-hover);
+}
+
+.module-rail__item.active {
   color: var(--yp-link);
   background: var(--yp-bg-selected);
 }
@@ -173,8 +208,7 @@ code {
   min-width: 0;
   padding: 0 var(--yp-space-6);
   border-bottom: 1px solid var(--yp-border-default);
-  background: color-mix(in srgb, var(--yp-bg-surface) 94%, transparent);
-  backdrop-filter: blur(12px);
+  background: var(--yp-bg-surface);
 }
 
 .app-topbar__context,
@@ -232,7 +266,8 @@ code {
   display: inline-flex;
 }
 
-.app-topbar__tool {
+.app-topbar__tool,
+.yp-tool-button {
   display: inline-grid;
   width: var(--yp-control-height-small);
   height: var(--yp-control-height-small);
@@ -248,21 +283,23 @@ code {
 
 .app-topbar__tool:hover:not(:disabled),
 .app-topbar__tool.is-active,
-.app-topbar__tool[aria-expanded="true"] {
+.app-topbar__tool[aria-expanded="true"],
+.yp-tool-button:hover:not(:disabled),
+.yp-tool-button.is-active,
+.yp-tool-button[aria-expanded="true"] {
   background: var(--yp-bg-hover);
   color: var(--yp-text-primary);
 }
 
-.app-topbar__tool:disabled {
+.app-topbar__tool:disabled,
+.yp-tool-button:disabled {
   color: var(--yp-text-disabled);
   cursor: default;
 }
 
-.app-topbar__divider {
-  width: 1px;
-  height: 20px;
-  margin: 0 var(--yp-space-1);
-  background: var(--yp-border-subtle);
+/* 工具按钮的弹层打开时隐藏悬停提示；切换 tooltip 的 disabled 会让弹层吞掉第一次外部点击。 */
+.yp-tooltip--suppressed {
+  display: none !important;
 }
 
 .app-topbar__actions .user-menu-trigger {
@@ -416,7 +453,6 @@ code {
 
 .page-surface {
   padding: var(--yp-space-4) 0;
-  border-top: 1px solid var(--yp-border-subtle);
   border-radius: 0;
   background: transparent;
 }
@@ -446,27 +482,36 @@ code {
   margin-bottom: var(--yp-space-5);
 }
 
-.problem-message,
-.problem-retry {
-  margin: var(--yp-space-2) 0 0;
-}
-
 .problem-meta {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--yp-space-2);
-  margin-top: var(--yp-space-2);
+  margin-top: var(--yp-space-1);
 }
 
 .problem-meta code {
   word-break: break-all;
 }
 
+.problem-fields {
+  margin: var(--yp-space-1) 0 0;
+  padding-left: var(--yp-space-5);
+}
+
+.problem-diagnostics {
+  margin: var(--yp-space-2) 0 0;
+  padding: var(--yp-space-2) var(--yp-space-3);
+  border-radius: var(--yp-radius-sm);
+  background: color-mix(in srgb, var(--yp-on-solid) 14%, transparent);
+  color: inherit;
+  font: 12px/1.6 var(--yp-font-mono);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
 .table-surface {
   overflow: hidden;
-  border: 1px solid var(--yp-border-default);
-  border-radius: var(--yp-radius-sm);
   background: transparent;
 }
 
@@ -520,7 +565,6 @@ code {
 .form-section {
   margin-bottom: var(--yp-space-6);
   padding: var(--yp-space-5) 0;
-  border-top: 1px solid var(--yp-border-subtle);
   border-radius: 0;
   background: transparent;
 }
@@ -853,3 +897,54 @@ code {
   }
 }
 html.timer-surface,html.timer-surface body,html.timer-surface #app{min-width:0;min-height:100%;margin:0;background:transparent;overflow:hidden}
+
+/* 桌面宽度下外壳固定为视口高度：顶栏、模块栏与二级导航不随内容滚动，正文在 .app-main 内滚动。 */
+@media (min-width: 960px) {
+  html:has(.app-shell),
+  html:has(.app-shell) body {
+    overflow: hidden;
+  }
+
+  .app-shell {
+    height: 100dvh;
+    min-height: 0;
+  }
+}
+
+/* Fixed frame (route meta `frame: 'fixed'`): .app-main drops its padding and scroll; each page scrolls its own body. */
+html:has(.app-shell--fixed),
+html:has(.app-shell--fixed) body {
+  overflow: hidden;
+}
+
+.app-shell.app-shell--fixed {
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-shell .app-main.app-main--fixed {
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.app-shell--workspace.app-shell--context-open .app-main.app-main--fixed {
+  padding-left: 260px;
+}
+
+.app-shell--context-open:not(.app-shell--workspace) .app-main.app-main--fixed {
+  padding-left: 232px;
+}
+
+@media (max-width: 1279px) {
+  .app-shell--context-open:not(.app-shell--workspace) .app-main.app-main--fixed {
+    padding-left: 0;
+  }
+}
+
+@media (max-width: 959.98px) {
+  .app-shell.app-shell--context-open .app-main.app-main--fixed {
+    padding: 0;
+  }
+}

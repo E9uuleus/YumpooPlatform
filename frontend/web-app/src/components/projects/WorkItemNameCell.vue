@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { workItemAssigneeIds } from './workItemAssignees'
-import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElInput, ElMessage, type InputInstance } from 'element-plus'
 import { readCsrfToken, type ProjectWorkItemListItem, type WorkItemDetail } from '@yumpoo/api-client'
 import { workItemsApi } from '../../api/client'
@@ -12,6 +12,8 @@ const props = defineProps<{
   strictVersion?: boolean
   disabled?: boolean
   selected?: boolean
+  /** Opens for editing with the title selected once the row renders: the item the toolbar just created. */
+  autoEdit?: boolean
   create?: ((title: string) => Promise<boolean>) | undefined
 }>()
 const emit = defineEmits<{
@@ -36,12 +38,12 @@ async function focus(select = false): Promise<void> {
   if (select) input.value?.select()
 }
 
-function start(): void {
+function start(select = false): void {
   if (props.disabled || !props.item.capabilities.canEditFields || editing.value) return
   title.value = props.item.title
   editing.value = true
   emit('editing', true)
-  void focus()
+  void focus(select)
 }
 
 function finish(): void {
@@ -122,6 +124,12 @@ function keydown(event: Event | KeyboardEvent): void {
   if (event.key === 'Escape') { event.preventDefault(); cancel() }
 }
 
+watch(() => props.autoEdit, value => {
+  if (!value) return
+  start(true)
+  root.value?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
+}, { immediate: true, flush: 'post' })
+
 onMounted(() => {
   document.addEventListener('pointerdown', outside, true)
   if (editing.value) {
@@ -169,7 +177,7 @@ onBeforeUnmount(() => {
         class="work-item-title-text"
         :disabled="disabled || !item.capabilities.canEditFields"
         :aria-label="`编辑名称：${item.title}`"
-        @click.stop="start"
+        @click.stop="start()"
       >
         {{ item.title }}
       </button>

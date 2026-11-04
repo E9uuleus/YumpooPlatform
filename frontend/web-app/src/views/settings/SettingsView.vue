@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { usePageLoad } from '../../brand/page-progress'
+
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -9,9 +11,11 @@ import { useProjectRecents } from '../../composables/useProjectRecents'
 import WindowSettingsCard from '../../components/settings/WindowSettingsCard.vue'
 import GeneralSettingsCard from '../../components/settings/GeneralSettingsCard.vue'
 import AppearanceSettingsCard from '../../components/settings/AppearanceSettingsCard.vue'
+import YpModulePage from '../../components/yp/YpModulePage.vue'
 import { plainRailProjects } from '../../components/desktop/railProjects'
 
 // Shells before 1.1.0 and browsers have no preferences bridge: the page then offers appearance only.
+const pageLoad = usePageLoad()
 const bridge = window.yumpooDesktop?.preferences
 const timerBridge = window.yumpooDesktop?.timer
 const route = useRoute()
@@ -25,7 +29,7 @@ const scope = computed(() => {
   return authentication ? `${authentication.company.id}:${authentication.user.id}` : undefined
 })
 const recents = useProjectRecents(() => scope.value)
-const defaults = computed<RailProject[]>(() => recents.items.value.filter(project => project.lifecycle === ProjectLifecycle.Active).slice(0, 6)
+const defaults = computed<RailProject[]>(() => recents.items.value.filter(project => project.lifecycle === ProjectLifecycle.Active && !project.endedAt).slice(0, 6)
   .map(project => ({ id: project.id, name: project.name.slice(0, 64) })))
 const projects = computed(() => preferences.value?.railProjects?.owner === scope.value ? preferences.value!.railProjects!.items : defaults.value)
 
@@ -68,7 +72,7 @@ const offChange = bridge?.onChange(value => { preferences.value = value })
 const focus = () => { void refresh().catch(() => undefined) }
 onMounted(async () => {
   window.addEventListener('focus', focus)
-  await refresh().catch(() => undefined)
+  await pageLoad.track(refresh).catch(() => undefined)
   if (route.query.section !== 'rail') return
   await nextTick()
   document.getElementById('settings-rail-projects')?.scrollIntoView({ block: 'center' })
@@ -77,36 +81,39 @@ onBeforeUnmount(() => { offChange?.(); window.removeEventListener('focus', focus
 </script>
 
 <template>
-  <section class="settings-page">
-    <h1>偏好设置</h1>
-    <div class="settings-page__cards">
-      <template v-if="preferences && timer">
-        <WindowSettingsCard
-          :preferences="preferences"
-          :timer="timer"
-          :pinned="pinned"
-          :projects="projects"
-          :defaults="defaults"
-          :busy="busy"
-          @change="change"
-          @timer="changeTimer"
-          @pin="pin"
-          @shortcut="shortcut"
-          @projects="saveProjects"
-        />
-        <GeneralSettingsCard
-          :preferences="preferences"
-          :busy="busy"
-          @change="change"
-        />
-      </template>
-      <AppearanceSettingsCard :desktop="!!bridge" />
+  <yp-module-page
+    module="settings"
+    title="偏好设置"
+  >
+    <div class="settings-page">
+      <div class="settings-page__cards">
+        <template v-if="preferences && timer">
+          <WindowSettingsCard
+            :preferences="preferences"
+            :timer="timer"
+            :pinned="pinned"
+            :projects="projects"
+            :defaults="defaults"
+            :busy="busy"
+            @change="change"
+            @timer="changeTimer"
+            @pin="pin"
+            @shortcut="shortcut"
+            @projects="saveProjects"
+          />
+          <GeneralSettingsCard
+            :preferences="preferences"
+            :busy="busy"
+            @change="change"
+          />
+        </template>
+        <AppearanceSettingsCard :desktop="!!bridge" />
+      </div>
     </div>
-  </section>
+  </yp-module-page>
 </template>
 
 <style scoped>
-.settings-page{box-sizing:border-box;max-width:760px;margin:0 auto;padding:24px 24px 48px;color:var(--yp-text-primary);font-size:13px}
-.settings-page h1{margin:0 0 16px;font-size:20px;font-weight:600}
+.settings-page{box-sizing:border-box;max-width:760px;margin:0 auto;color:var(--yp-text-primary);font-size:13px}
 .settings-page__cards{display:flex;flex-direction:column;gap:12px}
 </style>

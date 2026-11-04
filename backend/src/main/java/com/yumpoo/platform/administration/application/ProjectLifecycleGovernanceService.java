@@ -5,6 +5,7 @@ import com.yumpoo.platform.audit.api.SecurityAuditAppendPort;
 import com.yumpoo.platform.audit.api.SecurityAuditDraft;
 import com.yumpoo.platform.audit.api.SecurityAuditOutcome;
 import com.yumpoo.platform.catalog.api.ProjectArchiveMutation;
+import com.yumpoo.platform.catalog.api.ProjectEndMutation;
 import com.yumpoo.platform.catalog.api.ProjectLifecycleCommandPort;
 import com.yumpoo.platform.catalog.api.ProjectRestoreMutation;
 import com.yumpoo.platform.catalog.api.ProjectRestoreSnapshot;
@@ -94,6 +95,24 @@ public final class ProjectLifecycleGovernanceService {
         });
     }
 
+    public IdempotencyExecutionResult changeEnded(ProjectEndOperationCommand command) {
+        return idempotency.execute(key(command.actor(), command.ended() ? "endProject" : "resumeProject",
+                command.idempotencyKey(), command.requestHash()), () -> {
+            ProjectEndMutation mutation = new ProjectEndMutation(command.actor().companyId(), command.projectId(),
+                    command.expectedRowVersion(), command.actor().userId(),
+                    command.actor().hasRole(PlatformRoleCode.COMPANY_ADMIN), command.ended());
+            ProjectSnapshot before = projects.lockForEnded(mutation);
+            ProjectSnapshot after = projects.changeEnded(mutation);
+            if (command.ended()) timers.stopRunningTimers(command.actor(), after.projectId());
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("projectId", after.projectId()); payload.put("code", after.code()); payload.put("rowVersion", after.rowVersion());
+            append(command.ended() ? "PROJECT_ENDED" : "PROJECT_RESUMED",
+                    command.ended() ? "catalog.project_ended" : "catalog.project_resumed",
+                    before, after, command.actor(), command.idempotencyKey(), null, payload);
+            return stored(after);
+        });
+    }
+
     ProjectSnapshot archiveOverride(CurrentActor actor, UUID projectId, long version,
             UUID idempotencyKey, String reason, List<SafeBlocker> found) {
         ProjectArchiveMutation mutation = new ProjectArchiveMutation(actor.companyId(), projectId,
@@ -171,7 +190,7 @@ public final class ProjectLifecycleGovernanceService {
 
     static Map<String, Object> safeSnapshot(ProjectSnapshot project) {
         return Map.of("projectId", project.projectId(), "workspaceId", project.workspaceId(),
-                "lifecycle", project.lifecycle(), "rowVersion", project.rowVersion());
+                "lifecycle", project.lifecycle(), "rowVersion", project.rowVersion(), "ended", project.endedAt() != null);
     }
 
     private static Map<String, Object> response(ProjectSnapshot p) {
@@ -179,6 +198,7 @@ public final class ProjectLifecycleGovernanceService {
         result.put("id", p.projectId()); result.put("workspaceId", p.workspaceId());
         result.put("code", p.code()); result.put("name", p.name()); result.put("description", p.description());
         result.put("lifecycle", p.lifecycle());
+        result.put("endedAt", p.endedAt());
         result.put("ownerUserId", p.ownerUserId()); result.put("rowVersion", p.rowVersion()); return result;
     }
 

@@ -1,3 +1,4 @@
+import { usePageLoad } from '../../brand/page-progress'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { readCsrfToken, type DashboardConfiguration, type DashboardSnapshot, type DashboardSummary, type DashboardView, type DashboardWrite } from '@yumpoo/api-client'
@@ -8,6 +9,7 @@ import { clone, defaultConfiguration } from './dashboardModel'
 import { settleDashboardLayout } from './dashboardLayout'
 
 export function useDashboard() {
+  const pageLoad = usePageLoad()
   const route = useRoute(), router = useRouter(), session = useSession()
   const dashboards = ref<DashboardSummary[]>([]), dashboard = ref<DashboardView>(), snapshot = ref<DashboardSnapshot>()
   const loading = ref(true), refreshing = ref(false), error = ref(''), saveError = ref('')
@@ -195,7 +197,7 @@ export function useDashboard() {
     dirty.value = false; await router.replace({ name: 'dashboards', params: { workspaceSlug: route.params.workspaceSlug } })
   }
   async function switchTo(id: string) { if (!await canLeave()) return; await router.push({ name: 'dashboards', params: { ...route.params, dashboardId: id } }) }
-  watch(() => route.params.dashboardId, id => { activeLoad = load(typeof id === 'string' ? id : undefined) }, { immediate: true })
+  watch(() => route.params.dashboardId, id => { activeLoad = pageLoad.track(() => load(typeof id === 'string' ? id : undefined)) }, { immediate: true })
   watch(storageKey, () => { ++epoch; ++queryEpoch; clearTimeout(saveTimer); clearTimeout(queryTimer); pending = undefined; createAttempt = undefined; dirty.value = false; name.value = '我的仪表板'; dashboard.value = undefined; snapshot.value = undefined; dashboards.value = []; configuration.value = defaultConfiguration() })
   onBeforeRouteLeave(canLeave)
   onBeforeRouteUpdate((to, from) => to.params.dashboardId !== from.params.dashboardId ? canLeave() : true)

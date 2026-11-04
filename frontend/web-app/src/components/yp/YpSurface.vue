@@ -59,15 +59,12 @@ withDefaults(defineProps<{
 <style scoped>
 .yp-surface {
   min-width: 0;
-  border: 1px solid var(--yp-border-subtle);
   border-radius: var(--yp-radius-md);
   color: var(--yp-text-primary);
   background: var(--yp-bg-surface);
 }
 
-.yp-surface--danger {
-  border-color: color-mix(in srgb, var(--yp-status-red) 34%, var(--yp-border-subtle));
-}
+
 
 .yp-surface--flush {
   overflow: hidden;
@@ -83,7 +80,6 @@ withDefaults(defineProps<{
 
 .yp-surface--flush .yp-surface__header {
   padding-bottom: var(--yp-space-3);
-  border-bottom: 1px solid var(--yp-border-subtle);
 }
 
 .yp-surface__heading {
@@ -131,6 +127,5 @@ withDefaults(defineProps<{
   justify-content: flex-end;
   gap: var(--yp-space-3);
   padding: var(--yp-space-3) var(--yp-space-4);
-  border-top: 1px solid var(--yp-border-subtle);
 }
 </style>

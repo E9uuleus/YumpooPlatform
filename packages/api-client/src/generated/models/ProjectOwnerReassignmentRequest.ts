@@ -25,11 +25,11 @@ export interface ProjectOwnerReassignmentRequest {
      */
     newOwnerUserId: string;
     /**
-     *
+     * 可选，只写入安全审计。
      * @type {string}
      * @memberof ProjectOwnerReassignmentRequest
      */
-    reason: string;
+    reason?: string | null;
 }
 
 /**
@@ -37,7 +37,6 @@ export interface ProjectOwnerReassignmentRequest {
  */
 export function instanceOfProjectOwnerReassignmentRequest(value: object): value is ProjectOwnerReassignmentRequest {
     if (!('newOwnerUserId' in value) || value['newOwnerUserId'] === undefined) return false;
-    if (!('reason' in value) || value['reason'] === undefined) return false;
     return true;
 }
 
@@ -52,7 +51,7 @@ export function ProjectOwnerReassignmentRequestFromJSONTyped(json: any, ignoreDi
     return {
 
         'newOwnerUserId': json['newOwnerUserId'],
-        'reason': json['reason'],
+        'reason': json['reason'] == null ? undefined : json['reason'],
     };
 }
 

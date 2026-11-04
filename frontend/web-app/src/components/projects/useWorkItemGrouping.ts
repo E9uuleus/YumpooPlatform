@@ -7,7 +7,7 @@ import type { WorkItemTableSource } from './workItemTableSource'
 import { workItemsApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import { buildWorkItemGroups, EMPTY_GROUP, groupingFields, groupListRequest, groupOrders,
-  itemGroupKey, type GroupField, type GroupOrder, type GroupSources, type WorkItemGroup } from './workItemGrouping'
+  itemGroupKey, type GroupField, type GroupKeySource, type GroupOrder, type GroupSources, type WorkItemGroup } from './workItemGrouping'
 
 interface GroupPage {
   items: ProjectWorkItemListItem[]
@@ -31,6 +31,8 @@ interface Options {
   ready: () => boolean
   restore: () => Promise<void>
   protectedIds?: () => Set<string>
+  /** 搜索或筛选生效时不显示空分组，即使打开了「显示空分组」。 */
+  filtering?: () => boolean
 }
 
 /** 与 WorkItemTableSettingsService.MAX_GROUPING_KEYS 一致。 */
@@ -62,6 +64,8 @@ export function useWorkItemGrouping(options: Options) {
   const order = ref<GroupOrder>('DEFAULT')
   const showEmpty = ref(false)
   const collapsed = ref(new Set<string>())
+  /** Saved-collapsed groups opened for this visit only, such as to show an item just created; never saved. */
+  const revealed = ref(new Set<string>())
   const colors: Record<string, string> = {}
   const facets = ref<ProjectWorkItemFilterOption[]>([])
   const countsReady = ref(false)
@@ -74,12 +78,12 @@ export function useWorkItemGrouping(options: Options) {
   let stopped = false
   let restoringPrefs = false
   const pending = new Map<string, Promise<void>>()
-  const groups = computed(() => field.value ? buildWorkItemGroups(field.value, order.value, showEmpty.value,
+  const groups = computed(() => field.value ? buildWorkItemGroups(field.value, order.value, showEmpty.value && !options.filtering?.(),
     facets.value, options.sources(), options.today(), colors) : [])
   const active = computed(() => Boolean(field.value))
-  const keyOf = (item: ProjectWorkItemListItem) => field.value ? itemGroupKey(item, field.value, options.today()) : ''
+  const keyOf = (item: GroupKeySource) => field.value ? itemGroupKey(item, field.value, options.today()) : ''
   const collapseKey = (key: string) => `${field.value}:${key}`
-  const isCollapsed = (key: string) => collapsed.value.has(collapseKey(key))
+  const isCollapsed = (key: string) => collapsed.value.has(collapseKey(key)) && !revealed.value.has(collapseKey(key))
   function page(key: string): GroupPage {
     return pages[key] ??= { items: [], nextCursor: null, loaded: false, loading: false, error: undefined }
   }
@@ -235,9 +239,19 @@ export function useWorkItemGrouping(options: Options) {
     page(key).items = items
     syncItems()
   }
+  function reveal(key: string): void {
+    revealed.value = new Set(revealed.value).add(collapseKey(key))
+  }
   function toggle(key: string): void {
-    const next = new Set(collapsed.value)
     const value = collapseKey(key)
+    if (revealed.value.has(value)) {
+      // Closing a revealed group returns it to the saved collapsed state, so nothing needs saving.
+      const next = new Set(revealed.value)
+      next.delete(value)
+      revealed.value = next
+      return
+    }
+    const next = new Set(collapsed.value)
     if (next.has(value)) next.delete(value); else next.add(value)
     collapsed.value = next
     persist()
@@ -296,7 +310,7 @@ export function useWorkItemGrouping(options: Options) {
   onBeforeUnmount(() => { stopped = true; stop() })
   const changed = async () => { await nextTick(); await refresh() }
   return { active, field, order, showEmpty, collapsed, groups, countsReady, loading, error,
-    page, keyOf, isCollapsed, toggle, setField, refresh, load, stop, changed, edgeItems, replaceOrder }
+    page, keyOf, isCollapsed, reveal, toggle, setField, refresh, load, stop, changed, edgeItems, replaceOrder }
 }
 
 export interface WorkItemGroupDisplayRow {

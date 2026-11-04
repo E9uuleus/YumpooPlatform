@@ -38,6 +38,6 @@ public class ProjectCreationService {
         }
         return new ProjectApplicationSnapshot(project.id(), project.companyId(), project.workspaceId(),
                 project.code(), project.name(), project.description(), project.lifecycle().name(),
-                project.ownerUserId(), project.rowVersion());
+                project.ownerUserId(), project.rowVersion(), null);
     }
 }

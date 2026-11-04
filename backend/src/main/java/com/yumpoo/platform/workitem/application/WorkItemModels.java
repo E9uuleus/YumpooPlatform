@@ -48,22 +48,31 @@ public final class WorkItemModels {
         public WorkItemPage { items = List.copyOf(items); }
     }
 
+    /** Archived items are read-only, so updatedAt and updatedByDisplayName record when and by whom the item was archived. */
+    public record ArchivedWorkItem(UUID id, String itemNo, String title, String statusCode, String statusCategory,
+            String parentTitle, long subitemCount, Instant updatedAt, String updatedByDisplayName, String etag) {}
+
+    public record ArchivedWorkItemPage(List<ArchivedWorkItem> items, int page, int size, long totalElements, int totalPages) {}
+
     public record ProjectWorkItemListItem(UUID id, UUID projectId, UUID contentId,
             String contentName, String contentColorToken, String itemNo, String title, String statusCode,
             String statusCategory, String priority, UUID assigneeUserId,
             String assigneeDisplayName, List<WorkItemAssignee> assignees, LocalDate dueDate, String dueTime, Instant completedAt,
             long rowVersion, String etag,
-            WorkItemCapabilities capabilities, long subitemCount, long discussionCount, Instant updatedAt, UUID updatedByUserId, String updatedByDisplayName, TimeTrackingModels.TimeTrackingSummary timeTracking) {
+            WorkItemCapabilities capabilities, long subitemCount, long discussionCount, Instant updatedAt, UUID updatedByUserId, String updatedByDisplayName, TimeTrackingModels.TimeTrackingSummary timeTracking, long matchedSubitemCount) {
         public ProjectWorkItemListItem(UUID id, UUID projectId, UUID contentId,
             String contentName, String contentColorToken, String itemNo, String title, String statusCode,
             String statusCategory, String priority, UUID assigneeUserId,
             String assigneeDisplayName, List<WorkItemAssignee> assignees, LocalDate dueDate, String dueTime, Instant completedAt,
             long rowVersion, String etag,
             WorkItemCapabilities capabilities, long subitemCount, long discussionCount, Instant updatedAt, UUID updatedByUserId, String updatedByDisplayName) {
-            this(id,projectId,contentId,contentName,contentColorToken,itemNo,title,statusCode,statusCategory,priority,assigneeUserId,assigneeDisplayName,assignees,dueDate,dueTime,completedAt,rowVersion,etag,capabilities,subitemCount,discussionCount,updatedAt,updatedByUserId,updatedByDisplayName,null);
+            this(id,projectId,contentId,contentName,contentColorToken,itemNo,title,statusCode,statusCategory,priority,assigneeUserId,assigneeDisplayName,assignees,dueDate,dueTime,completedAt,rowVersion,etag,capabilities,subitemCount,discussionCount,updatedAt,updatedByUserId,updatedByDisplayName,null,0);
+        }
+        public ProjectWorkItemListItem withMatchedSubitemCount(long count) {
+            return new ProjectWorkItemListItem(id,projectId,contentId,contentName,contentColorToken,itemNo,title,statusCode,statusCategory,priority,assigneeUserId,assigneeDisplayName,assignees,dueDate,dueTime,completedAt,rowVersion,etag,capabilities,subitemCount,discussionCount,updatedAt,updatedByUserId,updatedByDisplayName,timeTracking,count);
         }
         public ProjectWorkItemListItem withTime(TimeTrackingModels.TimeTrackingSummary summary) {
-            return new ProjectWorkItemListItem(id,projectId,contentId,contentName,contentColorToken,itemNo,title,statusCode,statusCategory,priority,assigneeUserId,assigneeDisplayName,assignees,dueDate,dueTime,completedAt,rowVersion,etag,capabilities,subitemCount,discussionCount,updatedAt,updatedByUserId,updatedByDisplayName,summary);
+            return new ProjectWorkItemListItem(id,projectId,contentId,contentName,contentColorToken,itemNo,title,statusCode,statusCategory,priority,assigneeUserId,assigneeDisplayName,assignees,dueDate,dueTime,completedAt,rowVersion,etag,capabilities,subitemCount,discussionCount,updatedAt,updatedByUserId,updatedByDisplayName,summary,matchedSubitemCount);
         }
     }
 

@@ -42,12 +42,13 @@ components:
           format: date-time
     TimeCategory:
       type: string
-      description: 固定工时分类：出差、学习、商务、会议；可选关联一个项目，但不关联工作项。
+      description: 固定工时分类：出差、学习、商务、会议，以及仅由系统写入、成员只读的迁入工时；可选关联一个项目，但不关联工作项。
       enum:
         - BUSINESS_TRIP
         - LEARNING
         - BUSINESS
         - MEETING
+        - MIGRATED
     TimeCategorySubject:
       type: object
       additionalProperties: false
@@ -238,6 +239,9 @@ components:
           description: 非项目分类记录的分类；工作项记录为 null。服务端总是返回。
           allOf:
             - $ref: "#/components/schemas/TimeCategory"
+        migrated:
+          type: boolean
+          description: 迁入工时导入写入的记录（含首版的 MIGRATED 分类记录）为 true，只读，时段由系统排布。服务端总是返回。
         userId:
           type: string
           format: uuid
@@ -386,6 +390,18 @@ components:
           type: integer
           format: int64
           minimum: 0
+        parentWorkItemId:
+          type: string
+          format: uuid
+          nullable: true
+          description: 父工作项 ID；顶层工作项为 null。
+        parentTitle:
+          type: string
+          nullable: true
+          description: 父工作项标题，父项不在当前列表中时用于显示父项标题行。
+        parentCompleted:
+          type: boolean
+          description: 父工作项按本人对该项目的完成定义是否已完成；没有父项时为 false。
     RecentTimeTrackingItem:
       type: object
       additionalProperties: false
@@ -412,6 +428,13 @@ components:
         workItemTitle:
           type: string
           nullable: true
+    HideCompletedEffect:
+      type: string
+      enum:
+        - FADE
+        - FADE_STRIKETHROUGH
+        - HIDE
+      description: 隐藏已完成开启时工作项表格的显示效果：FADE 文字置灰，FADE_STRIKETHROUGH 置灰并加删除线（默认），HIDE 主表不显示（搜索或按状态筛选时照常显示）。请求省略时保留原值，响应总是返回。
     TimeTrackingPreferences:
       type: object
       additionalProperties: false
@@ -438,6 +461,8 @@ components:
         hideCompleted:
           type: boolean
           description: 在工作项表格淡化、在计时与补录选择列表隐藏已完成项；默认 false。请求省略时保留原值，响应总是返回。
+        hideCompletedEffect:
+          $ref: "#/components/schemas/HideCompletedEffect"
     CurrentTimeTracker:
       type: object
       additionalProperties: false

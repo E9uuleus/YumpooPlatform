@@ -12,7 +12,7 @@ Status: implemented
 
 过滤发生在 `notification-inbox-v1` 投影写入之前：`workitem.*` 事件每次按项目读取一次偏好，在合并接收人原因时逐个判断，被屏蔽的高优先级原因不会覆盖已允许的低优先级原因（关闭 @提及但保留评论时，被 @ 的处理人仍收到 COMMENT）；连接通知对目标项目负责人单独判断。偏好只影响此后投影的通知，既有通知、已读状态与部署水位不变，不做补发或追溯隐藏。
 
-HTTP 提供 `GET/PUT /me/projects/{projectId}/notification-preference`，仅当前账号且为项目 ACTIVE 成员可用，非成员返回 404；未设置时 GET 返回 ALL 默认值与 null 的 updatedAt。PUT 整体替换、天然幂等，沿用收件箱本人状态的约定只要求会话与 XSRF，不要求幂等键或资源版本。Web 在项目页头标题菜单提供"通知提醒"入口与设置弹窗；企业管理员只读访问项目时不显示入口。
+HTTP 提供 `GET/PUT /me/projects/{projectId}/notification-preference`，仅当前账号且为项目 ACTIVE 成员可用，非成员返回 404；未设置时 GET 返回 ALL 默认值与 null 的 updatedAt。PUT 整体替换、天然幂等，沿用收件箱本人状态的约定只要求会话与 XSRF，不要求幂等键或资源版本。Web 在项目页头右上角[项目菜单](2026-10-31-project-header-menu.md)提供“通知提醒”入口与设置弹窗；企业管理员只读访问项目时不显示入口。
 
 不提供项目级"为所有人静音"开关。
 

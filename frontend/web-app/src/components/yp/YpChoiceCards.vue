@@ -93,15 +93,14 @@ async function move(event: KeyboardEvent, index: number): Promise<void> {
   width: 100%;
   min-height: 72px;
   padding: var(--yp-space-4) var(--yp-space-5);
-  border: 1px solid var(--yp-border-default);
+  border: 0;
   border-radius: var(--yp-radius-md);
   color: var(--yp-text-primary);
-  background: var(--yp-bg-surface);
+  background: var(--yp-bg-sunken);
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: border-color var(--yp-motion-fast) var(--yp-ease-standard),
-              background-color var(--yp-motion-fast) var(--yp-ease-standard);
+  transition: background-color var(--yp-motion-fast) var(--yp-ease-standard);
 }
 
 .yp-choice-card:hover:not(:disabled) {
@@ -110,7 +109,6 @@ async function move(event: KeyboardEvent, index: number): Promise<void> {
 
 .yp-choice-card.is-checked,
 .yp-choice-card.is-checked:hover:not(:disabled) {
-  border-color: var(--yp-action-primary);
   background: var(--yp-bg-selected);
 }
 

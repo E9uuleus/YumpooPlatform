@@ -32,6 +32,8 @@ export interface DayBlock {
   start: number
   /** `null` while the timer is running; the block then ends at `now`. */
   end: number | null
+  /** 迁入工时导入写入的只读记录，时段由系统排布。 */
+  migrated?: boolean | undefined
   canEdit: boolean
   etag: string
 }
@@ -51,7 +53,7 @@ export function blockFromSession(item: MyTimeSession): DayBlock {
     projectId: item.session.projectId, title: category?.label ?? item.title ?? '不可见工作项', itemNo: item.itemNo,
     projectName: item.projectName, colorToken: category?.colorToken ?? item.contentColorToken,
     start: item.session.startedAt.getTime(), end: item.session.stoppedAt?.getTime() ?? null,
-    canEdit: item.session.canEdit, etag: item.session.etag,
+    migrated: item.session.migrated, canEdit: item.session.canEdit, etag: item.session.etag,
   }
 }
 

@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import YpSkeleton from '../../components/yp/YpSkeleton.vue'
+import { usePageLoad } from '../../brand/page-progress'
+
 import {
   DirectorySyncRunStatus,
   DirectorySyncTriggerType,
@@ -35,6 +38,7 @@ import { formatTimestamp } from '../../design-system/dates'
 import { businessLabel } from '../../design-system/labels'
 import type { ActiveFilter } from '../../design-system/types'
 
+const pageLoad = usePageLoad()
 const ElOption = ElOptionRaw as unknown as DefineComponent
 const ElSelect = ElSelectRaw as unknown as DefineComponent
 const statusOptions = [
@@ -213,7 +217,7 @@ watch(() => [route.query.status, route.query.triggerType], () => {
   status.value = routeStatus()
   triggerType.value = routeTriggerType()
   page.value = 0
-  void load()
+  void pageLoad.track(load)
 })
 
 function removeFilter(key: string): void {
@@ -228,7 +232,7 @@ function clearFilters(): void {
   applyFilters()
 }
 
-onMounted(load)
+onMounted(() => pageLoad.track(load))
 onBeforeUnmount(clearPoll)
 </script>
 
@@ -290,8 +294,14 @@ onBeforeUnmount(clearPoll)
       :problem="error"
     />
 
+    <yp-skeleton
+      v-if="loading && !result?.items.length"
+      variant="table"
+      :rows="8"
+      :columns="6"
+    />
     <div
-      v-if="loading || result?.items.length"
+      v-else-if="loading || result?.items.length"
       class="table-surface table-scroll sync-runs__surface"
     >
       <el-table

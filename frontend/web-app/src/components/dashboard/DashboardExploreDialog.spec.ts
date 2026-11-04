@@ -15,7 +15,7 @@ const Dialog = defineComponent({ props: ['modelValue'], template: '<div><slot na
 const Button = defineComponent({ emits: ['click'], template: '<button @click="$emit(\'click\')"><slot/></button>' })
 const wrappers: ReturnType<typeof mount>[] = []
 function render() {
-  const wrapper = mount(DashboardExploreDialog, { props: { source: dashboardSource('dashboard'), widget: newWidget('CHART'), filters: emptyFilters(), projects: [] }, global: { stubs: { DashboardChart: Chart, DashboardItemsTable: Table, ElDialog: Dialog, ElButton: Button, ElTooltip: { template: '<div><slot/></div>' }, ElDropdown: { template: '<div><slot/></div>' }, ElPagination: true, ElAlert: true, ElTag: true } } })
+  const wrapper = mount(DashboardExploreDialog, { props: { source: dashboardSource('dashboard'), widget: newWidget('CHART'), filters: emptyFilters(), projects: [] }, global: { stubs: { DashboardChart: Chart, DashboardItemsTable: Table, ElDialog: Dialog, ElButton: Button, ElTooltip: { template: '<div><slot/></div>' }, ElDropdown: { template: '<div><slot/></div>' }, ElPagination: true, ElTag: true } } })
   wrappers.push(wrapper); return wrapper
 }
 beforeEach(() => { closeAllowed.mockResolvedValue(true); api.queryDashboardItems.mockReset().mockResolvedValue({ items: [], totalElements: 50 }) })

@@ -52,7 +52,9 @@ public class ConnectionCardReader {
             var connection = row.connection();
             boolean writable = row.columnActive() && connection.active()
                     && active(context.projects().get(connection.sourceProjectId()))
+                    && !context.projects().get(connection.sourceProjectId()).ended()
                     && active(context.projects().get(connection.targetProjectId()))
+                    && !context.projects().get(connection.targetProjectId()).ended()
                     && (ConnectionAccess.member(context.access().get(connection.sourceProjectId()))
                         || ConnectionAccess.member(context.access().get(connection.targetProjectId())));
             var source = context.cards().getOrDefault(connection.sourceWorkItemId(),unavailable(

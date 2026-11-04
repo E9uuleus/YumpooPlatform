@@ -10,7 +10,8 @@ import HideCompletedSwitch from '../../timer/HideCompletedSwitch.vue'
 import '../../projects/workItemAccentBar.css'
 import { workItemLabelColorValue } from '../../projects/workItemLabelColors'
 import YpSegmented from '../../yp/YpSegmented.vue'
-import { categoryOf, matchCategories } from '../../timer/timeCategories'
+import { candidateParent, withHierarchy, type HierarchyRow } from '../../timer/candidateHierarchy'
+import { categoryOf, isMigratedCategory, matchCategories } from '../../timer/timeCategories'
 import { durationLabel, HOUR, MIN_BLOCK_MS, MINUTE, parseDuration, type ItemTotal } from './dayModel'
 import { draggedItem, SHELF_DRAG_TYPE, type ShelfItem } from './shelfDrag'
 
@@ -42,20 +43,26 @@ const recorded = computed(() => new Set(props.totals.map(item => item.key)))
 const candidates = computed<ShelfItem[]>(() => items.value
   .filter(item => filtering.value || !recorded.value.has(item.workItemId))
   .map(item => ({ key: item.workItemId, title: item.title, itemNo: item.itemNo, projectName: item.projectName,
-    colorToken: item.contentColorToken ?? null, completed: item.completed })))
+    colorToken: item.contentColorToken ?? null, completed: item.completed, parent: candidateParent(item) })))
 /** Categories stay at hand above the work items; with exactly one project filtered they are recorded against it. */
 const categoryProject = computed(() => projects.value.size === 1 ? [...projects.value.keys()][0]! : null)
 const categories = computed<ShelfItem[]>(() => mine.value ? [] : matchCategories(query.value, categoryProject.value)
   .filter(option => filtering.value || !recorded.value.has(option.key))
   .map(option => ({ key: option.key, title: option.label, itemNo: null, projectName: null, colorToken: option.colorToken })))
+/** 迁入工时 is written only by the import, so it cannot be placed again from the shelf. */
+const recordable = computed(() => props.totals.filter(item => !isMigratedCategory(categoryOf(item.key)?.code)))
 interface ShelfSection { key: string; title: string; list: (ShelfItem & { ms?: number | undefined })[] }
 const sections = computed<ShelfSection[]>(() => {
   const fixed = categories.value.length ? [{ key: 'fixed', title: '通用工时', list: categories.value }] : []
   return filtering.value
     ? [...fixed, { key: 'result', title: searching.value ? '搜索结果' : '筛选结果', list: candidates.value }]
-    : [{ key: 'today', title: '今天已记录', list: props.totals }, ...fixed, { key: 'recent', title: '最近与我的', list: candidates.value }]
+    : [{ key: 'today', title: '今天已记录', list: recordable.value }, ...fixed, { key: 'recent', title: '最近与我的', list: candidates.value }]
 })
 const listsWorkItems = (key: string) => key === 'result' || key === 'recent'
+type ShelfRow = HierarchyRow<ShelfSection['list'][number]>
+const rowsOf = (section: ShelfSection): ShelfRow[] => listsWorkItems(section.key)
+  ? withHierarchy(section.list, item => item.key, item => item.parent ?? null)
+  : section.list.map(item => ({ key: item.key, item, parent: null, child: false, last: false }))
 const iconOf = (item: ShelfItem) => categoryOf(item.key)?.icon
 function toggleProject(id: string, name: string) {
   const next = new Map(projects.value)
@@ -227,87 +234,105 @@ const color = (item: ShelfItem) => ({ '--work-item-accent': workItemLabelColorVa
           还没有记录。把下方工作项拖到右侧时间线，或在时间线上拖选一段时间。
         </p>
         <ul v-else>
-          <li
-            v-for="item in section.list"
-            :key="item.key"
-            class="item-shelf__row work-item-accent-bar"
-            :class="{ 'is-open': openFor === item.key, 'is-draggable': canDrag && !busy, 'is-dragging': dragging === item.key,
-                      'is-completed': hideCompleted && item.completed, 'is-category': !!iconOf(item) }"
-            :style="color(item)"
-            :draggable="canDrag && !busy"
-            :title="canDrag ? '拖到空白处补录，拖到已有卡片按其时段添加并行工作项' : undefined"
-            @dragstart="dragStart(item, $event)"
-            @dragend="dragEnd"
+          <template
+            v-for="{ key, item, parent, child, last } in rowsOf(section)"
+            :key="key"
           >
-            <span
-              v-if="canDrag"
-              class="item-shelf__grip"
-              aria-hidden="true"
-            />
-            <el-icon
-              v-if="iconOf(item)"
-              class="item-shelf__icon"
-              aria-hidden="true"
-            ><component :is="iconOf(item)" /></el-icon>
-            <span class="item-shelf__text">
-              <strong>{{ item.title }}</strong>
-              <small v-if="item.projectName">{{ item.projectName }}</small>
-            </span>
-            <span
-              v-if="hideCompleted && item.completed"
-              class="item-shelf__done"
-            >已完成</span>
-            <span
-              v-if="item.ms !== undefined"
-              class="item-shelf__ms"
-            >{{ durationLabel(item.ms) }}</span>
-            <el-popover
-              :ref="popover => register(item.key, popover)"
-              trigger="click"
-              :persistent="false"
-              placement="right-start"
-              :width="232"
-              popper-class="day-popover"
-              @show="open(item, true)"
-              @hide="open(item, false)"
+            <li
+              v-if="!item"
+              class="item-shelf__row item-shelf__parent work-item-accent-bar"
+              :class="{ 'is-completed': hideCompleted && parent!.completed }"
             >
-              <template #reference>
-                <el-button
-                  text
-                  circle
-                  size="small"
-                  class="item-shelf__add"
-                  :icon="Plus"
-                  :aria-label="`按时长补录 ${item.title}`"
-                  :aria-expanded="openFor === item.key"
-                />
-              </template>
-              <div class="shelf-duration">
-                <p>排入上班时间后的空白</p>
-                <div class="shelf-duration__chips">
+              <span class="item-shelf__text"><strong>{{ parent!.title }}</strong><small>父工作项</small></span>
+            </li>
+            <li
+              v-else
+              class="item-shelf__row work-item-accent-bar"
+              :class="{ 'is-open': openFor === item.key, 'is-draggable': canDrag && !busy, 'is-dragging': dragging === item.key,
+                        'is-completed': hideCompleted && item.completed, 'is-category': !!iconOf(item), 'is-child': child }"
+              :style="color(item)"
+              :draggable="canDrag && !busy"
+              :title="canDrag ? '拖到空白处补录，拖到已有卡片按其时段添加并行工作项' : undefined"
+              @dragstart="dragStart(item, $event)"
+              @dragend="dragEnd"
+            >
+              <span
+                v-if="child"
+                class="item-shelf__branch"
+                :class="{ 'is-continued': !last }"
+                aria-hidden="true"
+              />
+              <span
+                v-if="canDrag"
+                class="item-shelf__grip"
+                aria-hidden="true"
+              />
+              <el-icon
+                v-if="iconOf(item)"
+                class="item-shelf__icon"
+                aria-hidden="true"
+              ><component :is="iconOf(item)" /></el-icon>
+              <span class="item-shelf__text">
+                <strong>{{ item.title }}</strong>
+                <small v-if="item.projectName">{{ item.projectName }}</small>
+              </span>
+              <span
+                v-if="hideCompleted && item.completed"
+                class="item-shelf__done"
+              >已完成</span>
+              <span
+                v-if="item.ms !== undefined"
+                class="item-shelf__ms"
+              >{{ durationLabel(item.ms) }}</span>
+              <el-popover
+                :ref="popover => register(item.key, popover)"
+                trigger="click"
+                :persistent="false"
+                placement="right-start"
+                :width="232"
+                popper-class="day-popover"
+                @show="open(item, true)"
+                @hide="open(item, false)"
+              >
+                <template #reference>
                   <el-button
-                    v-for="preset in presets"
-                    :key="preset"
+                    text
+                    circle
                     size="small"
-                    :disabled="busy"
-                    @mouseenter="emit('preview', item, preset)"
-                    @focus="emit('preview', item, preset)"
-                    @click="place(item, preset)"
-                  >
-                    {{ durationLabel(preset) }}
-                  </el-button>
+                    class="item-shelf__add"
+                    :icon="Plus"
+                    :aria-label="`按时长补录 ${item.title}`"
+                    :aria-expanded="openFor === item.key"
+                  />
+                </template>
+                <div class="shelf-duration">
+                  <p>排入上班时间后的空白</p>
+                  <div class="shelf-duration__chips">
+                    <el-button
+                      v-for="preset in presets"
+                      :key="preset"
+                      size="small"
+                      :disabled="busy"
+                      text
+                      @mouseenter="emit('preview', item, preset)"
+                      @focus="emit('preview', item, preset)"
+                      @click="place(item, preset)"
+                    >
+                      {{ durationLabel(preset) }}
+                    </el-button>
+                  </div>
+                  <el-input
+                    v-model="custom"
+                    size="small"
+                    placeholder="其他时长（至少 15 分钟），如 1.5 或 1h30"
+                    aria-label="自定义时长"
+                    @input="emit('preview', customMs ? item : null, customMs ?? 0)"
+                    @keydown.enter.prevent="place(item, customMs)"
+                  />
                 </div>
-                <el-input
-                  v-model="custom"
-                  size="small"
-                  placeholder="其他时长（至少 15 分钟），如 1.5 或 1h30"
-                  aria-label="自定义时长"
-                  @input="emit('preview', customMs ? item : null, customMs ?? 0)"
-                  @keydown.enter.prevent="place(item, customMs)"
-                />
-              </div>
-            </el-popover>
-          </li>
+              </el-popover>
+            </li>
+          </template>
         </ul>
         <template v-if="listsWorkItems(section.key)">
           <p
@@ -367,15 +392,15 @@ const color = (item: ShelfItem) => ({ '--work-item-accent': workItemLabelColorVa
 </template>
 
 <style scoped>
-.item-shelf{display:flex;flex-direction:column;min-height:0;overflow:hidden;border:1px solid var(--yp-border-subtle);border-radius:var(--yp-radius-md);background:var(--yp-bg-surface)}
-.item-shelf__head{display:grid;gap:10px;padding:14px 14px 12px;border-bottom:1px solid var(--yp-border-subtle)}
+.item-shelf{display:flex;flex-direction:column;min-height:0;overflow:hidden;border-radius:var(--yp-radius-md);background:var(--yp-bg-surface)}
+.item-shelf__head{display:grid;gap:10px;padding:14px 14px 12px;}
 .item-shelf__heading{display:flex;align-items:baseline;justify-content:space-between;gap:8px;min-width:0}
 .item-shelf__heading h2{margin:0;color:var(--yp-text-primary);font:600 15px/22px var(--yp-font-heading)}
 .item-shelf__heading small{overflow:hidden;color:var(--yp-text-muted);font-size:12px;white-space:nowrap;text-overflow:ellipsis}
 .item-shelf__filters{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
 .item-shelf__filter{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border:0;border-radius:var(--yp-radius-sm);background:transparent;color:var(--yp-text-primary);font:13px var(--yp-font-family);cursor:pointer;transition:background var(--yp-motion-fast) var(--yp-ease-standard),color var(--yp-motion-fast) var(--yp-ease-standard)}
 .item-shelf__filter:hover,.item-shelf__filter.active{background:var(--yp-bg-hover);color:var(--yp-action-primary)}
-.item-shelf__count{min-width:18px;padding:1px 5px;box-sizing:border-box;border-radius:var(--yp-radius-pill);background:var(--yp-action-primary);color:var(--yp-text-inverse);font-size:11px;line-height:14px;text-align:center}
+.item-shelf__count{min-width:18px;padding:1px 5px;box-sizing:border-box;border-radius:var(--yp-radius-pill);background:var(--yp-action-primary);color:var(--yp-on-solid);font-size:11px;line-height:14px;text-align:center}
 .item-shelf__clear{margin-left:auto;padding:4px 8px;border:0;border-radius:var(--yp-radius-sm);background:transparent;color:var(--yp-action-primary);font:13px var(--yp-font-family);cursor:pointer}
 .item-shelf__clear:hover{background:var(--yp-bg-hover)}
 .item-shelf__body{display:flex;flex-direction:column;gap:16px;min-height:0;overflow:auto;padding:12px 14px 14px;overscroll-behavior:contain}
@@ -386,9 +411,9 @@ const color = (item: ShelfItem) => ({ '--work-item-accent': workItemLabelColorVa
 .item-shelf__empty{margin:0;color:var(--yp-text-muted);font-size:13px;line-height:20px}
 .item-shelf__status{margin:6px 0;color:var(--yp-text-muted);font-size:12px;text-align:center}
 .item-shelf-sentinel{height:1px}
-.item-shelf__row{display:flex;align-items:center;gap:8px;min-height:52px;padding:6px 6px 6px 16px;border:1px solid var(--yp-monday-grid-border);border-radius:var(--yp-radius-sm);background:var(--yp-bg-surface);box-shadow:var(--yp-shadow-card);transition:box-shadow var(--yp-motion-fast) ease-out,border-color var(--yp-motion-fast) ease-out,opacity var(--yp-motion-fast) ease-out}
+.item-shelf__row{display:flex;align-items:center;gap:8px;min-height:52px;padding:6px 6px 6px 16px;border-radius:var(--yp-radius-sm);background:var(--yp-bg-surface);transition:box-shadow var(--yp-motion-fast) ease-out,border-color var(--yp-motion-fast) ease-out,opacity var(--yp-motion-fast) ease-out}
 .item-shelf__row.work-item-accent-bar::before{top:-1px;bottom:-1px;left:-1px}
-.item-shelf__row:hover,.item-shelf__row.is-open{border-color:color-mix(in srgb,var(--work-item-accent) 45%,var(--yp-monday-grid-border));box-shadow:var(--yp-shadow-hover)}
+.item-shelf__row:hover,.item-shelf__row.is-open{background:var(--yp-bg-hover);}
 .item-shelf__row.is-category{min-height:40px}
 .item-shelf__icon{flex:none;color:var(--work-item-accent);font-size:16px}
 .item-shelf__row.is-draggable{cursor:grab}
@@ -418,4 +443,13 @@ const color = (item: ShelfItem) => ({ '--work-item-accent': workItemLabelColorVa
 .shelf-duration p{margin:0;color:var(--yp-text-muted);font-size:12px}
 .shelf-duration__chips{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
 .shelf-duration__chips .el-button+.el-button{margin-left:0}
+.item-shelf__row.is-child{margin-left:20px}
+/* Branch from the parent's accent bar (x 3px, 6px gap above) to this row's title line (17px). */
+.item-shelf__branch{position:absolute;top:-7px;bottom:-1px;left:-18px;width:17px;pointer-events:none}
+.item-shelf__branch::before{position:absolute;top:0;right:0;left:0;height:23px;box-sizing:border-box;border-bottom:1.5px solid var(--yp-border-strong);border-left:1.5px solid var(--yp-border-strong);border-bottom-left-radius:8px;content:''}
+.item-shelf__branch.is-continued::after{position:absolute;top:0;bottom:0;left:0;border-left:1.5px solid var(--yp-border-strong);content:''}
+.item-shelf__row.item-shelf__parent{--work-item-accent:var(--yp-border-strong);min-height:36px;padding:4px 8px 4px 16px;border-style:dashed;background:transparent;box-shadow:none}
+.item-shelf__row.item-shelf__parent:hover{border-color:var(--yp-monday-grid-border);box-shadow:none}
+.item-shelf__parent .item-shelf__text strong{color:var(--yp-text-secondary);font-size:13px}
+.item-shelf__parent .item-shelf__text small{color:var(--yp-text-muted);font-size:12px}
 </style>

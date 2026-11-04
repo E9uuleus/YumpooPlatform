@@ -26,6 +26,7 @@ const statusMappings: Record<StatusDomain, Record<string, StatusPresentation>> =
   },
   'project-lifecycle': {
     ACTIVE: { label: '进行中', tone: 'blue' },
+    ENDED: { label: '已结束', tone: 'green' },
     ARCHIVED: { label: '已归档', tone: 'gray' },
   },
   'project-membership': {

@@ -138,5 +138,5 @@ const durationTitle = computed(() => {
 .timer-cell,.timer-toggle{cursor:pointer}
 .timer-toggle:hover{background:var(--el-color-primary-dark-2)}.timer-toggle:disabled{cursor:default}.timer-toggle.is-unavailable{opacity:.45}
 .timer-cell:focus-visible{outline:2px solid var(--el-color-primary);outline-offset:-2px}
-:global(.time-log-popover.el-popover){padding:0;max-width:calc(100vw - 24px);box-sizing:border-box;border-radius:10px}
+:global(.time-log-popover.el-popover){padding:0;max-width:calc(100vw - 24px);box-sizing:border-box;}
 </style>

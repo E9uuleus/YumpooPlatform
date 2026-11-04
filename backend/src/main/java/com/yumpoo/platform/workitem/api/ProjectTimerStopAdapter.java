@@ -13,4 +13,8 @@ public class ProjectTimerStopAdapter implements ProjectTimerStopPort {
     public int stopRunningTimers(CurrentActor actor, UUID projectId) {
         return service.stopRunningInArchivedProject(actor, projectId);
     }
+
+    public int stopLeavingMemberTimers(CurrentActor actor, UUID projectId) {
+        return service.stopRunningForLeavingMember(actor, projectId);
+    }
 }

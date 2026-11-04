@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import YpNotice from '../yp/YpNotice.vue'
 import { computed, ref, watch } from 'vue'
-import { ElAlert, ElButton } from 'element-plus'
+import { ElButton } from 'element-plus'
 import TeamTimesheet from './TeamTimesheet.vue'
 import TeamProjectHours from './TeamProjectHours.vue'
 import TeamWorkload from './TeamWorkload.vue'
@@ -20,20 +21,22 @@ defineExpose({ refresh: team.refresh, loading, ready })
 
 <template>
   <div class="team-dashboard">
-    <el-alert
+    <yp-notice
       v-if="optionsError"
       class="team-notice"
-      type="error"
-      :title="optionsError"
-      :closable="false"
+      tone="danger"
     >
-      <el-button
-        text
-        @click="team.refresh()"
-      >
-        重试
-      </el-button>
-    </el-alert>
+      {{ optionsError }}
+
+      <template #actions>
+        <el-button
+          text
+          @click="team.refresh()"
+        >
+          重试
+        </el-button>
+      </template>
+    </yp-notice>
     <TeamTimesheet
       v-show="props.view === 'TIMESHEET' || props.view === 'OVERTIME'"
       ref="timesheetView"

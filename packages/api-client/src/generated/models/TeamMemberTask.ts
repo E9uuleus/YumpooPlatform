@@ -49,6 +49,12 @@ export interface TeamMemberTask {
      */
     title: string;
     /**
+     * 项目状态代码；NOT_STARTED 为项目初始状态，成员新增的状态使用生成的代码。
+     * @type {string}
+     * @memberof TeamMemberTask
+     */
+    statusCode: string;
+    /**
      *
      * @type {string}
      * @memberof TeamMemberTask
@@ -112,6 +118,7 @@ export function instanceOfTeamMemberTask(value: object): value is TeamMemberTask
     if (!('projectName' in value) || value['projectName'] === undefined) return false;
     if (!('itemNo' in value) || value['itemNo'] === undefined) return false;
     if (!('title' in value) || value['title'] === undefined) return false;
+    if (!('statusCode' in value) || value['statusCode'] === undefined) return false;
     if (!('statusName' in value) || value['statusName'] === undefined) return false;
     if (!('statusCategory' in value) || value['statusCategory'] === undefined) return false;
     if (!('statusColor' in value) || value['statusColor'] === undefined) return false;
@@ -137,6 +144,7 @@ export function TeamMemberTaskFromJSONTyped(json: any, ignoreDiscriminator: bool
         'projectName': json['projectName'],
         'itemNo': json['itemNo'],
         'title': json['title'],
+        'statusCode': json['statusCode'],
         'statusName': json['statusName'],
         'statusCategory': json['statusCategory'],
         'statusColor': json['statusColor'],
@@ -163,6 +171,7 @@ export function TeamMemberTaskToJSONTyped(value?: TeamMemberTask | null, ignoreD
         'projectName': value['projectName'],
         'itemNo': value['itemNo'],
         'title': value['title'],
+        'statusCode': value['statusCode'],
         'statusName': value['statusName'],
         'statusCategory': value['statusCategory'],
         'statusColor': value['statusColor'],

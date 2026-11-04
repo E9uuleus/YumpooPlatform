@@ -11,8 +11,8 @@ vi.mock('../../composables/useSession', () => ({ useSession: () => ({ authentica
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }), useRoute: () => ({ query: {} }) }))
 
 const workload = (): TeamWorkload => ({ asOf: new Date(), today: new Date(),
-  members: ['张三', '李四'].map((displayName, index) => ({ userId: `member-${index}`, displayName, active: true, todo: 2, inProgress: 0, overdue: 0 })),
-  unassigned: { todo: 1, inProgress: 0, overdue: 0 } })
+  members: ['张三', '李四'].map((displayName, index) => ({ userId: `member-${index}`, displayName, active: true, todo: 2, inProgress: 0, other: 0, overdue: 0 })),
+  unassigned: { todo: 1, inProgress: 0, other: 0, overdue: 0 } })
 const page = (title: string): TeamMemberTaskPage => ({ items: [{ id: title, title } as TeamMemberTask], totalElements: 2 })
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -80,7 +80,7 @@ describe('expanded team tasks', () => {
     await row('张三').trigger('click'); await row('李四').trigger('click'); await row('未分配').trigger('click'); await flushPromises()
     api.queryTeamMemberTasks.mockClear()
     api.queryTeamWorkload.mockResolvedValueOnce({ ...workload(), members: [workload().members[0]!, { ...workload().members[1]!, todo: 0 }],
-      unassigned: { todo: 0, inProgress: 0, overdue: 0 } })
+      unassigned: { todo: 0, inProgress: 0, other: 0, overdue: 0 } })
     await team.loadWorkload(); await flushPromises()
     expect(row('张三').attributes('aria-expanded')).toBe('true')
     expect(wrapper.findAll('.team-workload__tasks')).toHaveLength(1)

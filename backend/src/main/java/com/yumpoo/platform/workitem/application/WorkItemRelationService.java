@@ -543,14 +543,14 @@ public class WorkItemRelationService {
     }
 
     private static boolean canWrite(ProjectAccessSnapshot project) {
-        return project.lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED
+        return project.contentWritable()
                 && project.actorAccess() != ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY;
     }
 
     private static void requireWritable(ProjectAccessSnapshot project) {
         if (project.actorAccess() == ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY)
             throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
-        if (project.lifecycle() == ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED)
+        if (!project.contentWritable())
             throw conflict("PROJECT_ARCHIVED");
     }
 

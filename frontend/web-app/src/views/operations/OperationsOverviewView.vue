@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import YpSkeleton from '../../components/yp/YpSkeleton.vue'
+import YpNotice from '../../components/yp/YpNotice.vue'
 import { Coin, Connection, Files, FolderOpened, Monitor, Tickets } from '@element-plus/icons-vue'
 import type { OperationsAlert } from '@yumpoo/api-client'
 import { computed, watch, type Component } from 'vue'
 import { RouterLink } from 'vue-router'
-import { ElAlert, ElIcon, ElSkeleton } from 'element-plus'
+import { ElIcon } from 'element-plus'
 import { identityAdministrationApi } from '../../api/client'
 import { useOperationsQuery } from '../../composables/useOperationsQuery'
 import { useOperations } from '../../components/operations/operationsContext'
@@ -26,7 +28,7 @@ const query = useOperations(),
   data = query.data
 const integration = useOperationsQuery(
   (signal) => identityAdministrationApi.getWeComIntegrationStatus({ signal }),
-  { interval: () => query.interval.value * 1000 },
+  { pageLoad: true, interval: () => query.interval.value * 1000 },
 )
 watch(query.refreshVersion, () => void integration.refresh())
 
@@ -191,10 +193,11 @@ const postureTone = (severity: string) =>
 </script>
 
 <template>
-  <el-skeleton
+  <yp-skeleton
     v-if="!data && query.loading.value"
-    :rows="12"
-    animated
+    variant="cards"
+    :rows="6"
+    label="正在加载运维概览"
   />
   <template v-if="data">
     <section
@@ -244,20 +247,20 @@ const postureTone = (severity: string) =>
         </div>
       </div>
     </section>
-    <el-alert
+    <yp-notice
       v-if="data.runtime.lostSamples"
       class="ops-overview-alert"
-      type="warning"
-      :closable="false"
-      :title="`历史存储积压，已丢弃 ${data.runtime.lostSamples} 个分钟桶。图表保留缺口。`"
-    />
-    <el-alert
+      tone="warning"
+    >
+      {{ `历史存储积压，已丢弃 ${data.runtime.lostSamples} 个分钟桶。图表保留缺口。` }}
+    </yp-notice>
+    <yp-notice
       v-if="data.runtime.metrics['alerts.droppedSamples']"
       class="ops-overview-alert"
-      type="warning"
-      :closable="false"
-      :title="`告警评估积压，已丢弃 ${data.runtime.metrics['alerts.droppedSamples']} 份旧观测；部分历史告警可能缺失。`"
-    />
+      tone="warning"
+    >
+      {{ `告警评估积压，已丢弃 ${data.runtime.metrics['alerts.droppedSamples']} 份旧观测；部分历史告警可能缺失。` }}
+    </yp-notice>
     <div class="ops-kpis">
       <ops-tile
         v-for="tile in tiles"
@@ -282,7 +285,6 @@ const postureTone = (severity: string) =>
       <section class="ops-card flush">
         <header class="ops-card__head">
           <h2>服务组件</h2>
-          <span class="ops-muted">数据库与部署目录来自健康检查，随概览刷新</span>
         </header>
         <ul class="ops-list">
           <li
@@ -299,7 +301,6 @@ const postureTone = (severity: string) =>
             <yp-status-tag
               domain="operations"
               :status="component.status"
-              effect="soft"
               size="small"
             />
             <span class="ops-health-row__detail">{{ componentDetail(component.code, component.detail) }}</span>
@@ -318,7 +319,6 @@ const postureTone = (severity: string) =>
             <yp-status-tag
               domain="integration"
               :status="integration.data.value?.oauth.configured ? 'CONFIGURED' : 'INCOMPLETE'"
-              effect="soft"
               size="small"
             />
             <span class="ops-health-row__detail">最近同步成功 {{ time(integration.data.value?.lastSuccessfulRunAt) }}</span>
@@ -359,7 +359,7 @@ const postureTone = (severity: string) =>
             v-else
             compact
             title="没有活跃告警"
-            description="12 条内置规则正在持续评估。"
+            description=""
           />
         </section>
         <section class="ops-card flush">
@@ -380,7 +380,6 @@ const postureTone = (severity: string) =>
               <yp-status-tag
                 domain="operations"
                 :status="check.status"
-                effect="soft"
                 size="small"
               />
             </li>
@@ -440,7 +439,7 @@ const postureTone = (severity: string) =>
           v-else
           compact
           title="没有错误日志"
-          description="当前内存缓冲中没有 ERROR 级别记录。"
+          description=""
         />
       </section>
       <section class="ops-card">
@@ -480,7 +479,6 @@ const postureTone = (severity: string) =>
   gap: var(--yp-space-4);
   margin-bottom: var(--yp-space-4);
   padding: var(--yp-space-4) var(--yp-space-5);
-  border: 1px solid color-mix(in srgb, var(--ops-tone) 40%, var(--yp-border-subtle));
   border-radius: var(--yp-radius-md);
   background: color-mix(in srgb, var(--ops-tone) 8%, var(--yp-bg-surface));
 }

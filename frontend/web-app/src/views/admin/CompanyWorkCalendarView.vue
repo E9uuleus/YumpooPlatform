@@ -1,6 +1,10 @@
 <script setup lang="ts">
+import YpSkeleton from '../../components/yp/YpSkeleton.vue'
+import YpNotice from '../../components/yp/YpNotice.vue'
+import { usePageLoad } from '../../brand/page-progress'
+
 import { CalendarDaySource, CalendarDayType, readCsrfToken, type WorkCalendarYear, type WorkHoursAlertSetting } from '@yumpoo/api-client'
-import { ElAlert, ElButton, ElDialog, ElInput, ElInputNumber, ElMessage, ElMessageBox } from 'element-plus'
+import { ElButton, ElDialog, ElInput, ElInputNumber, ElMessage, ElMessageBox } from 'element-plus'
 import { computed, onMounted, ref, watch } from 'vue'
 import { administrationApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
@@ -16,6 +20,7 @@ import { useIdentityAdmin } from '../../composables/useIdentityAdmin'
 import { useSession } from '../../composables/useSession'
 import { usePageOnboarding } from '../../onboarding/useOnboarding'
 
+const pageLoad = usePageLoad()
 const session = useSession(), { canWrite } = useIdentityAdmin()
 const timezone = computed(() => session.authentication.value?.company.timezone ?? 'Asia/Shanghai')
 const today = computed(() => todayIn(timezone.value))
@@ -131,14 +136,19 @@ async function saveAlert(): Promise<void> {
   } catch (reason) { error.value = await toApiProblem(reason) }
   finally { alertSaving.value = false }
 }
-onMounted(load)
+onMounted(() => pageLoad.track(load))
 </script>
 
 <template>
   <section
-    v-loading="loading"
+    v-loading="loading && Boolean(data)"
     class="work-calendar"
   >
+    <yp-skeleton
+      v-if="loading && !data"
+      variant="cards"
+      :rows="12"
+    />
     <inline-problem
       v-if="error"
       :problem="error"
@@ -151,6 +161,7 @@ onMounted(load)
         <el-button
           aria-label="上一年"
           :disabled="year <= 2000 || loading || saving"
+          text
           @click="changeYear(-1)"
         >
           ‹
@@ -159,6 +170,7 @@ onMounted(load)
         <el-button
           aria-label="下一年"
           :disabled="year >= 2100 || loading || saving"
+          text
           @click="changeYear(1)"
         >
           ›
@@ -175,12 +187,14 @@ onMounted(load)
         <el-button
           :disabled="!canWrite || loading || saving"
           data-tour="work-calendar-import"
+          text
           @click="fileInput?.click()"
         >
           导入 Excel
         </el-button>
         <el-button
           :disabled="!dirty || saving"
+          text
           @click="accept(data!)"
         >
           放弃修改
@@ -202,11 +216,10 @@ onMounted(load)
         >
       </div>
     </div>
-    <el-alert
+    <yp-notice
       v-if="importErrors.length"
-      type="error"
+      tone="danger"
       title="导入未完成，草稿未改变"
-      :closable="false"
     >
       <ul>
         <li
@@ -216,7 +229,7 @@ onMounted(load)
           {{ message }}
         </li>
       </ul>
-    </el-alert>
+    </yp-notice>
     <div class="calendar-legend">
       <span><i class="is-workday" />工作日</span><span><i class="is-rest" />休息日</span>
       <span><i class="is-holiday" />法定节假日</span><span><i class="is-makeup" />补班</span>
@@ -265,10 +278,26 @@ onMounted(load)
       <h3>工时异常提醒</h3>
       <div class="calendar-actions">
         <label for="work-hours-threshold">阈值（小时）</label>
-        <el-input-number id="work-hours-threshold" v-model="alertHours" :min="1" :max="24" :step="0.5" :disabled="!canWrite || alertSaving" />
-        <el-button type="primary" :disabled="!canWrite" :loading="alertSaving" @click="saveAlert">保存</el-button>
+        <el-input-number
+          id="work-hours-threshold"
+          v-model="alertHours"
+          :min="1"
+          :max="24"
+          :step="0.5"
+          :disabled="!canWrite || alertSaving"
+        />
+        <el-button
+          type="primary"
+          :disabled="!canWrite"
+          :loading="alertSaving"
+          @click="saveAlert"
+        >
+          保存
+        </el-button>
       </div>
-      <p>每天检查前一自然日每位成员的总工时（与团队视图同一口径），超过阈值时向全体公司管理员发送站内提醒「该成员工时数据异常请关注」。执行时间与启用在 <router-link :to="{ name: 'company-scheduled-jobs' }">定时任务</router-link> 中设置，默认停用。</p>
+      <p>
+        每天检查前一自然日每位成员的总工时，超过阈值时向全体公司管理员发送站内提醒「该成员工时数据异常请关注」。执行时间与启用在 <router-link :to="{ name: 'company-scheduled-jobs' }">定时任务</router-link> 中设置，默认停用。
+      </p>
     </article>
     <el-dialog
       v-model="dialogOpen"
@@ -322,7 +351,7 @@ onMounted(load)
 .calendar-legend span { display: flex; align-items: center; gap: 6px; }
 .calendar-legend i { width: 12px; height: 12px; border: 1px solid var(--yp-border-subtle); border-radius: 3px; }
 .calendar-months { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: var(--yp-space-4); }
-.calendar-month { padding: var(--yp-space-3); border: 1px solid var(--yp-border-subtle); border-radius: var(--yp-radius-md); background: var(--yp-bg-surface); }
+.calendar-month { padding: var(--yp-space-3);  border-radius: var(--yp-radius-md); background: var(--yp-bg-surface); }
 .calendar-month h3 { margin: 0 0 12px; font-size: 15px; color: var(--yp-text-primary); }
 .month-grid { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 3px; }
 .month-weekday { padding-bottom: 5px; text-align: center; font-size: 12px; color: var(--yp-text-muted); }
@@ -334,12 +363,12 @@ onMounted(load)
 .is-makeup { background: color-mix(in srgb,var(--yp-status-blue) 12%,var(--yp-bg-surface)); color: var(--yp-status-blue); }
 .calendar-day.is-explicit { border-color: var(--yp-border-strong); }
 .calendar-day.is-today { outline: 2px solid var(--yp-status-blue); outline-offset: -2px; }
-.calendar-day:hover:not(:disabled) { border-color: var(--yp-status-blue); }
+.calendar-day:hover:not(:disabled) {  background:var(--yp-bg-hover);}
 .calendar-day:disabled { cursor: default; }
 .calendar-editor,.calendar-editor label { display: grid; gap: var(--yp-space-2); }
 .calendar-editor { gap: var(--yp-space-4); }
 .calendar-editor .el-input-number { width: 100%; }
-.calendar-alert { padding: var(--yp-space-4); border: 1px solid var(--yp-border-subtle); border-radius: var(--yp-radius-md); background: var(--yp-bg-surface); }
+.calendar-alert { padding: var(--yp-space-4);  border-radius: var(--yp-radius-md); background: var(--yp-bg-surface); }
 .calendar-alert h3 { margin: 0 0 var(--yp-space-3); color: var(--yp-text-primary); }
 .calendar-alert p { margin-bottom: 0; color: var(--yp-text-secondary); line-height: 1.6; }
 @media (max-width: 1280px) { .calendar-months { grid-template-columns: repeat(3,minmax(0,1fr)); } }

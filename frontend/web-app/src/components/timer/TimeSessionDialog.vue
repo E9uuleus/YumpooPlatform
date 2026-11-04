@@ -6,6 +6,7 @@ import { timeTrackingApi } from '../../api/client'
 import { useSession } from '../../composables/useSession'
 import { formatDuration, formatTrackingDuration, timerMutation } from '../../composables/useTimeTracker'
 import TimeSessionForm from './TimeSessionForm.vue'
+import { MIGRATED_TIME_NOTE } from './timeCategories'
 import { companyDateTime, parseCompanyDateTime } from './timeFormat'
 
 const props = withDefaults(defineProps<{ workItemId: string; title: string; includeChildren?: boolean }>(), { includeChildren: false })
@@ -206,6 +207,7 @@ onMounted(() => load())
           >
             {{ clockLabel(record.startedAt) }} - {{ record.stoppedAt ? clockLabel(record.stoppedAt) : '计时中' }}
             <small v-if="record.parallelItemCount > 0">与 {{ record.parallelItemCount }} 项并行 · 计入 {{ formatTrackingDuration(record.allocatedDurationMs) }}</small>
+            <small v-if="record.migrated">迁入工时 · {{ MIGRATED_TIME_NOTE }}</small>
           </button>
           <button
             class="plain-button record-duration"

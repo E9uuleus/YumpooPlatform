@@ -4,6 +4,7 @@ import 'element-plus/theme-chalk/dark/css-vars.css'
 import App from './App.vue'
 import TimerQuickMenu from './components/timer/TimerQuickMenu.vue'
 import { SHELL_SURFACE, shellSurfacePaths } from './components/desktop/surfaces'
+import { configurePageProgress } from './brand/page-progress'
 import { dismissBootSplash } from './brand/boot-splash'
 import { vBrandLoading } from './brand/loading'
 import { initializeAppearance } from './composables/useAppearance'
@@ -16,6 +17,7 @@ import './styles/projects.css'
 import './styles/timer-surface.css'
 
 initializeAppearance()
+configurePageProgress()
 const desktopSurface = window.yumpooDesktop ? window.location.pathname : ''
 if (shellSurfacePaths.includes(desktopSurface)) document.documentElement.classList.add('timer-surface')
 // The quick panel is driven only by the desktop shell over IPC, so it mounts without the router, session or timer polling.

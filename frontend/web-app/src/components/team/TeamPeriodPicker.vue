@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import { ElButton, ElIcon, ElPopover } from 'element-plus'
 import { ArrowLeft, ArrowRight, Calendar } from '@element-plus/icons-vue'
-import TimeCalendar from '../timer/TimeCalendar.vue'
+import YpCalendar from '../yp/YpCalendar.vue'
 import YpSegmented from '../yp/YpSegmented.vue'
 import { periodFor, periodLabel, periodOptions, shiftPeriod, todayIn, type Period, type PeriodKind } from './teamDashboardModel'
 
@@ -54,7 +54,7 @@ defineExpose({ close: () => { calendarOpen.value = false } })
             </Transition></span>
           </button>
         </template>
-        <TimeCalendar
+        <YpCalendar
           v-if="calendarOpen"
           :model-value="period.from"
           :timezone="timezone"

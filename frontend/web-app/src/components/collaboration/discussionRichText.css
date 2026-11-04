@@ -25,19 +25,20 @@
 .discussion-editor-popup button, .discussion-member-popup button { display: block; width: 100%; padding: 8px 10px; border: 0; border-radius: 4px; color: inherit; background: transparent; text-align: left; cursor: pointer; font: inherit; }
 .discussion-editor-popup button:hover, .discussion-editor-popup button[aria-pressed='true'], .discussion-member-popup button:hover, .discussion-member-popup button[aria-selected='true'] { background: var(--yp-bg-selected); color: var(--yp-action-primary); }
 .discussion-editor-popup button:disabled { opacity: .45; cursor: not-allowed; }
-.discussion-editor-popup input, .discussion-member-popup input { box-sizing: border-box; width: 100%; padding: 8px; margin: 4px 0 8px; border: 1px solid var(--yp-input-border); border-radius: var(--yp-input-radius); color: var(--yp-text-primary); background: var(--yp-input-bg); font: inherit; }
-.discussion-editor-popup input:hover, .discussion-member-popup input:hover { border-color: var(--yp-input-border-hover); }
-.discussion-editor-popup input:focus, .discussion-member-popup input:focus { border-color: var(--yp-input-border-focus); outline: none; }
+.discussion-editor-popup input:not(.el-input__inner), .discussion-member-popup input { box-sizing: border-box; width: 100%; padding: 8px; margin: 4px 0 8px; border: 1px solid var(--yp-input-border); border-radius: var(--yp-input-radius); color: var(--yp-text-primary); background: var(--yp-input-bg); font: inherit; }
+.discussion-editor-popup input:not(.el-input__inner):hover, .discussion-member-popup input:hover { border-color: var(--yp-input-border-hover); }
+.discussion-editor-popup input:not(.el-input__inner):focus, .discussion-member-popup input:focus { border-color: var(--yp-input-border-focus); outline: none; }
 .discussion-editor-popup button:focus-visible, .discussion-member-popup button:focus-visible { outline: 2px solid var(--yp-action-primary); outline-offset: -2px; }
 .discussion-member-popup [role='listbox'] { max-height: 220px; overflow: auto; }
 .discussion-color-tabs { display: flex; }.discussion-color-tabs button { text-align: center; }
 .discussion-color-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px; margin: 12px 0; }
 .discussion-color-grid button { aspect-ratio: 1; border: 1px solid var(--yp-border-strong); padding: 0; border-radius: 3px; }
 .discussion-color-grid button:hover { outline: 2px solid var(--yp-action-primary); outline-offset: 1px; }
+.discussion-table-form .el-input-number { width:100%; }
 .discussion-table-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }.discussion-table-form button { grid-column: 1 / -1; }
 .discussion-link-form label { display: block; }.discussion-link-form p { color: var(--yp-status-red); }
 .discussion-emoji-grid { display: grid; grid-template-columns: repeat(6, 1fr); }.discussion-emoji-grid button { padding: 6px 0; text-align: center; font-size: 22px; }
-.discussion-popup-close { margin-top: 6px; border-top: 1px solid var(--yp-border-subtle) !important; }
+.discussion-popup-close { margin-top: 6px;  }
 
 .discussion-rich-text a[data-type='attachment'] { display: flex; align-items: center; gap: 12px; box-sizing: border-box; width: min(100%, 380px); margin: 12px 0; padding: 12px; border: 1px solid var(--yp-border-strong); border-radius: 8px; color: var(--yp-text-primary); background: var(--yp-bg-surface); text-decoration: none; }
 .discussion-rich-text a[data-type='attachment']:hover { border-color: var(--yp-action-primary); background: var(--yp-bg-selected); }

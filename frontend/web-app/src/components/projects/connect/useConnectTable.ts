@@ -1,8 +1,9 @@
 import { computed, nextTick, provide, ref, watch, type MaybeRefOrGetter, toValue } from 'vue'
-import { ProjectActorAccess, ProjectLifecycle, type ConnectColumn, type ConnectTargetProject, type ProjectDetail,
+import { ProjectActorAccess, type ConnectColumn, type ConnectTargetProject, type ProjectDetail,
   type ProjectWorkItemListItem, type WorkItemConnection } from '@yumpoo/api-client'
 import { useRoute, useRouter } from 'vue-router'
 import { useSession } from '../../../composables/useSession'
+import { projectWritable } from '../projectStatus'
 import { CONNECT_DRAFT_KEY, connectColumnAutoName, connectColumnDefaultWidth, connectColumnKey, connectColumnKeys, connectColumnMinWidth,
   reverseColumnKey, reverseColumnLabels, type ConnectColumnKey, type ConnectTableColumn } from './connectColumnKeys'
 import { connectColumnPrefsKey, readConnectColumnPrefs, saveConnectColumnPrefs, type ConnectColumnPrefs } from './connectColumnPrefs'
@@ -56,7 +57,7 @@ export function useConnectTable(options: { projectId: MaybeRefOrGetter<string>; 
       width: connectColumnDefaultWidth(CONNECT_DRAFT_KEY), minWidth: connectColumnMinWidth(CONNECT_DRAFT_KEY) }
     return reverseAt < 0 ? [...shown, placeholder] : [...shown.slice(0, reverseAt), placeholder, ...shown.slice(reverseAt)]
   })
-  const readOnly = computed(() => !toValue(options.project) || toValue(options.project)?.lifecycle !== ProjectLifecycle.Active
+  const readOnly = computed(() => !toValue(options.project) || !projectWritable(toValue(options.project)!)
     || ![ProjectActorAccess.Owner, ProjectActorAccess.Member].includes(toValue(options.project)!.actorAccess))
   const canManage = computed(() => !readOnly.value && Boolean(catalog.value?.canManage))
   const canDelete = computed(() => !readOnly.value && Boolean(catalog.value?.canDelete))
@@ -71,7 +72,7 @@ export function useConnectTable(options: { projectId: MaybeRefOrGetter<string>; 
     versions.clear(); closeSetup(); deletingColumn.value = undefined; cardOpen.value = false; selectedConnection.value = undefined
     if (toValue(options.enabled)) void context.loadCatalog()
   }, { immediate: true, flush: 'sync' })
-  watch(() => [toValue(options.project)?.actorAccess, toValue(options.project)?.lifecycle], (next, previous) => {
+  watch(() => [toValue(options.project)?.actorAccess, toValue(options.project)?.lifecycle, toValue(options.project)?.endedAt], (next, previous) => {
     if (previous[0] && next[0] && next.join() !== previous.join()) { void context.loadCatalog(); void context.refreshCells(options.rows().map(item => item.id)) }
   })
   watch(canManage, allowed => { if (!allowed) closeSetup() })

@@ -5,6 +5,7 @@ import {
   ResponseError,
   instanceOfErrorResponse,
   type ErrorResponse,
+  type FieldError,
   type Middleware,
 } from '@yumpoo/api-client'
 
@@ -118,6 +119,42 @@ function validErrorResponse(error: ErrorResponse): boolean {
     && error.requestId.length > 0
     && typeof error.retryable === 'boolean'
     && Array.isArray(error.fieldErrors)
+}
+
+/** 失败分类：输入问题由用户修正，冲突要刷新后重试，内部错误要带诊断信息联系管理员。 */
+export type ProblemKind = 'input' | 'denied' | 'conflict' | 'internal' | 'network'
+
+export function problemKind(problem: ApiProblem): ProblemKind {
+  if (problem.kind === 'fallback') return problem.requestId ? 'internal' : 'network'
+  if (problem.status >= 500) return 'internal'
+  if (problem.status === 401 || problem.status === 403 || problem.status === 404) return 'denied'
+  if ([409, 412, 428, 429].includes(problem.status)) return 'conflict'
+  return 'input'
+}
+
+export function problemFieldErrors(problem: ApiProblem): FieldError[] {
+  return problem.kind === 'response' ? problem.error.fieldErrors : []
+}
+
+/** 复制给管理员的诊断信息，凭请求 ID 与时间在运行日志中定位；不含请求正文。 */
+export function problemDiagnostics(problem: ApiProblem, at: Date, fieldLabel?: (field: string) => string): string {
+  const lines = [
+    `时间：${at.toISOString()}`,
+    `客户端：${window.yumpooDesktop ? '桌面端' : 'Web'}`,
+    `页面：${window.location.pathname}`,
+    `提示：${problemMessage(problem)}`,
+  ]
+  if (problem.kind === 'response') {
+    lines.push(`状态：HTTP ${problem.status}`, `错误码：${problem.error.code}`)
+    if (problem.error.details.reason) lines.push(`原因：${problem.error.details.reason}`)
+    for (const error of problem.error.fieldErrors) {
+      const label = fieldLabel?.(error.field)
+      lines.push(`字段：${label ? `${label}（${error.field}）` : error.field} · ${error.code} · ${error.message}`)
+    }
+  }
+  const requestId = problemRequestId(problem)
+  if (requestId) lines.push(`请求 ID：${requestId}`)
+  return lines.join('\n')
 }
 
 function isGlobalProblem(problem: ApiProblem): boolean {

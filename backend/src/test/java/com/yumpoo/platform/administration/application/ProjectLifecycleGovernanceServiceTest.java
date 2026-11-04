@@ -91,10 +91,24 @@ class ProjectLifecycleGovernanceServiceTest {
         verifyNoInteractions(audits, events, users);
     }
 
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void endingStopsTimersAndResumingDoesNot(boolean ending) {
+        CurrentActor actor = actor(ownerId, false);
+        when(projects.lockForEnded(any())).thenReturn(snapshot("ACTIVE", 0));
+        when(projects.changeEnded(any())).thenReturn(new ProjectSnapshot(projectId, companyId, UUID.randomUUID(),
+                "P001", "结束项目", null, "ACTIVE", ownerId, 1, ending ? java.time.Instant.now() : null));
+        service.changeEnded(new ProjectEndOperationCommand(actor, projectId, 0, UUID.randomUUID(),
+                new RequestHash("d".repeat(64)), ending));
+        verify(timers, times(ending ? 1 : 0)).stopRunningTimers(actor, projectId);
+        verify(events).append(argThat(event -> event.eventType().equals(
+                ending ? "catalog.project_ended" : "catalog.project_resumed")));
+    }
+
     private CurrentActor actor(UUID userId, boolean admin) {
         return new CurrentActor(userId, companyId, 0, admin ? Set.of(PlatformRoleCode.COMPANY_ADMIN) : Set.of());
     }
     private ProjectSnapshot snapshot(String lifecycle, long version) {
-        return new ProjectSnapshot(projectId, companyId, UUID.randomUUID(), "P001", "归档项目", null, lifecycle, ownerId, version);
+        return new ProjectSnapshot(projectId, companyId, UUID.randomUUID(), "P001", "归档项目", null, lifecycle, ownerId, version, null);
     }
 }

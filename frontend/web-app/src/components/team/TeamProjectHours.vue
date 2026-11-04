@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import YpSkeleton from '../yp/YpSkeleton.vue'
+import YpNotice from '../yp/YpNotice.vue'
 import { computed, ref } from 'vue'
-import { ElAlert, ElButton, ElIcon, ElMessage } from 'element-plus'
+import { ElButton, ElIcon, ElMessage } from 'element-plus'
 import { ArrowDown, ArrowRight, Download } from '@element-plus/icons-vue'
 import type { TeamTimesheet } from '@yumpoo/api-client'
 import YpAssignee from '../yp/YpAssignee.vue'
@@ -54,29 +56,38 @@ async function exportExcel() {
           :icon="Download"
           :loading="exporting"
           :disabled="!sheet || loading || !model.rows.length"
+          text
           @click="exportExcel"
         >
           导出 Excel
         </el-button>
       </div>
     </div>
+    <yp-skeleton
+      v-if="loading && !sheet"
+      variant="table"
+      :rows="6"
+    />
     <div
+      v-else
       v-loading="loading"
       class="team-body"
     >
-      <el-alert
+      <yp-notice
         v-if="error"
-        :title="sheet ? `刷新失败，当前显示上次数据。${error}` : error"
-        type="error"
-        :closable="false"
+        tone="danger"
       >
-        <el-button
-          text
-          @click="emit('retry')"
-        >
-          重试
-        </el-button>
-      </el-alert>
+        {{ sheet ? `刷新失败，当前显示上次数据。${error}` : error }}
+
+        <template #actions>
+          <el-button
+            text
+            @click="emit('retry')"
+          >
+            重试
+          </el-button>
+        </template>
+      </yp-notice>
       <p class="team-summary">
         合计 <strong>{{ shortHours(model.totalMs) }}</strong> 小时 · 有工时项目 <strong>{{ projectCount }}</strong><template v-if="sheet">
           · 统计至 {{ formatTimestamp(sheet.asOf, timezone) }}
@@ -228,9 +239,6 @@ async function exportExcel() {
           </tfoot>
         </table>
       </div>
-      <p class="team-note">
-        按公司时区（{{ timezone }}）切分自然日，并行计时按项数平均计入。展开项目可查看成员，以及关联到该项目的出差、学习、商务、会议；未关联项目的这类工时列在最后。
-      </p>
     </div>
   </section>
 </template>
