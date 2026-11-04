@@ -6,11 +6,9 @@ import com.yumpoo.platform.audit.application.ActivitySummaryRenderer;
 import com.yumpoo.platform.foundation.application.event.DomainEventEnvelope;
 import com.yumpoo.platform.foundation.application.event.EventActor;
 import com.yumpoo.platform.foundation.application.event.EventSubscription;
-import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
+import com.yumpoo.platform.testing.JdbcIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
@@ -25,8 +23,7 @@ import static com.yumpoo.platform.workitem.application.ConnectionFixture.*;
 import static com.yumpoo.platform.workitem.application.WorkItemConnectionCommands.*;
 import static org.assertj.core.api.Assertions.assertThat;
 
-@Import(PostgreSqlTestContainerConfiguration.class)
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE, properties = "yumpoo.outbox.enabled=false")
+@JdbcIntegrationTest
 @Transactional
 class ConnectionEventProjectionIT {
     private static final Set<String> TYPES = Set.of("workitem.connect_column_created", "workitem.connect_column_updated",

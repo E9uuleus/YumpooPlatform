@@ -3,7 +3,7 @@ package com.yumpoo.platform.workitem.application;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
-import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
+import com.yumpoo.platform.testing.JdbcIntegrationTest;
 import com.yumpoo.platform.workitem.infrastructure.JdbcWorkItemProjectDataPurger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -11,10 +11,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
@@ -35,10 +34,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @ActiveProfiles("test")
-@Import(PostgreSqlTestContainerConfiguration.class)
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE, properties = {
-        "yumpoo.outbox.enabled=false", "yumpoo.projects.deletion.purge-poll-delay=1d",
-        "yumpoo.attachments.scan-enabled=false", "yumpoo.attachments.maintenance-initial-delay=1d"})
+@JdbcIntegrationTest
+@TestPropertySource(properties = {"yumpoo.projects.deletion.purge-poll-delay=1d", "yumpoo.attachments.maintenance-initial-delay=1d", "yumpoo.attachments.scan-enabled=false"})
 class ConnectColumnPurgeIT {
     @Autowired private JdbcClient jdbc;
     @Autowired private PlatformTransactionManager transactions;
