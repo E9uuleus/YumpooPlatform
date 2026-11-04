@@ -2,7 +2,7 @@
 import YpNotice from '../../yp/YpNotice.vue'
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { ElButton, ElDialog, ElDropdown, ElDropdownItem, ElDropdownMenu, ElIcon, ElInput, ElMessage, ElMessageBox, ElPopover } from 'element-plus'
-import { Calendar, Close as CloseIcon, CollectionTag, Flag, List, MoreFilled, Refresh as RefreshIcon, User, UserFilled } from '@element-plus/icons-vue'
+import { Close as CloseIcon, MoreFilled, Refresh as RefreshIcon } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import type { WorkItemConnection, WorkItemDetail, WorkItemLabelColorToken } from '@yumpoo/api-client'
 import { isProblemStatus, type ApiProblem } from '../../../api/problems'
@@ -16,6 +16,7 @@ import WorkItemCellActivityLog from '../../collaboration/WorkItemCellActivityLog
 import WorkItemAssigneePicker from '../WorkItemAssigneePicker.vue'
 import WorkItemContentPopoverContent from '../WorkItemContentPopoverContent.vue'
 import WorkItemDueDateCell from '../WorkItemDueDateCell.vue'
+import WorkItemFieldGlyph from '../WorkItemFieldGlyph.vue'
 import WorkItemLabelPopoverContent from '../WorkItemLabelPopoverContent.vue'
 import { workItemLabelColorValue } from '../workItemLabelColors'
 import type { DueDateValue } from '../workItemDueDate'
@@ -278,7 +279,7 @@ const updatedText = (value: WorkItemDetail) => formatRelativeTime(value.updatedA
     >
       <div class="connected-item-card__row">
         <dt>
-          <span class="connected-item-card__glyph connected-item-card__glyph--category"><el-icon><collection-tag /></el-icon></span>工作项类别
+          <work-item-field-glyph class="connected-item-card__glyph" field="content" :size="24" />工作项类别
         </dt>
         <dd>
           <el-popover
@@ -315,7 +316,7 @@ const updatedText = (value: WorkItemDetail) => formatRelativeTime(value.updatedA
       </div>
       <div class="connected-item-card__row">
         <dt>
-          <span class="connected-item-card__glyph connected-item-card__glyph--assignee"><el-icon><user /></el-icon></span>处理人
+          <work-item-field-glyph class="connected-item-card__glyph" field="assignee" :size="24" />处理人
         </dt>
         <dd>
           <el-popover
@@ -373,7 +374,7 @@ const updatedText = (value: WorkItemDetail) => formatRelativeTime(value.updatedA
         class="connected-item-card__row"
       >
         <dt>
-          <span class="connected-item-card__glyph connected-item-card__glyph--due"><el-icon><calendar /></el-icon></span>截止日期
+          <work-item-field-glyph class="connected-item-card__glyph" field="dueDate" :size="24" />截止日期
         </dt>
         <dd class="connected-item-card__tile connected-item-card__due">
           <work-item-due-date-cell
@@ -386,7 +387,7 @@ const updatedText = (value: WorkItemDetail) => formatRelativeTime(value.updatedA
       </div>
       <div class="connected-item-card__row">
         <dt>
-          <span class="connected-item-card__glyph connected-item-card__glyph--status"><el-icon><list /></el-icon></span>状态
+          <work-item-field-glyph class="connected-item-card__glyph" field="status" :size="24" />状态
         </dt>
         <dd>
           <el-popover
@@ -427,7 +428,7 @@ const updatedText = (value: WorkItemDetail) => formatRelativeTime(value.updatedA
       </div>
       <div class="connected-item-card__row">
         <dt>
-          <span class="connected-item-card__glyph connected-item-card__glyph--priority"><el-icon><flag /></el-icon></span>优先级
+          <work-item-field-glyph class="connected-item-card__glyph" field="priority" :size="24" />优先级
         </dt>
         <dd>
           <el-popover
@@ -470,7 +471,7 @@ const updatedText = (value: WorkItemDetail) => formatRelativeTime(value.updatedA
       <template v-if="detail">
         <div class="connected-item-card__row">
           <dt>
-            <span class="connected-item-card__glyph connected-item-card__glyph--updated"><el-icon><refresh-icon /></el-icon></span>最后更新
+            <work-item-field-glyph class="connected-item-card__glyph" field="updatedAt" :size="24" />最后更新
           </dt>
           <dd class="connected-item-card__tile is-static">
             <yp-assignee
@@ -485,7 +486,7 @@ const updatedText = (value: WorkItemDetail) => formatRelativeTime(value.updatedA
         </div>
         <div class="connected-item-card__row">
           <dt>
-            <span class="connected-item-card__glyph connected-item-card__glyph--reporter"><el-icon><user-filled /></el-icon></span>报告人
+            <work-item-field-glyph class="connected-item-card__glyph" field="reporter" :size="24" />报告人
           </dt>
           <dd class="connected-item-card__tile is-static">
             <yp-assignee
@@ -535,14 +536,7 @@ const updatedText = (value: WorkItemDetail) => formatRelativeTime(value.updatedA
 .connected-item-card__row { display: grid; grid-template-columns: 150px minmax(0, 1fr); align-items: center; gap: 16px; }
 .connected-item-card__row dt { display: flex; align-items: center; gap: 10px; color: var(--yp-text-secondary); font-size: 14px; }
 .connected-item-card__row dd { min-width: 0; margin: 0; }
-.connected-item-card__glyph { display: inline-grid; width: 24px; height: 24px; flex-shrink: 0; place-items: center; border-radius: var(--yp-radius-sm); color: var(--yp-text-inverse); font-size: 14px; }
-.connected-item-card__glyph--category { background: var(--yp-label-egg-yolk); }
-.connected-item-card__glyph--assignee { background: var(--yp-label-chili-blue); }
-.connected-item-card__glyph--due { background: var(--yp-label-purple); }
-.connected-item-card__glyph--status { background: var(--yp-label-green); }
-.connected-item-card__glyph--priority { background: var(--yp-label-orange); }
-.connected-item-card__glyph--updated { background: var(--yp-label-lavender); }
-.connected-item-card__glyph--reporter { background: var(--yp-label-teal); }
+.connected-item-card__glyph { flex-shrink: 0; }
 .connected-item-card__tile { display: flex; width: 100%; min-width: 0; height: 40px; box-sizing: border-box; align-items: center; justify-content: center; gap: 8px; padding: 0 12px; border: 0; border-radius: var(--yp-radius-sm); background: var(--yp-bg-sunken); color: var(--yp-text-secondary); font: inherit; font-size: 14px; white-space: nowrap; transition: background-color var(--yp-motion-fast) var(--yp-ease-standard), filter var(--yp-motion-fast) var(--yp-ease-standard); }
 .connected-item-card__tile.is-filled { color: var(--yp-text-inverse); font-weight: 500; }
 .connected-item-card__tile.is-editable { cursor: pointer; }

@@ -1,6 +1,7 @@
 <script setup lang="ts" generic="T extends string">
 import { ElCheckbox } from 'element-plus'
 import { onBeforeUnmount, ref, watch } from 'vue'
+import WorkItemFieldGlyph from './WorkItemFieldGlyph.vue'
 
 const props = defineProps<{ columns: { key: T; label: string }[]; hidden: Set<T>; disabled?: boolean }>()
 const emit = defineEmits<{ toggle: [key: T, visible: boolean] }>()
@@ -36,11 +37,12 @@ onBeforeUnmount(() => pending.forEach(change => {
     <strong>显示列</strong>
     <el-checkbox v-for="column in columns" :key="column.key" class="column-option"
       :model-value="!hidden.has(column.key)" :disabled="disabled || column.key === 'title'"
-      @change="toggle(column.key, Boolean($event))">{{ column.label }}</el-checkbox>
+      @change="toggle(column.key, Boolean($event))"><span class="column-option__label"><work-item-field-glyph :field="column.key" />{{ column.label }}</span></el-checkbox>
   </div>
 </template>
 
 <style scoped>
 .column-visibility-menu { display: grid; gap: 6px; }
 .column-option { margin: 0; }
+.column-option__label { display: inline-flex; align-items: center; gap: 8px; }
 </style>
