@@ -96,6 +96,12 @@ export interface WorkItemTableSettings {
      */
     completedStatusCodes: Set<string> | null;
     /**
+     * 子项表中工作项名称列之后冻结的列数；从未保存时为 0。
+     * @type {number}
+     * @memberof WorkItemTableSettings
+     */
+    subitemPinnedColumnCount: number;
+    /**
      *
      * @type {Date}
      * @memberof WorkItemTableSettings
@@ -123,6 +129,7 @@ export function instanceOfWorkItemTableSettings(value: object): value is WorkIte
     if (!('defaultValues' in value) || value['defaultValues'] === undefined) return false;
     if (!('grouping' in value) || value['grouping'] === undefined) return false;
     if (!('completedStatusCodes' in value) || value['completedStatusCodes'] === undefined) return false;
+    if (!('subitemPinnedColumnCount' in value) || value['subitemPinnedColumnCount'] === undefined) return false;
     if (!('updatedAt' in value) || value['updatedAt'] === undefined) return false;
     if (!('etag' in value) || value['etag'] === undefined) return false;
     return true;
@@ -146,6 +153,7 @@ export function WorkItemTableSettingsFromJSONTyped(json: any, ignoreDiscriminato
         'defaultValues': WorkItemCreateDefaultValuesFromJSON(json['defaultValues']),
         'grouping': WorkItemTableGroupingFromJSON(json['grouping']),
         'completedStatusCodes': json['completedStatusCodes'] == null ? null : new Set(json['completedStatusCodes']),
+        'subitemPinnedColumnCount': json['subitemPinnedColumnCount'],
         'updatedAt': (json['updatedAt'] == null ? null : new Date(json['updatedAt'])),
         'etag': json['etag'],
     };
@@ -170,6 +178,7 @@ export function WorkItemTableSettingsToJSONTyped(value?: Omit<WorkItemTableSetti
         'defaultValues': WorkItemCreateDefaultValuesToJSON(value['defaultValues']),
         'grouping': WorkItemTableGroupingToJSON(value['grouping']),
         'completedStatusCodes': value['completedStatusCodes'] == null ? null : Array.from(value['completedStatusCodes'] as Set<any>),
+        'subitemPinnedColumnCount': value['subitemPinnedColumnCount'],
         'updatedAt': value['updatedAt'] == null ? value['updatedAt'] : value['updatedAt'].toISOString(),
     };
 }

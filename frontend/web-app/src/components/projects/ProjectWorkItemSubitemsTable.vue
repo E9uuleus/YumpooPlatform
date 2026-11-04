@@ -1018,7 +1018,7 @@ onBeforeUnmount(() => {
           :label="column.label"
           :prop="column.key"
           :width="columnWidths[column.key]"
-          :fixed="column.key === 'title'"
+          :fixed="column.key === 'title' || Boolean(pinnedColumnKeys?.has(column.key))"
           align="center"
           :class-name="columnBodyClass(column)"
           :label-class-name="columnHeaderClass(column)"
@@ -1179,6 +1179,7 @@ onBeforeUnmount(() => {
         <el-table-column
           v-for="column in connectColumns ?? []"
           :key="column.key"
+          :fixed="Boolean(pinnedColumnKeys?.has(column.key))"
           :column-key="column.key"
           :prop="column.key"
           :label="column.label"

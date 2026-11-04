@@ -89,6 +89,12 @@ export interface WorkItemTableSettingsUpdateRequest {
      * @memberof WorkItemTableSettingsUpdateRequest
      */
     completedStatusCodes?: Set<string> | null;
+    /**
+     * 子项表中工作项名称列之后按子项列顺序冻结的列数；省略或 null 时保留原值。
+     * @type {number}
+     * @memberof WorkItemTableSettingsUpdateRequest
+     */
+    subitemPinnedColumnCount?: number | null;
 }
 
 
@@ -122,6 +128,7 @@ export function WorkItemTableSettingsUpdateRequestFromJSONTyped(json: any, ignor
         'defaultValues': WorkItemCreateDefaultValuesFromJSON(json['defaultValues']),
         ...(json['grouping'] === undefined ? {} : { 'grouping': json['grouping'] === null ? null : WorkItemTableGroupingFromJSON(json['grouping']) }),
         ...(json['completedStatusCodes'] === undefined ? {} : { 'completedStatusCodes': json['completedStatusCodes'] === null ? null : new Set(json['completedStatusCodes']) }),
+        ...(json['subitemPinnedColumnCount'] === undefined ? {} : { 'subitemPinnedColumnCount': json['subitemPinnedColumnCount'] === null ? null : json['subitemPinnedColumnCount'] }),
     };
 }
 
@@ -143,5 +150,6 @@ export function WorkItemTableSettingsUpdateRequestToJSONTyped(value?: WorkItemTa
         'defaultValues': WorkItemCreateDefaultValuesToJSON(value['defaultValues']),
         'grouping': WorkItemTableGroupingToJSON(value['grouping']),
         'completedStatusCodes': value['completedStatusCodes'] == null ? undefined : Array.from(value['completedStatusCodes'] as Set<any>),
+        'subitemPinnedColumnCount': value['subitemPinnedColumnCount'],
     };
 }

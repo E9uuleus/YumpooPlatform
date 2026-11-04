@@ -758,6 +758,13 @@ const pinnedColumnKeys = computed(() => new Set<string>(pinnableColumns.value
   .slice(0, tableViewSettings.value.pinnedColumnCount).map(column => column.key)))
 const tablePinColumns = computed(() => [columnByKey.get('title')!, ...pinnableColumns.value]
   .map(column => ({ key: column.key, label: column.label, width: columnWidth(column.key) })))
+// 子项表独立冻结前 N 列：按子项列自己的顺序（内置列在前、连接列在后）。
+const subitemPinnableColumns = computed(() => [...visibleSubitemColumns.value, ...connect.visibleColumns]
+  .filter(column => column.key !== 'title' && column.key !== CONNECT_DRAFT_KEY))
+const subitemPinnedColumnKeys = computed(() => new Set<string>(subitemPinnableColumns.value
+  .slice(0, tableViewSettings.value.subitemPinnedColumnCount ?? 0).map(column => column.key)))
+const subitemPinColumns = computed(() => [columnByKey.get('title')!, ...subitemPinnableColumns.value]
+  .map(column => ({ key: column.key, label: column.label, width: columnWidth(column.key) })))
 const tableRowHeight = computed(() => heightOption(tableViewSettings.value.rowHeight).row)
 const tableHeightClasses = computed(() => [
   `monday-table--header-${tableViewSettings.value.headerHeight.toLowerCase()}`,
@@ -769,6 +776,12 @@ function tablePinWidthBudget(): number {
   return width > 0
     ? Math.max(1, width - TABLE_MENU_COLUMN_WIDTH - TABLE_EXPAND_COLUMN_WIDTH - TABLE_SELECTION_COLUMN_WIDTH - PIN_SCROLL_RESERVE)
     : 0
+}
+/** 子项表前导为 72px 菜单列与 48px 勾选列。 */
+const SUBITEM_LEAD_WIDTH = 72 + TABLE_SELECTION_COLUMN_WIDTH
+function subitemPinWidthBudget(): number {
+  const width = resolveTableScrollElement()?.clientWidth ?? 0
+  return width > 0 ? Math.max(1, width - SUBITEM_LEAD_WIDTH - PIN_SCROLL_RESERVE) : 0
 }
 watch(() => [[...pinnedColumnKeys.value].join('|'), tableViewSettings.value.headerHeight, tableViewSettings.value.rowHeight].join(':'),
   () => void nextTick(flushResponsiveTableLayout))
@@ -3423,6 +3436,8 @@ onBeforeUnmount(() => {
             :disabled="selectedView === 'kanban'"
             :pin-columns="tablePinColumns"
             :pin-width-budget="tablePinWidthBudget"
+            :subitem-pin-columns="subitemPinColumns"
+            :subitem-pin-width-budget="subitemPinWidthBudget"
             :defaults-count="createDefaults.count"
             :catalog="tableSettingsCatalog"
             :default-columns="defaultValueColumns"
@@ -3524,6 +3539,7 @@ onBeforeUnmount(() => {
                     :row-height="tableRowHeight"
                     :coloring-rules="tableViewSettings.coloringRules"
                     :today="companyToday"
+                    :pinned-column-keys="subitemPinnedColumnKeys"
                     :connect-columns="connect.visibleColumns"
                     :connect-cells="connect.cells"
                     :connect-read-only="connect.readOnly"

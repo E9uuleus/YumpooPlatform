@@ -759,3 +759,16 @@ describe('子项表沿用主表的行高与条件着色', () => {
     expect(wrapper.find('.work-item-table-row--colored').exists()).toBe(false)
   })
 })
+
+describe('子项表固定列', () => {
+  it('除名称列外，按传入的子项固定列冻结', async () => {
+    const wrapper = mountTable()
+    await flushPromises()
+    const fixedHeaders = () => wrapper.findAll('.el-table__header th.el-table-fixed-column--left').length
+    const before = fixedHeaders()
+    expect(before).toBe(3)
+    await wrapper.setProps({ pinnedColumnKeys: new Set(['content']) })
+    await flushPromises()
+    expect(fixedHeaders()).toBe(before + 1)
+  })
+})

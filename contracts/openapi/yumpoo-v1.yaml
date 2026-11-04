@@ -15175,6 +15175,13 @@ components:
             type: string
             pattern: ^[A-Z][A-Z0-9_]{1,31}$
           description: 本人在该项目中视为已完成的状态代码；省略或 null 时保留原值。
+        subitemPinnedColumnCount:
+          type: integer
+          format: int32
+          nullable: true
+          minimum: 0
+          maximum: 50
+          description: 子项表中工作项名称列之后按子项列顺序冻结的列数；省略或 null 时保留原值。
     WorkItemTableSettings:
       type: object
       additionalProperties: false
@@ -15187,6 +15194,7 @@ components:
         - defaultValues
         - grouping
         - completedStatusCodes
+        - subitemPinnedColumnCount
         - updatedAt
         - etag
       properties:
@@ -15223,6 +15231,12 @@ components:
             type: string
             pattern: ^[A-Z][A-Z0-9_]{1,31}$
           description: null 表示按 DONE 与 CANCELED 两类状态判定已完成。
+        subitemPinnedColumnCount:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 50
+          description: 子项表中工作项名称列之后冻结的列数；从未保存时为 0。
         updatedAt:
           type: string
           format: date-time

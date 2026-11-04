@@ -210,5 +210,6 @@ export function emptyTableSettings(): TableSettings {
     defaultValues: { assigneeUserIds: new Set<string>(), statusCode: null, priority: null, contentId: null, dueDateOffsetDays: null },
     grouping: null,
     completedStatusCodes: null,
+    subitemPinnedColumnCount: 0,
   }
 }
