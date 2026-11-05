@@ -217,6 +217,6 @@ export function useProjectTableScrollLayout({
   return {
     horizontalPageScrollbar, verticalPageScrollbar, horizontalOverflow, horizontalScrollExtent, verticalScrollExtent,
     pageScrollbarLeft, horizontalPageScrollbarStyle, verticalPageScrollbarStyle, onHorizontalPageScroll, onVerticalPageScroll,
-    resolveTableScrollElement, schedulePageScrollbarSync, scheduleResponsiveTableLayout, flushResponsiveTableLayout,
+    resolveTableScrollElement, syncPageScrollbars, schedulePageScrollbarSync, scheduleResponsiveTableLayout, flushResponsiveTableLayout,
   }
 }
