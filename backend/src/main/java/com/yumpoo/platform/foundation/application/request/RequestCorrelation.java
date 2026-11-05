@@ -5,11 +5,7 @@ import java.util.UUID;
 /**
  * 一次同步或异步执行链使用的稳定关联标识。
  */
-public record RequestCorrelation(
-        String requestId,
-        String correlationId,
-        UUID causationId
-) {
+public record RequestCorrelation(String requestId, String correlationId, UUID causationId) {
 
     public RequestCorrelation {
         requestId = RequestIdContext.requireValid(requestId, "requestId");

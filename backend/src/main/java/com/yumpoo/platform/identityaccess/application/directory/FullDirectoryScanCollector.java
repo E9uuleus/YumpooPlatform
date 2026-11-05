@@ -35,8 +35,7 @@ public final class FullDirectoryScanCollector {
                 || !first.pageTrajectoryHash.equals(repeated.pageTrajectoryHash)) {
             throw failure(
                     "DIRECTORY_OMITTED_CURSOR_MISMATCH",
-                    "Repeated omitted-cursor scans did not produce the same directory snapshot"
-            );
+                    "Repeated omitted-cursor scans did not produce the same directory snapshot");
         }
         return repeated.result(DirectoryScanResult.CursorTerminationMode.OMITTED_CONFIRMED);
     }
@@ -47,17 +46,14 @@ public final class FullDirectoryScanCollector {
         List<String> pageHashes = new ArrayList<>();
         String cursor = "";
 
-        for (int pageNumber = 1;
-             pageNumber <= DirectorySnapshotCollector.MAX_PAGE_COUNT;
-             pageNumber++) {
+        for (int pageNumber = 1; pageNumber <= DirectorySnapshotCollector.MAX_PAGE_COUNT; pageNumber++) {
             WeComDirectoryPage page;
             try {
                 page = gateway.fetchPage(cursor, pageSize);
             } catch (WeComDirectoryGatewayException exception) {
                 throw failure(
                         "DIRECTORY_SCAN_PROVIDER_FAILED",
-                        "The directory provider rejected or could not complete a page request"
-                );
+                        "The directory provider rejected or could not complete a page request");
             }
             if (page == null) {
                 throw failure("DIRECTORY_SCAN_MALFORMED", "The directory provider returned no page");
@@ -67,9 +63,7 @@ public final class FullDirectoryScanCollector {
             for (String member : pageMembers) {
                 if (!members.add(member)) {
                     throw failure(
-                            "DIRECTORY_DUPLICATE_MEMBER",
-                            "The directory scan returned a duplicate member identifier"
-                    );
+                            "DIRECTORY_DUPLICATE_MEMBER", "The directory scan returned a duplicate member identifier");
                 }
             }
             pageHashes.add(DirectoryCanonicalHash.strings("directory-page-v1", pageMembers));
@@ -80,8 +74,7 @@ public final class FullDirectoryScanCollector {
                         List.copyOf(members),
                         pageNumber,
                         page.cursorState(),
-                        DirectoryCanonicalHash.strings("directory-pages-v1", pageHashes)
-                );
+                        DirectoryCanonicalHash.strings("directory-pages-v1", pageHashes));
             }
             if (!observedCursors.add(page.nextCursor())) {
                 throw failure("DIRECTORY_CURSOR_LOOP", "The directory cursor repeated before termination");
@@ -99,16 +92,14 @@ public final class FullDirectoryScanCollector {
             List<String> members,
             int pageCount,
             WeComDirectoryPage.CursorState terminalState,
-            String pageTrajectoryHash
-    ) {
+            String pageTrajectoryHash) {
         private DirectoryScanResult result(DirectoryScanResult.CursorTerminationMode mode) {
             return new DirectoryScanResult(
                     members,
                     mode,
                     pageCount,
                     DirectoryCanonicalHash.strings("directory-members-v1", members),
-                    pageTrajectoryHash
-            );
+                    pageTrajectoryHash);
         }
     }
 }

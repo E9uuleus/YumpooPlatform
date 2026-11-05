@@ -10,6 +10,4 @@ public record CompanyConfigurationView(
         ZoneId timezone,
         DayOfWeek weekStartDay,
         int defaultWorkdayMinutes,
-        long rowVersion
-) {
-}
+        long rowVersion) {}

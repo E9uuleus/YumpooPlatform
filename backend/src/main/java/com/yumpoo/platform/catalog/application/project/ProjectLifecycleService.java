@@ -1,16 +1,15 @@
 package com.yumpoo.platform.catalog.application.project;
 
+import com.yumpoo.platform.catalog.application.workspace.WorkspaceRepository;
 import com.yumpoo.platform.catalog.domain.project.Project;
 import com.yumpoo.platform.catalog.domain.project.ProjectLifecycle;
 import com.yumpoo.platform.catalog.domain.project.ProjectMembershipStatus;
-import com.yumpoo.platform.catalog.application.workspace.WorkspaceRepository;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
+import java.time.Clock;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.Clock;
 
 @Service
 public class ProjectLifecycleService {
@@ -20,9 +19,11 @@ public class ProjectLifecycleService {
     private final WorkspaceRepository workspaces;
     private final Clock clock;
 
-    public ProjectLifecycleService(ProjectRepository projects,
-                                   ProjectMembershipRepository memberships,
-                                   WorkspaceRepository workspaces, Clock clock) {
+    public ProjectLifecycleService(
+            ProjectRepository projects,
+            ProjectMembershipRepository memberships,
+            WorkspaceRepository workspaces,
+            Clock clock) {
         this.projects = projects;
         this.memberships = memberships;
         this.workspaces = workspaces;
@@ -48,8 +49,8 @@ public class ProjectLifecycleService {
             throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
         }
         requireLifecycle(before, ProjectLifecycle.ACTIVE);
-        Project after = projects.archive(before.archive(command.actorUserId(), clock.instant()),
-                        command.expectedRowVersion())
+        Project after = projects.archive(
+                        before.archive(command.actorUserId(), clock.instant()), command.expectedRowVersion())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
         return snapshot(after);
     }
@@ -60,8 +61,9 @@ public class ProjectLifecycleService {
         requireVersion(project, command.expectedRowVersion());
         requireLifecycle(project, ProjectLifecycle.ARCHIVED);
         requireNotScheduled(project);
-        boolean membershipActive = memberships.find(project.companyId(), project.id(),
-                        project.ownerUserId()).map(member -> member.status() == ProjectMembershipStatus.ACTIVE)
+        boolean membershipActive = memberships
+                .find(project.companyId(), project.id(), project.ownerUserId())
+                .map(member -> member.status() == ProjectMembershipStatus.ACTIVE)
                 .orElse(false);
         return new ProjectRestoreState(snapshot(project), membershipActive);
     }
@@ -72,25 +74,24 @@ public class ProjectLifecycleService {
         requireVersion(before, command.expectedRowVersion());
         requireLifecycle(before, ProjectLifecycle.ARCHIVED);
         requireNotScheduled(before);
-        if (workspaces.findMainForShare(before.companyId())
-                .filter(workspace -> workspace.id().equals(before.workspaceId())).isEmpty()) {
-            throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION,
-                    "WORKSPACE_UNAVAILABLE");
+        if (workspaces
+                .findMainForShare(before.companyId())
+                .filter(workspace -> workspace.id().equals(before.workspaceId()))
+                .isEmpty()) {
+            throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION, "WORKSPACE_UNAVAILABLE");
         }
-        Project after = projects.reopen(before.reopen(command.actorUserId(), clock.instant()),
-                        command.expectedRowVersion())
+        Project after = projects.reopen(
+                        before.reopen(command.actorUserId(), clock.instant()), command.expectedRowVersion())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
         return snapshot(after);
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
-    public ProjectApplicationSnapshot lockForNewFact(java.util.UUID companyId,
-                                                      java.util.UUID projectId) {
+    public ProjectApplicationSnapshot lockForNewFact(java.util.UUID companyId, java.util.UUID projectId) {
         Project project = projects.lockByIdForShare(companyId, projectId)
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
         if (project.lifecycle() == ProjectLifecycle.ARCHIVED) {
-            throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION,
-                    "PROJECT_ARCHIVED");
+            throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION, "PROJECT_ARCHIVED");
         }
         if (project.ended()) {
             throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION, "PROJECT_ENDED");
@@ -99,8 +100,7 @@ public class ProjectLifecycleService {
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
-    public ProjectApplicationSnapshot lockForModeration(java.util.UUID companyId,
-                                                         java.util.UUID projectId) {
+    public ProjectApplicationSnapshot lockForModeration(java.util.UUID companyId, java.util.UUID projectId) {
         return lockForNewFact(companyId, projectId);
     }
 
@@ -113,7 +113,8 @@ public class ProjectLifecycleService {
     public ProjectApplicationSnapshot changeEnded(ProjectEndCommand command) {
         Project before = requireEndable(command);
         var now = clock.instant();
-        Project next = command.ended() ? before.end(command.actorUserId(), now) : before.resume(command.actorUserId(), now);
+        Project next =
+                command.ended() ? before.end(command.actorUserId(), now) : before.resume(command.actorUserId(), now);
         return snapshot(projects.changeEnded(next, command.expectedRowVersion())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT)));
     }
@@ -124,7 +125,8 @@ public class ProjectLifecycleService {
         if (!command.admin() && !project.ownerUserId().equals(command.actorUserId()))
             throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
         requireLifecycle(project, ProjectLifecycle.ACTIVE);
-        if (project.ended() == command.ended()) throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
+        if (project.ended() == command.ended())
+            throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
         return project;
     }
 
@@ -152,8 +154,16 @@ public class ProjectLifecycleService {
     }
 
     private static ProjectApplicationSnapshot snapshot(Project project) {
-        return new ProjectApplicationSnapshot(project.id(), project.companyId(), project.workspaceId(),
-                project.code(), project.name(), project.description(),
-                project.lifecycle().name(), project.ownerUserId(), project.rowVersion(), project.endedAt());
+        return new ProjectApplicationSnapshot(
+                project.id(),
+                project.companyId(),
+                project.workspaceId(),
+                project.code(),
+                project.name(),
+                project.description(),
+                project.lifecycle().name(),
+                project.ownerUserId(),
+                project.rowVersion(),
+                project.endedAt());
     }
 }

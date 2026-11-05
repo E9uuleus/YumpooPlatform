@@ -11,8 +11,7 @@ public record Company(
         ZoneId timezone,
         DayOfWeek weekStartDay,
         int defaultWorkdayMinutes,
-        long rowVersion
-) {
+        long rowVersion) {
 
     public Company {
         Objects.requireNonNull(id, "id must not be null");

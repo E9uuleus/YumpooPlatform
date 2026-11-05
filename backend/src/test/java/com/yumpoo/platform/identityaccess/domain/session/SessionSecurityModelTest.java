@@ -1,16 +1,15 @@
 package com.yumpoo.platform.identityaccess.domain.session;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.yumpoo.platform.identityaccess.application.session.CredentialPurpose;
 import com.yumpoo.platform.identityaccess.application.session.SecureSessionCredentialGenerator;
 import com.yumpoo.platform.identityaccess.application.session.SessionKeyRing;
-import org.junit.jupiter.api.Test;
-
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
 
 class SessionSecurityModelTest {
 
@@ -20,10 +19,7 @@ class SessionSecurityModelTest {
     @Test
     void opaqueCredentialsUsePurposeSeparatedHmacAndRedactValues() {
         var credential = new SecureSessionCredentialGenerator().generate();
-        SessionKeyRing keyRing = new SessionKeyRing(
-                new SessionKeyRing.Key("current-v1", new byte[32], null),
-                null
-        );
+        SessionKeyRing keyRing = new SessionKeyRing(new SessionKeyRing.Key("current-v1", new byte[32], null), null);
 
         var session = keyRing.fingerprintCurrent(CredentialPurpose.SESSION, credential);
         var csrf = keyRing.fingerprintCurrent(CredentialPurpose.CSRF, credential);
@@ -40,37 +36,25 @@ class SessionSecurityModelTest {
         var credential = new SecureSessionCredentialGenerator().generate();
         SessionKeyRing keyRing = new SessionKeyRing(
                 new SessionKeyRing.Key("current", filled(1), null),
-                new SessionKeyRing.Key("previous", filled(2), cutoff)
-        );
+                new SessionKeyRing.Key("previous", filled(2), cutoff));
 
-        assertThat(keyRing.fingerprint(
-                "previous", CredentialPurpose.SESSION, credential, cutoff.minusNanos(1)
-        )).isPresent();
-        assertThat(keyRing.fingerprint(
-                "previous", CredentialPurpose.SESSION, credential, cutoff
-        )).isEmpty();
+        assertThat(keyRing.fingerprint("previous", CredentialPurpose.SESSION, credential, cutoff.minusNanos(1)))
+                .isPresent();
+        assertThat(keyRing.fingerprint("previous", CredentialPurpose.SESSION, credential, cutoff))
+                .isEmpty();
     }
 
     @Test
     void csrfRepairCredentialIsStablePerSessionAndCurrentKey() {
-        SessionKeyRing keyRing = new SessionKeyRing(
-                new SessionKeyRing.Key("current-v1", filled(1), null),
-                null
-        );
-        LoginSession first = session(
-                UUID.fromString("30000000-0000-4000-8000-000000000031")
-        );
-        LoginSession second = session(
-                UUID.fromString("30000000-0000-4000-8000-000000000032")
-        );
+        SessionKeyRing keyRing = new SessionKeyRing(new SessionKeyRing.Key("current-v1", filled(1), null), null);
+        LoginSession first = session(UUID.fromString("30000000-0000-4000-8000-000000000031"));
+        LoginSession second = session(UUID.fromString("30000000-0000-4000-8000-000000000032"));
 
         var firstRepair = keyRing.deriveCurrentCsrfRepairCredential(first);
         var repeatedRepair = keyRing.deriveCurrentCsrfRepairCredential(first);
         var secondRepair = keyRing.deriveCurrentCsrfRepairCredential(second);
-        var rotatedKeyRepair = new SessionKeyRing(
-                new SessionKeyRing.Key("current-v2", filled(2), null),
-                null
-        ).deriveCurrentCsrfRepairCredential(first);
+        var rotatedKeyRepair = new SessionKeyRing(new SessionKeyRing.Key("current-v2", filled(2), null), null)
+                .deriveCurrentCsrfRepairCredential(first);
 
         assertThat(firstRepair.value()).matches("[A-Za-z0-9_-]{43}");
         assertThat(repeatedRepair).isEqualTo(firstRepair);
@@ -81,13 +65,8 @@ class SessionSecurityModelTest {
 
     @Test
     void expirationBoundariesAndTerminalFactsAreExact() {
-        LoginSession active = session(
-                SessionStatus.ACTIVE,
-                null,
-                null,
-                ISSUED_AT.plusSeconds(60),
-                ISSUED_AT.plusSeconds(120)
-        );
+        LoginSession active =
+                session(SessionStatus.ACTIVE, null, null, ISSUED_AT.plusSeconds(60), ISSUED_AT.plusSeconds(120));
 
         assertThat(active.expiredAt(ISSUED_AT.plusSeconds(60).minusNanos(1))).isFalse();
         assertThat(active.expiredAt(ISSUED_AT.plusSeconds(60))).isTrue();
@@ -97,12 +76,8 @@ class SessionSecurityModelTest {
                 .isEqualTo(SessionRevocationReason.ABSOLUTE_EXPIRED);
 
         assertThatThrownBy(() -> session(
-                SessionStatus.REVOKED,
-                null,
-                null,
-                ISSUED_AT.plusSeconds(60),
-                ISSUED_AT.plusSeconds(120)
-        )).isInstanceOf(IllegalArgumentException.class);
+                        SessionStatus.REVOKED, null, null, ISSUED_AT.plusSeconds(60), ISSUED_AT.plusSeconds(120)))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     private static LoginSession session(
@@ -110,8 +85,7 @@ class SessionSecurityModelTest {
             Instant revokedAt,
             SessionRevocationReason reason,
             Instant idleExpiry,
-            Instant absoluteExpiry
-    ) {
+            Instant absoluteExpiry) {
         return new LoginSession(
                 UUID.randomUUID(),
                 UUID.randomUUID(),
@@ -131,8 +105,7 @@ class SessionSecurityModelTest {
                 revokedAt,
                 reason,
                 absoluteExpiry.plusSeconds(86_400),
-                false
-        );
+                false);
     }
 
     private static LoginSession session(UUID sessionId) {
@@ -155,8 +128,7 @@ class SessionSecurityModelTest {
                 null,
                 null,
                 ISSUED_AT.plusSeconds(120 + 86_400),
-                false
-        );
+                false);
     }
 
     private static byte[] filled(int value) {

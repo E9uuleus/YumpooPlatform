@@ -14,6 +14,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import java.util.List;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,8 +23,6 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 
-import java.util.List;
-
 @ApiV1Controller
 public final class ScheduledJobController {
     private final CurrentActorProvider actors;
@@ -31,8 +30,11 @@ public final class ScheduledJobController {
     private final CompanyConfigurationQuery company;
     private final IfMatchParser ifMatchParser;
 
-    public ScheduledJobController(CurrentActorProvider actors, ScheduledJobService service,
-            CompanyConfigurationQuery company, IfMatchParser ifMatchParser) {
+    public ScheduledJobController(
+            CurrentActorProvider actors,
+            ScheduledJobService service,
+            CompanyConfigurationQuery company,
+            IfMatchParser ifMatchParser) {
         this.actors = actors;
         this.service = service;
         this.company = company;
@@ -42,22 +44,40 @@ public final class ScheduledJobController {
     @GetMapping("/admin/scheduled-jobs")
     ResponseEntity<ScheduledJobList> list() {
         CurrentActor actor = actors.requiredActive();
-        if (!actor.hasRole(PlatformRoleCode.COMPANY_ADMIN)) throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(new ScheduledJobList(service.list(actor.companyId(), company.current().timezone())));
+        if (!actor.hasRole(PlatformRoleCode.COMPANY_ADMIN))
+            throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(new ScheduledJobList(
+                        service.list(actor.companyId(), company.current().timezone())));
     }
 
     @PutMapping("/admin/scheduled-jobs/{jobCode}")
-    ResponseEntity<ScheduledJobView> update(@PathVariable String jobCode, @Valid @RequestBody UpdateRequest request,
+    ResponseEntity<ScheduledJobView> update(
+            @PathVariable String jobCode,
+            @Valid @RequestBody UpdateRequest request,
             @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatch) {
         CurrentActor actor = actors.requiredActive();
-        if (!actor.hasRole(PlatformRoleCode.COMPANY_ADMIN)) throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
+        if (!actor.hasRole(PlatformRoleCode.COMPANY_ADMIN))
+            throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
         long expectedVersion = ifMatchParser.parseForVisibleResource(service.exists(jobCode), ifMatch);
-        ScheduledJobView view = service.update(actor.companyId(), jobCode, request.enabled(), request.cron(),
-                company.current().timezone(), actor.userId(), expectedVersion);
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).eTag(view.etag()).body(view);
+        ScheduledJobView view = service.update(
+                actor.companyId(),
+                jobCode,
+                request.enabled(),
+                request.cron(),
+                company.current().timezone(),
+                actor.userId(),
+                expectedVersion);
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .eTag(view.etag())
+                .body(view);
     }
 
     record ScheduledJobList(List<ScheduledJobView> items) {}
-    record UpdateRequest(@NotNull Boolean enabled, @NotBlank @Size(max = 64) String cron) {}
+
+    record UpdateRequest(
+            @NotNull Boolean enabled,
+            @NotBlank @Size(max = 64) String cron) {}
 }

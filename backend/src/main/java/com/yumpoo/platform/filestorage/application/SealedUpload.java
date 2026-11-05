@@ -6,12 +6,7 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 
 /** 已完整接收并封存、尚未发布的隔离对象。 */
-public record SealedUpload(
-        UUID uploadId,
-        Path quarantinedPath,
-        long sizeBytes,
-        String sha256
-) {
+public record SealedUpload(UUID uploadId, Path quarantinedPath, long sizeBytes, String sha256) {
     private static final Pattern SHA_256 = Pattern.compile("^[0-9a-f]{64}$");
 
     public SealedUpload {

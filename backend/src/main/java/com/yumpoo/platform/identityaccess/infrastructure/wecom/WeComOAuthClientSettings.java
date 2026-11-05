@@ -3,12 +3,7 @@ package com.yumpoo.platform.identityaccess.infrastructure.wecom;
 import java.net.URI;
 import java.util.Objects;
 
-record WeComOAuthClientSettings(
-        String corpId,
-        String agentId,
-        String appSecret,
-        URI callbackUri
-) {
+record WeComOAuthClientSettings(String corpId, String agentId, String appSecret, URI callbackUri) {
 
     WeComOAuthClientSettings {
         corpId = requireText(corpId, "corpId");

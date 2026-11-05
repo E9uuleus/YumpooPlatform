@@ -1,23 +1,17 @@
 package com.yumpoo.platform.identityaccess.infrastructure.identity;
 
-import com.yumpoo.platform.identityaccess.application.directory.DirectoryMemberProvisioningResult;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.yumpoo.platform.identityaccess.application.directory.DirectoryMemberProvisioningOutcome;
+import com.yumpoo.platform.identityaccess.application.directory.DirectoryMemberProvisioningResult;
 import com.yumpoo.platform.identityaccess.application.directory.DirectoryMemberProvisioningService;
-import com.yumpoo.platform.identityaccess.application.directory.WeComMemberProfile;
 import com.yumpoo.platform.identityaccess.application.directory.DirectoryOptionalField;
+import com.yumpoo.platform.identityaccess.application.directory.WeComMemberProfile;
 import com.yumpoo.platform.identityaccess.domain.identity.AccountStatus;
 import com.yumpoo.platform.identityaccess.domain.identity.EmploymentStatus;
 import com.yumpoo.platform.identityaccess.domain.identity.ProfileHash;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.jdbc.core.simple.JdbcClient;
-
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -28,17 +22,20 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.simple.JdbcClient;
 
 @Import(PostgreSqlTestContainerConfiguration.class)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 class DirectoryMemberProvisioningIT {
 
-    private static final UUID COMPANY_ID = UUID.fromString(
-            "00000000-0000-4000-8000-000000000001"
-    );
+    private static final UUID COMPANY_ID = UUID.fromString("00000000-0000-4000-8000-000000000001");
 
     @Autowired
     private DirectoryMemberProvisioningService service;
@@ -55,18 +52,10 @@ class DirectoryMemberProvisioningIT {
 
     @Test
     void createsThenRefreshesTheSameStableBinding() {
-        DirectoryMemberProvisioningResult created = service.provisionOrRefresh(profile(
-                "Member-A",
-                "Alice",
-                "13800000000",
-                "a"
-        ));
-        DirectoryMemberProvisioningResult refreshed = service.provisionOrRefresh(profile(
-                "Member-A",
-                "Alice Renamed",
-                "13900000000",
-                "b"
-        ));
+        DirectoryMemberProvisioningResult created =
+                service.provisionOrRefresh(profile("Member-A", "Alice", "13800000000", "a"));
+        DirectoryMemberProvisioningResult refreshed =
+                service.provisionOrRefresh(profile("Member-A", "Alice Renamed", "13900000000", "b"));
 
         assertThat(created.created()).isTrue();
         assertThat(created.profileChanged()).isTrue();
@@ -79,30 +68,24 @@ class DirectoryMemberProvisioningIT {
         assertThat(refreshed.rowVersion()).isEqualTo(1);
         assertThat(count("identity_user")).isOne();
         assertThat(count("external_identity")).isOne();
-        assertThat(jdbcClient.sql("""
+        assertThat(jdbcClient
+                        .sql("""
                         SELECT display_name || '|' || mobile || '|' || workspace_slug
                         FROM yumpoo.identity_user
                         WHERE id = :id
                         """)
-                .param("id", created.userId())
-                .query(String.class)
-                .single()).isEqualTo("Alice Renamed|13900000000|member-a");
+                        .param("id", created.userId())
+                        .query(String.class)
+                        .single())
+                .isEqualTo("Alice Renamed|13900000000|member-a");
     }
 
     @Test
     void doesNotMergeDifferentExternalIdsWithMatchingProfileFields() {
-        DirectoryMemberProvisioningResult first = service.provisionOrRefresh(profile(
-                "member-a",
-                "Same Name",
-                "13800000000",
-                "a"
-        ));
-        DirectoryMemberProvisioningResult second = service.provisionOrRefresh(profile(
-                "member-b",
-                "Same Name",
-                "13800000000",
-                "a"
-        ));
+        DirectoryMemberProvisioningResult first =
+                service.provisionOrRefresh(profile("member-a", "Same Name", "13800000000", "a"));
+        DirectoryMemberProvisioningResult second =
+                service.provisionOrRefresh(profile("member-b", "Same Name", "13800000000", "a"));
 
         assertThat(second.userId()).isNotEqualTo(first.userId());
         assertThat(count("identity_user")).isEqualTo(2);
@@ -111,41 +94,26 @@ class DirectoryMemberProvisioningIT {
 
     @Test
     void allocatesReadableImmutableSlugsAndDisambiguatesNormalizedCollisions() {
-        DirectoryMemberProvisioningResult first = service.provisionOrRefresh(profile(
-                "Member-A",
-                "First",
-                null,
-                "a"
-        ));
-        DirectoryMemberProvisioningResult second = service.provisionOrRefresh(profile(
-                "member/a",
-                "Second",
-                null,
-                "b"
-        ));
+        DirectoryMemberProvisioningResult first = service.provisionOrRefresh(profile("Member-A", "First", null, "a"));
+        DirectoryMemberProvisioningResult second = service.provisionOrRefresh(profile("member/a", "Second", null, "b"));
 
         assertThat(workspaceSlug(first.userId())).isEqualTo("member-a");
-        assertThat(workspaceSlug(second.userId())).isEqualTo(
-                "member-a-" + second.userId().toString().replace("-", "").substring(0, 8)
-        );
+        assertThat(workspaceSlug(second.userId()))
+                .isEqualTo("member-a-"
+                        + second.userId().toString().replace("-", "").substring(0, 8));
         assertThatThrownBy(() -> jdbcClient.sql("""
                         UPDATE yumpoo.identity_user
                         SET workspace_slug = 'changed'
                         WHERE id = :id
-                        """)
-                .param("id", first.userId())
-                .update()).isInstanceOf(DataIntegrityViolationException.class);
+                        """).param("id", first.userId()).update())
+                .isInstanceOf(DataIntegrityViolationException.class);
         assertThat(workspaceSlug(first.userId())).isEqualTo("member-a");
     }
 
     @Test
     void returningMemberRestoresEmploymentButPreservesAccountDisableAndLeftHistory() {
-        DirectoryMemberProvisioningResult created = service.provisionOrRefresh(profile(
-                "member-status",
-                "Before",
-                null,
-                "a"
-        ));
+        DirectoryMemberProvisioningResult created =
+                service.provisionOrRefresh(profile("member-status", "Before", null, "a"));
         jdbcClient.sql("""
                         UPDATE yumpoo.identity_user
                         SET employment_status = 'LEFT',
@@ -158,30 +126,23 @@ class DirectoryMemberProvisioningIT {
                             updated_at = transaction_timestamp(),
                             row_version = row_version + 1
                         WHERE id = :id
-                        """)
-                .param("id", created.userId())
-                .update();
+                        """).param("id", created.userId()).update();
         jdbcClient.sql("""
                         UPDATE yumpoo.external_identity
                         SET provider_employment_status = 'LEFT',
                             updated_at = transaction_timestamp()
                         WHERE user_id = :id
-                        """)
-                .param("id", created.userId())
-                .update();
+                        """).param("id", created.userId()).update();
 
-        DirectoryMemberProvisioningResult refreshed = service.provisionOrRefresh(profile(
-                "member-status",
-                "After",
-                "13900000000",
-                "b"
-        ));
+        DirectoryMemberProvisioningResult refreshed =
+                service.provisionOrRefresh(profile("member-status", "After", "13900000000", "b"));
 
         assertThat(refreshed.employmentStatus()).isEqualTo(EmploymentStatus.ACTIVE);
         assertThat(refreshed.accountStatus()).isEqualTo(AccountStatus.DISABLED);
         assertThat(refreshed.outcome()).isEqualTo(DirectoryMemberProvisioningOutcome.RETURNED);
         assertThat(refreshed.authorizationVersion()).isOne();
-        assertThat(jdbcClient.sql("""
+        assertThat(jdbcClient
+                        .sql("""
                         SELECT identity_user.employment_status || '|'
                             || external_identity.provider_employment_status || '|'
                             || identity_user.account_status || '|'
@@ -192,57 +153,36 @@ class DirectoryMemberProvisioningIT {
                           ON external_identity.user_id = identity_user.id
                         WHERE identity_user.id = :id
                         """)
-                .param("id", created.userId())
-                .query(String.class)
-                .single()).isEqualTo(
-                        "ACTIVE|ACTIVE|DISABLED|DIRECTORY_CONFIRMED|SECURITY_REVIEW"
-                );
+                        .param("id", created.userId())
+                        .query(String.class)
+                        .single())
+                .isEqualTo("ACTIVE|ACTIVE|DISABLED|DIRECTORY_CONFIRMED|SECURITY_REVIEW");
     }
 
     @Test
     void databaseRejectsDuplicateBindingsCrossCompanyReferencesAndInvalidCodes() {
-        DirectoryMemberProvisioningResult first = service.provisionOrRefresh(profile(
-                "member-a",
-                "Alice",
-                null,
-                "a"
-        ));
+        DirectoryMemberProvisioningResult first = service.provisionOrRefresh(profile("member-a", "Alice", null, "a"));
         UUID otherUserId = UUID.randomUUID();
         insertActiveUser(otherUserId, "Other");
 
-        assertThatThrownBy(() -> insertExternalIdentity(
-                UUID.randomUUID(),
-                otherUserId,
-                "member-a",
-                "WECOM",
-                "a".repeat(64)
-        )).isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() ->
+                        insertExternalIdentity(UUID.randomUUID(), otherUserId, "member-a", "WECOM", "a".repeat(64)))
+                .isInstanceOf(DataIntegrityViolationException.class);
+
+        assertThatThrownBy(() ->
+                        insertExternalIdentity(UUID.randomUUID(), first.userId(), "member-c", "WECOM", "a".repeat(64)))
+                .isInstanceOf(DataIntegrityViolationException.class);
 
         assertThatThrownBy(() -> insertExternalIdentity(
-                UUID.randomUUID(),
-                first.userId(),
-                "member-c",
-                "WECOM",
-                "a".repeat(64)
-        )).isInstanceOf(DataIntegrityViolationException.class);
+                        UUID.randomUUID(), otherUserId, "member-invalid-provider", "OTHER", "a".repeat(64)))
+                .isInstanceOf(DataIntegrityViolationException.class);
 
         assertThatThrownBy(() -> insertExternalIdentity(
-                UUID.randomUUID(),
-                otherUserId,
-                "member-invalid-provider",
-                "OTHER",
-                "a".repeat(64)
-        )).isInstanceOf(DataIntegrityViolationException.class);
+                        UUID.randomUUID(), otherUserId, "member-invalid-hash", "WECOM", "not-a-sha256"))
+                .isInstanceOf(DataIntegrityViolationException.class);
 
-        assertThatThrownBy(() -> insertExternalIdentity(
-                UUID.randomUUID(),
-                otherUserId,
-                "member-invalid-hash",
-                "WECOM",
-                "not-a-sha256"
-        )).isInstanceOf(DataIntegrityViolationException.class);
-
-        assertThatThrownBy(() -> jdbcClient.sql("""
+        assertThatThrownBy(() -> jdbcClient
+                        .sql("""
                         INSERT INTO yumpoo.identity_user (
                             id, company_id, employment_status, account_status,
                             display_name, directory_synced_at, row_version,
@@ -252,10 +192,11 @@ class DirectoryMemberProvisioningIT {
                             'Invalid', :now, 0, :now, :now
                         )
                         """)
-                .param("id", UUID.randomUUID())
-                .param("companyId", COMPANY_ID)
-                .param("now", databaseInstant())
-                .update()).isInstanceOf(DataIntegrityViolationException.class);
+                        .param("id", UUID.randomUUID())
+                        .param("companyId", COMPANY_ID)
+                        .param("now", databaseInstant())
+                        .update())
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
@@ -270,12 +211,7 @@ class DirectoryMemberProvisioningIT {
                 futures.add(executor.submit(() -> {
                     ready.countDown();
                     start.await();
-                    return service.provisionOrRefresh(profile(
-                            "member-concurrent",
-                            "Concurrent",
-                            null,
-                            "c"
-                    ));
+                    return service.provisionOrRefresh(profile("member-concurrent", "Concurrent", null, "c"));
                 }));
             }
             ready.await();
@@ -286,44 +222,39 @@ class DirectoryMemberProvisioningIT {
                 results.add(future.get());
             }
 
-            assertThat(results).extracting(DirectoryMemberProvisioningResult::userId)
+            assertThat(results)
+                    .extracting(DirectoryMemberProvisioningResult::userId)
                     .containsOnly(results.getFirst().userId());
-            assertThat(results).extracting(
-                            DirectoryMemberProvisioningResult::externalIdentityId
-                    )
+            assertThat(results)
+                    .extracting(DirectoryMemberProvisioningResult::externalIdentityId)
                     .containsOnly(results.getFirst().externalIdentityId());
-            assertThat(results).filteredOn(DirectoryMemberProvisioningResult::created)
+            assertThat(results)
+                    .filteredOn(DirectoryMemberProvisioningResult::created)
                     .hasSize(1);
-            assertThat(results).filteredOn(result -> !result.created())
+            assertThat(results)
+                    .filteredOn(result -> !result.created())
                     .allSatisfy(result -> assertThat(result.profileChanged()).isFalse());
             assertThat(count("identity_user")).isOne();
             assertThat(count("external_identity")).isOne();
         }
     }
 
-    private WeComMemberProfile profile(
-            String externalUserId,
-            String displayName,
-            String mobile,
-            String hashCharacter
-    ) {
+    private WeComMemberProfile profile(String externalUserId, String displayName, String mobile, String hashCharacter) {
         return new WeComMemberProfile(
                 externalUserId,
                 displayName,
                 DirectoryOptionalField.present(displayName.toLowerCase().replace(' ', '.') + "@example.test"),
-                mobile == null
-                        ? DirectoryOptionalField.clear()
-                        : DirectoryOptionalField.present(mobile),
+                mobile == null ? DirectoryOptionalField.clear() : DirectoryOptionalField.present(mobile),
                 "Engineering",
-                new ProfileHash(hashCharacter.repeat(64))
-        );
+                new ProfileHash(hashCharacter.repeat(64)));
     }
 
     private int count(String tableName) {
         if (!Set.of("identity_user", "external_identity").contains(tableName)) {
             throw new IllegalArgumentException("Unsupported table");
         }
-        return jdbcClient.sql("SELECT count(*) FROM yumpoo." + tableName)
+        return jdbcClient
+                .sql("SELECT count(*) FROM yumpoo." + tableName)
                 .query(Integer.class)
                 .single();
     }
@@ -333,14 +264,12 @@ class DirectoryMemberProvisioningIT {
                         SELECT workspace_slug
                         FROM yumpoo.identity_user
                         WHERE id = :id
-                        """)
-                .param("id", userId)
-                .query(String.class)
-                .single();
+                        """).param("id", userId).query(String.class).single();
     }
 
     private void insertActiveUser(UUID userId, String displayName) {
-        jdbcClient.sql("""
+        jdbcClient
+                .sql("""
                         INSERT INTO yumpoo.identity_user (
                             id, company_id, employment_status, account_status,
                             display_name, directory_synced_at, row_version,
@@ -358,13 +287,9 @@ class DirectoryMemberProvisioningIT {
     }
 
     private void insertExternalIdentity(
-            UUID identityId,
-            UUID userId,
-            String externalUserId,
-            String provider,
-            String hash
-    ) {
-        jdbcClient.sql("""
+            UUID identityId, UUID userId, String externalUserId, String provider, String hash) {
+        jdbcClient
+                .sql("""
                         INSERT INTO yumpoo.external_identity (
                             id, company_id, user_id, provider, external_user_id,
                             provider_employment_status, raw_profile_hash,
@@ -385,9 +310,6 @@ class DirectoryMemberProvisioningIT {
     }
 
     private static OffsetDateTime databaseInstant() {
-        return OffsetDateTime.ofInstant(
-                Instant.parse("2026-08-13T12:00:00Z"),
-                ZoneOffset.UTC
-        );
+        return OffsetDateTime.ofInstant(Instant.parse("2026-08-13T12:00:00Z"), ZoneOffset.UTC);
     }
 }

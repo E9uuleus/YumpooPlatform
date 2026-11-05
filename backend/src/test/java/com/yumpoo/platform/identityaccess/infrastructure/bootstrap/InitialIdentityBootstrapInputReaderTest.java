@@ -1,17 +1,16 @@
 package com.yumpoo.platform.identityaccess.infrastructure.bootstrap;
 
-import com.yumpoo.platform.identityaccess.application.bootstrap.InitialIdentityBootstrapException;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-import tools.jackson.databind.ObjectMapper;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.yumpoo.platform.identityaccess.application.bootstrap.InitialIdentityBootstrapException;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import tools.jackson.databind.ObjectMapper;
 
 class InitialIdentityBootstrapInputReaderTest {
 
@@ -37,8 +36,7 @@ class InitialIdentityBootstrapInputReaderTest {
         assertThat(result.expectedCorpId()).isEqualTo("ww-test-corp");
         assertThat(result.appManagerWeComUserId()).isEqualTo("m115-app-manager");
         assertThat(result.companyAdminWeComUserId()).isEqualTo("m115-company-admin");
-        assertThat(result.toString()).isEqualTo(
-                "InitialIdentityBootstrapInput[identityData=REDACTED]");
+        assertThat(result.toString()).isEqualTo("InitialIdentityBootstrapInput[identityData=REDACTED]");
     }
 
     @Test
@@ -91,8 +89,7 @@ class InitialIdentityBootstrapInputReaderTest {
                   "companyAdminWeComUserId": "same-member"
                 }
                 """);
-        assertCode(reader(secrets), duplicate,
-                "INITIAL_IDENTITY_BOOTSTRAP_TARGETS_NOT_DISTINCT");
+        assertCode(reader(secrets), duplicate, "INITIAL_IDENTITY_BOOTSTRAP_TARGETS_NOT_DISTINCT");
     }
 
     private InitialIdentityBootstrapInputReader reader(Path secrets) {
@@ -100,15 +97,10 @@ class InitialIdentityBootstrapInputReaderTest {
                 new ObjectMapper(), secrets.toAbsolutePath().toString());
     }
 
-    private static void assertCode(
-            InitialIdentityBootstrapInputReader reader,
-            Path input,
-            String expectedCode
-    ) {
+    private static void assertCode(InitialIdentityBootstrapInputReader reader, Path input, String expectedCode) {
         assertThatThrownBy(() -> reader.read(input.toAbsolutePath()))
                 .isInstanceOfSatisfying(
                         InitialIdentityBootstrapException.class,
-                        exception -> assertThat(exception.errorCode()).isEqualTo(expectedCode)
-                );
+                        exception -> assertThat(exception.errorCode()).isEqualTo(expectedCode));
     }
 }

@@ -9,10 +9,12 @@ import com.yumpoo.platform.identityaccess.application.session.SessionService;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
+import java.io.IOException;
+import java.time.Clock;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -22,12 +24,9 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.session.NullAuthenticatedSessionStrategy;
 import org.springframework.security.web.csrf.CsrfFilter;
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.csrf.InvalidCsrfTokenException;
 import org.springframework.security.web.csrf.MissingCsrfTokenException;
-import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
-
-import java.io.IOException;
-import java.time.Clock;
 
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
@@ -42,32 +41,26 @@ public class SessionSecurityConfiguration {
             ApiErrorWriter errorWriter,
             LocalAuthenticationProperties localAuthentication,
             WebLoginCompletionService webLoginCompletionService,
-            Clock clock
-    ) throws Exception {
-        SessionBoundCsrfTokenRepository csrfRepository =
-                new SessionBoundCsrfTokenRepository(sessionService, clock);
+            Clock clock)
+            throws Exception {
+        SessionBoundCsrfTokenRepository csrfRepository = new SessionBoundCsrfTokenRepository(sessionService, clock);
         CsrfTokenRequestAttributeHandler requestHandler = new CsrfTokenRequestAttributeHandler();
         requestHandler.setCsrfRequestAttributeName(null);
 
-        http
-                .securityMatcher("/api/v1/**")
-                .sessionManagement(session -> session
-                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+        http.securityMatcher("/api/v1/**")
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .securityContext(context -> context.requireExplicitSave(true))
                 .requestCache(cache -> cache.disable())
                 .formLogin(form -> form.disable())
                 .httpBasic(basic -> basic.disable())
                 .logout(logout -> logout.disable())
                 .anonymous(Customizer.withDefaults())
-                .csrf(csrf -> csrf
-                        .csrfTokenRepository(csrfRepository)
-                        .requireCsrfProtectionMatcher(request ->
-                                SessionRequestContext.present(request)
-                                        && !isSafeMethod(request.getMethod()))
+                .csrf(csrf -> csrf.csrfTokenRepository(csrfRepository)
+                        .requireCsrfProtectionMatcher(
+                                request -> SessionRequestContext.present(request) && !isSafeMethod(request.getMethod()))
                         .csrfTokenRequestHandler(requestHandler)
                         // 每请求认证不代表重新登录；CSRF 轮换由会话签发与退出显式管理。
-                        .sessionAuthenticationStrategy(
-                                new NullAuthenticatedSessionStrategy()))
+                        .sessionAuthenticationStrategy(new NullAuthenticatedSessionStrategy()))
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint(authenticationRequired())
                         .accessDeniedHandler(csrfDenied(errorWriter)))
@@ -77,20 +70,16 @@ public class SessionSecurityConfiguration {
                         // 首次派发已认证并授权；流式下载收尾的异步派发不再携带会话，响应也可能已提交。
                         .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR)
                         .permitAll()
-                        .anyRequest().authenticated())
+                        .anyRequest()
+                        .authenticated())
                 .addFilterBefore(
                         new SessionAuthenticationFilter(
                                 sessionService,
                                 platformRoleQuery,
                                 errorWriter,
-                                new LocalSessionIssuer(
-                                        localAuthentication,
-                                        webLoginCompletionService
-                                ),
-                                clock
-                        ),
-                        CsrfFilter.class
-                );
+                                new LocalSessionIssuer(localAuthentication, webLoginCompletionService),
+                                clock),
+                        CsrfFilter.class);
         return http.build();
     }
 
@@ -102,35 +91,25 @@ public class SessionSecurityConfiguration {
 
     private static AccessDeniedHandler csrfDenied(ApiErrorWriter writer) {
         return (request, response, exception) -> {
-            if (exception instanceof MissingCsrfTokenException
-                    || exception instanceof InvalidCsrfTokenException) {
+            if (exception instanceof MissingCsrfTokenException || exception instanceof InvalidCsrfTokenException) {
                 response.addHeader(
-                        HttpHeaders.SET_COOKIE,
-                        SessionHttpCookies.clearCsrf().toString()
-                );
+                        HttpHeaders.SET_COOKIE, SessionHttpCookies.clearCsrf().toString());
             }
             write(writer, request, response, StandardErrorCode.ACCESS_DENIED);
         };
     }
 
     private static boolean isSafeMethod(String method) {
-        return "GET".equals(method)
-                || "HEAD".equals(method)
-                || "OPTIONS".equals(method)
-                || "TRACE".equals(method);
+        return "GET".equals(method) || "HEAD".equals(method) || "OPTIONS".equals(method) || "TRACE".equals(method);
     }
 
     private static void write(
-            ApiErrorWriter writer,
-            HttpServletRequest request,
-            HttpServletResponse response,
-            StandardErrorCode code
-    ) throws IOException {
+            ApiErrorWriter writer, HttpServletRequest request, HttpServletResponse response, StandardErrorCode code)
+            throws IOException {
         Object requestId = request.getAttribute(RequestIdContext.ATTRIBUTE_NAME);
         writer.write(
                 response,
                 new ApplicationException(code),
-                requestId == null ? "missing-request-id" : requestId.toString()
-        );
+                requestId == null ? "missing-request-id" : requestId.toString());
     }
 }

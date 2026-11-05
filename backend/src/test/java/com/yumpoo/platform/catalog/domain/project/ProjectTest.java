@@ -1,12 +1,11 @@
 package com.yumpoo.platform.catalog.domain.project;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
 
 class ProjectTest {
 
@@ -28,15 +27,15 @@ class ProjectTest {
     @Test
     void fieldLimitsAreRejected() {
         assertThatThrownBy(() -> create("x".repeat(501))).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> Project.create(UUID.randomUUID(), COMPANY_ID, WORKSPACE_ID,
-                "lower", "Project", null, OWNER_ID, OWNER_ID, NOW))
+        assertThatThrownBy(() -> Project.create(
+                        UUID.randomUUID(), COMPANY_ID, WORKSPACE_ID, "lower", "Project", null, OWNER_ID, OWNER_ID, NOW))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void membershipRemovalAndReactivationReuseIdentityAndAdvanceVersion() {
-        ProjectMembership active = ProjectMembership.activeMember(UUID.randomUUID(), COMPANY_ID,
-                UUID.randomUUID(), UUID.randomUUID(), OWNER_ID, NOW);
+        ProjectMembership active = ProjectMembership.activeMember(
+                UUID.randomUUID(), COMPANY_ID, UUID.randomUUID(), UUID.randomUUID(), OWNER_ID, NOW);
         ProjectMembership removed = active.remove(OWNER_ID, null, NOW.plusSeconds(10));
         ProjectMembership reactivated = removed.reactivate(OWNER_ID, NOW.plusSeconds(20));
 
@@ -51,10 +50,21 @@ class ProjectTest {
     @Test
     void archivedProjectCannotReassignOwner() {
         Project draft = create(null);
-        Project archived = new Project(draft.id(), draft.companyId(), draft.workspaceId(), draft.code(),
-                draft.name(), draft.description(), ProjectLifecycle.ARCHIVED,
-                draft.ownerUserId(), 2, draft.createdAt(),
-                draft.createdByUserId(), NOW.plusSeconds(20), OWNER_ID, NOW.plusSeconds(20));
+        Project archived = new Project(
+                draft.id(),
+                draft.companyId(),
+                draft.workspaceId(),
+                draft.code(),
+                draft.name(),
+                draft.description(),
+                ProjectLifecycle.ARCHIVED,
+                draft.ownerUserId(),
+                2,
+                draft.createdAt(),
+                draft.createdByUserId(),
+                NOW.plusSeconds(20),
+                OWNER_ID,
+                NOW.plusSeconds(20));
         assertThatThrownBy(() -> archived.reassignOwner(UUID.randomUUID(), OWNER_ID, NOW.plusSeconds(30)))
                 .isInstanceOf(IllegalStateException.class);
     }
@@ -100,12 +110,19 @@ class ProjectTest {
         Project ended = create(null).end(OWNER_ID, NOW.plusSeconds(10));
         Project restored = ended.archive(OWNER_ID, NOW.plusSeconds(20)).reopen(OWNER_ID, NOW.plusSeconds(30));
         assertThat(restored.endedAt()).isEqualTo(ended.endedAt());
-        assertThatThrownBy(() -> ended.end(OWNER_ID, NOW.plusSeconds(20)))
-                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> ended.end(OWNER_ID, NOW.plusSeconds(20))).isInstanceOf(IllegalStateException.class);
     }
 
     private static Project create(String description) {
-        return Project.create(UUID.randomUUID(), COMPANY_ID, WORKSPACE_ID, "M2_04",
-                " M2-04 Project ", description, OWNER_ID, OWNER_ID, NOW);
+        return Project.create(
+                UUID.randomUUID(),
+                COMPANY_ID,
+                WORKSPACE_ID,
+                "M2_04",
+                " M2-04 Project ",
+                description,
+                OWNER_ID,
+                OWNER_ID,
+                NOW);
     }
 }

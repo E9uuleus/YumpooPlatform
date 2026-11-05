@@ -9,11 +9,7 @@ public interface OAuthAttemptStore {
     /**
      * 仅当 state、nonce 同时匹配、未过期且尚未消费时原子消费；返回前必须提交消费事实。
      */
-    boolean consume(
-            OAuthAttemptHash stateHash,
-            OAuthAttemptHash nonceHash,
-            Instant consumedAt
-    );
+    boolean consume(OAuthAttemptHash stateHash, OAuthAttemptHash nonceHash, Instant consumedAt);
 
     default int purgeExpired(Instant now, int limit) {
         return 0;

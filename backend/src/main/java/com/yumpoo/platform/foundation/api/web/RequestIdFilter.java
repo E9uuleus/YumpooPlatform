@@ -45,20 +45,18 @@ public final class RequestIdFilter extends OncePerRequestFilter {
 
     @org.springframework.beans.factory.annotation.Autowired
     public RequestIdFilter(
-        ApiErrorWriter apiErrorWriter,
-        org.springframework.beans.factory.ObjectProvider<io.micrometer.core.instrument.MeterRegistry> registries
-    ) {
+            ApiErrorWriter apiErrorWriter,
+            org.springframework.beans.factory.ObjectProvider<io.micrometer.core.instrument.MeterRegistry> registries) {
         this.apiErrorWriter = apiErrorWriter;
         var registry = registries.getIfAvailable();
-        this.businessRequests =
-            registry == null
+        this.businessRequests = registry == null
                 ? null
                 : io.micrometer.core.instrument.Timer.builder("yumpoo.http.business")
-                      .description("Business HTTP latency without route tags")
-                      .publishPercentiles(.95)
-                      .distributionStatisticExpiry(java.time.Duration.ofMinutes(5))
-                      .distributionStatisticBufferLength(1)
-                      .register(registry);
+                        .description("Business HTTP latency without route tags")
+                        .publishPercentiles(.95)
+                        .distributionStatisticExpiry(java.time.Duration.ofMinutes(5))
+                        .distributionStatisticBufferLength(1)
+                        .register(registry);
     }
 
     /** Streaming downloads finish in an async dispatch; its failures need the same requestId and error handling. */
@@ -74,7 +72,7 @@ public final class RequestIdFilter extends OncePerRequestFilter {
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
-        throws ServletException, IOException {
+            throws ServletException, IOException {
         long started = System.nanoTime();
         // 异步与错误派发沿用首次派发的 requestId，响应头已在首次派发写出。
         Object dispatched = request.getAttribute(RequestIdContext.ATTRIBUTE_NAME);
@@ -95,10 +93,8 @@ public final class RequestIdFilter extends OncePerRequestFilter {
         // 后续派发不再经过会话认证，用户与客户端类型取自首次派发留下的请求属性。
         logging.put(StructuredLoggingContext.USER_ID, request.getAttribute(HttpAccessLog.USER_ID));
         logging.put(StructuredLoggingContext.CLIENT_TYPE, request.getAttribute(HttpAccessLog.CLIENT_TYPE));
-        try (
-            RequestCorrelationContext.Scope ignoredCorrelation = RequestCorrelationContext.open(correlation);
-            StructuredLoggingContext.Scope ignoredLogging = StructuredLoggingContext.open(logging)
-        ) {
+        try (RequestCorrelationContext.Scope ignoredCorrelation = RequestCorrelationContext.open(correlation);
+                StructuredLoggingContext.Scope ignoredLogging = StructuredLoggingContext.open(logging)) {
             try {
                 filterChain.doFilter(request, response);
             } catch (ApplicationException exception) {
@@ -109,12 +105,12 @@ public final class RequestIdFilter extends OncePerRequestFilter {
             } catch (Exception exception) {
                 if (!Boolean.TRUE.equals(request.getAttribute(HttpAccessLog.ERROR_LOGGED))) {
                     LOGGER.atError()
-                        .setMessage("unexpected request failure")
-                        .setCause(exception)
-                        .addKeyValue("event", "http.request.unhandled")
-                        .addKeyValue("method", request.getMethod())
-                        .addKeyValue("route", HttpAccessLog.route(request))
-                        .log();
+                            .setMessage("unexpected request failure")
+                            .setCause(exception)
+                            .addKeyValue("event", "http.request.unhandled")
+                            .addKeyValue("method", request.getMethod())
+                            .addKeyValue("route", HttpAccessLog.route(request))
+                            .log();
                     request.setAttribute(HttpAccessLog.ERROR_LOGGED, true);
                 }
                 if (response.isCommitted()) {
@@ -127,11 +123,9 @@ public final class RequestIdFilter extends OncePerRequestFilter {
                 if (initial) {
                     HttpAccessLog.completed(request, response, started);
                     String path = request.getRequestURI();
-                    if (
-                        businessRequests != null &&
-                        !path.startsWith("/api/v1/admin/operations") &&
-                        !path.startsWith("/actuator")
-                    ) {
+                    if (businessRequests != null
+                            && !path.startsWith("/api/v1/admin/operations")
+                            && !path.startsWith("/actuator")) {
                         businessRequests.record(System.nanoTime() - started, java.util.concurrent.TimeUnit.NANOSECONDS);
                     }
                 }
@@ -140,11 +134,8 @@ public final class RequestIdFilter extends OncePerRequestFilter {
     }
 
     private void resetAndWrite(
-        HttpServletRequest request,
-        HttpServletResponse response,
-        ApplicationException exception,
-        String requestId
-    ) throws IOException {
+            HttpServletRequest request, HttpServletResponse response, ApplicationException exception, String requestId)
+            throws IOException {
         response.reset();
         HttpAccessLog.applicationError(request, exception);
         preventOperationsCaching(request, response);

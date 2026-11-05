@@ -1,5 +1,8 @@
 package com.yumpoo.platform.foundation.consistency;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.yumpoo.platform.foundation.api.http.IdempotencyKeyParser;
 import com.yumpoo.platform.foundation.api.http.IdempotencyRequestHasher;
 import com.yumpoo.platform.foundation.application.event.DomainEventEnvelope;
@@ -22,18 +25,6 @@ import com.yumpoo.platform.foundation.testing.M011ProbeController;
 import com.yumpoo.platform.foundation.testing.M011SecondaryProbeConsumer;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
 import com.yumpoo.platform.testing.TestProbeSecurityConfiguration;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Import;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.test.context.jdbc.Sql;
-import org.springframework.transaction.IllegalTransactionStateException;
-import tools.jackson.databind.ObjectMapper;
-
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -54,30 +45,29 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.context.jdbc.Sql;
+import org.springframework.transaction.IllegalTransactionStateException;
+import tools.jackson.databind.ObjectMapper;
 
 @Import({
-        PostgreSqlTestContainerConfiguration.class,
-        TestProbeSecurityConfiguration.class,
-        M011ProbeApplicationService.class,
-        M011ProbeController.class,
-        M011PrimaryProbeConsumer.class,
-        M011SecondaryProbeConsumer.class
+    PostgreSqlTestContainerConfiguration.class,
+    TestProbeSecurityConfiguration.class,
+    M011ProbeApplicationService.class,
+    M011ProbeController.class,
+    M011PrimaryProbeConsumer.class,
+    M011SecondaryProbeConsumer.class
 })
-@SpringBootTest(
-        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "yumpoo.outbox.enabled=false"
-)
-@Sql(
-        scripts = "/sql/m0-11-probe-schema.sql",
-        executionPhase = Sql.ExecutionPhase.BEFORE_TEST_CLASS
-)
-@Sql(
-        scripts = "/sql/m0-11-probe-drop.sql",
-        executionPhase = Sql.ExecutionPhase.AFTER_TEST_CLASS
-)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = "yumpoo.outbox.enabled=false")
+@Sql(scripts = "/sql/m0-11-probe-schema.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_CLASS)
+@Sql(scripts = "/sql/m0-11-probe-drop.sql", executionPhase = Sql.ExecutionPhase.AFTER_TEST_CLASS)
 class M011TransactionalOutboxIT {
 
     private static final String PROBE_PATH = "/api/v1/__test/m0-11/probes";
@@ -126,8 +116,7 @@ class M011TransactionalOutboxIT {
                             yumpoo.outbox_event,
                             yumpoo.m011_probe,
                             yumpoo.idempotency_record
-                        """)
-                .update();
+                        """).update();
         primaryConsumer.reset();
         secondaryConsumer.reset();
     }
@@ -156,9 +145,7 @@ class M011TransactionalOutboxIT {
                         SELECT request_id, correlation_id, consumer_causation_id
                         FROM yumpoo.m011_projection
                         ORDER BY consumer_name
-                        """)
-                .query()
-                .listOfRows();
+                        """).query().listOfRows();
         assertThat(projections).allSatisfy(projection -> {
             assertThat(projection.get("request_id")).isEqualTo(requestId);
             assertThat(projection.get("correlation_id")).isEqualTo(requestId);
@@ -168,27 +155,12 @@ class M011TransactionalOutboxIT {
 
     @Test
     void derivedEventInheritsCorrelationAndUsesParentEventAsCausation() {
-        DomainEventEnvelope parent = publishOnly(
-                "m011-derived-chain",
-                M011ProbeApplicationService.EVENT_TYPE,
-                1,
-                UUID.randomUUID(),
-                0
-        );
+        DomainEventEnvelope parent =
+                publishOnly("m011-derived-chain", M011ProbeApplicationService.EVENT_TYPE, 1, UUID.randomUUID(), 0);
         DomainEventEnvelope derived;
         try (RequestCorrelationContext.Scope ignored = RequestCorrelationContext.open(
-                new RequestCorrelation(
-                        parent.requestId(),
-                        parent.correlationId(),
-                        parent.eventId()
-                )
-        )) {
-            derived = applicationService.publishOnly(
-                    M011ProbeApplicationService.EVENT_TYPE,
-                    1,
-                    UUID.randomUUID(),
-                    0
-            );
+                new RequestCorrelation(parent.requestId(), parent.correlationId(), parent.eventId()))) {
+            derived = applicationService.publishOnly(M011ProbeApplicationService.EVENT_TYPE, 1, UUID.randomUUID(), 0);
         }
 
         assertThat(derived.requestId()).isEqualTo(parent.requestId());
@@ -200,12 +172,11 @@ class M011TransactionalOutboxIT {
     void rollbackRemovesBusinessFactIdempotencyClaimAndOutboxEventTogether() {
         RequestHash requestHash = requestHashFor("rollback");
 
-        assertThatThrownBy(() -> withRoot("m011-rollback", () -> applicationService.createThenFail(
-                M011ProbeController.FIXED_ACTOR_ID,
-                UUID.randomUUID(),
-                requestHash,
-                "rollback"
-        ))).isInstanceOf(IllegalStateException.class)
+        assertThatThrownBy(() -> withRoot(
+                        "m011-rollback",
+                        () -> applicationService.createThenFail(
+                                M011ProbeController.FIXED_ACTOR_ID, UUID.randomUUID(), requestHash, "rollback")))
+                .isInstanceOf(IllegalStateException.class)
                 .hasMessage("forced M0-11 transaction rollback");
 
         assertThat(count("m011_probe")).isZero();
@@ -217,27 +188,24 @@ class M011TransactionalOutboxIT {
     void publishingOutsideAnExistingTransactionFailsClosed() {
         UUID aggregateId = UUID.randomUUID();
 
-        assertThatThrownBy(() -> withRoot("m011-no-transaction", () ->
-                transactionalEventPort.append(applicationService.probeDraft(
-                        M011ProbeApplicationService.EVENT_TYPE,
-                        1,
-                        aggregateId,
-                        0,
-                        M011ProbeController.FIXED_ACTOR_ID,
-                        "no-transaction"
-                ))
-        )).isInstanceOf(IllegalTransactionStateException.class);
+        assertThatThrownBy(() -> withRoot(
+                        "m011-no-transaction",
+                        () -> transactionalEventPort.append(applicationService.probeDraft(
+                                M011ProbeApplicationService.EVENT_TYPE,
+                                1,
+                                aggregateId,
+                                0,
+                                M011ProbeController.FIXED_ACTOR_ID,
+                                "no-transaction"))))
+                .isInstanceOf(IllegalTransactionStateException.class);
         assertThat(count("outbox_event")).isZero();
     }
 
     @Test
     void publishingWithoutCorrelationContextRollsBackTheTransaction() {
-        assertThatThrownBy(() -> applicationService.publishOnly(
-                M011ProbeApplicationService.EVENT_TYPE,
-                1,
-                UUID.randomUUID(),
-                0
-        )).isInstanceOf(IllegalStateException.class)
+        assertThatThrownBy(() ->
+                        applicationService.publishOnly(M011ProbeApplicationService.EVENT_TYPE, 1, UUID.randomUUID(), 0))
+                .isInstanceOf(IllegalStateException.class)
                 .hasMessage("request correlation context is required");
         assertThat(count("outbox_event")).isZero();
     }
@@ -245,21 +213,11 @@ class M011TransactionalOutboxIT {
     @Test
     void sameAggregateVersionAndEventTypeCannotBePublishedTwice() {
         UUID aggregateId = UUID.randomUUID();
-        publishOnly(
-                "m011-unique-fact-first",
-                M011ProbeApplicationService.EVENT_TYPE,
-                1,
-                aggregateId,
-                0
-        );
+        publishOnly("m011-unique-fact-first", M011ProbeApplicationService.EVENT_TYPE, 1, aggregateId, 0);
 
         assertThatThrownBy(() -> publishOnly(
-                "m011-unique-fact-second",
-                M011ProbeApplicationService.EVENT_TYPE,
-                1,
-                aggregateId,
-                0
-        )).isInstanceOf(DataIntegrityViolationException.class);
+                        "m011-unique-fact-second", M011ProbeApplicationService.EVENT_TYPE, 1, aggregateId, 0))
+                .isInstanceOf(DataIntegrityViolationException.class);
         assertThat(count("outbox_event")).isOne();
     }
 
@@ -276,10 +234,8 @@ class M011TransactionalOutboxIT {
         assertThat(secondaryConsumer.calls()).isOne();
         assertThat(count("outbox_consumer_receipt")).isOne();
         assertThat(count("m011_projection")).isOne();
-        assertThat(eventRow(eventId).get("last_error_code"))
-                .isEqualTo("M011_RETRYABLE_FAILURE");
-        assertThat(eventRow(eventId).get("last_error_type"))
-                .isEqualTo(OutboxConsumerException.class.getName());
+        assertThat(eventRow(eventId).get("last_error_code")).isEqualTo("M011_RETRYABLE_FAILURE");
+        assertThat(eventRow(eventId).get("last_error_type")).isEqualTo(OutboxConsumerException.class.getName());
 
         makeRetryDue(eventId);
         assertThat(dispatcher.dispatchOnce()).isOne();
@@ -308,10 +264,8 @@ class M011TransactionalOutboxIT {
 
         Map<String, Object> dead = eventRow(eventId);
         assertThat(dead.get("last_error_code")).isEqualTo("M011_RETRYABLE_FAILURE");
-        assertThat(dead.get("last_error_consumer"))
-                .isEqualTo(M011SecondaryProbeConsumer.NAME);
-        assertThat(dead.get("last_error_type"))
-                .isEqualTo(OutboxConsumerException.class.getName());
+        assertThat(dead.get("last_error_consumer")).isEqualTo(M011SecondaryProbeConsumer.NAME);
+        assertThat(dead.get("last_error_type")).isEqualTo(OutboxConsumerException.class.getName());
         assertThat(dead.values()).doesNotContain("secret-do-not-persist");
         assertThat(primaryConsumer.calls()).isOne();
         assertThat(secondaryConsumer.calls()).isEqualTo(6);
@@ -319,25 +273,16 @@ class M011TransactionalOutboxIT {
 
     @Test
     void concurrentAndRepeatedConsumptionCreateOnlyOneEffectAndReceipt() throws Exception {
-        DomainEventEnvelope event = publishOnly(
-                "m011-consumer-dedup",
-                M011ProbeApplicationService.EVENT_TYPE,
-                1,
-                UUID.randomUUID(),
-                0
-        );
+        DomainEventEnvelope event =
+                publishOnly("m011-consumer-dedup", M011ProbeApplicationService.EVENT_TYPE, 1, UUID.randomUUID(), 0);
 
         List<OutboxConsumerOutcome> outcomes = runConcurrently(List.of(
                 () -> consumeWithEventContext(primaryConsumer, event),
-                () -> consumeWithEventContext(primaryConsumer, event)
-        ));
+                () -> consumeWithEventContext(primaryConsumer, event)));
 
-        assertThat(outcomes).containsExactlyInAnyOrder(
-                OutboxConsumerOutcome.CONSUMED,
-                OutboxConsumerOutcome.ALREADY_COMPLETED
-        );
-        assertThat(consumeWithEventContext(primaryConsumer, event))
-                .isEqualTo(OutboxConsumerOutcome.ALREADY_COMPLETED);
+        assertThat(outcomes)
+                .containsExactlyInAnyOrder(OutboxConsumerOutcome.CONSUMED, OutboxConsumerOutcome.ALREADY_COMPLETED);
+        assertThat(consumeWithEventContext(primaryConsumer, event)).isEqualTo(OutboxConsumerOutcome.ALREADY_COMPLETED);
         assertThat(primaryConsumer.calls()).isOne();
         assertThat(count("outbox_consumer_receipt")).isOne();
         assertThat(count("m011_projection")).isOne();
@@ -345,13 +290,8 @@ class M011TransactionalOutboxIT {
 
     @Test
     void consumerEffectAndReceiptRollBackTogether() {
-        DomainEventEnvelope event = publishOnly(
-                "m011-consumer-rollback",
-                M011ProbeApplicationService.EVENT_TYPE,
-                1,
-                UUID.randomUUID(),
-                0
-        );
+        DomainEventEnvelope event =
+                publishOnly("m011-consumer-rollback", M011ProbeApplicationService.EVENT_TYPE, 1, UUID.randomUUID(), 0);
         secondaryConsumer.failAfterInsertNext(1);
 
         assertThatThrownBy(() -> consumeWithEventContext(secondaryConsumer, event))
@@ -360,8 +300,7 @@ class M011TransactionalOutboxIT {
 
         assertThat(count("outbox_consumer_receipt")).isZero();
         assertThat(count("m011_projection")).isZero();
-        assertThat(consumeWithEventContext(secondaryConsumer, event))
-                .isEqualTo(OutboxConsumerOutcome.CONSUMED);
+        assertThat(consumeWithEventContext(secondaryConsumer, event)).isEqualTo(OutboxConsumerOutcome.CONSUMED);
         assertThat(count("outbox_consumer_receipt")).isOne();
         assertThat(count("m011_projection")).isOne();
     }
@@ -384,81 +323,46 @@ class M011TransactionalOutboxIT {
 
     @Test
     void missingConsumerAndUnsupportedVersionBecomeObservablePermanentFailures() {
-        DomainEventEnvelope missing = publishOnly(
-                "m011-missing-consumer",
-                "foundation.unhandled",
-                1,
-                UUID.randomUUID(),
-                0
-        );
+        DomainEventEnvelope missing =
+                publishOnly("m011-missing-consumer", "foundation.unhandled", 1, UUID.randomUUID(), 0);
         DomainEventEnvelope unsupported = publishOnly(
-                "m011-unsupported-version",
-                M011ProbeApplicationService.EVENT_TYPE,
-                2,
-                UUID.randomUUID(),
-                0
-        );
+                "m011-unsupported-version", M011ProbeApplicationService.EVENT_TYPE, 2, UUID.randomUUID(), 0);
 
         assertThat(dispatcher.dispatchOnce()).isEqualTo(2);
 
         assertThat(eventStatus(missing.eventId())).isEqualTo("DEAD");
-        assertThat(eventRow(missing.eventId()).get("last_error_code"))
-                .isEqualTo("NO_MATCHING_CONSUMER");
+        assertThat(eventRow(missing.eventId()).get("last_error_code")).isEqualTo("NO_MATCHING_CONSUMER");
         assertThat(eventStatus(unsupported.eventId())).isEqualTo("DEAD");
-        assertThat(eventRow(unsupported.eventId()).get("last_error_code"))
-                .isEqualTo("UNSUPPORTED_EVENT_VERSION");
+        assertThat(eventRow(unsupported.eventId()).get("last_error_code")).isEqualTo("UNSUPPORTED_EVENT_VERSION");
     }
 
     @Test
     void expiredLeaseCanBeReclaimedAndOldTokenCannotFinalize() {
-        DomainEventEnvelope event = publishOnly(
-                "m011-lease",
-                M011ProbeApplicationService.EVENT_TYPE,
-                1,
-                UUID.randomUUID(),
-                0
-        );
+        DomainEventEnvelope event =
+                publishOnly("m011-lease", M011ProbeApplicationService.EVENT_TYPE, 1, UUID.randomUUID(), 0);
         Instant firstClaimAt = Instant.now();
-        OutboxClaim first = outboxStorePort.claimBatch(
-                1,
-                "worker-first",
-                UUID.randomUUID(),
-                firstClaimAt,
-                Duration.ofSeconds(1)
-        ).getFirst();
+        OutboxClaim first = outboxStorePort
+                .claimBatch(1, "worker-first", UUID.randomUUID(), firstClaimAt, Duration.ofSeconds(1))
+                .getFirst();
 
-        OutboxClaim second = outboxStorePort.claimBatch(
-                1,
-                "worker-second",
-                UUID.randomUUID(),
-                firstClaimAt.plusSeconds(2),
-                Duration.ofMinutes(5)
-        ).getFirst();
+        OutboxClaim second = outboxStorePort
+                .claimBatch(1, "worker-second", UUID.randomUUID(), firstClaimAt.plusSeconds(2), Duration.ofMinutes(5))
+                .getFirst();
 
         assertThat(second.event().eventId()).isEqualTo(event.eventId());
         assertThat(second.attemptCount()).isEqualTo(2);
         assertThat(outboxStorePort.markCompleted(first.lease(), firstClaimAt.plusSeconds(3)))
                 .isFalse();
         assertThat(outboxStorePort.markRetry(
-                first.lease(),
-                new OutboxFailure(
-                        "outbox.dispatcher",
-                        "STALE_LEASE_TEST",
-                        "StaleLeaseTestFailure",
-                        true
-                ),
-                firstClaimAt.plusSeconds(60)
-        )).isFalse();
+                        first.lease(),
+                        new OutboxFailure("outbox.dispatcher", "STALE_LEASE_TEST", "StaleLeaseTestFailure", true),
+                        firstClaimAt.plusSeconds(60)))
+                .isFalse();
         assertThat(outboxStorePort.markDead(
-                first.lease(),
-                new OutboxFailure(
-                        "outbox.dispatcher",
-                        "STALE_LEASE_TEST",
-                        "StaleLeaseTestFailure",
-                        false
-                ),
-                firstClaimAt.plusSeconds(3)
-        )).isFalse();
+                        first.lease(),
+                        new OutboxFailure("outbox.dispatcher", "STALE_LEASE_TEST", "StaleLeaseTestFailure", false),
+                        firstClaimAt.plusSeconds(3)))
+                .isFalse();
         assertThat(outboxStorePort.markCompleted(second.lease(), firstClaimAt.plusSeconds(3)))
                 .isTrue();
     }
@@ -466,24 +370,13 @@ class M011TransactionalOutboxIT {
     @Test
     void concurrentWorkersNeverClaimTheSameEvent() throws Exception {
         for (int index = 0; index < 8; index++) {
-            publishOnly(
-                    "m011-concurrent-" + index,
-                    M011ProbeApplicationService.EVENT_TYPE,
-                    1,
-                    UUID.randomUUID(),
-                    0
-            );
+            publishOnly("m011-concurrent-" + index, M011ProbeApplicationService.EVENT_TYPE, 1, UUID.randomUUID(), 0);
         }
         Instant claimedAt = Instant.now();
 
         List<List<OutboxClaim>> batches = runConcurrently(List.of(
-                () -> outboxStorePort.claimBatch(
-                        8, "worker-a", UUID.randomUUID(), claimedAt, Duration.ofMinutes(5)
-                ),
-                () -> outboxStorePort.claimBatch(
-                        8, "worker-b", UUID.randomUUID(), claimedAt, Duration.ofMinutes(5)
-                )
-        ));
+                () -> outboxStorePort.claimBatch(8, "worker-a", UUID.randomUUID(), claimedAt, Duration.ofMinutes(5)),
+                () -> outboxStorePort.claimBatch(8, "worker-b", UUID.randomUUID(), claimedAt, Duration.ofMinutes(5))));
 
         List<UUID> claimedIds = batches.stream()
                 .flatMap(List::stream)
@@ -496,165 +389,89 @@ class M011TransactionalOutboxIT {
     @Test
     void deadLowerAggregateVersionStrictlyBlocksLaterVersions() {
         UUID aggregateId = UUID.randomUUID();
-        DomainEventEnvelope first = publishOnly(
-                "m011-order-first",
-                M011ProbeApplicationService.EVENT_TYPE,
-                1,
-                aggregateId,
-                0
-        );
-        publishOnly(
-                "m011-order-second",
-                M011ProbeApplicationService.EVENT_TYPE,
-                1,
-                aggregateId,
-                1
-        );
+        DomainEventEnvelope first =
+                publishOnly("m011-order-first", M011ProbeApplicationService.EVENT_TYPE, 1, aggregateId, 0);
+        publishOnly("m011-order-second", M011ProbeApplicationService.EVENT_TYPE, 1, aggregateId, 1);
         Instant now = Instant.now();
-        List<OutboxClaim> initial = outboxStorePort.claimBatch(
-                10,
-                "worker-order",
-                UUID.randomUUID(),
-                now,
-                Duration.ofMinutes(5)
-        );
+        List<OutboxClaim> initial =
+                outboxStorePort.claimBatch(10, "worker-order", UUID.randomUUID(), now, Duration.ofMinutes(5));
 
-        assertThat(initial).singleElement()
+        assertThat(initial)
+                .singleElement()
                 .extracting(claim -> claim.event().eventId())
                 .isEqualTo(first.eventId());
         assertThat(outboxStorePort.markDead(
-                initial.getFirst().lease(),
-                new OutboxFailure(
-                        "outbox.dispatcher",
-                        "ORDERING_TEST_DEAD",
-                        "OrderingTestFailure",
-                        false
-                ),
-                now.plusSeconds(1)
-        )).isTrue();
+                        initial.getFirst().lease(),
+                        new OutboxFailure("outbox.dispatcher", "ORDERING_TEST_DEAD", "OrderingTestFailure", false),
+                        now.plusSeconds(1)))
+                .isTrue();
 
         assertThat(outboxStorePort.claimBatch(
-                10,
-                "worker-order-later",
-                UUID.randomUUID(),
-                now.plusSeconds(2),
-                Duration.ofMinutes(5)
-        )).isEmpty();
+                        10, "worker-order-later", UUID.randomUUID(), now.plusSeconds(2), Duration.ofMinutes(5)))
+                .isEmpty();
     }
 
     @Test
     void retryingLowerAggregateVersionStrictlyBlocksLaterVersions() {
         UUID aggregateId = UUID.randomUUID();
-        DomainEventEnvelope first = publishOnly(
-                "m011-retry-order-first",
-                M011ProbeApplicationService.EVENT_TYPE,
-                1,
-                aggregateId,
-                0
-        );
-        publishOnly(
-                "m011-retry-order-second",
-                M011ProbeApplicationService.EVENT_TYPE,
-                1,
-                aggregateId,
-                1
-        );
+        DomainEventEnvelope first =
+                publishOnly("m011-retry-order-first", M011ProbeApplicationService.EVENT_TYPE, 1, aggregateId, 0);
+        publishOnly("m011-retry-order-second", M011ProbeApplicationService.EVENT_TYPE, 1, aggregateId, 1);
         Instant now = Instant.now();
-        OutboxClaim firstClaim = outboxStorePort.claimBatch(
-                10,
-                "worker-retry-order",
-                UUID.randomUUID(),
-                now,
-                Duration.ofMinutes(5)
-        ).getFirst();
+        OutboxClaim firstClaim = outboxStorePort
+                .claimBatch(10, "worker-retry-order", UUID.randomUUID(), now, Duration.ofMinutes(5))
+                .getFirst();
         assertThat(firstClaim.event().eventId()).isEqualTo(first.eventId());
         assertThat(outboxStorePort.markRetry(
-                firstClaim.lease(),
-                new OutboxFailure(
-                        "outbox.dispatcher",
-                        "ORDERING_TEST_RETRY",
-                        "OrderingTestFailure",
-                        true
-                ),
-                now.plusSeconds(60)
-        )).isTrue();
+                        firstClaim.lease(),
+                        new OutboxFailure("outbox.dispatcher", "ORDERING_TEST_RETRY", "OrderingTestFailure", true),
+                        now.plusSeconds(60)))
+                .isTrue();
 
         assertThat(outboxStorePort.claimBatch(
-                10,
-                "worker-retry-order-early",
-                UUID.randomUUID(),
-                now.plusSeconds(30),
-                Duration.ofMinutes(5)
-        )).isEmpty();
+                        10, "worker-retry-order-early", UUID.randomUUID(), now.plusSeconds(30), Duration.ofMinutes(5)))
+                .isEmpty();
         assertThat(outboxStorePort.claimBatch(
-                10,
-                "worker-retry-order-due",
-                UUID.randomUUID(),
-                now.plusSeconds(61),
-                Duration.ofMinutes(5)
-        )).singleElement()
+                        10, "worker-retry-order-due", UUID.randomUUID(), now.plusSeconds(61), Duration.ofMinutes(5)))
+                .singleElement()
                 .extracting(claim -> claim.event().eventId())
                 .isEqualTo(first.eventId());
     }
 
-    private HttpResponse<String> postProbe(
-            String requestId,
-            UUID idempotencyKey,
-            String name
-    ) throws Exception {
+    private HttpResponse<String> postProbe(String requestId, UUID idempotencyKey, String name) throws Exception {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("http://127.0.0.1:" + port + PROBE_PATH))
                 .header(RequestIdContext.HEADER_NAME, requestId)
                 .header(IdempotencyKeyParser.HEADER_NAME, idempotencyKey.toString())
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(
-                        objectMapper.writeValueAsString(Map.of("name", name)),
-                        StandardCharsets.UTF_8
-                ))
+                        objectMapper.writeValueAsString(Map.of("name", name)), StandardCharsets.UTF_8))
                 .build();
         return httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
     }
 
     private DomainEventEnvelope publishOnly(
-            String requestId,
-            String eventType,
-            int eventVersion,
-            UUID aggregateId,
-            long aggregateVersion
-    ) {
-        return withRoot(requestId, () -> applicationService.publishOnly(
-                eventType,
-                eventVersion,
-                aggregateId,
-                aggregateVersion
-        ));
+            String requestId, String eventType, int eventVersion, UUID aggregateId, long aggregateVersion) {
+        return withRoot(
+                requestId,
+                () -> applicationService.publishOnly(eventType, eventVersion, aggregateId, aggregateVersion));
     }
 
     private RequestHash requestHashFor(String name) {
         return requestHasher.hash(
-                M011ProbeApplicationService.CREATE_ROUTE_KEY,
-                Map.of(),
-                objectMapper.valueToTree(Map.of("name", name))
-        );
+                M011ProbeApplicationService.CREATE_ROUTE_KEY, Map.of(), objectMapper.valueToTree(Map.of("name", name)));
     }
 
-    private OutboxConsumerOutcome consumeWithEventContext(
-            OutboxEventConsumer consumer,
-            DomainEventEnvelope event
-    ) {
+    private OutboxConsumerOutcome consumeWithEventContext(OutboxEventConsumer consumer, DomainEventEnvelope event) {
         try (RequestCorrelationContext.Scope ignored = RequestCorrelationContext.open(
-                new RequestCorrelation(
-                        event.requestId(),
-                        event.correlationId(),
-                        event.eventId()
-                )
-        )) {
+                new RequestCorrelation(event.requestId(), event.correlationId(), event.eventId()))) {
             return consumerExecutor.execute(consumer, event);
         }
     }
 
     private UUID singleEventId() {
-        return jdbcClient.sql("SELECT event_id FROM yumpoo.outbox_event")
+        return jdbcClient
+                .sql("SELECT event_id FROM yumpoo.outbox_event")
                 .query(UUID.class)
                 .single();
     }
@@ -666,10 +483,7 @@ class M011TransactionalOutboxIT {
                                last_error_type
                         FROM yumpoo.outbox_event
                         WHERE event_id = :eventId
-                        """)
-                .param("eventId", eventId)
-                .query()
-                .singleRow();
+                        """).param("eventId", eventId).query().singleRow();
     }
 
     private String eventStatus(UUID eventId) {
@@ -677,24 +491,17 @@ class M011TransactionalOutboxIT {
                         SELECT status
                         FROM yumpoo.outbox_event
                         WHERE event_id = :eventId
-                        """)
-                .param("eventId", eventId)
-                .query(String.class)
-                .single();
+                        """).param("eventId", eventId).query(String.class).single();
     }
 
     private long count(String tableName) {
         Set<String> allowed = Set.of(
-                "m011_probe",
-                "m011_projection",
-                "idempotency_record",
-                "outbox_event",
-                "outbox_consumer_receipt"
-        );
+                "m011_probe", "m011_projection", "idempotency_record", "outbox_event", "outbox_consumer_receipt");
         if (!allowed.contains(tableName)) {
             throw new IllegalArgumentException("unexpected table: " + tableName);
         }
-        return jdbcClient.sql("SELECT count(*) FROM yumpoo." + tableName)
+        return jdbcClient
+                .sql("SELECT count(*) FROM yumpoo." + tableName)
                 .query(Long.class)
                 .single();
     }
@@ -704,16 +511,13 @@ class M011TransactionalOutboxIT {
                         UPDATE yumpoo.outbox_event
                         SET next_attempt_at = occurred_at
                         WHERE event_id = :eventId AND status = 'RETRY'
-                        """)
-                .param("eventId", eventId)
-                .update();
+                        """).param("eventId", eventId).update();
         assertThat(updated).isOne();
     }
 
     private static <T> T withRoot(String requestId, Supplier<T> callback) {
-        try (RequestCorrelationContext.Scope ignored = RequestCorrelationContext.open(
-                RequestCorrelation.root(requestId)
-        )) {
+        try (RequestCorrelationContext.Scope ignored =
+                RequestCorrelationContext.open(RequestCorrelation.root(requestId))) {
             return callback.get();
         }
     }

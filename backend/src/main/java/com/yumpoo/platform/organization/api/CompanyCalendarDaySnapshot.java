@@ -13,8 +13,7 @@ public record CompanyCalendarDaySnapshot(
         OptionalLong calendarDayRowVersion,
         String note,
         Integer configuredStandardMinutes,
-        CalendarDaySource source
-) {
+        CalendarDaySource source) {
 
     public CompanyCalendarDaySnapshot {
         Objects.requireNonNull(date, "date must not be null");

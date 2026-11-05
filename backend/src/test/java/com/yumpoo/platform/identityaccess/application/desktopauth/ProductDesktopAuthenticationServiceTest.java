@@ -1,5 +1,12 @@
 package com.yumpoo.platform.identityaccess.application.desktopauth;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.identityaccess.application.authentication.AuthenticationEventService;
@@ -13,9 +20,6 @@ import com.yumpoo.platform.identityaccess.domain.identity.AccountStatus;
 import com.yumpoo.platform.identityaccess.domain.identity.EmploymentStatus;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
 import com.yumpoo.platform.organization.api.CompanyConfigurationSnapshot;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
 import java.net.URI;
 import java.time.Clock;
 import java.time.DayOfWeek;
@@ -24,13 +28,8 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 class ProductDesktopAuthenticationServiceTest {
 
@@ -58,9 +57,9 @@ class ProductDesktopAuthenticationServiceTest {
         CompanyConfigurationQuery companyQuery = mock(CompanyConfigurationQuery.class);
 
         when(identityProvider.expectedCorpId()).thenReturn("corp");
-        when(companyQuery.current()).thenReturn(new CompanyConfigurationSnapshot(
-                COMPANY_ID, "Yumpoo", ZoneId.of("Asia/Shanghai"), DayOfWeek.MONDAY, 480, 0
-        ));
+        when(companyQuery.current())
+                .thenReturn(new CompanyConfigurationSnapshot(
+                        COMPANY_ID, "Yumpoo", ZoneId.of("Asia/Shanghai"), DayOfWeek.MONDAY, 480, 0));
         service = new ProductDesktopAuthenticationService(
                 attemptStore,
                 () -> HANDOFF,
@@ -70,26 +69,29 @@ class ProductDesktopAuthenticationServiceTest {
                 companyQuery,
                 sessionService,
                 eventService,
-                Clock.fixed(NOW, ZoneOffset.UTC)
-        );
+                Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
     void createsProductAttemptForOfficialQrAuthorization() {
-        when(identityProvider.buildElectronAuthorizationUri(STATE.value())).thenReturn(URI.create(
-                "https://open.work.weixin.qq.com/wwopen/sso/qrConnect?state=" + STATE.value()
-        ));
+        when(identityProvider.buildElectronAuthorizationUri(STATE.value()))
+                .thenReturn(URI.create("https://open.work.weixin.qq.com/wwopen/sso/qrConnect?state=" + STATE.value()));
 
-        ProductDesktopAuthorization authorization = service.begin(
-                STATE, VERIFIER.challenge(), "m114.begin-1", "0.1.0", "1", false
-        );
+        ProductDesktopAuthorization authorization =
+                service.begin(STATE, VERIFIER.challenge(), "m114.begin-1", "0.1.0", "1", false);
 
         assertThat(authorization.expiresAt()).isEqualTo(NOW.plusSeconds(300));
         assertThat(authorization.authorizationUri().getHost()).isEqualTo("open.work.weixin.qq.com");
-        verify(attemptStore).createProduct(new ProductDesktopAuthAttempt(
-                new DesktopAuthTokenHasher().hash(STATE), VERIFIER.challenge(),
-                "m114.begin-1", "0.1.0", "1", NOW, NOW.plusSeconds(300), false
-        ));
+        verify(attemptStore)
+                .createProduct(new ProductDesktopAuthAttempt(
+                        new DesktopAuthTokenHasher().hash(STATE),
+                        VERIFIER.challenge(),
+                        "m114.begin-1",
+                        "0.1.0",
+                        "1",
+                        NOW,
+                        NOW.plusSeconds(300),
+                        false));
     }
 
     @Test
@@ -100,8 +102,8 @@ class ProductDesktopAuthenticationServiceTest {
         when(identityProvider.exchangeCode("provider-code")).thenReturn(new WeComMemberIdentity("corp", "member"));
         when(userRepository.lockByWeComIdentity(COMPANY_ID, "member")).thenReturn(Optional.of(user));
         when(attemptStore.issueProductHandoff(
-                stateHash, new DesktopAuthTokenHasher().hash(HANDOFF), USER_ID, NOW, NOW.plusSeconds(60)
-        )).thenReturn(true);
+                        stateHash, new DesktopAuthTokenHasher().hash(HANDOFF), USER_ID, NOW, NOW.plusSeconds(60)))
+                .thenReturn(true);
 
         DesktopHandoffAuthorization authorization = service.completeAuthorization("provider-code", STATE);
 
@@ -112,26 +114,29 @@ class ProductDesktopAuthenticationServiceTest {
 
     @Test
     void rejectsReplayBeforeCallingProvider() {
-        when(attemptStore.claimProductAuthorization(new DesktopAuthTokenHasher().hash(STATE), NOW)).thenReturn(false);
+        when(attemptStore.claimProductAuthorization(new DesktopAuthTokenHasher().hash(STATE), NOW))
+                .thenReturn(false);
 
         assertThatThrownBy(() -> service.completeAuthorization("provider-code", STATE))
-                .isInstanceOfSatisfying(ApplicationException.class, exception ->
-                        assertThat(exception.errorCode()).isEqualTo(StandardErrorCode.AUTHENTICATION_REQUIRED));
+                .isInstanceOfSatisfying(
+                        ApplicationException.class,
+                        exception ->
+                                assertThat(exception.errorCode()).isEqualTo(StandardErrorCode.AUTHENTICATION_REQUIRED));
         verify(identityProvider, never()).exchangeCode("provider-code");
     }
 
     @Test
     void consumesPkceHandoffAndIssuesElectronSession() {
         AuthenticationUser user = eligibleUser();
-        ProductDesktopAuthExchange exchange = new ProductDesktopAuthExchange(
-                USER_ID, "0.1.0", "1", NOW.minusSeconds(10), NOW, false
-        );
+        ProductDesktopAuthExchange exchange =
+                new ProductDesktopAuthExchange(USER_ID, "0.1.0", "1", NOW.minusSeconds(10), NOW, false);
         IssuedSession issued = mock(IssuedSession.class);
         when(attemptStore.consumeProduct(
-                new DesktopAuthTokenHasher().hash(STATE),
-                new DesktopAuthTokenHasher().hash(HANDOFF),
-                VERIFIER.challenge(), NOW
-        )).thenReturn(Optional.of(exchange));
+                        new DesktopAuthTokenHasher().hash(STATE),
+                        new DesktopAuthTokenHasher().hash(HANDOFF),
+                        VERIFIER.challenge(),
+                        NOW))
+                .thenReturn(Optional.of(exchange));
         when(sessionService.issueElectronSession(USER_ID, "0.1.0", false)).thenReturn(issued);
         when(userRepository.findByUserId(USER_ID)).thenReturn(Optional.of(user));
 
@@ -142,9 +147,15 @@ class ProductDesktopAuthenticationServiceTest {
 
     private static AuthenticationUser eligibleUser() {
         return new AuthenticationUser(
-                USER_ID, COMPANY_ID, "Member", "member", EmploymentStatus.ACTIVE,
-                AccountStatus.ENABLED, EmploymentStatus.ACTIVE, 2, 3
-        );
+                USER_ID,
+                COMPANY_ID,
+                "Member",
+                "member",
+                EmploymentStatus.ACTIVE,
+                AccountStatus.ENABLED,
+                EmploymentStatus.ACTIVE,
+                2,
+                3);
     }
 
     private static DesktopAuthToken token(char value) {

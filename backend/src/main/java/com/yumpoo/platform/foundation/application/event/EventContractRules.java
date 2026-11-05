@@ -4,12 +4,9 @@ import java.util.regex.Pattern;
 
 final class EventContractRules {
 
-    private static final Pattern EVENT_TYPE = Pattern.compile(
-            "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
-    );
+    private static final Pattern EVENT_TYPE = Pattern.compile("^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$");
 
-    private EventContractRules() {
-    }
+    private EventContractRules() {}
 
     static String eventType(String value) {
         if (value == null || value.length() > 120 || !EVENT_TYPE.matcher(value).matches()) {

@@ -21,15 +21,22 @@ class OperationsPrometheusEndpointTest {
         var runtime = mock(OperationsRuntime.class);
         var alerts = mock(OperationsAlertService.class);
         Instant at = Instant.parse("2026-10-23T12:00:00Z");
-        when(runtime.sampledSnapshot()).thenReturn(Optional.of(new RuntimeSnapshot(
-            at, at.minusSeconds(15), "DOWN", Map.of("heap.used", 123d, "private.path", 999d),
-            List.of(), List.of(), null, 0
-        )));
+        when(runtime.sampledSnapshot())
+                .thenReturn(Optional.of(new RuntimeSnapshot(
+                        at,
+                        at.minusSeconds(15),
+                        "DOWN",
+                        Map.of("heap.used", 123d, "private.path", 999d),
+                        List.of(),
+                        List.of(),
+                        null,
+                        0)));
         when(alerts.cached()).thenReturn(List.of());
         when(alerts.cachedEvaluatedAt()).thenReturn(at.minusSeconds(30));
         String text = new OperationsPrometheusEndpoint(runtime, alerts).scrape();
-        assertThat(text).contains("yumpoo_ops_heap_used 123.0", "yumpoo_ops_db_ping NaN")
-            .doesNotContain("private", "HOST_CPU_HIGH", "DISK_LOW", "hostName", "subjectKey");
+        assertThat(text)
+                .contains("yumpoo_ops_heap_used 123.0", "yumpoo_ops_db_ping NaN")
+                .doesNotContain("private", "HOST_CPU_HIGH", "DISK_LOW", "hostName", "subjectKey");
         verify(runtime, never()).snapshot();
         verify(alerts, never()).rules();
     }
@@ -42,7 +49,8 @@ class OperationsPrometheusEndpointTest {
         when(alerts.cached()).thenReturn(List.of());
         when(alerts.cachedEvaluatedAt()).thenReturn(Instant.EPOCH);
         assertThat(new OperationsPrometheusEndpoint(runtime, alerts).scrape())
-            .contains("yumpoo_ops_sample_timestamp_seconds 0.0", "yumpoo_ops_alert_evaluation_timestamp_seconds 0.0");
+                .contains(
+                        "yumpoo_ops_sample_timestamp_seconds 0.0", "yumpoo_ops_alert_evaluation_timestamp_seconds 0.0");
         verify(runtime, never()).snapshot();
     }
 }

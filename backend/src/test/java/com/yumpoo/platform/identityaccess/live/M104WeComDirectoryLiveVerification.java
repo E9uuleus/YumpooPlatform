@@ -1,5 +1,7 @@
 package com.yumpoo.platform.identityaccess.live;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.yumpoo.platform.identityaccess.application.directory.DirectoryProfileMapper;
 import com.yumpoo.platform.identityaccess.application.directory.DirectoryScanResult;
 import com.yumpoo.platform.identityaccess.application.directory.FullDirectoryScanCollector;
@@ -7,12 +9,6 @@ import com.yumpoo.platform.identityaccess.application.directory.WeComMemberProfi
 import com.yumpoo.platform.identityaccess.application.directory.WeComRawMemberProfile;
 import com.yumpoo.platform.identityaccess.infrastructure.wecom.RestClientWeComDirectoryGateway;
 import com.yumpoo.platform.identityaccess.infrastructure.wecom.RestClientWeComDirectoryProfileGateway;
-import org.junit.jupiter.api.Test;
-import org.springframework.web.client.RestClient;
-import tools.jackson.databind.ObjectMapper;
-
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -22,8 +18,11 @@ import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import org.junit.jupiter.api.Test;
+import org.springframework.web.client.RestClient;
+import tools.jackson.databind.ObjectMapper;
 
 /** 仅由 verify:m1-04:live 双重门禁点名执行，不连接业务数据库。 */
 class M104WeComDirectoryLiveVerification {
@@ -36,35 +35,28 @@ class M104WeComDirectoryLiveVerification {
             "departmentDictionaryRead",
             "requiredProfileVisible",
             "optionalVisibilityCaptured",
-            "secretsRedacted"
-    );
+            "secretsRedacted");
 
     @Test
     void writesShortLivedSignedRedactedReceipt() throws Exception {
         String corpId = required("YUMPOO_M104_WECOM_CORP_ID");
         String directorySecret = required("YUMPOO_M104_WECOM_DIRECTORY_SECRET");
         String profileSecret = required("YUMPOO_M104_WECOM_PROFILE_SECRET");
-        byte[] evidenceKey = required("YUMPOO_M104_EVIDENCE_HMAC_KEY")
-                .getBytes(StandardCharsets.UTF_8);
+        byte[] evidenceKey = required("YUMPOO_M104_EVIDENCE_HMAC_KEY").getBytes(StandardCharsets.UTF_8);
         assertThat(directorySecret).isNotEqualTo(profileSecret);
 
         Clock clock = Clock.systemUTC();
         RestClientWeComDirectoryGateway directoryGateway =
-                new RestClientWeComDirectoryGateway(
-                        RestClient.builder(), corpId, directorySecret, clock
-                );
-        DirectoryScanResult scan = new FullDirectoryScanCollector(directoryGateway, 1000)
-                .collect((pass, page, cursor, members) -> { });
+                new RestClientWeComDirectoryGateway(RestClient.builder(), corpId, directorySecret, clock);
+        DirectoryScanResult scan =
+                new FullDirectoryScanCollector(directoryGateway, 1000).collect((pass, page, cursor, members) -> {});
         assertThat(scan.externalUserIds()).isNotEmpty();
 
         RestClientWeComDirectoryProfileGateway profileGateway =
-                new RestClientWeComDirectoryProfileGateway(
-                        RestClient.builder(), corpId, profileSecret, clock
-                );
+                new RestClientWeComDirectoryProfileGateway(RestClient.builder(), corpId, profileSecret, clock);
         Map<Long, String> departments = profileGateway.fetchDepartmentNames();
-        WeComRawMemberProfile raw = profileGateway.fetchMemberProfile(
-                scan.externalUserIds().getFirst()
-        );
+        WeComRawMemberProfile raw =
+                profileGateway.fetchMemberProfile(scan.externalUserIds().getFirst());
         WeComMemberProfile mapped = DirectoryProfileMapper.map(raw, departments);
         assertThat(mapped.displayName()).isNotBlank();
         assertThat(mapped.departmentSummary()).isNotBlank();
@@ -80,14 +72,9 @@ class M104WeComDirectoryLiveVerification {
         CHECK_NAMES.forEach(name -> checks.put(name, true));
         String verifiedAt = Instant.now().toString();
         String corpFingerprint = hmac(evidenceKey, "corp\0" + corpId);
-        String snapshotFingerprint = hmac(
-                evidenceKey,
-                "snapshot\0" + String.join("\0", scan.externalUserIds())
-        );
-        String signature = hmac(
-                evidenceKey,
-                canonicalReceipt(verifiedAt, corpFingerprint, snapshotFingerprint, checks)
-        );
+        String snapshotFingerprint = hmac(evidenceKey, "snapshot\0" + String.join("\0", scan.externalUserIds()));
+        String signature =
+                hmac(evidenceKey, canonicalReceipt(verifiedAt, corpFingerprint, snapshotFingerprint, checks));
 
         LinkedHashMap<String, Object> receipt = new LinkedHashMap<>();
         receipt.put("schemaVersion", 1);
@@ -103,14 +90,12 @@ class M104WeComDirectoryLiveVerification {
     }
 
     private static String canonicalReceipt(
-            String verifiedAt,
-            String corpFingerprint,
-            String snapshotFingerprint,
-            Map<String, Boolean> checks
-    ) {
+            String verifiedAt, String corpFingerprint, String snapshotFingerprint, Map<String, Boolean> checks) {
         StringBuilder value = new StringBuilder("m1-04-receipt-v1\0PASS\0")
-                .append(verifiedAt).append('\0')
-                .append(corpFingerprint).append('\0')
+                .append(verifiedAt)
+                .append('\0')
+                .append(corpFingerprint)
+                .append('\0')
                 .append(snapshotFingerprint);
         CHECK_NAMES.forEach(name -> value.append('\0').append(checks.get(name)));
         return value.toString();

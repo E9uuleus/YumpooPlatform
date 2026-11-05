@@ -1,26 +1,25 @@
 package com.yumpoo.platform.catalog.api;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
 import com.yumpoo.platform.catalog.application.workspace.WorkspaceService;
 import com.yumpoo.platform.catalog.application.workspace.WorkspaceView;
 import com.yumpoo.platform.catalog.domain.workspace.WorkspaceStatus;
-import com.yumpoo.platform.foundation.api.http.IfMatchParser;
 import com.yumpoo.platform.foundation.api.http.IdempotencyKeyParser;
+import com.yumpoo.platform.foundation.api.http.IfMatchParser;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.CurrentActorProvider;
 import com.yumpoo.platform.identityaccess.api.PlatformRoleCode;
+import java.util.Set;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
-
-import java.util.Set;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 class WorkspaceControllerTest {
     private static final UUID ACTOR_ID = UUID.fromString("13000000-0000-4000-8000-000000000001");
@@ -37,8 +36,7 @@ class WorkspaceControllerTest {
         CurrentActorProvider actorProvider = mock(CurrentActorProvider.class);
         when(actorProvider.requiredActive()).thenReturn(actor);
         service = mock(WorkspaceService.class);
-        controller = new WorkspaceController(
-                actorProvider, service, new IfMatchParser(), new IdempotencyKeyParser());
+        controller = new WorkspaceController(actorProvider, service, new IfMatchParser(), new IdempotencyKeyParser());
     }
 
     @Test
@@ -50,19 +48,19 @@ class WorkspaceControllerTest {
     @Test
     void visibleResourceIsResolvedBeforeMissingIfMatchBecomes428() throws Exception {
         when(service.findForAdministration(actor, WORKSPACE_ID)).thenReturn(view(0));
-        WorkspaceUpdateRequest body = new ObjectMapper().readValue(
-                "{\"name\":\"主工作空间\",\"description\":null}", WorkspaceUpdateRequest.class);
+        WorkspaceUpdateRequest body =
+                new ObjectMapper().readValue("{\"name\":\"主工作空间\",\"description\":null}", WorkspaceUpdateRequest.class);
         assertCode(() -> controller.update(WORKSPACE_ID, body, null), StandardErrorCode.PRECONDITION_REQUIRED);
     }
 
     @Test
     void deprecatedCreationEndpointCannotCreateASecondWorkspace() {
-        when(service.findAll(actor,
-                com.yumpoo.platform.catalog.application.workspace.WorkspaceListStatus.ALL))
+        when(service.findAll(actor, com.yumpoo.platform.catalog.application.workspace.WorkspaceListStatus.ALL))
                 .thenReturn(java.util.List.of(view(0)));
         WorkspaceCreateRequest request = new WorkspaceCreateRequest("OTHER", "其他空间", null, 1);
 
-        assertCode(() -> controller.legacyCreate(request, UUID.randomUUID().toString()),
+        assertCode(
+                () -> controller.legacyCreate(request, UUID.randomUUID().toString()),
                 StandardErrorCode.INVALID_STATE_TRANSITION);
     }
 
@@ -70,21 +68,24 @@ class WorkspaceControllerTest {
     void deprecatedLifecycleEndpointsResolveMainBeforeRejectingMutation() {
         when(service.findForAdministration(actor, WORKSPACE_ID)).thenReturn(view(0));
 
-        assertCode(() -> controller.legacyArchive(
+        assertCode(
+                () -> controller.legacyArchive(
                         WORKSPACE_ID, "\"0\"", UUID.randomUUID().toString()),
                 StandardErrorCode.INVALID_STATE_TRANSITION);
-        assertCode(() -> controller.legacyRestore(
+        assertCode(
+                () -> controller.legacyRestore(
                         WORKSPACE_ID, "\"0\"", UUID.randomUUID().toString()),
                 StandardErrorCode.INVALID_STATE_TRANSITION);
     }
 
     private static WorkspaceView view(long version) {
-        return new WorkspaceView(WORKSPACE_ID, "MAIN", "主工作空间", null,
-                0, WorkspaceStatus.ACTIVE, 0, version);
+        return new WorkspaceView(WORKSPACE_ID, "MAIN", "主工作空间", null, 0, WorkspaceStatus.ACTIVE, 0, version);
     }
 
     private static void assertCode(Runnable action, StandardErrorCode expected) {
-        assertThatThrownBy(action::run).isInstanceOfSatisfying(ApplicationException.class,
-                error -> assertThat(error.errorCode()).isEqualTo(expected));
+        assertThatThrownBy(action::run)
+                .isInstanceOfSatisfying(
+                        ApplicationException.class,
+                        error -> assertThat(error.errorCode()).isEqualTo(expected));
     }
 }

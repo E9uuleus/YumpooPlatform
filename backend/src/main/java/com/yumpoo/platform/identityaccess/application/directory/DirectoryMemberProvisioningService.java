@@ -4,16 +4,15 @@ import com.yumpoo.platform.foundation.application.event.EventActor;
 import com.yumpoo.platform.identityaccess.application.account.DirectoryAccountStatusService;
 import com.yumpoo.platform.identityaccess.application.authorization.AppManagerAvailabilityCoordinator;
 import com.yumpoo.platform.identityaccess.application.authorization.AvailabilitySnapshot;
-import com.yumpoo.platform.identityaccess.domain.identity.ExternalIdentityProvider;
 import com.yumpoo.platform.identityaccess.domain.identity.EmploymentStatus;
+import com.yumpoo.platform.identityaccess.domain.identity.ExternalIdentityProvider;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class DirectoryMemberProvisioningService {
@@ -29,15 +28,12 @@ public class DirectoryMemberProvisioningService {
             DirectoryMemberProvisioningRepository repository,
             AppManagerAvailabilityCoordinator availabilityCoordinator,
             Clock clock,
-            DirectoryAccountStatusService accountStatusService
-    ) {
-        this.companyConfigurationQuery = Objects.requireNonNull(
-                companyConfigurationQuery,
-                "companyConfigurationQuery must not be null"
-        );
+            DirectoryAccountStatusService accountStatusService) {
+        this.companyConfigurationQuery =
+                Objects.requireNonNull(companyConfigurationQuery, "companyConfigurationQuery must not be null");
         this.repository = Objects.requireNonNull(repository, "repository must not be null");
-        this.availabilityCoordinator = Objects.requireNonNull(
-                availabilityCoordinator, "availabilityCoordinator must not be null");
+        this.availabilityCoordinator =
+                Objects.requireNonNull(availabilityCoordinator, "availabilityCoordinator must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
         this.accountStatusService = accountStatusService;
     }
@@ -48,57 +44,48 @@ public class DirectoryMemberProvisioningService {
     }
 
     @Transactional
-    public DirectoryMemberProvisioningResult provisionOrRefresh(
-            WeComMemberProfile profile,
-            EventActor actor
-    ) {
+    public DirectoryMemberProvisioningResult provisionOrRefresh(WeComMemberProfile profile, EventActor actor) {
         Objects.requireNonNull(profile, "profile must not be null");
         Objects.requireNonNull(actor, "actor must not be null");
         UUID companyId = companyConfigurationQuery.current().companyId();
         AvailabilitySnapshot availabilityBefore = availabilityCoordinator.lock(companyId);
-        repository.acquireProvisionLock(
-                companyId,
-                ExternalIdentityProvider.WECOM,
-                profile.externalUserId()
-        );
+        repository.acquireProvisionLock(companyId, ExternalIdentityProvider.WECOM, profile.externalUserId());
 
         Instant now = clock.instant();
-        DirectoryMemberProvisioningResult result = repository.findByExternalIdentity(
-                        companyId,
-                        ExternalIdentityProvider.WECOM,
-                        profile.externalUserId()
-                )
+        DirectoryMemberProvisioningResult result = repository
+                .findByExternalIdentity(companyId, ExternalIdentityProvider.WECOM, profile.externalUserId())
                 .map(current -> refresh(current, profile, now))
-                .orElseGet(() -> result(
-                        repository.create(companyId, profile, now),
-                        DirectoryMemberProvisioningOutcome.CREATED
-                ));
+                .orElseGet(() ->
+                        result(repository.create(companyId, profile, now), DirectoryMemberProvisioningOutcome.CREATED));
         if (profile.accountDisabled()) {
-            var disabled = accountStatusService.disable(companyId, result.userId(),
-                    DirectoryAccountStatusService.PROVIDER_DISABLED, actor);
+            var disabled = accountStatusService.disable(
+                    companyId, result.userId(), DirectoryAccountStatusService.PROVIDER_DISABLED, actor);
             if (disabled.isPresent()) {
                 var changed = disabled.orElseThrow();
-                result = new DirectoryMemberProvisioningResult(result.userId(), result.externalIdentityId(),
-                        changed.employmentStatus(), changed.accountStatus(), changed.authorizationVersion(),
-                        changed.rowVersion(), result.outcome() == DirectoryMemberProvisioningOutcome.UNCHANGED
-                                ? DirectoryMemberProvisioningOutcome.UPDATED : result.outcome());
+                result = new DirectoryMemberProvisioningResult(
+                        result.userId(),
+                        result.externalIdentityId(),
+                        changed.employmentStatus(),
+                        changed.accountStatus(),
+                        changed.authorizationVersion(),
+                        changed.rowVersion(),
+                        result.outcome() == DirectoryMemberProvisioningOutcome.UNCHANGED
+                                ? DirectoryMemberProvisioningOutcome.UPDATED
+                                : result.outcome());
             }
         }
         availabilityCoordinator.reconcile(
                 availabilityBefore,
                 result.outcome() == DirectoryMemberProvisioningOutcome.RETURNED
-                        ? "EMPLOYMENT_RETURNED" : "DIRECTORY_MEMBER_REFRESHED",
+                        ? "EMPLOYMENT_RETURNED"
+                        : "DIRECTORY_MEMBER_REFRESHED",
                 result.userId(),
-                actor
-        );
+                actor);
         return result;
     }
 
     private DirectoryMemberProvisioningResult refresh(
-            DirectoryMemberBinding current,
-            WeComMemberProfile profile,
-            Instant now
-    ) {
+            DirectoryMemberBinding current, WeComMemberProfile profile, Instant now) {
         String effectiveEmail = profile.email().applyTo(current.user().email());
         String effectiveMobile = profile.mobile().applyTo(current.user().mobile());
         WeComMemberProfile effectiveProfile = new WeComMemberProfile(
@@ -108,15 +95,11 @@ public class DirectoryMemberProvisioningService {
                 resolved(effectiveMobile),
                 profile.departmentSummary(),
                 profile.rawProfileHash(),
-                profile.accountDisabled()
-        );
+                profile.accountDisabled());
         boolean profileChanged = !current.user().displayName().equals(profile.displayName())
                 || !Objects.equals(current.user().email(), effectiveEmail)
                 || !Objects.equals(current.user().mobile(), effectiveMobile)
-                || !Objects.equals(
-                        current.user().departmentSummary(),
-                        profile.departmentSummary()
-                )
+                || !Objects.equals(current.user().departmentSummary(), profile.departmentSummary())
                 || !current.externalIdentity().rawProfileHash().equals(profile.rawProfileHash());
         boolean returned = current.user().employmentStatus() == EmploymentStatus.LEFT
                 || current.externalIdentity().providerEmploymentStatus() == EmploymentStatus.LEFT;
@@ -130,15 +113,11 @@ public class DirectoryMemberProvisioningService {
     }
 
     private static DirectoryOptionalField resolved(String value) {
-        return value == null
-                ? DirectoryOptionalField.clear()
-                : DirectoryOptionalField.present(value);
+        return value == null ? DirectoryOptionalField.clear() : DirectoryOptionalField.present(value);
     }
 
     private static DirectoryMemberProvisioningResult result(
-            DirectoryMemberBinding binding,
-            DirectoryMemberProvisioningOutcome outcome
-    ) {
+            DirectoryMemberBinding binding, DirectoryMemberProvisioningOutcome outcome) {
         return new DirectoryMemberProvisioningResult(
                 binding.user().id(),
                 binding.externalIdentity().id(),
@@ -146,7 +125,6 @@ public class DirectoryMemberProvisioningService {
                 binding.user().accountStatus(),
                 binding.user().authorizationVersion(),
                 binding.user().rowVersion(),
-                outcome
-        );
+                outcome);
     }
 }

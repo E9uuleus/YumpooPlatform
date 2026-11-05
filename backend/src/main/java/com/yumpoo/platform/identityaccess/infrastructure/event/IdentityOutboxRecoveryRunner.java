@@ -3,6 +3,8 @@ package com.yumpoo.platform.identityaccess.infrastructure.event;
 import com.yumpoo.platform.foundation.application.event.EventSubscription;
 import com.yumpoo.platform.foundation.application.outbox.OutboxStorePort;
 import com.yumpoo.platform.identityaccess.application.event.IdentityCommittedFactConsumer;
+import java.time.Clock;
+import java.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -10,9 +12,6 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
-
-import java.time.Clock;
-import java.time.Instant;
 
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
@@ -25,10 +24,7 @@ public class IdentityOutboxRecoveryRunner implements ApplicationRunner {
     private final Clock clock;
 
     public IdentityOutboxRecoveryRunner(
-            OutboxStorePort outboxStore,
-            IdentityCommittedFactConsumer consumer,
-            Clock clock
-    ) {
+            OutboxStorePort outboxStore, IdentityCommittedFactConsumer consumer, Clock clock) {
         this.outboxStore = outboxStore;
         this.consumer = consumer;
         this.clock = clock;
@@ -42,8 +38,11 @@ public class IdentityOutboxRecoveryRunner implements ApplicationRunner {
             recovered += outboxStore.requeueMissingConsumerEvents(subscription, nextAttemptAt);
         }
         if (recovered > 0) {
-            LOGGER.atInfo().setMessage("identity outbox events requeued").addKeyValue("event", "identity.outbox.requeued")
-                    .addKeyValue("count", recovered).log();
+            LOGGER.atInfo()
+                    .setMessage("identity outbox events requeued")
+                    .addKeyValue("event", "identity.outbox.requeued")
+                    .addKeyValue("count", recovered)
+                    .log();
         }
     }
 }

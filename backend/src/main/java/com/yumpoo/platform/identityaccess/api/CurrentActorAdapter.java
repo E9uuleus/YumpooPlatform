@@ -23,9 +23,8 @@ public class CurrentActorAdapter implements CurrentActorProvider {
                 || !(authentication.getPrincipal() instanceof CurrentActor actor)) {
             throw authenticationRequired();
         }
-        ActiveUserSnapshot current = userQuery.findByUserId(actor.userId()).orElseThrow(
-                CurrentActorAdapter::authenticationRequired
-        );
+        ActiveUserSnapshot current =
+                userQuery.findByUserId(actor.userId()).orElseThrow(CurrentActorAdapter::authenticationRequired);
         if (!current.activeAndEnabled()) {
             throw new ApplicationException(StandardErrorCode.ACCOUNT_DISABLED);
         }

@@ -12,16 +12,6 @@ import com.yumpoo.platform.identityaccess.testing.M013DirectoryProbeRepository;
 import com.yumpoo.platform.identityaccess.testing.M013DirectoryReconciliationService;
 import com.yumpoo.platform.identityaccess.testing.M013OmittedCursorConfirmation;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.test.context.jdbc.Sql;
-import org.springframework.web.client.RestClient;
-
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -40,30 +30,29 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.test.context.jdbc.Sql;
+import org.springframework.web.client.RestClient;
 
 /**
  * M0-13 受控真实验证入口。类名故意不以 Test/IT 结尾，普通 Maven 验证不会发现它。
  */
 @Import({
-        PostgreSqlTestContainerConfiguration.class,
-        M013DirectoryProbeRepository.class,
-        M013DirectoryReconciliationService.class
+    PostgreSqlTestContainerConfiguration.class,
+    M013DirectoryProbeRepository.class,
+    M013DirectoryReconciliationService.class
 })
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.NONE,
-        properties = {
-                "spring.flyway.enabled=false",
-                "yumpoo.outbox.enabled=false"
-        }
-)
-@Sql(
-        scripts = "/sql/m0-13-probe-schema.sql",
-        executionPhase = Sql.ExecutionPhase.BEFORE_TEST_CLASS
-)
-@Sql(
-        scripts = "/sql/m0-13-probe-drop.sql",
-        executionPhase = Sql.ExecutionPhase.AFTER_TEST_CLASS
-)
+        properties = {"spring.flyway.enabled=false", "yumpoo.outbox.enabled=false"})
+@Sql(scripts = "/sql/m0-13-probe-schema.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_CLASS)
+@Sql(scripts = "/sql/m0-13-probe-drop.sql", executionPhase = Sql.ExecutionPhase.AFTER_TEST_CLASS)
 class M013WeComDirectoryLiveVerification {
 
     private static final String HMAC_SHA_256 = "HmacSHA256";
@@ -79,13 +68,8 @@ class M013WeComDirectoryLiveVerification {
             "3eb43ef6ad4b3701555abdd7e5d9fba4eb1ea660394d4d78821f7af860cb8965";
     private static final Pattern LOWERCASE_SHA_256_HEX = Pattern.compile("^[0-9a-f]{64}$");
     private static final HexFormat HEX = HexFormat.of();
-    private static final Set<String> INSECURE_KEY_MARKERS = Set.of(
-            "change-me",
-            "changeme",
-            "placeholder",
-            "password",
-            "secret-key"
-    );
+    private static final Set<String> INSECURE_KEY_MARKERS =
+            Set.of("change-me", "changeme", "placeholder", "password", "secret-key");
     private static final List<String> CHECK_NAMES = List.of(
             "configurationPreflight",
             "realDirectoryRead",
@@ -97,8 +81,7 @@ class M013WeComDirectoryLiveVerification {
             "syntheticDepartureDetected",
             "syntheticReturnReused",
             "secretsRedacted",
-            "externalLimitsRecorded"
-    );
+            "externalLimitsRecorded");
 
     @Autowired
     private M013DirectoryProbeRepository repository;
@@ -113,101 +96,50 @@ class M013WeComDirectoryLiveVerification {
 
         Clock liveClock = Clock.systemUTC();
         WeComDirectoryGateway realGateway = new RestClientWeComDirectoryGateway(
-                liveRestClientBuilder(),
-                configuration.corpId(),
-                configuration.directorySecret(),
-                liveClock
-        );
+                liveRestClientBuilder(), configuration.corpId(), configuration.directorySecret(), liveClock);
         DirectorySnapshotCollector narrowCollector = new DirectorySnapshotCollector(
-                realGateway,
-                configuration.corpId(),
-                configuration.hmacKey(),
-                LIVE_PAGE_SIZE
-        );
+                realGateway, configuration.corpId(), configuration.hmacKey(), LIVE_PAGE_SIZE);
         DirectorySnapshotCollector wideCollector = new DirectorySnapshotCollector(
-                realGateway,
-                configuration.corpId(),
-                configuration.hmacKey(),
-                WIDE_PAGE_SIZE
-        );
+                realGateway, configuration.corpId(), configuration.hmacKey(), WIDE_PAGE_SIZE);
 
         DirectorySnapshotResult firstSnapshot = narrowCollector.collect();
         DirectorySnapshotResult repeatedSnapshot = narrowCollector.collect();
         DirectorySnapshotResult wideSnapshot = wideCollector.collect();
         M013OmittedCursorConfirmation.ConfirmedSnapshot confirmedSnapshot =
-                M013OmittedCursorConfirmation.confirm(
-                        firstSnapshot,
-                        repeatedSnapshot,
-                        wideSnapshot
-        );
+                M013OmittedCursorConfirmation.confirm(firstSnapshot, repeatedSnapshot, wideSnapshot);
         Set<String> realFingerprints = confirmedSnapshot.memberFingerprints();
 
-        M013DirectoryProbeRepository.RunRow initialRun = reconciliationService.synchronize(
-                realFingerprints,
-                true,
-                Set.of()
-        );
+        M013DirectoryProbeRepository.RunRow initialRun =
+                reconciliationService.synchronize(realFingerprints, true, Set.of());
         requireSuccessfulInitialRun(initialRun, realFingerprints.size());
-        Map<String, M013DirectoryProbeRepository.MemberRow> initialMembers =
-                memberRows(realFingerprints);
+        Map<String, M013DirectoryProbeRepository.MemberRow> initialMembers = memberRows(realFingerprints);
 
-        M013DirectoryProbeRepository.RunRow replayRun = reconciliationService.synchronize(
-                realFingerprints,
-                true,
-                Set.of()
-        );
+        M013DirectoryProbeRepository.RunRow replayRun =
+                reconciliationService.synchronize(realFingerprints, true, Set.of());
         requireIdempotentReplay(replayRun, initialRun, initialMembers, realFingerprints);
 
-        verifyPageFailureSafety(
-                realGateway,
-                configuration,
-                realFingerprints
-        );
+        verifyPageFailureSafety(realGateway, configuration, realFingerprints);
 
         String departureTarget = realFingerprints.stream().sorted().findFirst().orElseThrow();
         M013DirectoryProbeRepository.MemberRow targetBeforeFailure = member(departureTarget);
-        verifyItemFailureSafety(
-                realFingerprints,
-                departureTarget,
-                targetBeforeFailure
-        );
-        M013DirectoryProbeRepository.MemberRow recoveredTarget = verifyRecoveryRerun(
-                realFingerprints,
-                initialMembers,
-                initialRun,
-                departureTarget
-        );
-        verifyDepartureAndReturn(
-                realFingerprints,
-                departureTarget,
-                recoveredTarget
-        );
+        verifyItemFailureSafety(realFingerprints, departureTarget, targetBeforeFailure);
+        M013DirectoryProbeRepository.MemberRow recoveredTarget =
+                verifyRecoveryRerun(realFingerprints, initialMembers, initialRun, departureTarget);
+        verifyDepartureAndReturn(realFingerprints, departureTarget, recoveredTarget);
         verifyExternalLimits();
 
         LinkedHashMap<String, Boolean> checks = passingChecks();
         String verifiedAt = liveClock.instant().toString();
         String canonical = canonicalReceipt(
-                verifiedAt,
-                confirmedSnapshot.corpFingerprint(),
-                confirmedSnapshot.snapshotFingerprint(),
-                checks
-        );
+                verifiedAt, confirmedSnapshot.corpFingerprint(), confirmedSnapshot.snapshotFingerprint(), checks);
         String signature = signReceipt(configuration.hmacKey(), canonical);
         String receipt = receiptJson(
                 verifiedAt,
                 confirmedSnapshot.corpFingerprint(),
                 confirmedSnapshot.snapshotFingerprint(),
                 checks,
-                signature
-        );
-        verifySecretsRedacted(
-                configuration,
-                canonical,
-                receipt,
-                firstSnapshot,
-                repeatedSnapshot,
-                wideSnapshot
-        );
+                signature);
+        verifySecretsRedacted(configuration, canonical, receipt, firstSnapshot, repeatedSnapshot, wideSnapshot);
         writeReceiptCreateNew(receipt);
     }
 
@@ -218,10 +150,7 @@ class M013WeComDirectoryLiveVerification {
         return RestClient.builder().requestFactory(requestFactory);
     }
 
-    private void requireSuccessfulInitialRun(
-            M013DirectoryProbeRepository.RunRow run,
-            int memberCount
-    ) {
+    private void requireSuccessfulInitialRun(M013DirectoryProbeRepository.RunRow run, int memberCount) {
         require(
                 "SUCCEEDED".equals(run.status())
                         && run.scanComplete()
@@ -232,16 +161,14 @@ class M013WeComDirectoryLiveVerification {
                         && run.leftCount() == 0
                         && run.failedCount() == 0
                         && repository.memberCount() == memberCount,
-                "M0-13 initial reconciliation did not persist a complete snapshot"
-        );
+                "M0-13 initial reconciliation did not persist a complete snapshot");
     }
 
     private void requireIdempotentReplay(
             M013DirectoryProbeRepository.RunRow replayRun,
             M013DirectoryProbeRepository.RunRow initialRun,
             Map<String, M013DirectoryProbeRepository.MemberRow> initialMembers,
-            Set<String> fingerprints
-    ) {
+            Set<String> fingerprints) {
         require(
                 "SUCCEEDED".equals(replayRun.status())
                         && replayRun.scanComplete()
@@ -251,8 +178,7 @@ class M013WeComDirectoryLiveVerification {
                         && replayRun.leftCount() == 0
                         && replayRun.failedCount() == 0
                         && repository.memberCount() == fingerprints.size(),
-                "M0-13 replay was not idempotent"
-        );
+                "M0-13 replay was not idempotent");
         for (String fingerprint : fingerprints) {
             M013DirectoryProbeRepository.MemberRow before = initialMembers.get(fingerprint);
             M013DirectoryProbeRepository.MemberRow after = member(fingerprint);
@@ -263,40 +189,28 @@ class M013WeComDirectoryLiveVerification {
                             && after.firstSeenRunId().equals(initialRun.id())
                             && after.lastSeenRunId().equals(replayRun.id())
                             && "ACTIVE".equals(after.employmentStatus()),
-                    "M0-13 replay changed stable member identity"
-            );
+                    "M0-13 replay changed stable member identity");
         }
     }
 
     private void verifyPageFailureSafety(
-            WeComDirectoryGateway realGateway,
-            LiveConfiguration configuration,
-            Set<String> realFingerprints
-    ) {
-        Map<String, M013DirectoryProbeRepository.MemberRow> beforeFailure =
-                memberRows(realFingerprints);
+            WeComDirectoryGateway realGateway, LiveConfiguration configuration, Set<String> realFingerprints) {
+        Map<String, M013DirectoryProbeRepository.MemberRow> beforeFailure = memberRows(realFingerprints);
         DirectorySnapshotCollector failureCollector = new DirectorySnapshotCollector(
                 new SecondPageFailureGateway(realGateway),
                 configuration.corpId(),
                 configuration.hmacKey(),
-                LIVE_PAGE_SIZE
-        );
+                LIVE_PAGE_SIZE);
         DirectorySnapshotResult.Incomplete incomplete = requireIncomplete(
-                failureCollector.collect(),
-                "M0-13 controlled second-page failure was not fail closed"
-        );
+                failureCollector.collect(), "M0-13 controlled second-page failure was not fail closed");
         require(
                 incomplete.failure() == DirectorySnapshotFailure.TRANSPORT_ERROR
                         && incomplete.completedPageCount() == 1
                         && incomplete.memberCount() > 0,
-                "M0-13 controlled page failure had an unexpected safe classification"
-        );
+                "M0-13 controlled page failure had an unexpected safe classification");
 
-        M013DirectoryProbeRepository.RunRow failedRun = reconciliationService.synchronize(
-                fingerprintValues(incomplete),
-                false,
-                Set.of()
-        );
+        M013DirectoryProbeRepository.RunRow failedRun =
+                reconciliationService.synchronize(fingerprintValues(incomplete), false, Set.of());
         require(
                 "FAILED".equals(failedRun.status())
                         && !failedRun.scanComplete()
@@ -309,20 +223,15 @@ class M013WeComDirectoryLiveVerification {
                         && repository.seenCount(failedRun.id()) == incomplete.memberCount()
                         && repository.memberCount() == realFingerprints.size()
                         && beforeFailure.equals(memberRows(realFingerprints)),
-                "M0-13 incomplete page scan changed reconciled member state"
-        );
+                "M0-13 incomplete page scan changed reconciled member state");
     }
 
     private void verifyItemFailureSafety(
             Set<String> realFingerprints,
             String failedExistingFingerprint,
-            M013DirectoryProbeRepository.MemberRow beforeFailure
-    ) {
-        M013DirectoryProbeRepository.RunRow partialRun = reconciliationService.synchronize(
-                realFingerprints,
-                true,
-                Set.of(failedExistingFingerprint)
-        );
+            M013DirectoryProbeRepository.MemberRow beforeFailure) {
+        M013DirectoryProbeRepository.RunRow partialRun =
+                reconciliationService.synchronize(realFingerprints, true, Set.of(failedExistingFingerprint));
         M013DirectoryProbeRepository.MemberRow afterFailure = member(failedExistingFingerprint);
         require(
                 "PARTIALLY_SUCCEEDED".equals(partialRun.status())
@@ -335,30 +244,24 @@ class M013WeComDirectoryLiveVerification {
                         && partialRun.failedCount() == 1
                         && repository.memberCount() == realFingerprints.size()
                         && beforeFailure.equals(afterFailure),
-                "M0-13 item failure was not isolated as a partial result"
-        );
+                "M0-13 item failure was not isolated as a partial result");
         require(
-                repository.findSeen(partialRun.id(), failedExistingFingerprint)
+                repository
+                        .findSeen(partialRun.id(), failedExistingFingerprint)
                         .map(seen -> "FAILED".equals(seen.result())
                                 && seen.memberId() == null
-                                && M013DirectoryReconciliationService.ITEM_FAILURE_CODE
-                                .equals(seen.errorCode()))
+                                && M013DirectoryReconciliationService.ITEM_FAILURE_CODE.equals(seen.errorCode()))
                         .orElse(false),
-                "M0-13 item failure did not retain a safe failure marker"
-        );
+                "M0-13 item failure did not retain a safe failure marker");
     }
 
     private M013DirectoryProbeRepository.MemberRow verifyRecoveryRerun(
             Set<String> realFingerprints,
             Map<String, M013DirectoryProbeRepository.MemberRow> initialMembers,
             M013DirectoryProbeRepository.RunRow initialRun,
-            String departureTarget
-    ) {
-        M013DirectoryProbeRepository.RunRow recoveryRun = reconciliationService.synchronize(
-                realFingerprints,
-                true,
-                Set.of()
-        );
+            String departureTarget) {
+        M013DirectoryProbeRepository.RunRow recoveryRun =
+                reconciliationService.synchronize(realFingerprints, true, Set.of());
         require(
                 "SUCCEEDED".equals(recoveryRun.status())
                         && recoveryRun.scanComplete()
@@ -369,8 +272,7 @@ class M013WeComDirectoryLiveVerification {
                         && recoveryRun.leftCount() == 0
                         && recoveryRun.failedCount() == 0
                         && repository.memberCount() == realFingerprints.size(),
-                "M0-13 recovery rerun was not idempotent"
-        );
+                "M0-13 recovery rerun was not idempotent");
         for (String fingerprint : realFingerprints) {
             M013DirectoryProbeRepository.MemberRow initial = initialMembers.get(fingerprint);
             M013DirectoryProbeRepository.MemberRow recovered = member(fingerprint);
@@ -380,8 +282,7 @@ class M013WeComDirectoryLiveVerification {
                             && recovered.firstSeenRunId().equals(initialRun.id())
                             && recovered.lastSeenRunId().equals(recoveryRun.id())
                             && "ACTIVE".equals(recovered.employmentStatus()),
-                    "M0-13 recovery rerun changed stable member identity"
-            );
+                    "M0-13 recovery rerun changed stable member identity");
         }
         return member(departureTarget);
     }
@@ -389,16 +290,12 @@ class M013WeComDirectoryLiveVerification {
     private void verifyDepartureAndReturn(
             Set<String> realFingerprints,
             String departureTarget,
-            M013DirectoryProbeRepository.MemberRow stableIdentity
-    ) {
+            M013DirectoryProbeRepository.MemberRow stableIdentity) {
         Set<String> afterDeparture = new LinkedHashSet<>(realFingerprints);
         require(afterDeparture.remove(departureTarget), "M0-13 departure target was unavailable");
 
-        M013DirectoryProbeRepository.RunRow departureRun = reconciliationService.synchronize(
-                afterDeparture,
-                true,
-                Set.of()
-        );
+        M013DirectoryProbeRepository.RunRow departureRun =
+                reconciliationService.synchronize(afterDeparture, true, Set.of());
         M013DirectoryProbeRepository.MemberRow left = member(departureTarget);
         require(
                 "SUCCEEDED".equals(departureRun.status())
@@ -412,14 +309,10 @@ class M013WeComDirectoryLiveVerification {
                         && left.id().equals(stableIdentity.id())
                         && left.firstSeenRunId().equals(stableIdentity.firstSeenRunId())
                         && "LEFT".equals(left.employmentStatus()),
-                "M0-13 synthetic departure did not preserve stable member identity"
-        );
+                "M0-13 synthetic departure did not preserve stable member identity");
 
-        M013DirectoryProbeRepository.RunRow returnRun = reconciliationService.synchronize(
-                realFingerprints,
-                true,
-                Set.of()
-        );
+        M013DirectoryProbeRepository.RunRow returnRun =
+                reconciliationService.synchronize(realFingerprints, true, Set.of());
         M013DirectoryProbeRepository.MemberRow returned = member(departureTarget);
         require(
                 "SUCCEEDED".equals(returnRun.status())
@@ -435,8 +328,7 @@ class M013WeComDirectoryLiveVerification {
                         && returned.firstSeenRunId().equals(stableIdentity.firstSeenRunId())
                         && returned.lastSeenRunId().equals(returnRun.id())
                         && "ACTIVE".equals(returned.employmentStatus()),
-                "M0-13 synthetic return did not reuse stable member identity"
-        );
+                "M0-13 synthetic return did not reuse stable member identity");
     }
 
     private static void verifyExternalLimits() {
@@ -452,13 +344,10 @@ class M013WeComDirectoryLiveVerification {
                         && !DirectorySnapshotFailure.PERMISSION_DENIED.retryable()
                         && !DirectorySnapshotFailure.UNTRUSTED_IP.retryable()
                         && !DirectorySnapshotFailure.MISSING_CURSOR.retryable(),
-                "M0-13 external directory limits or retry classifications changed"
-        );
+                "M0-13 external directory limits or retry classifications changed");
     }
 
-    private Map<String, M013DirectoryProbeRepository.MemberRow> memberRows(
-            Set<String> fingerprints
-    ) {
+    private Map<String, M013DirectoryProbeRepository.MemberRow> memberRows(Set<String> fingerprints) {
         Map<String, M013DirectoryProbeRepository.MemberRow> rows = new LinkedHashMap<>();
         for (String fingerprint : fingerprints.stream().sorted().toList()) {
             rows.put(fingerprint, member(fingerprint));
@@ -467,9 +356,9 @@ class M013WeComDirectoryLiveVerification {
     }
 
     private M013DirectoryProbeRepository.MemberRow member(String fingerprint) {
-        return repository.findMember(fingerprint).orElseThrow(() ->
-                new IllegalStateException("M0-13 expected member state was unavailable")
-        );
+        return repository
+                .findMember(fingerprint)
+                .orElseThrow(() -> new IllegalStateException("M0-13 expected member state was unavailable"));
     }
 
     private static Set<String> fingerprintValues(DirectorySnapshotResult snapshot) {
@@ -477,17 +366,12 @@ class M013WeComDirectoryLiveVerification {
         for (DirectoryMemberFingerprint fingerprint : snapshot.memberFingerprints()) {
             values.add(fingerprint.value());
         }
-        require(
-                values.size() == snapshot.memberCount(),
-                "M0-13 directory snapshot contained duplicate fingerprints"
-        );
+        require(values.size() == snapshot.memberCount(), "M0-13 directory snapshot contained duplicate fingerprints");
         return Set.copyOf(values);
     }
 
     private static DirectorySnapshotResult.Incomplete requireIncomplete(
-            DirectorySnapshotResult result,
-            String safeMessage
-    ) {
+            DirectorySnapshotResult result, String safeMessage) {
         if (result instanceof DirectorySnapshotResult.Incomplete incomplete) {
             return incomplete;
         }
@@ -498,35 +382,24 @@ class M013WeComDirectoryLiveVerification {
         String profiles = requiredEnvironment("SPRING_PROFILES_ACTIVE");
         String enabled = requiredEnvironment("YUMPOO_M013_WECOM_ENABLED");
         String corpId = requiredEnvironment("YUMPOO_M013_WECOM_CORP_ID");
-        String directorySecret = requiredEnvironment(
-                "YUMPOO_M013_WECOM_DIRECTORY_SECRET"
-        );
+        String directorySecret = requiredEnvironment("YUMPOO_M013_WECOM_DIRECTORY_SECRET");
         String hmacKey = requiredEnvironment("YUMPOO_M013_EVIDENCE_HMAC_KEY");
 
-        boolean liveProfileEnabled = List.of(profiles.split(",", -1)).stream()
-                .map(String::trim)
-                .anyMatch("m0-13-live"::equals);
+        boolean liveProfileEnabled =
+                List.of(profiles.split(",", -1)).stream().map(String::trim).anyMatch("m0-13-live"::equals);
         require(liveProfileEnabled, "M0-13 live profile is not enabled");
         require("true".equals(enabled), "M0-13 live verification is not enabled");
 
         byte[] hmacKeyBytes = hmacKey.getBytes(StandardCharsets.UTF_8);
         String normalizedKey = hmacKey.toLowerCase(Locale.ROOT);
         long distinctCodePoints = hmacKey.codePoints().distinct().limit(8).count();
-        boolean insecureMarker = INSECURE_KEY_MARKERS.stream()
-                .anyMatch(normalizedKey::contains);
+        boolean insecureMarker = INSECURE_KEY_MARKERS.stream().anyMatch(normalizedKey::contains);
         require(
-                hmacKeyBytes.length >= 32
-                        && distinctCodePoints >= 8
-                        && !insecureMarker,
-                "M0-13 evidence HMAC key does not meet the strength policy"
-        );
+                hmacKeyBytes.length >= 32 && distinctCodePoints >= 8 && !insecureMarker,
+                "M0-13 evidence HMAC key does not meet the strength policy");
         require(
-                !MessageDigest.isEqual(
-                        hmacKeyBytes,
-                        directorySecret.getBytes(StandardCharsets.UTF_8)
-                ),
-                "M0-13 evidence HMAC key must be independent from the directory secret"
-        );
+                !MessageDigest.isEqual(hmacKeyBytes, directorySecret.getBytes(StandardCharsets.UTF_8)),
+                "M0-13 evidence HMAC key must be independent from the directory secret");
         return new LiveConfiguration(corpId, directorySecret, hmacKey);
     }
 
@@ -545,16 +418,11 @@ class M013WeComDirectoryLiveVerification {
     }
 
     private static String canonicalReceipt(
-            String verifiedAt,
-            String corpFingerprint,
-            String snapshotFingerprint,
-            Map<String, Boolean> checks
-    ) {
+            String verifiedAt, String corpFingerprint, String snapshotFingerprint, Map<String, Boolean> checks) {
         require(
                 CHECK_NAMES.equals(new ArrayList<>(checks.keySet()))
                         && checks.values().stream().allMatch(Boolean.TRUE::equals),
-                "M0-13 receipt checks are incomplete"
-        );
+                "M0-13 receipt checks are incomplete");
         List<String> lines = new ArrayList<>();
         lines.add("schemaVersion=" + RECEIPT_SCHEMA_VERSION);
         lines.add("status=" + RECEIPT_STATUS);
@@ -570,10 +438,7 @@ class M013WeComDirectoryLiveVerification {
     private static String signReceipt(String hmacKey, String canonical) {
         try {
             Mac mac = Mac.getInstance(HMAC_SHA_256);
-            mac.init(new SecretKeySpec(
-                    hmacKey.getBytes(StandardCharsets.UTF_8),
-                    HMAC_SHA_256
-            ));
+            mac.init(new SecretKeySpec(hmacKey.getBytes(StandardCharsets.UTF_8), HMAC_SHA_256));
             mac.update(RECEIPT_DOMAIN.getBytes(StandardCharsets.UTF_8));
             return HEX.formatHex(mac.doFinal(canonical.getBytes(StandardCharsets.UTF_8)));
         } catch (GeneralSecurityException exception) {
@@ -582,19 +447,11 @@ class M013WeComDirectoryLiveVerification {
     }
 
     private static void verifyReceiptSigningCompatibility() {
-        String canonical = canonicalReceipt(
-                "2026-08-10T00:00:00.000Z",
-                "a".repeat(64),
-                "b".repeat(64),
-                passingChecks()
-        );
+        String canonical =
+                canonicalReceipt("2026-08-10T00:00:00.000Z", "a".repeat(64), "b".repeat(64), passingChecks());
         require(
-                EXPECTED_SIGNING_VECTOR.equals(signReceipt(
-                        "M013-Test-Key-0123456789-abcdef!@",
-                        canonical
-                )),
-                "M0-13 receipt signing compatibility self-check failed"
-        );
+                EXPECTED_SIGNING_VECTOR.equals(signReceipt("M013-Test-Key-0123456789-abcdef!@", canonical)),
+                "M0-13 receipt signing compatibility self-check failed");
     }
 
     private static String receiptJson(
@@ -602,28 +459,30 @@ class M013WeComDirectoryLiveVerification {
             String corpFingerprint,
             String snapshotFingerprint,
             Map<String, Boolean> checks,
-            String signature
-    ) {
+            String signature) {
         require(
                 LOWERCASE_SHA_256_HEX.matcher(corpFingerprint).matches()
                         && LOWERCASE_SHA_256_HEX.matcher(snapshotFingerprint).matches()
                         && LOWERCASE_SHA_256_HEX.matcher(signature).matches(),
-                "M0-13 receipt fingerprint format is invalid"
-        );
+                "M0-13 receipt fingerprint format is invalid");
         require(
                 CHECK_NAMES.equals(new ArrayList<>(checks.keySet()))
                         && checks.values().stream().allMatch(Boolean.TRUE::equals),
-                "M0-13 receipt checks are invalid"
-        );
+                "M0-13 receipt checks are invalid");
 
         StringBuilder json = new StringBuilder(1024);
         json.append("{\n")
                 .append("  \"schemaVersion\": 1,\n")
                 .append("  \"status\": \"PASS\",\n")
-                .append("  \"verifiedAt\": \"").append(verifiedAt).append("\",\n")
-                .append("  \"corpFingerprint\": \"").append(corpFingerprint).append("\",\n")
+                .append("  \"verifiedAt\": \"")
+                .append(verifiedAt)
+                .append("\",\n")
+                .append("  \"corpFingerprint\": \"")
+                .append(corpFingerprint)
+                .append("\",\n")
                 .append("  \"snapshotFingerprint\": \"")
-                .append(snapshotFingerprint).append("\",\n")
+                .append(snapshotFingerprint)
+                .append("\",\n")
                 .append("  \"checks\": {\n");
         for (int index = 0; index < CHECK_NAMES.size(); index++) {
             String name = CHECK_NAMES.get(index);
@@ -631,7 +490,9 @@ class M013WeComDirectoryLiveVerification {
             json.append(index + 1 == CHECK_NAMES.size() ? "\n" : ",\n");
         }
         json.append("  },\n")
-                .append("  \"signature\": \"").append(signature).append("\"\n")
+                .append("  \"signature\": \"")
+                .append(signature)
+                .append("\"\n")
                 .append("}\n");
         return json.toString();
     }
@@ -642,32 +503,26 @@ class M013WeComDirectoryLiveVerification {
             String receipt,
             DirectorySnapshotResult firstSnapshot,
             DirectorySnapshotResult repeatedSnapshot,
-            DirectorySnapshotResult wideSnapshot
-    ) {
+            DirectorySnapshotResult wideSnapshot) {
         String rawMemberSentinel = "m013-raw-member-sentinel";
         String rawCursorSentinel = "m013-raw-cursor-sentinel";
         String diagnosticSurface = firstSnapshot
                 + "|" + repeatedSnapshot
                 + "|" + wideSnapshot
                 + "|" + firstSnapshot.memberFingerprints().getFirst()
-                + "|" + WeComDirectoryPage.next(
-                List.of(rawMemberSentinel),
-                rawCursorSentinel
-        );
+                + "|" + WeComDirectoryPage.next(List.of(rawMemberSentinel), rawCursorSentinel);
         List<String> sensitiveValues = List.of(
                 configuration.corpId(),
                 configuration.directorySecret(),
                 configuration.hmacKey(),
                 rawMemberSentinel,
-                rawCursorSentinel
-        );
+                rawCursorSentinel);
         for (String sensitiveValue : sensitiveValues) {
             require(
                     !canonical.contains(sensitiveValue)
                             && !receipt.contains(sensitiveValue)
                             && !diagnosticSurface.contains(sensitiveValue),
-                    "M0-13 receipt or diagnostic surface contains sensitive material"
-            );
+                    "M0-13 receipt or diagnostic surface contains sensitive material");
         }
     }
 
@@ -676,12 +531,7 @@ class M013WeComDirectoryLiveVerification {
         Files.createDirectories(targetDirectory);
         Path receiptPath = targetDirectory.resolve(RECEIPT_FILE_NAME);
         Files.writeString(
-                receiptPath,
-                receipt,
-                StandardCharsets.UTF_8,
-                StandardOpenOption.CREATE_NEW,
-                StandardOpenOption.WRITE
-        );
+                receiptPath, receipt, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
     }
 
     private static void require(boolean condition, String safeMessage) {
@@ -690,11 +540,7 @@ class M013WeComDirectoryLiveVerification {
         }
     }
 
-    private record LiveConfiguration(
-            String corpId,
-            String directorySecret,
-            String hmacKey
-    ) {
+    private record LiveConfiguration(String corpId, String directorySecret, String hmacKey) {
 
         @Override
         public String toString() {
@@ -715,9 +561,7 @@ class M013WeComDirectoryLiveVerification {
         public WeComDirectoryPage fetchPage(String cursor, int limit) {
             callCount++;
             if (callCount == 2) {
-                throw new WeComDirectoryGatewayException(
-                        DirectorySnapshotFailure.TRANSPORT_ERROR
-                );
+                throw new WeComDirectoryGatewayException(DirectorySnapshotFailure.TRANSPORT_ERROR);
             }
             return delegate.fetchPage(cursor, limit);
         }

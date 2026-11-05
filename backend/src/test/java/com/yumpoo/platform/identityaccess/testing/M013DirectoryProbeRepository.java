@@ -1,9 +1,5 @@
 package com.yumpoo.platform.identityaccess.testing;
 
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -11,16 +7,16 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 仅供 M0-13 真实 PostgreSQL 隔离验收使用，不进入生产制品或 Flyway。
  */
 public class M013DirectoryProbeRepository {
 
-    private static final Set<String> NON_SUCCESS_TERMINAL_RUN_STATUSES = Set.of(
-            "PARTIALLY_SUCCEEDED",
-            "FAILED"
-    );
+    private static final Set<String> NON_SUCCESS_TERMINAL_RUN_STATUSES = Set.of("PARTIALLY_SUCCEEDED", "FAILED");
 
     private final JdbcClient jdbcClient;
     private final Clock clock;
@@ -39,17 +35,15 @@ public class M013DirectoryProbeRepository {
                         ) VALUES (
                             :id, 'RUNNING', false, :startedAt
                         )
-                        """)
-                .param("id", runId)
-                .param("startedAt", now())
-                .update();
+                        """).param("id", runId).param("startedAt", now()).update();
         return runId;
     }
 
     @Transactional
     public void stageSeen(UUID runId, Set<String> memberFingerprints) {
         for (String memberFingerprint : memberFingerprints.stream().sorted().toList()) {
-            jdbcClient.sql("""
+            jdbcClient
+                    .sql("""
                             INSERT INTO yumpoo.m013_probe_seen (
                                 run_id, member_fingerprint, result
                             ) VALUES (
@@ -76,11 +70,9 @@ public class M013DirectoryProbeRepository {
         throw new InjectedItemReconciliationFailure();
     }
 
-    private String reconcileSeenMemberInCurrentTransaction(
-            UUID runId,
-            String memberFingerprint
-    ) {
-        Optional<ExistingMember> existing = jdbcClient.sql("""
+    private String reconcileSeenMemberInCurrentTransaction(UUID runId, String memberFingerprint) {
+        Optional<ExistingMember> existing = jdbcClient
+                .sql("""
                         SELECT id, employment_status
                         FROM yumpoo.m013_probe_member
                         WHERE member_fingerprint = :memberFingerprint
@@ -88,9 +80,7 @@ public class M013DirectoryProbeRepository {
                         """)
                 .param("memberFingerprint", memberFingerprint)
                 .query((resultSet, rowNumber) -> new ExistingMember(
-                        resultSet.getObject("id", UUID.class),
-                        resultSet.getString("employment_status")
-                ))
+                        resultSet.getObject("id", UUID.class), resultSet.getString("employment_status")))
                 .optional();
 
         UUID memberId;
@@ -99,7 +89,8 @@ public class M013DirectoryProbeRepository {
         if (existing.isEmpty()) {
             memberId = UUID.randomUUID();
             result = "CREATED";
-            jdbcClient.sql("""
+            jdbcClient
+                    .sql("""
                             INSERT INTO yumpoo.m013_probe_member (
                                 id, member_fingerprint, employment_status,
                                 first_seen_run_id, last_seen_run_id, created_at, updated_at
@@ -115,10 +106,9 @@ public class M013DirectoryProbeRepository {
                     .update();
         } else {
             memberId = existing.orElseThrow().id();
-            result = "LEFT".equals(existing.orElseThrow().employmentStatus())
-                    ? "RETURNED"
-                    : "UNCHANGED";
-            jdbcClient.sql("""
+            result = "LEFT".equals(existing.orElseThrow().employmentStatus()) ? "RETURNED" : "UNCHANGED";
+            jdbcClient
+                    .sql("""
                             UPDATE yumpoo.m013_probe_member
                             SET employment_status = 'ACTIVE',
                                 last_seen_run_id = :runId,
@@ -145,9 +135,7 @@ public class M013DirectoryProbeRepository {
         SeenCounts counts = seenCounts(runId);
         int successfulCount = counts.created() + counts.unchanged() + counts.returned();
         if (counts.failed() != 0 || successfulCount != counts.discovered()) {
-            throw new IllegalStateException(
-                    "M0-13 successful finalization requires every seen member to succeed"
-            );
+            throw new IllegalStateException("M0-13 successful finalization requires every seen member to succeed");
         }
         int leftCount = markMissingMembersLeft(runId);
         return finishRunState(runId, "SUCCEEDED", true, leftCount);
@@ -161,7 +149,8 @@ public class M013DirectoryProbeRepository {
     }
 
     private int markMissingMembersLeft(UUID runId) {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                         UPDATE yumpoo.m013_probe_member member
                         SET employment_status = 'LEFT',
                             updated_at = :reconciledAt
@@ -179,12 +168,7 @@ public class M013DirectoryProbeRepository {
     }
 
     @Transactional
-    public RunRow finishRun(
-            UUID runId,
-            String status,
-            boolean scanComplete,
-            int leftCount
-    ) {
+    public RunRow finishRun(UUID runId, String status, boolean scanComplete, int leftCount) {
         if (!NON_SUCCESS_TERMINAL_RUN_STATUSES.contains(status)) {
             throw new IllegalArgumentException("invalid non-success M0-13 run status");
         }
@@ -194,14 +178,10 @@ public class M013DirectoryProbeRepository {
         return finishRunState(runId, status, scanComplete, leftCount);
     }
 
-    private RunRow finishRunState(
-            UUID runId,
-            String status,
-            boolean scanComplete,
-            int leftCount
-    ) {
+    private RunRow finishRunState(UUID runId, String status, boolean scanComplete, int leftCount) {
         SeenCounts counts = seenCounts(runId);
-        int updated = jdbcClient.sql("""
+        int updated = jdbcClient
+                .sql("""
                         UPDATE yumpoo.m013_probe_run
                         SET status = :status,
                             scan_complete = :scanComplete,
@@ -232,7 +212,8 @@ public class M013DirectoryProbeRepository {
     }
 
     public Optional<RunRow> findRun(UUID runId) {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                         SELECT id, status, scan_complete, discovered_count,
                                created_count, unchanged_count, returned_count,
                                left_count, failed_count
@@ -249,13 +230,13 @@ public class M013DirectoryProbeRepository {
                         resultSet.getInt("unchanged_count"),
                         resultSet.getInt("returned_count"),
                         resultSet.getInt("left_count"),
-                        resultSet.getInt("failed_count")
-                ))
+                        resultSet.getInt("failed_count")))
                 .optional();
     }
 
     public Optional<MemberRow> findMember(String memberFingerprint) {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                         SELECT id, member_fingerprint, employment_status,
                                first_seen_run_id, last_seen_run_id
                         FROM yumpoo.m013_probe_member
@@ -267,13 +248,13 @@ public class M013DirectoryProbeRepository {
                         resultSet.getString("member_fingerprint"),
                         resultSet.getString("employment_status"),
                         resultSet.getObject("first_seen_run_id", UUID.class),
-                        resultSet.getObject("last_seen_run_id", UUID.class)
-                ))
+                        resultSet.getObject("last_seen_run_id", UUID.class)))
                 .optional();
     }
 
     public Optional<SeenRow> findSeen(UUID runId, String memberFingerprint) {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                         SELECT run_id, member_fingerprint, result, member_id, error_code
                         FROM yumpoo.m013_probe_seen
                         WHERE run_id = :runId AND member_fingerprint = :memberFingerprint
@@ -285,13 +266,13 @@ public class M013DirectoryProbeRepository {
                         resultSet.getString("member_fingerprint"),
                         resultSet.getString("result"),
                         resultSet.getObject("member_id", UUID.class),
-                        resultSet.getString("error_code")
-                ))
+                        resultSet.getString("error_code")))
                 .optional();
     }
 
     public long memberCount() {
-        return jdbcClient.sql("SELECT count(*) FROM yumpoo.m013_probe_member")
+        return jdbcClient
+                .sql("SELECT count(*) FROM yumpoo.m013_probe_member")
                 .query(Long.class)
                 .single();
     }
@@ -301,14 +282,12 @@ public class M013DirectoryProbeRepository {
                         SELECT count(*)
                         FROM yumpoo.m013_probe_seen
                         WHERE run_id = :runId
-                        """)
-                .param("runId", runId)
-                .query(Long.class)
-                .single();
+                        """).param("runId", runId).query(Long.class).single();
     }
 
     private SeenCounts seenCounts(UUID runId) {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                         SELECT count(*) AS discovered,
                                count(*) FILTER (WHERE result = 'CREATED') AS created,
                                count(*) FILTER (WHERE result = 'UNCHANGED') AS unchanged,
@@ -323,19 +302,14 @@ public class M013DirectoryProbeRepository {
                         resultSet.getInt("created"),
                         resultSet.getInt("unchanged"),
                         resultSet.getInt("returned"),
-                        resultSet.getInt("failed")
-                ))
+                        resultSet.getInt("failed")))
                 .single();
     }
 
     private void updateSeenOutcome(
-            UUID runId,
-            String memberFingerprint,
-            String result,
-            UUID memberId,
-            String errorCode
-    ) {
-        int updated = jdbcClient.sql("""
+            UUID runId, String memberFingerprint, String result, UUID memberId, String errorCode) {
+        int updated = jdbcClient
+                .sql("""
                         UPDATE yumpoo.m013_probe_seen
                         SET result = :result,
                             member_id = :memberId,
@@ -359,17 +333,9 @@ public class M013DirectoryProbeRepository {
         return OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC);
     }
 
-    private record ExistingMember(UUID id, String employmentStatus) {
-    }
+    private record ExistingMember(UUID id, String employmentStatus) {}
 
-    private record SeenCounts(
-            int discovered,
-            int created,
-            int unchanged,
-            int returned,
-            int failed
-    ) {
-    }
+    private record SeenCounts(int discovered, int created, int unchanged, int returned, int failed) {}
 
     public record RunRow(
             UUID id,
@@ -380,27 +346,12 @@ public class M013DirectoryProbeRepository {
             int unchangedCount,
             int returnedCount,
             int leftCount,
-            int failedCount
-    ) {
-    }
+            int failedCount) {}
 
     public record MemberRow(
-            UUID id,
-            String memberFingerprint,
-            String employmentStatus,
-            UUID firstSeenRunId,
-            UUID lastSeenRunId
-    ) {
-    }
+            UUID id, String memberFingerprint, String employmentStatus, UUID firstSeenRunId, UUID lastSeenRunId) {}
 
-    public record SeenRow(
-            UUID runId,
-            String memberFingerprint,
-            String result,
-            UUID memberId,
-            String errorCode
-    ) {
-    }
+    public record SeenRow(UUID runId, String memberFingerprint, String result, UUID memberId, String errorCode) {}
 
     public static final class InjectedItemReconciliationFailure extends RuntimeException {
 

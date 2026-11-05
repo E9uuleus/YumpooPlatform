@@ -1,5 +1,12 @@
 package com.yumpoo.platform.identityaccess.application.authentication;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.identityaccess.application.oauth.OAuthAttempt;
@@ -10,27 +17,16 @@ import com.yumpoo.platform.identityaccess.application.oauth.SecureOAuthAttemptTo
 import com.yumpoo.platform.identityaccess.application.oauth.WeComDependencyUnavailableException;
 import com.yumpoo.platform.identityaccess.application.oauth.WeComMemberIdentity;
 import com.yumpoo.platform.identityaccess.application.session.IssuedSession;
-import org.junit.jupiter.api.Test;
-
 import java.net.URI;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import org.junit.jupiter.api.Test;
 
 class WebAuthenticationServiceTest {
 
-    private static final Clock CLOCK = Clock.fixed(
-            Instant.parse("2026-08-14T06:00:00Z"),
-            ZoneOffset.UTC
-    );
+    private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-08-14T06:00:00Z"), ZoneOffset.UTC);
 
     @Test
     void dependencyFailureConsumesAttemptBeforeProviderAndReplayBecomesUnauthorized() {
@@ -46,13 +42,13 @@ class WebAuthenticationServiceTest {
         String state = query(authorization.authorizationUri(), "state");
 
         assertError(
-                () -> service.complete("one-time-code", state, authorization.nonce().value(), true),
-                StandardErrorCode.DEPENDENCY_UNAVAILABLE
-        );
+                () -> service.complete(
+                        "one-time-code", state, authorization.nonce().value(), true),
+                StandardErrorCode.DEPENDENCY_UNAVAILABLE);
         assertError(
-                () -> service.complete("one-time-code", state, authorization.nonce().value(), true),
-                StandardErrorCode.AUTHENTICATION_REQUIRED
-        );
+                () -> service.complete(
+                        "one-time-code", state, authorization.nonce().value(), true),
+                StandardErrorCode.AUTHENTICATION_REQUIRED);
         assertThat(exchanges).hasValue(1);
         verify(events).loginRejected("CALLBACK", "DEPENDENCY_UNAVAILABLE");
         verify(events).loginRejected("CALLBACK", "AUTHENTICATION_REQUIRED");
@@ -61,9 +57,7 @@ class WebAuthenticationServiceTest {
     @Test
     void corpMismatchIsUniformlyRejectedWithoutResolvingTheLocalIdentity() {
         InMemoryAttemptStore store = new InMemoryAttemptStore();
-        WebIdentityProvider provider = provider(
-                code -> new WeComMemberIdentity("other-corp", "member-test")
-        );
+        WebIdentityProvider provider = provider(code -> new WeComMemberIdentity("other-corp", "member-test"));
         AuthenticationEventService events = mock(AuthenticationEventService.class);
         WebLoginCompletionService completion = mock(WebLoginCompletionService.class);
         WebAuthenticationService service = service(store, provider, events, completion);
@@ -74,44 +68,34 @@ class WebAuthenticationServiceTest {
                         "one-time-code",
                         query(authorization.authorizationUri(), "state"),
                         authorization.nonce().value(),
-                        true
-                ),
-                StandardErrorCode.AUTHENTICATION_REQUIRED
-        );
+                        true),
+                StandardErrorCode.AUTHENTICATION_REQUIRED);
         verify(completion, never()).complete("member-test", true);
     }
 
     @Test
     void validExistingIdentityDelegatesToTransactionalCompletion() {
         InMemoryAttemptStore store = new InMemoryAttemptStore();
-        WebIdentityProvider provider = provider(
-                code -> new WeComMemberIdentity("corp-test", "member-test")
-        );
+        WebIdentityProvider provider = provider(code -> new WeComMemberIdentity("corp-test", "member-test"));
         WebLoginCompletionService completion = mock(WebLoginCompletionService.class);
         IssuedSession issued = mock(IssuedSession.class);
         when(completion.complete("member-test", false)).thenReturn(issued);
-        WebAuthenticationService service = service(
-                store,
-                provider,
-                mock(AuthenticationEventService.class),
-                completion
-        );
+        WebAuthenticationService service = service(store, provider, mock(AuthenticationEventService.class), completion);
         WebLoginAuthorization authorization = service.begin("m106-success");
 
         assertThat(service.complete(
-                "one-time-code",
-                query(authorization.authorizationUri(), "state"),
-                authorization.nonce().value(),
-                false
-        )).isSameAs(issued);
+                        "one-time-code",
+                        query(authorization.authorizationUri(), "state"),
+                        authorization.nonce().value(),
+                        false))
+                .isSameAs(issued);
     }
 
     private static WebAuthenticationService service(
             OAuthAttemptStore store,
             WebIdentityProvider provider,
             AuthenticationEventService events,
-            WebLoginCompletionService completion
-    ) {
+            WebLoginCompletionService completion) {
         return new WebAuthenticationService(
                 store,
                 provider,
@@ -119,8 +103,7 @@ class WebAuthenticationServiceTest {
                 new OAuthAttemptHasher(),
                 completion,
                 events,
-                CLOCK
-        );
+                CLOCK);
     }
 
     private static WebIdentityProvider provider(Exchange exchange) {
@@ -154,8 +137,9 @@ class WebAuthenticationServiceTest {
 
     private static void assertError(Runnable call, StandardErrorCode expected) {
         assertThatThrownBy(call::run)
-                .isInstanceOfSatisfying(ApplicationException.class, exception ->
-                        assertThat(exception.errorCode()).isEqualTo(expected));
+                .isInstanceOfSatisfying(
+                        ApplicationException.class,
+                        exception -> assertThat(exception.errorCode()).isEqualTo(expected));
     }
 
     @FunctionalInterface
@@ -175,10 +159,7 @@ class WebAuthenticationServiceTest {
 
         @Override
         public synchronized boolean consume(
-                OAuthAttemptHash stateHash,
-                OAuthAttemptHash nonceHash,
-                Instant consumedAt
-        ) {
+                OAuthAttemptHash stateHash, OAuthAttemptHash nonceHash, Instant consumedAt) {
             if (current == null
                     || consumed
                     || !current.stateHash().equals(stateHash)

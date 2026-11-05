@@ -1,10 +1,9 @@
 package com.yumpoo.platform.foundation.infrastructure.time;
 
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-
 import java.time.Clock;
 import java.time.Duration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 
 @Configuration(proxyBeanMethods = false)
 public class ClockConfiguration {

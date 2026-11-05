@@ -5,5 +5,4 @@ import jakarta.validation.constraints.Size;
 
 public record ContentCreateRequest(
         @NotBlank @Size(max = 80) String name,
-        @NotBlank @Size(max = 24) String colorToken
-) {}
+        @NotBlank @Size(max = 24) String colorToken) {}

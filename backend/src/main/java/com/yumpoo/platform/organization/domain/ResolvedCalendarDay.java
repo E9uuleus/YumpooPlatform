@@ -13,8 +13,7 @@ public record ResolvedCalendarDay(
         OptionalLong calendarDayRowVersion,
         String note,
         Integer configuredStandardMinutes,
-        CalendarDayOverride.Source source
-) {
+        CalendarDayOverride.Source source) {
 
     public ResolvedCalendarDay {
         Objects.requireNonNull(date, "date must not be null");

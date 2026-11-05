@@ -1,6 +1,12 @@
 package com.yumpoo.platform.foundation.infrastructure.deployment;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -8,21 +14,10 @@ import org.springframework.context.annotation.Import;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-
-import static org.assertj.core.api.Assertions.assertThat;
-
 @Import(PostgreSqlTestContainerConfiguration.class)
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = {
-                "yumpoo.deployment.release-tag=server-v2026.10.20.1",
-                "yumpoo.outbox.enabled=false"
-        }
-)
+        properties = {"yumpoo.deployment.release-tag=server-v2026.10.20.1", "yumpoo.outbox.enabled=false"})
 class ReleaseInfoHttpIT {
 
     private final HttpClient client = HttpClient.newHttpClient();
@@ -49,8 +44,9 @@ class ReleaseInfoHttpIT {
 
     private HttpResponse<String> get(String path) throws Exception {
         return client.send(
-                HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + path)).GET().build(),
-                HttpResponse.BodyHandlers.ofString()
-        );
+                HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + path))
+                        .GET()
+                        .build(),
+                HttpResponse.BodyHandlers.ofString());
     }
 }

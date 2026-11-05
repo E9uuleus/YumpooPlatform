@@ -15,8 +15,7 @@ public record IdempotencyRecord(
         Instant leaseUntil,
         Instant createdAt,
         Instant completedAt,
-        Instant expiresAt
-) {
+        Instant expiresAt) {
 
     public IdempotencyRecord {
         Objects.requireNonNull(id, "id must not be null");

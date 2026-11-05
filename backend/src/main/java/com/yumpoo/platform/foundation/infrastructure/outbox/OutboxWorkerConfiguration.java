@@ -3,12 +3,11 @@ package com.yumpoo.platform.foundation.infrastructure.outbox;
 import com.yumpoo.platform.foundation.application.outbox.OutboxRuntimeSettings;
 import com.yumpoo.platform.foundation.application.outbox.OutboxTaskExecutor;
 import com.yumpoo.platform.foundation.application.outbox.OutboxWorkerIdentity;
+import java.util.UUID;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
-
-import java.util.UUID;
 
 @Configuration(proxyBeanMethods = false)
 @EnableScheduling
@@ -17,10 +16,7 @@ public class OutboxWorkerConfiguration {
 
     @Bean
     OutboxRuntimeSettings outboxRuntimeSettings(OutboxProperties properties) {
-        return new OutboxRuntimeSettings(
-                properties.getBatchSize(),
-                properties.getLeaseDuration()
-        );
+        return new OutboxRuntimeSettings(properties.getBatchSize(), properties.getLeaseDuration());
     }
 
     @Bean
@@ -30,9 +26,6 @@ public class OutboxWorkerConfiguration {
 
     @Bean
     OutboxTaskExecutor outboxTaskExecutor(OutboxProperties properties) {
-        return new ThreadPoolOutboxTaskExecutor(
-                properties.getConcurrency(),
-                properties.getBatchSize()
-        );
+        return new ThreadPoolOutboxTaskExecutor(properties.getConcurrency(), properties.getBatchSize());
     }
 }

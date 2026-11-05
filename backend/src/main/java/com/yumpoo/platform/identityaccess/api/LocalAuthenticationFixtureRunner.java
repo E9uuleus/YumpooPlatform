@@ -7,6 +7,14 @@ import com.yumpoo.platform.identityaccess.application.authorization.PlatformRole
 import com.yumpoo.platform.identityaccess.application.directory.DirectoryMemberProvisioningResult;
 import com.yumpoo.platform.identityaccess.application.verification.IdentityAcceptanceFixtureProvisioner;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Clock;
+import java.util.HexFormat;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -16,22 +24,11 @@ import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
 import org.springframework.stereotype.Component;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.time.Clock;
-import java.util.HexFormat;
-import java.util.Objects;
-import java.util.Set;
-import java.util.UUID;
-
 @Component
 @ConditionalOnProperty(prefix = "yumpoo.auth.local", name = "enabled", havingValue = "true")
 public final class LocalAuthenticationFixtureRunner implements ApplicationRunner {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(
-            LocalAuthenticationFixtureRunner.class
-    );
+    private static final Logger LOGGER = LoggerFactory.getLogger(LocalAuthenticationFixtureRunner.class);
     private static final String REASON = "Local development identity fixture";
 
     private final Environment environment;
@@ -51,16 +48,12 @@ public final class LocalAuthenticationFixtureRunner implements ApplicationRunner
             PlatformRoleMaintenanceUseCase maintenanceUseCase,
             PlatformRoleCommandPort roleCommands,
             PlatformRoleQuery roleQuery,
-            Clock clock
-    ) {
+            Clock clock) {
         this.environment = Objects.requireNonNull(environment, "environment must not be null");
         this.properties = Objects.requireNonNull(properties, "properties must not be null");
         this.companyQuery = Objects.requireNonNull(companyQuery, "companyQuery must not be null");
         this.provisioner = Objects.requireNonNull(provisioner, "provisioner must not be null");
-        this.maintenanceUseCase = Objects.requireNonNull(
-                maintenanceUseCase,
-                "maintenanceUseCase must not be null"
-        );
+        this.maintenanceUseCase = Objects.requireNonNull(maintenanceUseCase, "maintenanceUseCase must not be null");
         this.roleCommands = Objects.requireNonNull(roleCommands, "roleCommands must not be null");
         this.roleQuery = Objects.requireNonNull(roleQuery, "roleQuery must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
@@ -68,9 +61,8 @@ public final class LocalAuthenticationFixtureRunner implements ApplicationRunner
 
     @Override
     public void run(ApplicationArguments args) {
-        try (RequestCorrelationContext.Scope ignored = RequestCorrelationContext.open(
-                RequestCorrelation.root("local-auth-fixture-" + UUID.randomUUID())
-        )) {
+        try (RequestCorrelationContext.Scope ignored =
+                RequestCorrelationContext.open(RequestCorrelation.root("local-auth-fixture-" + UUID.randomUUID()))) {
             initialize();
         }
     }
@@ -78,84 +70,66 @@ public final class LocalAuthenticationFixtureRunner implements ApplicationRunner
     private void initialize() {
         validateRuntimeBoundary();
         UUID companyId = companyQuery.current().companyId();
-        DirectoryMemberProvisioningResult localAdmin = provisioner.provision(
-                properties.getMemberId(),
-                properties.getDisplayName(),
-                "Local Development"
-        );
+        DirectoryMemberProvisioningResult localAdmin =
+                provisioner.provision(properties.getMemberId(), properties.getDisplayName(), "Local Development");
         DirectoryMemberProvisioningResult backupManager = provisioner.provision(
-                properties.getBackupMemberId(),
-                properties.getBackupDisplayName(),
-                "Local Development"
-        );
+                properties.getBackupMemberId(), properties.getBackupDisplayName(), "Local Development");
 
-        Set<PlatformRoleCode> adminRoles = roleQuery.findActiveRoleCodes(
-                companyId,
-                localAdmin.userId()
-        );
-        Set<PlatformRoleCode> backupRoles = roleQuery.findActiveRoleCodes(
-                companyId,
-                backupManager.userId()
-        );
+        Set<PlatformRoleCode> adminRoles = roleQuery.findActiveRoleCodes(companyId, localAdmin.userId());
+        Set<PlatformRoleCode> backupRoles = roleQuery.findActiveRoleCodes(companyId, backupManager.userId());
         if (adminRoles.contains(PlatformRoleCode.APP_MANAGER)) {
-            LOGGER.atInfo().setMessage("local authentication fixture ready").addKeyValue("event", "identity.local.ready").log();
+            LOGGER.atInfo()
+                    .setMessage("local authentication fixture ready")
+                    .addKeyValue("event", "identity.local.ready")
+                    .log();
             return;
         }
 
         ActorState actor;
         if (backupRoles.contains(PlatformRoleCode.APP_MANAGER)) {
-            actor = new ActorState(
-                    backupManager.userId(),
-                    backupManager.authorizationVersion()
-            );
+            actor = new ActorState(backupManager.userId(), backupManager.authorizationVersion());
         } else if (adminRoles.contains(PlatformRoleCode.APP_MANAGER)) {
             actor = new ActorState(localAdmin.userId(), localAdmin.authorizationVersion());
         } else {
-            MaintenanceRoleActor manager = maintenanceUseCase.ensureAvailableAppManager(
-                    companyId,
-                    backupManager.userId(),
-                    REASON
-            );
+            MaintenanceRoleActor manager =
+                    maintenanceUseCase.ensureAvailableAppManager(companyId, backupManager.userId(), REASON);
             actor = new ActorState(manager.userId(), manager.authorizationVersion());
         }
 
         if (adminRoles.contains(PlatformRoleCode.COMPANY_ADMIN)) {
             String commandIdentity = companyId + ":" + localAdmin.userId() + ":APP_MANAGER:" + localAdmin.rowVersion();
             roleCommands.changeTier(new PlatformRoleTierChangeCommand(
-                    companyId, localAdmin.userId(), PlatformRoleTier.APP_MANAGER, localAdmin.rowVersion(),
+                    companyId,
+                    localAdmin.userId(),
+                    PlatformRoleTier.APP_MANAGER,
+                    localAdmin.rowVersion(),
                     new PlatformRoleCommandActor(actor.userId(), actor.authorizationVersion(), clock.instant()),
                     UUID.nameUUIDFromBytes(("local-auth:" + commandIdentity).getBytes(StandardCharsets.UTF_8)),
-                    sha256(commandIdentity), REASON));
+                    sha256(commandIdentity),
+                    REASON));
         } else {
             grant(companyId, localAdmin.userId(), PlatformRoleCode.APP_MANAGER, localAdmin.rowVersion(), actor);
         }
-        LOGGER.atInfo().setMessage("local authentication fixture ready").addKeyValue("event", "identity.local.initialized").log();
+        LOGGER.atInfo()
+                .setMessage("local authentication fixture ready")
+                .addKeyValue("event", "identity.local.initialized")
+                .log();
     }
 
     private PlatformRoleAssignmentMutation grant(
-            UUID companyId,
-            UUID targetUserId,
-            PlatformRoleCode role,
-            long expectedTargetRowVersion,
-            ActorState actor
-    ) {
-        String commandIdentity = companyId + ":" + targetUserId + ":" + role
-                + ":" + expectedTargetRowVersion;
-        return roleCommands.grant(new PlatformRoleGrantCommand(
-                companyId,
-                targetUserId,
-                role,
-                expectedTargetRowVersion,
-                new PlatformRoleCommandActor(
-                        actor.userId(),
-                        actor.authorizationVersion(),
-                        clock.instant()
-                ),
-                UUID.nameUUIDFromBytes(("local-auth:" + commandIdentity)
-                        .getBytes(StandardCharsets.UTF_8)),
-                sha256(commandIdentity),
-                REASON
-        )).mutation();
+            UUID companyId, UUID targetUserId, PlatformRoleCode role, long expectedTargetRowVersion, ActorState actor) {
+        String commandIdentity = companyId + ":" + targetUserId + ":" + role + ":" + expectedTargetRowVersion;
+        return roleCommands
+                .grant(new PlatformRoleGrantCommand(
+                        companyId,
+                        targetUserId,
+                        role,
+                        expectedTargetRowVersion,
+                        new PlatformRoleCommandActor(actor.userId(), actor.authorizationVersion(), clock.instant()),
+                        UUID.nameUUIDFromBytes(("local-auth:" + commandIdentity).getBytes(StandardCharsets.UTF_8)),
+                        sha256(commandIdentity),
+                        REASON))
+                .mutation();
     }
 
     private void validateRuntimeBoundary() {
@@ -170,21 +144,18 @@ public final class LocalAuthenticationFixtureRunner implements ApplicationRunner
                 || environment.getProperty("yumpoo.wecom.directory.enabled", Boolean.class, false)
                 || environment.getProperty("yumpoo.auth.controlled.enabled", Boolean.class, false)) {
             throw new IllegalStateException(
-                    "Local authentication cannot run with WeCom or controlled identity providers"
-            );
+                    "Local authentication cannot run with WeCom or controlled identity providers");
         }
         String address = environment.getProperty("server.address", "127.0.0.1").strip();
         if (!Set.of("127.0.0.1", "localhost", "::1", "[::1]").contains(address)) {
-            throw new IllegalStateException(
-                    "Local authentication requires a loopback-only server address"
-            );
+            throw new IllegalStateException("Local authentication requires a loopback-only server address");
         }
     }
 
     private static String sha256(String value) {
         try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                    .digest(value.getBytes(StandardCharsets.UTF_8)));
+            return HexFormat.of()
+                    .formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 is unavailable", exception);
         }

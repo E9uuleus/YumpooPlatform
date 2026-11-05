@@ -1,10 +1,9 @@
 package com.yumpoo.platform.administration.application;
 
-import tools.jackson.databind.JsonNode;
-
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
+import tools.jackson.databind.JsonNode;
 
 public record GovernanceOverrideRecord(
         UUID id,
@@ -21,13 +20,18 @@ public record GovernanceOverrideRecord(
         JsonNode blockerCounts,
         GovernanceOverrideResult result,
         String errorCode,
-        Instant occurredAt
-) {
+        Instant occurredAt) {
     public GovernanceOverrideRecord {
-        Objects.requireNonNull(id); Objects.requireNonNull(companyId); Objects.requireNonNull(action);
-        Objects.requireNonNull(targetId); Objects.requireNonNull(idempotencyKey);
-        Objects.requireNonNull(actorUserId); Objects.requireNonNull(beforeSnapshot);
-        Objects.requireNonNull(blockerCounts); Objects.requireNonNull(result); Objects.requireNonNull(occurredAt);
+        Objects.requireNonNull(id);
+        Objects.requireNonNull(companyId);
+        Objects.requireNonNull(action);
+        Objects.requireNonNull(targetId);
+        Objects.requireNonNull(idempotencyKey);
+        Objects.requireNonNull(actorUserId);
+        Objects.requireNonNull(beforeSnapshot);
+        Objects.requireNonNull(blockerCounts);
+        Objects.requireNonNull(result);
+        Objects.requireNonNull(occurredAt);
         targetType = requireText(targetType, 32, "targetType");
         reason = requireText(reason, 500, "reason");
         if (reason.length() < 10) throw new IllegalArgumentException("reason must contain at least 10 characters");

@@ -1,9 +1,10 @@
 package com.yumpoo.platform.identityaccess.application.oauth;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
-import org.junit.jupiter.api.Test;
-
 import java.net.URI;
 import java.time.Clock;
 import java.time.Duration;
@@ -13,9 +14,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Set;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
 
 class WeComOAuthVerificationServiceTest {
 
@@ -44,9 +43,7 @@ class WeComOAuthVerificationServiceTest {
         assertThat(store.attempt.stateHash().value()).doesNotContain(STATE.value());
         assertThat(store.attempt.nonceHash().value()).doesNotContain(NONCE.value());
         assertThat(authorization.authorizationUri().toString()).contains(STATE.value());
-        assertThat(authorization.toString())
-                .doesNotContain(STATE.value())
-                .doesNotContain(NONCE.value());
+        assertThat(authorization.toString()).doesNotContain(STATE.value()).doesNotContain(NONCE.value());
         assertThat(authorization.state().toString()).doesNotContain(STATE.value());
         assertThat(authorization.nonce().toString()).doesNotContain(NONCE.value());
     }
@@ -65,14 +62,11 @@ class WeComOAuthVerificationServiceTest {
         VerifiedWeComIdentity verified = service.verify(
                 "one-time-code",
                 authorization.state().value(),
-                authorization.nonce().value()
-        );
+                authorization.nonce().value());
 
         assertThat(verified.corpId()).isEqualTo(CORP_ID);
         assertThat(verified.memberId()).isEqualTo(MEMBER_ID);
-        assertThat(verified.toString())
-                .doesNotContain(CORP_ID)
-                .doesNotContain(MEMBER_ID);
+        assertThat(verified.toString()).doesNotContain(CORP_ID).doesNotContain(MEMBER_ID);
         assertThat(gateway.exchangeCalls).isOne();
     }
 
@@ -83,11 +77,7 @@ class WeComOAuthVerificationServiceTest {
         WeComOAuthVerificationService service = service(store, gateway, fixedClock(), STATE, NONCE);
         service.begin("request-wrong-nonce");
 
-        assertAuthenticationRequired(() -> service.verify(
-                "one-time-code",
-                STATE.value(),
-                WRONG_NONCE.value()
-        ));
+        assertAuthenticationRequired(() -> service.verify("one-time-code", STATE.value(), WRONG_NONCE.value()));
 
         assertThat(store.consumed).isFalse();
         assertThat(gateway.exchangeCalls).isZero();
@@ -102,11 +92,7 @@ class WeComOAuthVerificationServiceTest {
         service.begin("request-expired");
         clock.set(NOW.plus(Duration.ofMinutes(5)));
 
-        assertAuthenticationRequired(() -> service.verify(
-                "one-time-code",
-                STATE.value(),
-                NONCE.value()
-        ));
+        assertAuthenticationRequired(() -> service.verify("one-time-code", STATE.value(), NONCE.value()));
 
         assertThat(store.consumed).isFalse();
         assertThat(gateway.exchangeCalls).isZero();
@@ -116,46 +102,33 @@ class WeComOAuthVerificationServiceTest {
     void invalidAndDependencyGatewayFailuresMapToStableApplicationErrorsAfterConsumption() {
         InMemoryAttemptStore invalidStore = new InMemoryAttemptStore();
         FakeGateway invalidGateway = new FakeGateway();
-        WeComOAuthVerificationService invalidService = service(
-                invalidStore,
-                invalidGateway,
-                fixedClock(),
-                STATE,
-                NONCE
-        );
+        WeComOAuthVerificationService invalidService =
+                service(invalidStore, invalidGateway, fixedClock(), STATE, NONCE);
         invalidService.begin("request-invalid-code");
         invalidGateway.exchangeAction = () -> {
             throw new WeComAuthenticationFailedException();
         };
 
-        assertAuthenticationRequired(() -> invalidService.verify(
-                "invalid-code",
-                STATE.value(),
-                NONCE.value()
-        ));
+        assertAuthenticationRequired(() -> invalidService.verify("invalid-code", STATE.value(), NONCE.value()));
         assertThat(invalidStore.consumed).isTrue();
 
         InMemoryAttemptStore dependencyStore = new InMemoryAttemptStore();
         FakeGateway dependencyGateway = new FakeGateway();
-        WeComOAuthVerificationService dependencyService = service(
-                dependencyStore,
-                dependencyGateway,
-                fixedClock(),
-                token('D'),
-                token('E')
-        );
+        WeComOAuthVerificationService dependencyService =
+                service(dependencyStore, dependencyGateway, fixedClock(), token('D'), token('E'));
         WeComOAuthAuthorization dependencyAuthorization = dependencyService.begin("request-dependency");
         dependencyGateway.exchangeAction = () -> {
             throw new WeComDependencyUnavailableException();
         };
 
         assertThatThrownBy(() -> dependencyService.verify(
-                "unavailable-code",
-                dependencyAuthorization.state().value(),
-                dependencyAuthorization.nonce().value()
-        )).isInstanceOfSatisfying(ApplicationException.class, exception ->
-                assertThat(exception.errorCode()).isEqualTo(StandardErrorCode.DEPENDENCY_UNAVAILABLE)
-        );
+                        "unavailable-code",
+                        dependencyAuthorization.state().value(),
+                        dependencyAuthorization.nonce().value()))
+                .isInstanceOfSatisfying(
+                        ApplicationException.class,
+                        exception ->
+                                assertThat(exception.errorCode()).isEqualTo(StandardErrorCode.DEPENDENCY_UNAVAILABLE));
         assertThat(dependencyStore.consumed).isTrue();
     }
 
@@ -197,21 +170,14 @@ class WeComOAuthVerificationServiceTest {
     }
 
     private void assertIdentityRejected(
-            WeComMemberIdentity gatewayIdentity,
-            OAuthAttemptToken state,
-            OAuthAttemptToken nonce
-    ) {
+            WeComMemberIdentity gatewayIdentity, OAuthAttemptToken state, OAuthAttemptToken nonce) {
         InMemoryAttemptStore store = new InMemoryAttemptStore();
         FakeGateway gateway = new FakeGateway();
         gateway.exchangeAction = () -> gatewayIdentity;
         WeComOAuthVerificationService service = service(store, gateway, fixedClock(), state, nonce);
         service.begin("request-identity-mismatch");
 
-        assertAuthenticationRequired(() -> service.verify(
-                "one-time-code",
-                state.value(),
-                nonce.value()
-        ));
+        assertAuthenticationRequired(() -> service.verify("one-time-code", state.value(), nonce.value()));
         assertThat(store.consumed).isTrue();
     }
 
@@ -220,27 +186,20 @@ class WeComOAuthVerificationServiceTest {
             FakeGateway gateway,
             Clock clock,
             OAuthAttemptToken state,
-            OAuthAttemptToken nonce
-    ) {
+            OAuthAttemptToken nonce) {
         Deque<OAuthAttemptToken> tokens = new ArrayDeque<>();
         tokens.add(state);
         tokens.add(nonce);
         return new WeComOAuthVerificationService(
-                store,
-                gateway,
-                tokens::removeFirst,
-                new OAuthAttemptHasher(),
-                clock,
-                CORP_ID,
-                Set.of(MEMBER_ID)
-        );
+                store, gateway, tokens::removeFirst, new OAuthAttemptHasher(), clock, CORP_ID, Set.of(MEMBER_ID));
     }
 
     private static void assertAuthenticationRequired(Runnable callback) {
         assertThatThrownBy(callback::run)
-                .isInstanceOfSatisfying(ApplicationException.class, exception ->
-                        assertThat(exception.errorCode()).isEqualTo(StandardErrorCode.AUTHENTICATION_REQUIRED)
-                );
+                .isInstanceOfSatisfying(
+                        ApplicationException.class,
+                        exception ->
+                                assertThat(exception.errorCode()).isEqualTo(StandardErrorCode.AUTHENTICATION_REQUIRED));
     }
 
     private static Clock fixedClock() {
@@ -263,11 +222,7 @@ class WeComOAuthVerificationServiceTest {
         }
 
         @Override
-        public boolean consume(
-                OAuthAttemptHash stateHash,
-                OAuthAttemptHash nonceHash,
-                Instant consumedAt
-        ) {
+        public boolean consume(OAuthAttemptHash stateHash, OAuthAttemptHash nonceHash, Instant consumedAt) {
             consumeCalls++;
             if (attempt == null
                     || consumed

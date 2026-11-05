@@ -7,12 +7,11 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.util.List;
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.util.ContentCachingResponseWrapper;
-
-import java.io.IOException;
-import java.util.List;
 
 class OpenApiResponseValidationFilter extends OncePerRequestFilter {
 
@@ -46,8 +45,8 @@ class OpenApiResponseValidationFilter extends OncePerRequestFilter {
                 continue;
             }
             if (message.getLevel() == ValidationReport.Level.ERROR) {
-                OpenApiResponseRecorder.record(method + " " + path + " → " + cached.getStatus()
-                        + "：" + message.getKey() + " " + message.getMessage());
+                OpenApiResponseRecorder.record(method + " " + path + " → " + cached.getStatus() + "：" + message.getKey()
+                        + " " + message.getMessage());
             }
         }
         cached.copyBodyToResponse();

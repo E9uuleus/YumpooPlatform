@@ -9,11 +9,9 @@ public record OAuthAttempt(
         OAuthAttemptHash nonceHash,
         String requestId,
         Instant createdAt,
-        Instant expiresAt
-) {
+        Instant expiresAt) {
 
-    private static final Pattern REQUEST_ID_PATTERN =
-            Pattern.compile("^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$");
+    private static final Pattern REQUEST_ID_PATTERN = Pattern.compile("^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$");
 
     public OAuthAttempt {
         Objects.requireNonNull(stateHash, "stateHash must not be null");

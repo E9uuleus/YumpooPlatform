@@ -1,15 +1,11 @@
 package com.yumpoo.platform.identityaccess.application.session;
 
 import com.yumpoo.platform.identityaccess.domain.session.LoginSession;
-
 import java.time.Instant;
 import java.util.Objects;
 
 public record IssuedSession(
-        LoginSession session,
-        SessionCredential sessionCredential,
-        SessionCredential csrfCredential
-) {
+        LoginSession session, SessionCredential sessionCredential, SessionCredential csrfCredential) {
 
     public IssuedSession {
         Objects.requireNonNull(session, "session must not be null");

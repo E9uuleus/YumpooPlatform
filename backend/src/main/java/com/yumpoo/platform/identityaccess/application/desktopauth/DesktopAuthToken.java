@@ -38,9 +38,7 @@ public final class DesktopAuthToken {
             return false;
         }
         return MessageDigest.isEqual(
-                value.getBytes(StandardCharsets.US_ASCII),
-                that.value.getBytes(StandardCharsets.US_ASCII)
-        );
+                value.getBytes(StandardCharsets.US_ASCII), that.value.getBytes(StandardCharsets.US_ASCII));
     }
 
     @Override

@@ -4,12 +4,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 public record ActiveUserSnapshot(
-        UUID userId,
-        UUID companyId,
-        boolean employmentActive,
-        boolean accountEnabled,
-        long authorizationVersion
-) {
+        UUID userId, UUID companyId, boolean employmentActive, boolean accountEnabled, long authorizationVersion) {
 
     public ActiveUserSnapshot {
         Objects.requireNonNull(userId, "userId must not be null");

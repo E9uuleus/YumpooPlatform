@@ -7,12 +7,7 @@ import java.util.UUID;
 /**
  * HTTP 幂等键的持久化作用域。
  */
-public record IdempotencyScope(
-        UUID actorUserId,
-        String httpMethod,
-        String routeKey,
-        UUID idempotencyKey
-) {
+public record IdempotencyScope(UUID actorUserId, String httpMethod, String routeKey, UUID idempotencyKey) {
 
     private static final int MAX_HTTP_METHOD_LENGTH = 10;
     private static final int MAX_ROUTE_KEY_LENGTH = 160;

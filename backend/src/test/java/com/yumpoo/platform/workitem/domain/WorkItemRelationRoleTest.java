@@ -1,14 +1,13 @@
 package com.yumpoo.platform.workitem.domain;
 
-import org.junit.jupiter.api.Test;
-
 import static org.assertj.core.api.Assertions.assertThat;
+
+import org.junit.jupiter.api.Test;
 
 class WorkItemRelationRoleTest {
     @Test
     void mapsEveryBusinessRoleToItsTypeSideAndCounterpart() {
-        assertThat(WorkItemRelationRole.PARENT.relationType())
-                .isEqualTo(WorkItemRelationType.PARENT_CHILD);
+        assertThat(WorkItemRelationRole.PARENT.relationType()).isEqualTo(WorkItemRelationType.PARENT_CHILD);
         assertThat(WorkItemRelationRole.PARENT.leftSide()).isTrue();
         assertThat(WorkItemRelationRole.PARENT.counterpart()).isEqualTo(WorkItemRelationRole.CHILD);
         assertThat(WorkItemRelationRole.RELATED.counterpart()).isEqualTo(WorkItemRelationRole.RELATED);

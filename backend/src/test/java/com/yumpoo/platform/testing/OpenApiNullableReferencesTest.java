@@ -1,20 +1,19 @@
 package com.yumpoo.platform.testing;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.atlassian.oai.validator.OpenApiInteractionValidator;
 import com.atlassian.oai.validator.model.Request;
 import com.atlassian.oai.validator.model.SimpleResponse;
 import com.atlassian.oai.validator.report.ValidationReport;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.swagger.v3.core.util.Yaml;
+import java.io.IOException;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-
-import java.io.IOException;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class OpenApiNullableReferencesTest {
 
@@ -71,32 +70,33 @@ class OpenApiNullableReferencesTest {
                       enum: [OPEN, CLOSED]
                 """);
         OpenApiNullableReferences.normalize(spec);
-        validator = OpenApiInteractionValidator.createForInlineApiSpecification(Yaml.mapper().writeValueAsString(spec))
+        validator = OpenApiInteractionValidator.createForInlineApiSpecification(
+                        Yaml.mapper().writeValueAsString(spec))
                 .withBasePathOverride("/api/v1")
                 .build();
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {
-            "{\"child\":null,\"choice\":null}",
-            "{\"child\":{\"name\":\"item\"},\"choice\":\"OPEN\"}"
-    })
+    @ValueSource(strings = {"{\"child\":null,\"choice\":null}", "{\"child\":{\"name\":\"item\"},\"choice\":\"OPEN\"}"})
     void acceptsNullAndValidReferencedValues(String body) {
         ValidationReport report = validate(body);
-        assertThat(report.hasErrors()).withFailMessage(() -> report.getMessages().toString()).isFalse();
+        assertThat(report.hasErrors())
+                .withFailMessage(() -> report.getMessages().toString())
+                .isFalse();
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {
-            "{\"child\":{},\"choice\":\"OPEN\"}",
-            "{\"child\":\"item\",\"choice\":\"OPEN\"}",
-            "{\"child\":{\"name\":\"item\",\"extra\":true},\"choice\":\"OPEN\"}",
-            "{\"child\":null,\"choice\":\"UNKNOWN\"}",
-            "{\"child\":null,\"choice\":1}"
-    })
+    @ValueSource(
+            strings = {
+                "{\"child\":{},\"choice\":\"OPEN\"}",
+                "{\"child\":\"item\",\"choice\":\"OPEN\"}",
+                "{\"child\":{\"name\":\"item\",\"extra\":true},\"choice\":\"OPEN\"}",
+                "{\"child\":null,\"choice\":\"UNKNOWN\"}",
+                "{\"child\":null,\"choice\":1}"
+            })
     void rejectsValuesThatViolateReferencedSchemas(String body) {
-        assertThat(validate(body).getMessages()).anyMatch(message ->
-                message.getLevel() == ValidationReport.Level.ERROR
+        assertThat(validate(body).getMessages())
+                .anyMatch(message -> message.getLevel() == ValidationReport.Level.ERROR
                         && message.getKey().startsWith("validation.response.body.schema."));
     }
 
@@ -105,7 +105,9 @@ class OpenApiNullableReferencesTest {
         ValidationReport report = validate("""
                 {"child":null,"choice":null,"nullableTarget":null}
                 """);
-        assertThat(report.hasErrors()).withFailMessage(() -> report.getMessages().toString()).isFalse();
+        assertThat(report.hasErrors())
+                .withFailMessage(() -> report.getMessages().toString())
+                .isFalse();
     }
 
     @Test
@@ -136,7 +138,10 @@ class OpenApiNullableReferencesTest {
     }
 
     private static ValidationReport validate(String body) {
-        SimpleResponse response = SimpleResponse.Builder.ok().withContentType("application/json").withBody(body).build();
+        SimpleResponse response = SimpleResponse.Builder.ok()
+                .withContentType("application/json")
+                .withBody(body)
+                .build();
         return validator.validateResponse("/api/v1/example", Request.Method.GET, response);
     }
 }

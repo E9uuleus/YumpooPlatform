@@ -4,18 +4,17 @@ import com.yumpoo.platform.identityaccess.application.oauth.WeComAuthenticationF
 import com.yumpoo.platform.identityaccess.application.oauth.WeComDependencyUnavailableException;
 import com.yumpoo.platform.identityaccess.application.oauth.WeComIdentityGateway;
 import com.yumpoo.platform.identityaccess.application.oauth.WeComMemberIdentity;
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.MediaType;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientException;
-import org.springframework.web.util.UriComponentsBuilder;
-
 import java.net.URI;
 import java.time.Clock;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.MediaType;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.util.UriComponentsBuilder;
 
 final class RestClientWeComIdentityGateway implements WeComIdentityGateway {
 
@@ -23,26 +22,17 @@ final class RestClientWeComIdentityGateway implements WeComIdentityGateway {
     private static final String MOBILE_AUTHORIZE_ENDPOINT = "https://open.weixin.qq.com/connect/oauth2/authorize";
     private static final String QR_AUTHORIZE_ENDPOINT = "https://open.work.weixin.qq.com/wwopen/sso/qrConnect";
     private static final String GET_USER_INFO_PATH = "/cgi-bin/auth/getuserinfo";
-    private static final Set<Long> INVALID_AUTHORIZATION_CODE_ERRORS = Set.of(
-            40029L,
-            40163L,
-            42003L,
-            42022L
-    );
+    private static final Set<Long> INVALID_AUTHORIZATION_CODE_ERRORS = Set.of(40029L, 40163L, 42003L, 42022L);
     private static final Set<Long> INVALID_ACCESS_TOKEN_ERRORS = Set.of(40014L, 42001L);
     private static final ParameterizedTypeReference<Map<String, Object>> JSON_OBJECT_TYPE =
-            new ParameterizedTypeReference<>() {
-            };
+            new ParameterizedTypeReference<>() {};
 
     private final RestClient restClient;
     private final WeComOAuthClientSettings settings;
     private final WeComAccessTokenProvider accessTokenProvider;
 
     RestClientWeComIdentityGateway(
-            RestClient.Builder restClientBuilder,
-            WeComOAuthClientSettings settings,
-            Clock clock
-    ) {
+            RestClient.Builder restClientBuilder, WeComOAuthClientSettings settings, Clock clock) {
         this.restClient = Objects.requireNonNull(restClientBuilder, "restClientBuilder must not be null")
                 .baseUrl(API_BASE_URL)
                 .defaultHeader("Accept", MediaType.APPLICATION_JSON_VALUE)
@@ -52,8 +42,7 @@ final class RestClientWeComIdentityGateway implements WeComIdentityGateway {
                 restClient,
                 settings.corpId(),
                 settings.appSecret(),
-                Objects.requireNonNull(clock, "clock must not be null")
-        );
+                Objects.requireNonNull(clock, "clock must not be null"));
     }
 
     @Override
@@ -89,8 +78,7 @@ final class RestClientWeComIdentityGateway implements WeComIdentityGateway {
                 "corpId", settings.corpId(),
                 "redirectUri", callbackUri.toASCIIString(),
                 "state", state,
-                "agentId", settings.agentId()
-        );
+                "agentId", settings.agentId());
     }
 
     private static void requireAuthorizationInput(String state, URI callbackUri) {
@@ -159,7 +147,8 @@ final class RestClientWeComIdentityGateway implements WeComIdentityGateway {
 
     private Map<String, Object> getJson(Function<org.springframework.web.util.UriBuilder, URI> uriFunction) {
         try {
-            Map<String, Object> response = restClient.get()
+            Map<String, Object> response = restClient
+                    .get()
                     .uri(uriFunction)
                     .accept(MediaType.APPLICATION_JSON)
                     .retrieve()

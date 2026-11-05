@@ -3,15 +3,10 @@ package com.yumpoo.platform.identityaccess.application.directory;
 import com.yumpoo.platform.foundation.application.event.EventActor;
 import com.yumpoo.platform.foundation.application.event.EventActorType;
 import com.yumpoo.platform.foundation.application.request.RequestIdContext;
-
 import java.util.Objects;
 
 public record DirectorySyncCommand(
-        String triggerKey,
-        DirectorySyncTriggerType triggerType,
-        EventActor actor,
-        String requestId
-) {
+        String triggerKey, DirectorySyncTriggerType triggerType, EventActor actor, String requestId) {
 
     public DirectorySyncCommand {
         Objects.requireNonNull(triggerKey, "triggerKey must not be null");
@@ -22,12 +17,10 @@ public record DirectorySyncCommand(
         Objects.requireNonNull(triggerType, "triggerType must not be null");
         Objects.requireNonNull(actor, "actor must not be null");
         requestId = RequestIdContext.requireValid(requestId, "requestId");
-        if (triggerType == DirectorySyncTriggerType.MANUAL
-                && actor.type() != EventActorType.USER) {
+        if (triggerType == DirectorySyncTriggerType.MANUAL && actor.type() != EventActorType.USER) {
             throw new IllegalArgumentException("MANUAL sync requires a USER actor");
         }
-        if (triggerType == DirectorySyncTriggerType.SCHEDULED
-                && actor.type() != EventActorType.SYSTEM) {
+        if (triggerType == DirectorySyncTriggerType.SCHEDULED && actor.type() != EventActorType.SYSTEM) {
             throw new IllegalArgumentException("SCHEDULED sync requires a SYSTEM actor");
         }
     }
