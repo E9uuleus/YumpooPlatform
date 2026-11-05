@@ -1,8 +1,7 @@
 package com.yumpoo.platform.foundation.application.event;
 
-import tools.jackson.databind.JsonNode;
-
 import java.util.UUID;
+import tools.jackson.databind.JsonNode;
 
 /**
  * 业务模块发布事件时提供的最小事实；技术信封字段由 foundation 补齐。
@@ -15,8 +14,7 @@ public record EventDraft(
         long aggregateVersion,
         UUID companyId,
         EventActor actor,
-        JsonNode payload
-) {
+        JsonNode payload) {
 
     public EventDraft {
         eventType = EventContractRules.eventType(eventType);

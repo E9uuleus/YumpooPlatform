@@ -8,8 +8,7 @@ public record WorkItemSortRanks(
         Map<String, Integer> priorities,
         Map<UUID, Integer> contents,
         Map<UUID, Integer> assignees,
-        Map<UUID, Integer> reporters
-) {
+        Map<UUID, Integer> reporters) {
     public WorkItemSortRanks {
         statuses = Map.copyOf(statuses);
         priorities = Map.copyOf(priorities);

@@ -1,6 +1,8 @@
 package com.yumpoo.platform.identityaccess.application.account;
 
 import com.yumpoo.platform.foundation.application.concurrency.StrongEtag;
+import com.yumpoo.platform.foundation.application.error.ApplicationException;
+import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.foundation.application.event.EventActor;
 import com.yumpoo.platform.foundation.application.event.EventDraft;
 import com.yumpoo.platform.foundation.application.event.TransactionalEventPort;
@@ -9,29 +11,26 @@ import com.yumpoo.platform.foundation.application.idempotency.IdempotencyExecuti
 import com.yumpoo.platform.foundation.application.idempotency.IdempotencyScope;
 import com.yumpoo.platform.foundation.application.idempotency.IdempotentCommandExecutor;
 import com.yumpoo.platform.foundation.application.idempotency.StoredCommandResult;
-import com.yumpoo.platform.identityaccess.application.session.SessionRevocationService;
-import com.yumpoo.platform.identityaccess.application.session.SessionRevocationTarget;
+import com.yumpoo.platform.identityaccess.application.audit.IdentitySecurityAuditRecorder;
 import com.yumpoo.platform.identityaccess.application.authorization.AppManagerAvailabilityCoordinator;
 import com.yumpoo.platform.identityaccess.application.authorization.AvailabilitySnapshot;
 import com.yumpoo.platform.identityaccess.application.authorization.ManagedPlatformRole;
 import com.yumpoo.platform.identityaccess.application.authorization.RoleGovernanceRepository;
 import com.yumpoo.platform.identityaccess.application.authorization.RoleUserSnapshot;
-import com.yumpoo.platform.identityaccess.application.audit.IdentitySecurityAuditRecorder;
-import com.yumpoo.platform.foundation.application.error.ApplicationException;
-import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
+import com.yumpoo.platform.identityaccess.application.session.SessionRevocationService;
+import com.yumpoo.platform.identityaccess.application.session.SessionRevocationTarget;
 import com.yumpoo.platform.identityaccess.domain.identity.AccountStatus;
 import com.yumpoo.platform.identityaccess.domain.session.SessionRevocationReason;
-import org.springframework.stereotype.Service;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.ObjectMapper;
-
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Objects;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
+import org.springframework.stereotype.Service;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 @Service
 public class AccountStatusService implements AccountStatusUseCase {
@@ -62,22 +61,17 @@ public class AccountStatusService implements AccountStatusUseCase {
             IdempotentCommandExecutor idempotentCommandExecutor,
             ObjectMapper objectMapper,
             Clock clock,
-            IdentitySecurityAuditRecorder auditRecorder
-    ) {
+            IdentitySecurityAuditRecorder auditRecorder) {
         this.repository = Objects.requireNonNull(repository, "repository must not be null");
-        this.roleGovernanceRepository = Objects.requireNonNull(
-                roleGovernanceRepository, "roleGovernanceRepository must not be null");
-        this.availabilityCoordinator = Objects.requireNonNull(
-                availabilityCoordinator, "availabilityCoordinator must not be null");
-        this.sessionRevocationService = Objects.requireNonNull(
-                sessionRevocationService,
-                "sessionRevocationService must not be null"
-        );
+        this.roleGovernanceRepository =
+                Objects.requireNonNull(roleGovernanceRepository, "roleGovernanceRepository must not be null");
+        this.availabilityCoordinator =
+                Objects.requireNonNull(availabilityCoordinator, "availabilityCoordinator must not be null");
+        this.sessionRevocationService =
+                Objects.requireNonNull(sessionRevocationService, "sessionRevocationService must not be null");
         this.eventPort = Objects.requireNonNull(eventPort, "eventPort must not be null");
-        this.idempotentCommandExecutor = Objects.requireNonNull(
-                idempotentCommandExecutor,
-                "idempotentCommandExecutor must not be null"
-        );
+        this.idempotentCommandExecutor =
+                Objects.requireNonNull(idempotentCommandExecutor, "idempotentCommandExecutor must not be null");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
         this.auditRecorder = Objects.requireNonNull(auditRecorder, "auditRecorder must not be null");
@@ -86,22 +80,11 @@ public class AccountStatusService implements AccountStatusUseCase {
     @Override
     public IdempotencyExecutionResult change(AccountStatusChangeCommand command) {
         Objects.requireNonNull(command, "command must not be null");
-        String routeKey = command.desiredStatus() == AccountStatus.DISABLED
-                ? DISABLE_ROUTE_KEY
-                : ENABLE_ROUTE_KEY;
+        String routeKey = command.desiredStatus() == AccountStatus.DISABLED ? DISABLE_ROUTE_KEY : ENABLE_ROUTE_KEY;
         IdempotencyCommand idempotencyCommand = new IdempotencyCommand(
-                new IdempotencyScope(
-                        command.actor().userId(),
-                        "POST",
-                        routeKey,
-                        command.idempotencyKey()
-                ),
-                command.requestHash()
-        );
-        return idempotentCommandExecutor.execute(
-                idempotencyCommand,
-                () -> executeChange(command)
-        );
+                new IdempotencyScope(command.actor().userId(), "POST", routeKey, command.idempotencyKey()),
+                command.requestHash());
+        return idempotentCommandExecutor.execute(idempotencyCommand, () -> executeChange(command));
     }
 
     private StoredCommandResult executeChange(AccountStatusChangeCommand command) {
@@ -115,59 +98,51 @@ public class AccountStatusService implements AccountStatusUseCase {
                 before,
                 command.desiredStatus() == AccountStatus.DISABLED
                         && targetBefore.available()
-                        && targetBefore.activeRoles().contains(ManagedPlatformRole.APP_MANAGER)
-        );
+                        && targetBefore.activeRoles().contains(ManagedPlatformRole.APP_MANAGER));
         AccountStatusSnapshot changed = repository.change(command);
         EventActor actor = EventActor.adminOverride(command.actor().userId(), command.reason());
         publishAccountStatusChanged(changed, actor);
         sessionRevocationService.revokeActive(
                 new SessionRevocationTarget(
-                        changed.userId(),
-                        changed.companyId(),
-                        changed.authorizationVersion(),
-                        changed.rowVersion()
-                ),
+                        changed.userId(), changed.companyId(), changed.authorizationVersion(), changed.rowVersion()),
                 command.desiredStatus() == AccountStatus.DISABLED
                         ? SessionRevocationReason.ACCOUNT_DISABLED
                         : SessionRevocationReason.AUTHORIZATION_CHANGED,
-                actor
-        );
+                actor);
         availabilityCoordinator.reconcile(
                 before,
-                command.desiredStatus() == AccountStatus.DISABLED
-                        ? "ACCOUNT_DISABLED" : "ACCOUNT_ENABLED",
+                command.desiredStatus() == AccountStatus.DISABLED ? "ACCOUNT_DISABLED" : "ACCOUNT_ENABLED",
                 command.targetUserId(),
-                actor
-        );
+                actor);
         auditRecorder.succeeded(
                 command.companyId(),
                 "account-status:" + changed.userId() + ":" + changed.rowVersion(),
-                changed.accountStatus() == AccountStatus.DISABLED
-                        ? "ACCOUNT_DISABLED" : "ACCOUNT_ENABLED",
+                changed.accountStatus() == AccountStatus.DISABLED ? "ACCOUNT_DISABLED" : "ACCOUNT_ENABLED",
                 actor,
-                actorUser.effectiveRoles().stream().map(Enum::name)
-                        .collect(Collectors.toUnmodifiableSet()),
-                "USER", changed.userId(), command.reason(),
-                Map.of("accountStatus", changed.accountStatus() == AccountStatus.DISABLED
-                        ? "ENABLED" : "DISABLED"),
-                Map.of("employmentStatus", changed.employmentStatus().name(),
-                        "accountStatus", changed.accountStatus().name(),
-                        "authorizationVersion", changed.authorizationVersion()),
-                command.idempotencyKey(), null, null);
+                actorUser.effectiveRoles().stream().map(Enum::name).collect(Collectors.toUnmodifiableSet()),
+                "USER",
+                changed.userId(),
+                command.reason(),
+                Map.of("accountStatus", changed.accountStatus() == AccountStatus.DISABLED ? "ENABLED" : "DISABLED"),
+                Map.of(
+                        "employmentStatus",
+                        changed.employmentStatus().name(),
+                        "accountStatus",
+                        changed.accountStatus().name(),
+                        "authorizationVersion",
+                        changed.authorizationVersion()),
+                command.idempotencyKey(),
+                null,
+                null);
 
         AccountStatusChangeResult result = new AccountStatusChangeResult(
                 changed.userId(),
                 changed.employmentStatus(),
                 changed.accountStatus(),
                 changed.authorizationVersion(),
-                changed.rowVersion()
-        );
+                changed.rowVersion());
         return new StoredCommandResult(
-                200,
-                writeJson(result),
-                changed.userId(),
-                StrongEtag.format(changed.rowVersion())
-        );
+                200, writeJson(result), changed.userId(), StrongEtag.format(changed.rowVersion()));
     }
 
     private void publishAccountStatusChanged(AccountStatusSnapshot changed, EventActor actor) {
@@ -176,9 +151,7 @@ public class AccountStatusService implements AccountStatusUseCase {
         payload.put("userId", changed.userId());
         payload.put("fromStatus", disabled ? "ENABLED" : "DISABLED");
         payload.put("toStatus", changed.accountStatus().name());
-        payload.put("reasonCode", disabled
-                ? "ADMIN_ACCOUNT_DISABLED"
-                : "ADMIN_ACCOUNT_ENABLED");
+        payload.put("reasonCode", disabled ? "ADMIN_ACCOUNT_DISABLED" : "ADMIN_ACCOUNT_ENABLED");
         payload.put("authorizationVersion", changed.authorizationVersion());
         eventPort.append(new EventDraft(
                 disabled ? USER_ACCOUNT_DISABLED : USER_ACCOUNT_ENABLED,
@@ -188,8 +161,7 @@ public class AccountStatusService implements AccountStatusUseCase {
                 changed.rowVersion(),
                 changed.companyId(),
                 actor,
-                objectMapper.valueToTree(payload)
-        ));
+                objectMapper.valueToTree(payload)));
     }
 
     private String writeJson(AccountStatusChangeResult result) {
@@ -205,8 +177,11 @@ public class AccountStatusService implements AccountStatusUseCase {
         AccountStatusCommandActor actor = command.actor();
         if (actor.authenticatedAt().isBefore(now.minus(RECENT_AUTHENTICATION_WINDOW))
                 || actor.authenticatedAt().isAfter(now)) {
-            throw new ApplicationException(StandardErrorCode.ACCESS_DENIED,
-                    "最近认证已过期，请重新认证后再试", java.util.List.of(), "RECENT_AUTHENTICATION_REQUIRED");
+            throw new ApplicationException(
+                    StandardErrorCode.ACCESS_DENIED,
+                    "最近认证已过期，请重新认证后再试",
+                    java.util.List.of(),
+                    "RECENT_AUTHENTICATION_REQUIRED");
         }
         RoleUserSnapshot user = roleGovernanceRepository
                 .lockUser(command.companyId(), actor.userId())

@@ -1,13 +1,12 @@
 package com.yumpoo.platform.testing;
 
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
-
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 
 /**
  * 不启动 Web 服务器的标准集成测试上下文。
@@ -18,5 +17,4 @@ import java.lang.annotation.Target;
 @Documented
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE, properties = "yumpoo.outbox.enabled=false")
 @Import(PostgreSqlTestContainerConfiguration.class)
-public @interface JdbcIntegrationTest {
-}
+public @interface JdbcIntegrationTest {}

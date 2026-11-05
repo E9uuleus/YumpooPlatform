@@ -17,23 +17,18 @@ public class ActiveSessionQueryAdapter implements ActiveSessionQuery {
 
     @Override
     public List<Session> findActive(UUID companyId, Instant now) {
-        return repository
-            .find(companyId, now)
-            .stream()
-            .map(s ->
-                new Session(
-                    s.id(),
-                    s.companyId(),
-                    s.userId(),
-                    s.displayName(),
-                    s.clientType(),
-                    s.clientVersion(),
-                    s.issuedAt(),
-                    s.lastSeenAt(),
-                    s.expiresAt()
-                )
-            )
-            .toList();
+        return repository.find(companyId, now).stream()
+                .map(s -> new Session(
+                        s.id(),
+                        s.companyId(),
+                        s.userId(),
+                        s.displayName(),
+                        s.clientType(),
+                        s.clientVersion(),
+                        s.issuedAt(),
+                        s.lastSeenAt(),
+                        s.expiresAt()))
+                .toList();
     }
 
     @Override

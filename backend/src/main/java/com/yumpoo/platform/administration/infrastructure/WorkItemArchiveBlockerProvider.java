@@ -4,9 +4,8 @@ import com.yumpoo.platform.administration.application.ProjectArchiveBlockerProvi
 import com.yumpoo.platform.administration.application.ProjectArchiveBlockerReport;
 import com.yumpoo.platform.administration.application.ProjectArchiveBlockerSource;
 import com.yumpoo.platform.workitem.api.WorkItemProjectArchiveBlockerPort;
-import org.springframework.stereotype.Component;
-
 import java.util.UUID;
+import org.springframework.stereotype.Component;
 
 @Component
 public final class WorkItemArchiveBlockerProvider implements ProjectArchiveBlockerProvider {

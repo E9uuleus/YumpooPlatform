@@ -10,17 +10,14 @@ public final class RequestCorrelationContext {
 
     private static final ThreadLocal<RequestCorrelation> CURRENT = new ThreadLocal<>();
 
-    private RequestCorrelationContext() {
-    }
+    private RequestCorrelationContext() {}
 
     public static Optional<RequestCorrelation> current() {
         return Optional.ofNullable(CURRENT.get());
     }
 
     public static RequestCorrelation required() {
-        return current().orElseThrow(() -> new IllegalStateException(
-                "request correlation context is required"
-        ));
+        return current().orElseThrow(() -> new IllegalStateException("request correlation context is required"));
     }
 
     public static Scope open(RequestCorrelation correlation) {

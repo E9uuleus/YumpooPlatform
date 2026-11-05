@@ -20,24 +20,22 @@ public final class AlertEvaluator {
     }
 
     public synchronized Decision evaluate(
-        String key,
-        long version,
-        AlertRuleType type,
-        boolean enabled,
-        Double warning,
-        Double critical,
-        int duration,
-        Double value,
-        String firingSeverity,
-        Instant now
-    ) {
+            String key,
+            long version,
+            AlertRuleType type,
+            boolean enabled,
+            Double warning,
+            Double critical,
+            int duration,
+            Double value,
+            String firingSeverity,
+            Instant now) {
         Window previous = windows.get(key);
-        if (
-            previous == null ||
-            previous.version != version ||
-            Duration.between(previous.last, now).isNegative() ||
-            Duration.between(previous.last, now).getSeconds() > 45
-        ) previous = new Window(version, now, null, null, null);
+        if (previous == null
+                || previous.version != version
+                || Duration.between(previous.last, now).isNegative()
+                || Duration.between(previous.last, now).getSeconds() > 45)
+            previous = new Window(version, now, null, null, null);
         if (!enabled) {
             windows.remove(key);
             return firingSeverity == null ? null : new Decision("RULE_DISABLED", firingSeverity);
@@ -47,16 +45,12 @@ public final class AlertEvaluator {
             return null;
         }
         String severity = type.severity(value, warning, critical);
-        Instant pending = previous.pending,
-            recovery = previous.recovery,
-            deescalation = previous.deescalation;
+        Instant pending = previous.pending, recovery = previous.recovery, deescalation = previous.deescalation;
         Decision decision = null;
         if (firingSeverity == null) {
             pending = severity == null ? null : pending == null ? now : pending;
-            if (pending != null && Duration.between(pending, now).getSeconds() >= duration) decision = new Decision(
-                "FIRED",
-                severity
-            );
+            if (pending != null && Duration.between(pending, now).getSeconds() >= duration)
+                decision = new Decision("FIRED", severity);
             recovery = null;
             deescalation = null;
         } else if (severity == null) {
@@ -67,16 +61,12 @@ public final class AlertEvaluator {
         } else {
             recovery = null;
             pending = null;
-            if ("WARNING".equals(firingSeverity) && "CRITICAL".equals(severity)) decision = new Decision(
-                "ESCALATED",
-                severity
-            );
+            if ("WARNING".equals(firingSeverity) && "CRITICAL".equals(severity))
+                decision = new Decision("ESCALATED", severity);
             else if ("CRITICAL".equals(firingSeverity) && "WARNING".equals(severity)) {
                 deescalation = deescalation == null ? now : deescalation;
-                if (Duration.between(deescalation, now).getSeconds() >= 60) decision = new Decision(
-                    "DEESCALATED",
-                    severity
-                );
+                if (Duration.between(deescalation, now).getSeconds() >= 60)
+                    decision = new Decision("DEESCALATED", severity);
             } else deescalation = null;
         }
         if (decision != null) {

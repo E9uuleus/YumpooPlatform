@@ -1,7 +1,7 @@
 package com.yumpoo.platform.identityaccess.api;
 
-import com.yumpoo.platform.foundation.api.error.ApiErrorResponse;
 import com.yumpoo.platform.foundation.api.error.ApiErrorDetails;
+import com.yumpoo.platform.foundation.api.error.ApiErrorResponse;
 import com.yumpoo.platform.foundation.api.http.IdempotencyKeyParser;
 import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
 import com.yumpoo.platform.foundation.api.pagination.OffsetPageResponse;
@@ -21,8 +21,10 @@ import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncExe
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncRunStatus;
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncTriggerType;
 import jakarta.servlet.http.HttpServletRequest;
+import java.net.URI;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.CacheControl;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -31,10 +33,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
-
-import java.net.URI;
-import java.util.List;
-import java.util.UUID;
 
 @ApiV1Controller
 public final class IdentityAdministrationController {
@@ -50,8 +48,7 @@ public final class IdentityAdministrationController {
             CurrentActorProvider currentActorProvider,
             IdentityAdministrationQueryService queryService,
             ManualDirectorySyncService manualSyncService,
-            IdempotencyKeyParser idempotencyKeyParser
-    ) {
+            IdempotencyKeyParser idempotencyKeyParser) {
         this.currentActorProvider = currentActorProvider;
         this.queryService = queryService;
         this.manualSyncService = manualSyncService;
@@ -72,12 +69,14 @@ public final class IdentityAdministrationController {
             @RequestParam(required = false) String accountStatus,
             @RequestParam(required = false) String platformRole,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
-    ) {
+            @RequestParam(defaultValue = "20") int size) {
         CurrentActor actor = currentActorProvider.requiredActive();
         OffsetPageRequest pageRequest = OffsetPageRequest.of(page, size);
-        var result = queryService.members(actor.companyId(), actor.userId(), new IdentityMemberQuery(
-                name, externalUserId, employmentStatus, accountStatus, platformRole, pageRequest));
+        var result = queryService.members(
+                actor.companyId(),
+                actor.userId(),
+                new IdentityMemberQuery(
+                        name, externalUserId, employmentStatus, accountStatus, platformRole, pageRequest));
         return OffsetPageResponse.of(result.items(), pageRequest, result.total());
     }
 
@@ -96,12 +95,13 @@ public final class IdentityAdministrationController {
             @RequestParam(required = false) DirectorySyncRunStatus status,
             @RequestParam(required = false) DirectorySyncTriggerType triggerType,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
-    ) {
+            @RequestParam(defaultValue = "20") int size) {
         CurrentActor actor = currentActorProvider.requiredActive();
         OffsetPageRequest pageRequest = OffsetPageRequest.of(page, size);
-        var result = queryService.runs(actor.companyId(), actor.userId(), new DirectoryRunQuery(
-                enumName(status), enumName(triggerType), pageRequest));
+        var result = queryService.runs(
+                actor.companyId(),
+                actor.userId(),
+                new DirectoryRunQuery(enumName(status), enumName(triggerType), pageRequest));
         return OffsetPageResponse.of(result.items(), pageRequest, result.total());
     }
 
@@ -115,26 +115,22 @@ public final class IdentityAdministrationController {
     OffsetPageResponse<DirectorySyncFailureView> failures(
             @PathVariable UUID runId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
-    ) {
+            @RequestParam(defaultValue = "20") int size) {
         CurrentActor actor = currentActorProvider.requiredActive();
         OffsetPageRequest pageRequest = OffsetPageRequest.of(page, size);
-        var result = queryService.failures(
-                actor.companyId(), actor.userId(), runId, pageRequest);
+        var result = queryService.failures(actor.companyId(), actor.userId(), runId, pageRequest);
         return OffsetPageResponse.of(result.items(), pageRequest, result.total());
     }
 
     @PostMapping("/admin/directory-sync-runs")
     ResponseEntity<?> trigger(
-            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false)
-            String idempotencyKey,
-            HttpServletRequest request
-    ) {
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String idempotencyKey,
+            HttpServletRequest request) {
         CurrentActor actor = currentActorProvider.requiredActive();
         UUID parsedKey = idempotencyKeyParser.parseRequired(idempotencyKey);
         String requestId = requiredRequestId(request);
-        DirectorySyncExecutionResult execution = manualSyncService.execute(
-                actor.companyId(), actor.userId(), parsedKey.toString(), requestId);
+        DirectorySyncExecutionResult execution =
+                manualSyncService.execute(actor.companyId(), actor.userId(), parsedKey.toString(), requestId);
         URI location = URI.create(RUNS_PATH + execution.snapshot().runId());
 
         if (execution.disposition() == DirectorySyncClaimDisposition.ACTIVE_CONFLICT) {
@@ -144,14 +140,18 @@ public final class IdentityAdministrationController {
                     .header(RequestIdContext.HEADER_NAME, requestId)
                     .location(location)
                     .body(new ApiErrorResponse(
-                            error.name(), error.defaultMessage(), requestId, error.retryable(),
-                            List.of(), ApiErrorDetails.EMPTY));
+                            error.name(),
+                            error.defaultMessage(),
+                            requestId,
+                            error.retryable(),
+                            List.of(),
+                            ApiErrorDetails.EMPTY));
         }
 
         DirectorySyncRunView body = queryService.run(
                 actor.companyId(), actor.userId(), execution.snapshot().runId());
-        HttpStatus status = execution.disposition() == DirectorySyncClaimDisposition.NEW
-                ? HttpStatus.CREATED : HttpStatus.OK;
+        HttpStatus status =
+                execution.disposition() == DirectorySyncClaimDisposition.NEW ? HttpStatus.CREATED : HttpStatus.OK;
         return ResponseEntity.status(status)
                 .contentType(MediaType.APPLICATION_JSON)
                 .header(RequestIdContext.HEADER_NAME, requestId)

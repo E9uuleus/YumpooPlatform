@@ -3,7 +3,6 @@ package com.yumpoo.platform.identityaccess.application.authorization;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.FieldViolation;
 import com.yumpoo.platform.foundation.application.idempotency.RequestHash;
-
 import java.util.Objects;
 import java.util.UUID;
 
@@ -15,8 +14,7 @@ public record ChangePlatformRoleTierCommand(
         RoleCommandActor actor,
         UUID idempotencyKey,
         RequestHash requestHash,
-        String reasonReference
-) {
+        String reasonReference) {
     public ChangePlatformRoleTierCommand {
         Objects.requireNonNull(companyId, "companyId must not be null");
         Objects.requireNonNull(targetUserId, "targetUserId must not be null");
@@ -26,10 +24,10 @@ public record ChangePlatformRoleTierCommand(
         Objects.requireNonNull(requestHash, "requestHash must not be null");
         if (expectedTargetRowVersion < 0) {
             throw ApplicationException.validation(new FieldViolation(
-                    "expectedTargetRowVersion", "NON_NEGATIVE_REQUIRED",
+                    "expectedTargetRowVersion",
+                    "NON_NEGATIVE_REQUIRED",
                     "expectedTargetRowVersion must not be negative"));
         }
         reasonReference = GrantPlatformRoleCommand.validateReason(reasonReference);
     }
-
 }

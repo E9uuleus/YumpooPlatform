@@ -5,6 +5,5 @@ package com.yumpoo.platform.notification.infrastructure;
  */
 final class LayerMarker {
 
-    private LayerMarker() {
-    }
+    private LayerMarker() {}
 }

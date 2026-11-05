@@ -1,9 +1,6 @@
 package com.yumpoo.platform.foundation.api.http;
 
 import com.yumpoo.platform.foundation.application.idempotency.RequestHash;
-import org.springframework.stereotype.Component;
-import tools.jackson.databind.JsonNode;
-
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -12,6 +9,8 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.springframework.stereotype.Component;
+import tools.jackson.databind.JsonNode;
 
 /**
  * 生成只包含业务请求身份的稳定 SHA-256 摘要。
@@ -35,11 +34,7 @@ public final class IdempotencyRequestHasher {
     private static final byte JSON_ARRAY = 15;
     private static final byte JSON_OBJECT = 16;
 
-    public RequestHash hash(
-            String operationId,
-            Map<String, String> pathParameters,
-            JsonNode body
-    ) {
+    public RequestHash hash(String operationId, Map<String, String> pathParameters, JsonNode body) {
         return hash(operationId, pathParameters, body, Map.of());
     }
 
@@ -47,8 +42,7 @@ public final class IdempotencyRequestHasher {
             String operationId,
             Map<String, String> pathParameters,
             JsonNode body,
-            Map<String, String> attachmentHashes
-    ) {
+            Map<String, String> attachmentHashes) {
         requireOperationId(operationId);
         Objects.requireNonNull(pathParameters, "pathParameters must not be null");
         Objects.requireNonNull(body, "body must not be null");
@@ -76,9 +70,8 @@ public final class IdempotencyRequestHasher {
             }
             case NUMBER -> {
                 digest.update(JSON_NUMBER);
-                BigDecimal value = node.decimalValueOpt().orElseThrow(() ->
-                        new IllegalArgumentException("body must not contain non-finite numbers")
-                );
+                BigDecimal value = node.decimalValueOpt()
+                        .orElseThrow(() -> new IllegalArgumentException("body must not contain non-finite numbers"));
                 updateString(digest, normalizeNumber(value));
             }
             case ARRAY -> {
@@ -99,9 +92,8 @@ public final class IdempotencyRequestHasher {
                     updateJson(digest, property.getValue());
                 }
             }
-            case BINARY, MISSING, POJO -> throw new IllegalArgumentException(
-                    "body must contain standard JSON values only"
-            );
+            case BINARY, MISSING, POJO ->
+                throw new IllegalArgumentException("body must contain standard JSON values only");
         }
     }
 
@@ -114,16 +106,11 @@ public final class IdempotencyRequestHasher {
         return normalized.unscaledValue() + "e" + exponent;
     }
 
-    private static void updateStringMap(
-            MessageDigest digest,
-            Map<String, String> values,
-            String parameterName
-    ) {
+    private static void updateStringMap(MessageDigest digest, Map<String, String> values, String parameterName) {
         List<Map.Entry<String, String>> entries = values.entrySet().stream()
                 .map(entry -> Map.entry(
                         Objects.requireNonNull(entry.getKey(), parameterName + " keys must not be null"),
-                        Objects.requireNonNull(entry.getValue(), parameterName + " values must not be null")
-                ))
+                        Objects.requireNonNull(entry.getValue(), parameterName + " values must not be null")))
                 .sorted(Map.Entry.comparingByKey())
                 .toList();
 

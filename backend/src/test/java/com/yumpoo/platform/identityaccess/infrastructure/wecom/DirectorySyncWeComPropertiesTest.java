@@ -1,11 +1,10 @@
 package com.yumpoo.platform.identityaccess.infrastructure.wecom;
 
-import org.junit.jupiter.api.Test;
-
-import java.time.Duration;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import java.time.Duration;
+import org.junit.jupiter.api.Test;
 
 class DirectorySyncWeComPropertiesTest {
 
@@ -31,8 +30,7 @@ class DirectorySyncWeComPropertiesTest {
         DirectorySyncWeComProperties properties = enabledProperties();
         properties.setReadTimeout(Duration.ofMinutes(5));
 
-        assertThatThrownBy(properties::validateForEnabled)
-                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(properties::validateForEnabled).isInstanceOf(IllegalStateException.class);
     }
 
     @Test

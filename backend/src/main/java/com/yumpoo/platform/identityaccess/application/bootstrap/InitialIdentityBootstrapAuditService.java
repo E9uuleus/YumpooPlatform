@@ -3,14 +3,13 @@ package com.yumpoo.platform.identityaccess.application.bootstrap;
 import com.yumpoo.platform.audit.api.SecurityAuditOutcome;
 import com.yumpoo.platform.foundation.application.event.EventActor;
 import com.yumpoo.platform.identityaccess.application.audit.IdentitySecurityAuditRecorder;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class InitialIdentityBootstrapAuditService {
@@ -30,8 +29,7 @@ public class InitialIdentityBootstrapAuditService {
             String reasonReference,
             String stage,
             String errorCode,
-            UUID directoryRunId
-    ) {
+            UUID directoryRunId) {
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("stage", stage);
         if (directoryRunId != null) {
@@ -51,7 +49,6 @@ public class InitialIdentityBootstrapAuditService {
                 summary,
                 errorCode,
                 null,
-                null
-        );
+                null);
     }
 }

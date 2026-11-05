@@ -1,21 +1,20 @@
 package com.yumpoo.platform.filestorage.consistency;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.yumpoo.platform.filestorage.application.AttachmentUploadPolicy;
 import com.yumpoo.platform.filestorage.infrastructure.LocalFileQuarantineStorage;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
-
 import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.LinkOption;
+import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.OptionalLong;
 import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
 @EnabledIfEnvironmentVariable(named = "YUMPOO_M014_LIVE_ENABLED", matches = "true")
 class M014FileStorageLiveVerification {

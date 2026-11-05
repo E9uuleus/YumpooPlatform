@@ -1,7 +1,6 @@
 package com.yumpoo.platform.identityaccess.application.administration;
 
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncCounts;
-
 import java.time.Instant;
 import java.util.UUID;
 
@@ -21,6 +20,4 @@ public record DirectorySyncRunView(
         String requestId,
         long rowVersion,
         Instant startedAt,
-        Instant finishedAt
-) {
-}
+        Instant finishedAt) {}

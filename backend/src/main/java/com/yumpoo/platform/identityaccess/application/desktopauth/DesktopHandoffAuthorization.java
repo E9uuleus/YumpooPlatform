@@ -4,10 +4,7 @@ import java.time.Instant;
 import java.util.Objects;
 
 public record DesktopHandoffAuthorization(
-        DesktopAuthToken handoffCode,
-        DesktopAuthToken desktopState,
-        Instant expiresAt
-) {
+        DesktopAuthToken handoffCode, DesktopAuthToken desktopState, Instant expiresAt) {
 
     public DesktopHandoffAuthorization {
         Objects.requireNonNull(handoffCode, "handoffCode must not be null");

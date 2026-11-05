@@ -1,21 +1,13 @@
 package com.yumpoo.platform.identityaccess.api;
 
 import com.yumpoo.platform.identityaccess.application.authentication.CurrentAuthenticationView;
-
 import java.util.List;
 import java.util.UUID;
 
-public record CurrentAuthenticationResponse(
-        User user,
-        Company company,
-        List<Role> roles,
-        Client client
-) {
+public record CurrentAuthenticationResponse(User user, Company company, List<Role> roles, Client client) {
 
     static CurrentAuthenticationResponse from(
-            CurrentAuthenticationView view,
-            java.util.Set<PlatformRoleCode> platformRoles
-    ) {
+            CurrentAuthenticationView view, java.util.Set<PlatformRoleCode> platformRoles) {
         java.util.ArrayList<Role> roles = new java.util.ArrayList<>();
         roles.add(Role.COMPANY_MEMBER);
         if (platformRoles.contains(PlatformRoleCode.COMPANY_ADMIN)) {
@@ -28,32 +20,21 @@ public record CurrentAuthenticationResponse(
                 new User(
                         view.user().userId(),
                         view.user().displayName(),
-                        view.user().workspaceSlug()
-                ),
+                        view.user().workspaceSlug()),
                 new Company(
                         view.company().companyId(),
                         view.company().displayName(),
                         view.company().timezone().getId(),
-                        view.company().weekStartDay().name()
-                ),
+                        view.company().weekStartDay().name()),
                 List.copyOf(roles),
-                new Client(ClientType.valueOf(view.clientType()), Compatibility.SUPPORTED)
-        );
+                new Client(ClientType.valueOf(view.clientType()), Compatibility.SUPPORTED));
     }
 
-    public record User(UUID id, String displayName, String workspaceSlug) {
-    }
+    public record User(UUID id, String displayName, String workspaceSlug) {}
 
-    public record Company(
-            UUID id,
-            String displayName,
-            String timezone,
-            String weekStartDay
-    ) {
-    }
+    public record Company(UUID id, String displayName, String timezone, String weekStartDay) {}
 
-    public record Client(ClientType type, Compatibility compatibility) {
-    }
+    public record Client(ClientType type, Compatibility compatibility) {}
 
     public enum Role {
         COMPANY_MEMBER,

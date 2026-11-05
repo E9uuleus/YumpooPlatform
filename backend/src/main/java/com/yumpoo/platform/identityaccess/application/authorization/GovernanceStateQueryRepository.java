@@ -8,6 +8,5 @@ public interface GovernanceStateQueryRepository {
     Optional<GovernanceMemberState> findMember(UUID companyId, UUID userId);
 
     Optional<RoleAssignmentSnapshot> findAssignment(
-            UUID companyId, UUID assignmentId, ManagedPlatformRole expectedRole
-    );
+            UUID companyId, UUID assignmentId, ManagedPlatformRole expectedRole);
 }

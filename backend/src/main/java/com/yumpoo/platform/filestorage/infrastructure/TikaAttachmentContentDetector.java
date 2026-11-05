@@ -7,13 +7,6 @@ import com.yumpoo.platform.filestorage.application.DetectedAttachmentContent;
 import com.yumpoo.platform.filestorage.application.UploadRejectedException;
 import com.yumpoo.platform.filestorage.domain.AttachmentFileType;
 import com.yumpoo.platform.filestorage.domain.AttachmentRejectedCode;
-import org.apache.tika.io.TikaInputStream;
-import org.apache.tika.metadata.Metadata;
-import org.apache.tika.metadata.TikaCoreProperties;
-import org.apache.tika.mime.MediaType;
-import org.apache.tika.mime.MimeTypes;
-import org.apache.tika.parser.ParseContext;
-
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -31,6 +24,12 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
+import org.apache.tika.io.TikaInputStream;
+import org.apache.tika.metadata.Metadata;
+import org.apache.tika.metadata.TikaCoreProperties;
+import org.apache.tika.mime.MediaType;
+import org.apache.tika.mime.MimeTypes;
+import org.apache.tika.parser.ParseContext;
 
 /** Tika 魔数识别 + 有界 ZIP/OOXML 容器判别。 */
 public final class TikaAttachmentContentDetector implements AttachmentContentDetector {
@@ -42,8 +41,7 @@ public final class TikaAttachmentContentDetector implements AttachmentContentDet
     private final MimeTypes mimeTypes = MimeTypes.getDefaultMimeTypes();
 
     @Override
-    public DetectedAttachmentContent detect(Path sealedContent, AttachmentFileName fileName)
-            throws IOException {
+    public DetectedAttachmentContent detect(Path sealedContent, AttachmentFileName fileName) throws IOException {
         if (!Files.isRegularFile(sealedContent, LinkOption.NOFOLLOW_LINKS)) {
             throw rejected();
         }
@@ -56,13 +54,10 @@ public final class TikaAttachmentContentDetector implements AttachmentContentDet
         metadata.set(TikaCoreProperties.RESOURCE_NAME_KEY, fileName.displayName());
         MediaType detected;
         try (InputStream input = new BufferedInputStream(
-                Files.newInputStream(
-                        sealedContent,
-                        java.nio.file.StandardOpenOption.READ,
-                        LinkOption.NOFOLLOW_LINKS
-                ),
-                AttachmentUploadPolicy.BUFFER_BYTES
-        ); TikaInputStream tikaInput = TikaInputStream.get(input)) {
+                        Files.newInputStream(
+                                sealedContent, java.nio.file.StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS),
+                        AttachmentUploadPolicy.BUFFER_BYTES);
+                TikaInputStream tikaInput = TikaInputStream.get(input)) {
             detected = mimeTypes.detect(tikaInput, metadata, new ParseContext());
         }
         String mime = detected.toString().toLowerCase(Locale.ROOT);
@@ -78,9 +73,7 @@ public final class TikaAttachmentContentDetector implements AttachmentContentDet
         }
         if (fileName.expectedType().isText() && isSafeUtf8Text(sealedContent)) {
             return new DetectedAttachmentContent(
-                    fileName.expectedType(),
-                    fileName.expectedType().canonicalMime()
-            );
+                    fileName.expectedType(), fileName.expectedType().canonicalMime());
         }
         throw rejected();
     }
@@ -112,19 +105,19 @@ public final class TikaAttachmentContentDetector implements AttachmentContentDet
         }
 
         String normalizedTypes = contentTypes.toLowerCase(Locale.ROOT);
-        if (names.contains("word/document.xml") && normalizedTypes.contains(
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"
-        )) {
+        if (names.contains("word/document.xml")
+                && normalizedTypes.contains(
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml")) {
             return AttachmentFileType.DOCX;
         }
-        if (names.contains("xl/workbook.xml") && normalizedTypes.contains(
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"
-        )) {
+        if (names.contains("xl/workbook.xml")
+                && normalizedTypes.contains(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml")) {
             return AttachmentFileType.XLSX;
         }
-        if (names.contains("ppt/presentation.xml") && normalizedTypes.contains(
-                "application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"
-        )) {
+        if (names.contains("ppt/presentation.xml")
+                && normalizedTypes.contains(
+                        "application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml")) {
             return AttachmentFileType.PPTX;
         }
         return AttachmentFileType.ZIP;
@@ -132,34 +125,28 @@ public final class TikaAttachmentContentDetector implements AttachmentContentDet
 
     private static boolean looksLikeZip(Path path) throws IOException {
         byte[] signature = new byte[4];
-        try (InputStream input = Files.newInputStream(
-                path,
-                java.nio.file.StandardOpenOption.READ,
-                LinkOption.NOFOLLOW_LINKS
-        )) {
+        try (InputStream input =
+                Files.newInputStream(path, java.nio.file.StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
             if (input.read(signature) != signature.length) {
                 return false;
             }
         }
-        return signature[0] == 'P' && signature[1] == 'K'
+        return signature[0] == 'P'
+                && signature[1] == 'K'
                 && ((signature[2] == 3 && signature[3] == 4)
-                || (signature[2] == 5 && signature[3] == 6)
-                || (signature[2] == 7 && signature[3] == 8));
+                        || (signature[2] == 5 && signature[3] == 6)
+                        || (signature[2] == 7 && signature[3] == 8));
     }
 
     private static boolean isSafeUtf8Text(Path path) throws IOException {
         try {
-            var decoder = StandardCharsets.UTF_8.newDecoder()
+            var decoder = StandardCharsets.UTF_8
+                    .newDecoder()
                     .onMalformedInput(CodingErrorAction.REPORT)
                     .onUnmappableCharacter(CodingErrorAction.REPORT);
             try (Reader reader = new InputStreamReader(
-                    Files.newInputStream(
-                            path,
-                            java.nio.file.StandardOpenOption.READ,
-                            LinkOption.NOFOLLOW_LINKS
-                    ),
-                    decoder
-            )) {
+                    Files.newInputStream(path, java.nio.file.StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS),
+                    decoder)) {
                 char[] characters = new char[TEXT_SAMPLE_BYTES / Character.BYTES];
                 boolean sawContent = false;
                 int read;
@@ -167,10 +154,11 @@ public final class TikaAttachmentContentDetector implements AttachmentContentDet
                     sawContent = true;
                     for (int index = 0; index < read; index++) {
                         char character = characters[index];
-                        if (character == 0 || (Character.isISOControl(character)
-                                && character != '\t'
-                                && character != '\r'
-                                && character != '\n')) {
+                        if (character == 0
+                                || (Character.isISOControl(character)
+                                        && character != '\t'
+                                        && character != '\r'
+                                        && character != '\n')) {
                             return false;
                         }
                     }

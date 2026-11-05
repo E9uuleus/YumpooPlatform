@@ -5,9 +5,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.time.temporal.TemporalAdjusters;
 import java.time.zone.ZoneOffsetTransition;
 import java.time.zone.ZoneRules;
-import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -30,11 +30,7 @@ public final class CompanyCalendar {
         return date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
     }
 
-    public ResolvedCalendarDay resolve(
-            Company company,
-            LocalDate date,
-            Map<LocalDate, CalendarDayOverride> overrides
-    ) {
+    public ResolvedCalendarDay resolve(Company company, LocalDate date, Map<LocalDate, CalendarDayOverride> overrides) {
         Objects.requireNonNull(company, "company must not be null");
         Objects.requireNonNull(date, "date must not be null");
         Objects.requireNonNull(overrides, "overrides must not be null");
@@ -42,9 +38,7 @@ public final class CompanyCalendar {
         if (override != null) {
             int minutes = override.dayType() != CalendarDayOverride.DayType.WORKDAY
                     ? 0
-                    : override.standardMinutes() == null
-                    ? company.defaultWorkdayMinutes()
-                    : override.standardMinutes();
+                    : override.standardMinutes() == null ? company.defaultWorkdayMinutes() : override.standardMinutes();
             return new ResolvedCalendarDay(
                     date,
                     override.dayType(),
@@ -54,8 +48,7 @@ public final class CompanyCalendar {
                     OptionalLong.of(override.rowVersion()),
                     override.note(),
                     override.dayType() == CalendarDayOverride.DayType.WORKDAY ? override.standardMinutes() : null,
-                    override.source()
-            );
+                    override.source());
         }
 
         boolean weekday = date.getDayOfWeek().getValue() <= DayOfWeek.FRIDAY.getValue();
@@ -68,8 +61,7 @@ public final class CompanyCalendar {
                 OptionalLong.empty(),
                 null,
                 null,
-                null
-        );
+                null);
     }
 
     public Instant toInstant(Company company, LocalDateTime localDateTime) {

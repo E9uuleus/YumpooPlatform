@@ -1,6 +1,19 @@
 package com.yumpoo.platform.identityaccess.api;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
+import java.time.Duration;
+import java.util.Base64;
+import java.util.Map;
+import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,20 +27,6 @@ import org.springframework.web.util.UriComponentsBuilder;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.SecureRandom;
-import java.time.Duration;
-import java.util.Base64;
-import java.util.Map;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-
 /**
  * The desktop shell calls these endpoints with no session cookie, and the system browser may carry a stale
  * one. Without local authentication they must still reach the controllers instead of the session filter.
@@ -37,32 +36,24 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
-                "yumpoo.auth.controlled.enabled=true",
-                "yumpoo.auth.controlled.corp-id=corp-desktop-it",
-                "yumpoo.auth.controlled.member-id=member-desktop-it",
-                "yumpoo.auth.local.enabled=false",
-                "yumpoo.outbox.enabled=false"
-        }
-)
+            "yumpoo.auth.controlled.enabled=true",
+            "yumpoo.auth.controlled.corp-id=corp-desktop-it",
+            "yumpoo.auth.controlled.member-id=member-desktop-it",
+            "yumpoo.auth.local.enabled=false",
+            "yumpoo.outbox.enabled=false"
+        })
 class DesktopAuthenticationIT {
 
-    private static final UUID COMPANY_ID = UUID.fromString(
-            "00000000-0000-4000-8000-000000000001"
-    );
-    private static final UUID USER_ID = UUID.fromString(
-            "60000000-0000-4000-8000-000000000206"
-    );
-    private static final UUID IDENTITY_ID = UUID.fromString(
-            "60000000-0000-4000-8000-000000000207"
-    );
+    private static final UUID COMPANY_ID = UUID.fromString("00000000-0000-4000-8000-000000000001");
+    private static final UUID USER_ID = UUID.fromString("60000000-0000-4000-8000-000000000206");
+    private static final UUID IDENTITY_ID = UUID.fromString("60000000-0000-4000-8000-000000000207");
     private static final String CLIENT_VERSION = "0.0.0-desktop-it";
     // A blocked request must fail this test, not hang the whole gate.
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
     private static final String STALE_SESSION = SessionHttpCookies.SESSION_COOKIE + "=" + "z".repeat(43);
 
-    private final HttpClient client = HttpClient.newBuilder()
-            .followRedirects(HttpClient.Redirect.NEVER)
-            .build();
+    private final HttpClient client =
+            HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build();
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final SecureRandom random = new SecureRandom();
 
@@ -75,7 +66,8 @@ class DesktopAuthenticationIT {
     @BeforeEach
     void setUp() {
         deleteFixture();
-        jdbcClient.sql("""
+        jdbcClient
+                .sql("""
                         INSERT INTO yumpoo.identity_user (
                             id, company_id, employment_status, account_status,
                             display_name, workspace_slug, directory_synced_at,
@@ -89,7 +81,8 @@ class DesktopAuthenticationIT {
                 .param("userId", USER_ID)
                 .param("companyId", COMPANY_ID)
                 .update();
-        jdbcClient.sql("""
+        jdbcClient
+                .sql("""
                         INSERT INTO yumpoo.external_identity (
                             id, company_id, user_id, provider, external_user_id,
                             provider_employment_status, raw_profile_hash,
@@ -117,11 +110,10 @@ class DesktopAuthenticationIT {
         String state = token();
         String verifier = token();
 
-        HttpResponse<String> attempt = post(DesktopAuthenticationPaths.ATTEMPTS, null, Map.of(
-                "state", state,
-                "codeChallenge", challenge(verifier),
-                "codeChallengeMethod", "S256"
-        ));
+        HttpResponse<String> attempt = post(
+                DesktopAuthenticationPaths.ATTEMPTS,
+                null,
+                Map.of("state", state, "codeChallenge", challenge(verifier), "codeChallengeMethod", "S256"));
         assertThat(attempt.statusCode()).as("body=%s", attempt.body()).isEqualTo(201);
         String authorizationUrl = json(attempt).get("authorizationUrl").asText();
 
@@ -130,14 +122,17 @@ class DesktopAuthenticationIT {
         assertThat(callback.statusCode()).as("body=%s", callback.body()).isEqualTo(302);
         URI deepLink = URI.create(callback.headers().firstValue("location").orElseThrow());
         assertThat(deepLink.getScheme()).isEqualTo("yumpoo");
-        Map<String, String> query = UriComponentsBuilder.fromUri(deepLink).build().getQueryParams().toSingleValueMap();
+        Map<String, String> query =
+                UriComponentsBuilder.fromUri(deepLink).build().getQueryParams().toSingleValueMap();
         assertThat(query.get("state")).isEqualTo(state);
 
-        HttpResponse<String> exchange = post(DesktopAuthenticationPaths.EXCHANGE, null, Map.of(
-                "handoffCode", query.get("code"),
-                "state", state,
-                "codeVerifier", verifier
-        ));
+        HttpResponse<String> exchange = post(
+                DesktopAuthenticationPaths.EXCHANGE,
+                null,
+                Map.of(
+                        "handoffCode", query.get("code"),
+                        "state", state,
+                        "codeVerifier", verifier));
         assertThat(exchange.statusCode()).as("body=%s", exchange.body()).isEqualTo(200);
         String session = json(exchange).get("sessionCredential").asText();
 
@@ -148,11 +143,13 @@ class DesktopAuthenticationIT {
 
     @Test
     void malformedDesktopRequestsReachTheControllersEvenWithAStaleCookie() throws Exception {
-        HttpResponse<String> attempt = post(DesktopAuthenticationPaths.ATTEMPTS, STALE_SESSION, Map.of(
-                "state", token(),
-                "codeChallenge", challenge(token()),
-                "codeChallengeMethod", "plain"
-        ));
+        HttpResponse<String> attempt = post(
+                DesktopAuthenticationPaths.ATTEMPTS,
+                STALE_SESSION,
+                Map.of(
+                        "state", token(),
+                        "codeChallenge", challenge(token()),
+                        "codeChallengeMethod", "plain"));
         HttpResponse<String> exchange = post(DesktopAuthenticationPaths.EXCHANGE, null, Map.of());
         HttpResponse<String> callback = get(DesktopAuthenticationPaths.CALLBACK, null);
 
@@ -160,8 +157,8 @@ class DesktopAuthenticationIT {
         assertThat(json(attempt).get("code").asText()).isEqualTo("MALFORMED_REQUEST");
         assertThat(exchange.statusCode()).as("body=%s", exchange.body()).isEqualTo(400);
         assertThat(callback.statusCode()).isEqualTo(400);
-        assertThat(callback.headers().firstValue("content-type")).hasValueSatisfying(
-                value -> assertThat(value).startsWith("text/html"));
+        assertThat(callback.headers().firstValue("content-type"))
+                .hasValueSatisfying(value -> assertThat(value).startsWith("text/html"));
         assertThat(attempt.headers().allValues("set-cookie")).isEmpty();
     }
 
@@ -180,7 +177,8 @@ class DesktopAuthenticationIT {
     }
 
     private HttpResponse<String> get(String path, String cookies) throws Exception {
-        HttpRequest.Builder request = HttpRequest.newBuilder(uri(path)).timeout(REQUEST_TIMEOUT).GET();
+        HttpRequest.Builder request =
+                HttpRequest.newBuilder(uri(path)).timeout(REQUEST_TIMEOUT).GET();
         if (cookies != null) {
             request.header("Cookie", cookies);
         }
@@ -207,25 +205,28 @@ class DesktopAuthenticationIT {
     }
 
     private void deleteFixture() {
-        jdbcClient.sql("DELETE FROM yumpoo.security_audit_event WHERE company_id = :companyId")
+        jdbcClient
+                .sql("DELETE FROM yumpoo.security_audit_event WHERE company_id = :companyId")
                 .param("companyId", COMPANY_ID)
                 .update();
         jdbcClient.sql("""
                         DELETE FROM yumpoo.outbox_event
                         WHERE payload_json ->> 'userId' = :userId
-                        """)
-                .param("userId", USER_ID.toString())
-                .update();
-        jdbcClient.sql("DELETE FROM yumpoo.desktop_auth_attempt WHERE client_version = :clientVersion")
+                        """).param("userId", USER_ID.toString()).update();
+        jdbcClient
+                .sql("DELETE FROM yumpoo.desktop_auth_attempt WHERE client_version = :clientVersion")
                 .param("clientVersion", CLIENT_VERSION)
                 .update();
-        jdbcClient.sql("DELETE FROM yumpoo.login_session WHERE user_id = :userId")
+        jdbcClient
+                .sql("DELETE FROM yumpoo.login_session WHERE user_id = :userId")
                 .param("userId", USER_ID)
                 .update();
-        jdbcClient.sql("DELETE FROM yumpoo.external_identity WHERE user_id = :userId")
+        jdbcClient
+                .sql("DELETE FROM yumpoo.external_identity WHERE user_id = :userId")
                 .param("userId", USER_ID)
                 .update();
-        jdbcClient.sql("DELETE FROM yumpoo.identity_user WHERE id = :userId")
+        jdbcClient
+                .sql("DELETE FROM yumpoo.identity_user WHERE id = :userId")
                 .param("userId", USER_ID)
                 .update();
     }

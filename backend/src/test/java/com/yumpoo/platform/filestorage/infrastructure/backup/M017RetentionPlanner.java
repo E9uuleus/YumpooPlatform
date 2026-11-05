@@ -4,9 +4,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.WeekFields;
-import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -18,8 +16,7 @@ import java.util.function.Function;
 /** 仅计算保留标签与删除资格，不执行文件删除。 */
 public final class M017RetentionPlanner {
 
-    private M017RetentionPlanner() {
-    }
+    private M017RetentionPlanner() {}
 
     public static RetentionPlan plan(List<Candidate> candidates, ZoneId companyZone) {
         Objects.requireNonNull(candidates, "candidates must not be null");
@@ -33,8 +30,8 @@ public final class M017RetentionPlanner {
                 .toList();
         selectLatest(verified, candidate -> localDate(candidate, companyZone), 14, Label.DAILY, labels);
         selectLatest(verified, candidate -> isoWeek(candidate, companyZone), 8, Label.WEEKLY, labels);
-        selectLatest(verified, candidate -> localDate(candidate, companyZone).withDayOfMonth(1),
-                6, Label.MONTHLY, labels);
+        selectLatest(
+                verified, candidate -> localDate(candidate, companyZone).withDayOfMonth(1), 6, Label.MONTHLY, labels);
 
         List<RetentionDecision> decisions = candidates.stream()
                 .sorted(Comparator.comparing(Candidate::verifiedAt).reversed())
@@ -50,8 +47,7 @@ public final class M017RetentionPlanner {
                             candidate.verified(),
                             assigned,
                             candidate.legalHold(),
-                            !protectedSet
-                    );
+                            !protectedSet);
                 })
                 .toList();
         return new RetentionPlan(1, "M0-17", companyZone.getId(), decisions);
@@ -62,8 +58,7 @@ public final class M017RetentionPlanner {
             Function<Candidate, K> bucket,
             int limit,
             Label label,
-            Map<UUID, EnumSet<Label>> labels
-    ) {
+            Map<UUID, EnumSet<Label>> labels) {
         Map<K, Candidate> latest = new LinkedHashMap<>();
         for (Candidate candidate : verified) {
             latest.putIfAbsent(bucket.apply(candidate), candidate);
@@ -92,12 +87,7 @@ public final class M017RetentionPlanner {
     }
 
     public record RetentionPlan(
-            int schemaVersion,
-            String milestone,
-            String companyTimeZone,
-            List<RetentionDecision> decisions
-    ) {
-    }
+            int schemaVersion, String milestone, String companyTimeZone, List<RetentionDecision> decisions) {}
 
     public record RetentionDecision(
             UUID backupSetId,
@@ -105,15 +95,14 @@ public final class M017RetentionPlanner {
             boolean verified,
             List<String> labels,
             boolean legalHold,
-            boolean deletionEligible
-    ) {
-    }
+            boolean deletionEligible) {}
 
-    private record IsoWeek(int year, int week) {
-    }
+    private record IsoWeek(int year, int week) {}
 
     private enum Label {
-        DAILY("daily"), WEEKLY("weekly"), MONTHLY("monthly");
+        DAILY("daily"),
+        WEEKLY("weekly"),
+        MONTHLY("monthly");
 
         private final String wireName;
 

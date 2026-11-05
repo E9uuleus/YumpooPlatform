@@ -1,14 +1,13 @@
 package com.yumpoo.platform.foundation.api.web;
 
-import com.yumpoo.platform.foundation.application.logging.LogFields;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
+import com.yumpoo.platform.foundation.application.logging.LogFields;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.util.List;
 import org.slf4j.LoggerFactory;
 import org.slf4j.event.Level;
 import org.springframework.web.servlet.HandlerMapping;
-
-import java.util.List;
 
 public final class HttpAccessLog {
 
@@ -23,16 +22,24 @@ public final class HttpAccessLog {
     private HttpAccessLog() {}
 
     public static void applicationError(HttpServletRequest request, ApplicationException exception) {
-        rejected(request, exception.errorCode().name(), exception.reason(), exception.fieldViolations().stream()
-                .map(violation -> violation.field() + ":" + violation.code()).toList());
+        rejected(
+                request,
+                exception.errorCode().name(),
+                exception.reason(),
+                exception.fieldViolations().stream()
+                        .map(violation -> violation.field() + ":" + violation.code())
+                        .toList());
     }
 
     /** 拒绝码、原因与字段错误写入同一条访问日志；字段只记路径与错误码，不记字段值或提示文本。 */
     public static void rejected(HttpServletRequest request, String errorCode, String reason, List<String> fieldErrors) {
         request.setAttribute(ERROR_CODE, errorCode);
         request.setAttribute(ERROR_REASON, reason);
-        request.setAttribute(FIELD_ERRORS, fieldErrors.isEmpty() ? null
-                : String.join(",", fieldErrors.subList(0, Math.min(10, fieldErrors.size()))));
+        request.setAttribute(
+                FIELD_ERRORS,
+                fieldErrors.isEmpty()
+                        ? null
+                        : String.join(",", fieldErrors.subList(0, Math.min(10, fieldErrors.size()))));
     }
 
     /** 同一接口分阶段处理时（如导入的预览与提交）标出本次请求所处的阶段。 */
@@ -51,36 +58,30 @@ public final class HttpAccessLog {
         int status = response.getStatus();
         String route = route(request);
         boolean read = "GET".equals(request.getMethod()) || "HEAD".equals(request.getMethod());
-        boolean polling =
-            route.equals("/api/v1/admin/operations/logs/tail") ||
-            route.equals("/api/v1/admin/operations/alerts/summary");
-        Level level =
-            status >= 500 || status == 403 || millis >= 1000
+        boolean polling = route.equals("/api/v1/admin/operations/logs/tail")
+                || route.equals("/api/v1/admin/operations/alerts/summary");
+        Level level = status >= 500 || status == 403 || millis >= 1000
                 ? Level.WARN
-                : status >= 400 || !read || (route.startsWith("/api/v1/admin/") && !polling)
-                  ? Level.INFO
-                  : Level.DEBUG;
-        String event =
-            status >= 500
+                : status >= 400 || !read || (route.startsWith("/api/v1/admin/") && !polling) ? Level.INFO : Level.DEBUG;
+        String event = status >= 500
                 ? "http.request.failed"
                 : millis >= 1000
-                  ? "http.request.slow"
-                  : status >= 400
-                    ? "http.request.rejected"
-                    : "http.request.completed";
+                        ? "http.request.slow"
+                        : status >= 400 ? "http.request.rejected" : "http.request.completed";
         var log = LoggerFactory.getLogger(HttpAccessLog.class)
-            .atLevel(level)
-            .setMessage(event.replace('.', ' '))
-            .addKeyValue(LogFields.EVENT, event)
-            .addKeyValue(LogFields.METHOD, request.getMethod())
-            .addKeyValue(LogFields.ROUTE, route)
-            .addKeyValue(LogFields.STATUS, status)
-            .addKeyValue(LogFields.DURATION_MS, millis);
+                .atLevel(level)
+                .setMessage(event.replace('.', ' '))
+                .addKeyValue(LogFields.EVENT, event)
+                .addKeyValue(LogFields.METHOD, request.getMethod())
+                .addKeyValue(LogFields.ROUTE, route)
+                .addKeyValue(LogFields.STATUS, status)
+                .addKeyValue(LogFields.DURATION_MS, millis);
         if (request.getAttribute(USER_ID) != null) log.addKeyValue("userId", request.getAttribute(USER_ID));
         if (request.getAttribute(CLIENT_TYPE) != null) log.addKeyValue("clientType", request.getAttribute(CLIENT_TYPE));
         if (request.getAttribute(ERROR_CODE) != null) log.addKeyValue("errorCode", request.getAttribute(ERROR_CODE));
         if (request.getAttribute(ERROR_REASON) != null) log.addKeyValue("reason", request.getAttribute(ERROR_REASON));
-        if (request.getAttribute(FIELD_ERRORS) != null) log.addKeyValue("fieldErrors", request.getAttribute(FIELD_ERRORS));
+        if (request.getAttribute(FIELD_ERRORS) != null)
+            log.addKeyValue("fieldErrors", request.getAttribute(FIELD_ERRORS));
         if (request.getAttribute(STAGE) != null) log.addKeyValue("stage", request.getAttribute(STAGE));
         log.log();
     }

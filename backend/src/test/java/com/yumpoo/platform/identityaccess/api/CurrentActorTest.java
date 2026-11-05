@@ -1,11 +1,12 @@
 package com.yumpoo.platform.identityaccess.api;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.yumpoo.platform.identityaccess.application.authorization.ManagedPlatformRole;
 import com.yumpoo.platform.identityaccess.application.authorization.RoleUserSnapshot;
-import org.junit.jupiter.api.Test;
 import java.util.Set;
 import java.util.UUID;
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 class CurrentActorTest {
     @Test
@@ -15,11 +16,12 @@ class CurrentActorTest {
         assertThat(actor.hasRole(PlatformRoleCode.COMPANY_ADMIN)).isTrue();
         assertThat(actor.memberTier()).isEqualTo(PlatformRoleTier.APP_MANAGER);
         assertThat(assigned).containsExactly(PlatformRoleCode.APP_MANAGER);
-        var snapshot = new RoleUserSnapshot(actor.userId(), actor.companyId(), "ACTIVE", "ENABLED", 0, 0,
-                Set.of(ManagedPlatformRole.APP_MANAGER));
+        var snapshot = new RoleUserSnapshot(
+                actor.userId(), actor.companyId(), "ACTIVE", "ENABLED", 0, 0, Set.of(ManagedPlatformRole.APP_MANAGER));
         assertThat(snapshot.hasEffectiveRole(ManagedPlatformRole.COMPANY_ADMIN)).isTrue();
         assertThat(snapshot.activeRoles()).containsExactly(ManagedPlatformRole.APP_MANAGER);
     }
+
     @Test
     void lowerTiersNeverInheritHigherRoles() {
         var member = new CurrentActor(UUID.randomUUID(), UUID.randomUUID(), 0, Set.of());

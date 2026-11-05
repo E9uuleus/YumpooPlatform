@@ -4,12 +4,6 @@ import com.yumpoo.platform.identityaccess.application.directory.DirectorySnapsho
 import com.yumpoo.platform.identityaccess.application.directory.WeComDirectoryGateway;
 import com.yumpoo.platform.identityaccess.application.directory.WeComDirectoryGatewayException;
 import com.yumpoo.platform.identityaccess.application.directory.WeComDirectoryPage;
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.MediaType;
-import org.springframework.http.converter.HttpMessageConversionException;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientException;
-
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -18,6 +12,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.MediaType;
+import org.springframework.http.converter.HttpMessageConversionException;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 
 /** 基于通讯录同步 Secret 的企业微信成员 ID 分页适配器。 */
 public final class RestClientWeComDirectoryGateway implements WeComDirectoryGateway {
@@ -26,28 +25,19 @@ public final class RestClientWeComDirectoryGateway implements WeComDirectoryGate
     private static final String LIST_MEMBER_IDS_PATH = "/cgi-bin/user/list_id";
     private static final Set<Long> INVALID_ACCESS_TOKEN_ERRORS = Set.of(40014L, 42001L);
     private static final ParameterizedTypeReference<Map<String, Object>> JSON_OBJECT_TYPE =
-            new ParameterizedTypeReference<>() {
-            };
+            new ParameterizedTypeReference<>() {};
 
     private final RestClient restClient;
     private final WeComAccessTokenProvider accessTokenProvider;
 
     public RestClientWeComDirectoryGateway(
-            RestClient.Builder restClientBuilder,
-            String corpId,
-            String directorySecret,
-            Clock clock
-    ) {
+            RestClient.Builder restClientBuilder, String corpId, String directorySecret, Clock clock) {
         this.restClient = Objects.requireNonNull(restClientBuilder, "restClientBuilder must not be null")
                 .baseUrl(API_BASE_URL)
                 .defaultHeader("Accept", MediaType.APPLICATION_JSON_VALUE)
                 .build();
         this.accessTokenProvider = new WeComAccessTokenProvider(
-                restClient,
-                corpId,
-                directorySecret,
-                Objects.requireNonNull(clock, "clock must not be null")
-        );
+                restClient, corpId, directorySecret, Objects.requireNonNull(clock, "clock must not be null"));
     }
 
     @Override
@@ -95,7 +85,8 @@ public final class RestClientWeComDirectoryGateway implements WeComDirectoryGate
         request.put("limit", limit);
 
         try {
-            Map<String, Object> response = restClient.post()
+            Map<String, Object> response = restClient
+                    .post()
                     .uri(uriBuilder -> uriBuilder
                             .path(LIST_MEMBER_IDS_PATH)
                             .queryParam("access_token", accessToken)
@@ -152,9 +143,7 @@ public final class RestClientWeComDirectoryGateway implements WeComDirectoryGate
                 throw failure(DirectorySnapshotFailure.MALFORMED_MEMBER);
             }
             Object memberIdValue = member.get("userid");
-            if (!(memberIdValue instanceof String memberId)
-                    || memberId.isBlank()
-                    || memberId.length() > 256) {
+            if (!(memberIdValue instanceof String memberId) || memberId.isBlank() || memberId.length() > 256) {
                 throw failure(DirectorySnapshotFailure.MALFORMED_MEMBER);
             }
             memberIds.add(memberId);
@@ -203,9 +192,7 @@ public final class RestClientWeComDirectoryGateway implements WeComDirectoryGate
         };
     }
 
-    private static DirectorySnapshotFailure mapTokenFailure(
-            WeComAccessTokenProvider.Failure failure
-    ) {
+    private static DirectorySnapshotFailure mapTokenFailure(WeComAccessTokenProvider.Failure failure) {
         return switch (failure) {
             case SYSTEM_BUSY -> DirectorySnapshotFailure.SYSTEM_BUSY;
             case INVALID_CREDENTIALS -> DirectorySnapshotFailure.INVALID_CREDENTIALS;

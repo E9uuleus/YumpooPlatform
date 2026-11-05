@@ -1,7 +1,6 @@
 package com.yumpoo.platform.identityaccess.application.administration;
 
 import com.yumpoo.platform.identityaccess.application.authorization.ManagedPlatformRole;
-
 import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
@@ -22,8 +21,7 @@ public record IdentityMemberView(
         Set<ManagedPlatformRole> platformRoles,
         long authorizationVersion,
         long rowVersion,
-        String etag
-) {
+        String etag) {
     public IdentityMemberView {
         platformRoles = Set.copyOf(platformRoles);
     }

@@ -7,7 +7,10 @@ import java.util.UUID;
 
 public interface ProjectDeletionRepository {
     Optional<Project> find(UUID companyId, UUID projectId, boolean shareLock);
+
     boolean purgingOrPurged(UUID companyId, UUID projectId);
+
     Project schedule(Project project, UUID actorUserId, Instant now, Instant purgeAfter);
+
     Project cancel(Project project, UUID actorUserId, Instant now);
 }

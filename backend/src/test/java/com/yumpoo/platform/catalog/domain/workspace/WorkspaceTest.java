@@ -1,12 +1,11 @@
 package com.yumpoo.platform.catalog.domain.workspace;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
 
 class WorkspaceTest {
 
@@ -44,14 +43,36 @@ class WorkspaceTest {
 
     @Test
     void rejectsNonStableCodesAtTheDomainBoundary() {
-        assertThatThrownBy(() -> new Workspace(WORKSPACE_ID, COMPANY_ID, "main", "主空间", null,
-                0, WorkspaceStatus.ACTIVE, 0, NOW, null, NOW, null))
+        assertThatThrownBy(() -> new Workspace(
+                        WORKSPACE_ID,
+                        COMPANY_ID,
+                        "main",
+                        "主空间",
+                        null,
+                        0,
+                        WorkspaceStatus.ACTIVE,
+                        0,
+                        NOW,
+                        null,
+                        NOW,
+                        null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("stable uppercase identifier");
     }
 
     private static Workspace main(UUID createdBy, UUID updatedBy) {
-        return new Workspace(WORKSPACE_ID, COMPANY_ID, "MAIN", "主工作空间", null, 0,
-                WorkspaceStatus.ACTIVE, 0, NOW, createdBy, NOW, updatedBy);
+        return new Workspace(
+                WORKSPACE_ID,
+                COMPANY_ID,
+                "MAIN",
+                "主工作空间",
+                null,
+                0,
+                WorkspaceStatus.ACTIVE,
+                0,
+                NOW,
+                createdBy,
+                NOW,
+                updatedBy);
     }
 }

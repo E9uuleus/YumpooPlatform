@@ -5,6 +5,5 @@ package com.yumpoo.platform.audit.api;
  */
 final class LayerMarker {
 
-    private LayerMarker() {
-    }
+    private LayerMarker() {}
 }

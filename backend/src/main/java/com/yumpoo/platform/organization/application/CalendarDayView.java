@@ -12,6 +12,4 @@ public record CalendarDayView(
         OptionalLong calendarDayRowVersion,
         String note,
         Integer configuredStandardMinutes,
-        String source
-) {
-}
+        String source) {}

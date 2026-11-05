@@ -4,7 +4,6 @@ import com.yumpoo.platform.filestorage.application.AttachmentContentDetector;
 import com.yumpoo.platform.filestorage.application.AttachmentFileName;
 import com.yumpoo.platform.filestorage.application.DetectedAttachmentContent;
 import com.yumpoo.platform.filestorage.infrastructure.TikaAttachmentContentDetector;
-
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -39,8 +38,13 @@ public final class M014ControllableContentDetector implements AttachmentContentD
         return entered.await(timeout.toMillis(), TimeUnit.MILLISECONDS);
     }
 
-    public void failDetection() { fail = true; }
-    public void release() { released.countDown(); }
+    public void failDetection() {
+        fail = true;
+    }
+
+    public void release() {
+        released.countDown();
+    }
 
     public void reset() {
         release();

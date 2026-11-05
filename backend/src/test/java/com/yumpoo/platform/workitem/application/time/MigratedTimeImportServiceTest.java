@@ -1,6 +1,11 @@
 package com.yumpoo.platform.workitem.application.time;
 
-import com.yumpoo.platform.workitem.application.WorkItemRepository;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.*;
+
 import com.yumpoo.platform.audit.api.SecurityAuditAppendPort;
 import com.yumpoo.platform.audit.api.SecurityAuditDraft;
 import com.yumpoo.platform.catalog.api.CompanyProjectQuery;
@@ -13,25 +18,24 @@ import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.MinimalUserSnapshot;
 import com.yumpoo.platform.identityaccess.api.MinimalUserSnapshotQuery;
 import com.yumpoo.platform.identityaccess.api.PlatformRoleCode;
-import com.yumpoo.platform.workitem.application.time.MigratedTimeImportService.Row;
+import com.yumpoo.platform.workitem.application.WorkItemRepository;
 import com.yumpoo.platform.workitem.application.time.MigratedTimeImportService.Request;
-import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import tools.jackson.databind.ObjectMapper;
+import com.yumpoo.platform.workitem.application.time.MigratedTimeImportService.Row;
 import java.time.*;
 import java.util.*;
 import java.util.function.Supplier;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.*;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import tools.jackson.databind.ObjectMapper;
 
 class MigratedTimeImportServiceTest {
     private static final Instant NOW = Instant.parse("2026-10-28T02:00:00Z");
     private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
     private static final LocalDate DAY = LocalDate.of(2026, 10, 20);
-    private final UUID company = UUID.randomUUID(), admin = UUID.randomUUID(), member = UUID.randomUUID(), gone = UUID.randomUUID();
+    private final UUID company = UUID.randomUUID(),
+            admin = UUID.randomUUID(),
+            member = UUID.randomUUID(),
+            gone = UUID.randomUUID();
     private final UUID project = UUID.randomUUID(), itemA = UUID.randomUUID(), itemB = UUID.randomUUID();
     private final CurrentActor actor = new CurrentActor(admin, company, 0, Set.of(PlatformRoleCode.COMPANY_ADMIN));
     private final TimeTrackingRepository timers = mock(TimeTrackingRepository.class);
@@ -46,21 +50,36 @@ class MigratedTimeImportServiceTest {
 
     MigratedTimeImportServiceTest() {
         var executor = mock(IdempotentCommandExecutor.class);
-        when(executor.execute(any(), any())).thenAnswer(call -> IdempotencyExecutionResult.executed(call.<Supplier<StoredCommandResult>>getArgument(1).get()));
-        when(users.findByUserIds(eq(company), any())).thenReturn(Map.of(
-                member, new MinimalUserSnapshot(member, company, "成员", "ACTIVE", "ENABLED"),
-                gone, new MinimalUserSnapshot(gone, company, "离职", "LEFT", "ENABLED")));
-        when(projects.listForAdministrator(actor)).thenReturn(List.of(
-                new MemberProjectQuery.Project(project, "交付项目", "P001", "ACTIVE"),
-                new MemberProjectQuery.Project(UUID.randomUUID(), "旧项目", "P002", "ARCHIVED")));
-        when(items.findTitles(company, project)).thenReturn(List.of(
-                new WorkItemRepository.WorkItemTitle(itemA, "接口开发", false),
-                new WorkItemRepository.WorkItemTitle(itemB, "联调测试", false)));
+        when(executor.execute(any(), any()))
+                .thenAnswer(call -> IdempotencyExecutionResult.executed(
+                        call.<Supplier<StoredCommandResult>>getArgument(1).get()));
+        when(users.findByUserIds(eq(company), any()))
+                .thenReturn(Map.of(
+                        member, new MinimalUserSnapshot(member, company, "成员", "ACTIVE", "ENABLED"),
+                        gone, new MinimalUserSnapshot(gone, company, "离职", "LEFT", "ENABLED")));
+        when(projects.listForAdministrator(actor))
+                .thenReturn(List.of(
+                        new MemberProjectQuery.Project(project, "交付项目", "P001", "ACTIVE"),
+                        new MemberProjectQuery.Project(UUID.randomUUID(), "旧项目", "P002", "ARCHIVED")));
+        when(items.findTitles(company, project))
+                .thenReturn(List.of(
+                        new WorkItemRepository.WorkItemTitle(itemA, "接口开发", false),
+                        new WorkItemRepository.WorkItemTitle(itemB, "联调测试", false)));
         when(memberships.findActiveMemberIds(eq(company), eq(project), any())).thenReturn(Set.of(member, gone));
         when(timers.preferences(company, member)).thenReturn(Optional.empty());
         when(timers.mySessions(eq(company), eq(member), any(), any())).thenReturn(List.of());
         when(shares.rebuild(eq(company), eq(member), any(), any())).thenReturn(Set.of(project));
-        service = new MigratedTimeImportService(timers, shares, projects, items, memberships, users, executor, audits, json, Clock.fixed(NOW, ZoneOffset.UTC));
+        service = new MigratedTimeImportService(
+                timers,
+                shares,
+                projects,
+                items,
+                memberships,
+                users,
+                executor,
+                audits,
+                json,
+                Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     private StoredCommandResult run(CurrentActor who, Request request) {
@@ -71,29 +90,41 @@ class MigratedTimeImportServiceTest {
     void onlyAdministratorsMayImport() {
         var plainMember = new CurrentActor(member, company, 0, Set.of());
         assertThatThrownBy(() -> run(plainMember, new Request(true, List.of(new Row(member, DAY, "交付项目", "接口开发", 60)))))
-                .isInstanceOfSatisfying(ApplicationException.class, e -> assertThat(e.errorCode()).isEqualTo(StandardErrorCode.ACCESS_DENIED));
+                .isInstanceOfSatisfying(
+                        ApplicationException.class,
+                        e -> assertThat(e.errorCode()).isEqualTo(StandardErrorCode.ACCESS_DENIED));
     }
 
     @Test
     void dryRunMatchesWorkItemsAndListsRowsThatCannotBeImported() {
-        var result = json.readTree(run(actor, new Request(true, List.of(
-                new Row(member, DAY, "交付项目", "接口开发", 60), new Row(member, DAY, "交付项目", "联调测试", 60),
-                new Row(member, DAY, "旧项目", "接口开发", 30), new Row(member, DAY, "交付项目", "不存在", 30),
-                new Row(gone, DAY, "交付项目", "接口开发", 60), new Row(UUID.randomUUID(), DAY, "交付项目", "接口开发", 60)))).responseJson());
+        var result = json.readTree(run(
+                        actor,
+                        new Request(
+                                true,
+                                List.of(
+                                        new Row(member, DAY, "交付项目", "接口开发", 60),
+                                                new Row(member, DAY, "交付项目", "联调测试", 60),
+                                        new Row(member, DAY, "旧项目", "接口开发", 30),
+                                                new Row(member, DAY, "交付项目", "不存在", 30),
+                                        new Row(gone, DAY, "交付项目", "接口开发", 60),
+                                                new Row(UUID.randomUUID(), DAY, "交付项目", "接口开发", 60))))
+                .responseJson());
         assertThat(result.path("importedDayCount").asInt()).isEqualTo(1);
         assertThat(result.path("failedDayCount").asInt()).isEqualTo(1);
         assertThat(result.path("importedMinutes").asLong()).isEqualTo(120);
         assertThat(result.path("skippedMinutes").asLong()).isEqualTo(120);
-        assertThat(result.path("skippedRows")).isEqualTo(json.valueToTree(List.of(
-                new MigratedTimeImportService.SkippedRow(2, "PROJECT_NOT_FOUND"),
-                new MigratedTimeImportService.SkippedRow(3, "WORK_ITEM_NOT_FOUND"),
-                new MigratedTimeImportService.SkippedRow(5, "NOT_PROJECT_MEMBER"))));
+        assertThat(result.path("skippedRows"))
+                .isEqualTo(json.valueToTree(List.of(
+                        new MigratedTimeImportService.SkippedRow(2, "PROJECT_NOT_FOUND"),
+                        new MigratedTimeImportService.SkippedRow(3, "WORK_ITEM_NOT_FOUND"),
+                        new MigratedTimeImportService.SkippedRow(5, "NOT_PROJECT_MEMBER"))));
         var days = new HashMap<String, tools.jackson.databind.JsonNode>();
         result.path("days").forEach(day -> days.put(day.path("userId").asText(), day));
         assertThat(days.get(member.toString()).path("startedAt").asText()).isEqualTo("2026-10-20T01:00:00Z");
         assertThat(days.get(member.toString()).path("stoppedAt").asText()).isEqualTo("2026-10-20T03:00:00Z");
         assertThat(days.get(gone.toString()).path("outcome").asText()).isEqualTo("ERROR");
-        assertThat(days.get(gone.toString()).path("issues").get(0).path("code").asText()).isEqualTo("USER_INVALID");
+        assertThat(days.get(gone.toString()).path("issues").get(0).path("code").asText())
+                .isEqualTo("USER_INVALID");
         verify(timers, never()).save(any());
         verify(timers, never()).stateVersion(any(), any(), eq(true));
         verifyNoInteractions(audits, shares);
@@ -101,14 +132,28 @@ class MigratedTimeImportServiceTest {
 
     @Test
     void commitReplacesTheDaysMigratedTimeWithReadOnlyWorkItemRecordsInFileOrder() {
-        var old = new TimeTrackingModels.Session(UUID.randomUUID(), company, null, null, member, DAY.atTime(9, 0).atZone(ZONE).toInstant(),
-                DAY.atTime(10, 0).atZone(ZONE).toInstant(), "MANUAL", 0, null, null, TimeCategory.MIGRATED, null);
-        when(timers.mySessions(eq(company), eq(member), any(), any())).thenReturn(List.of(new TimeTrackingModels.MySessionRow(old, null, null, null, false, false)));
+        var old = new TimeTrackingModels.Session(
+                UUID.randomUUID(),
+                company,
+                null,
+                null,
+                member,
+                DAY.atTime(9, 0).atZone(ZONE).toInstant(),
+                DAY.atTime(10, 0).atZone(ZONE).toInstant(),
+                "MANUAL",
+                0,
+                null,
+                null,
+                TimeCategory.MIGRATED,
+                null);
+        when(timers.mySessions(eq(company), eq(member), any(), any()))
+                .thenReturn(List.of(new TimeTrackingModels.MySessionRow(old, null, null, null, false, false)));
         var rows = List.of(new Row(member, DAY, "交付项目", "接口开发", 60), new Row(member, DAY, "交付项目", "联调测试", 30));
         var result = json.readTree(run(actor, new Request(false, rows)).responseJson());
 
         assertThat(result.path("replacedMinutes").asLong()).isEqualTo(60);
-        assertThat(result.path("days").get(0).path("issues").get(0).path("code").asText()).isEqualTo("REPLACES_PREVIOUS");
+        assertThat(result.path("days").get(0).path("issues").get(0).path("code").asText())
+                .isEqualTo("REPLACES_PREVIOUS");
         verify(timers).stateVersion(company, member, true);
         var saved = ArgumentCaptor.forClass(TimeTrackingModels.Session.class);
         verify(timers, times(3)).save(saved.capture());
@@ -144,63 +189,110 @@ class MigratedTimeImportServiceTest {
         assertThat(result.path("replacedMinutes").asLong()).isEqualTo(120);
         var saved = ArgumentCaptor.forClass(TimeTrackingModels.Session.class);
         verify(timers, times(3)).save(saved.capture());
-        assertThat(saved.getAllValues().subList(0, 2)).extracting(TimeTrackingModels.Session::id).containsExactly(oldA.id(), oldB.id());
+        assertThat(saved.getAllValues().subList(0, 2))
+                .extracting(TimeTrackingModels.Session::id)
+                .containsExactly(oldA.id(), oldB.id());
         assertThat(saved.getAllValues().subList(0, 2)).allMatch(session -> NOW.equals(session.deletedAt()));
         var created = saved.getAllValues().get(2);
         assertThat(created.workItemId()).isEqualTo(itemA);
         assertThat(created.startedAt()).isEqualTo(DAY.atTime(9, 0).atZone(ZONE).toInstant());
-        assertThat(created.stoppedAt()).isEqualTo(DAY.atTime(10, 30).atZone(ZONE).toInstant());
+        assertThat(created.stoppedAt())
+                .isEqualTo(DAY.atTime(10, 30).atZone(ZONE).toInstant());
     }
 
     @Test
     void rejectsDaysThatAlreadyHoldTheMembersOwnTime() {
-        var crossing = new TimeTrackingModels.Session(UUID.randomUUID(), company, project, itemB, member,
-                DAY.minusDays(1).atTime(23, 30).atZone(ZONE).toInstant(), DAY.atTime(0, 30).atZone(ZONE).toInstant(), "TIMER", 1, null, null);
+        var crossing = new TimeTrackingModels.Session(
+                UUID.randomUUID(),
+                company,
+                project,
+                itemB,
+                member,
+                DAY.minusDays(1).atTime(23, 30).atZone(ZONE).toInstant(),
+                DAY.atTime(0, 30).atZone(ZONE).toInstant(),
+                "TIMER",
+                1,
+                null,
+                null);
         var migrated = migratedRecord(itemA, DAY, 9, 10);
         when(timers.mySessions(eq(company), eq(member), any(), any())).thenReturn(rowsOf(crossing, migrated));
-        var rows = List.of(new Row(member, DAY, "交付项目", "接口开发", 60), new Row(member, DAY.plusDays(1), "交付项目", "联调测试", 60));
+        var rows =
+                List.of(new Row(member, DAY, "交付项目", "接口开发", 60), new Row(member, DAY.plusDays(1), "交付项目", "联调测试", 60));
         var result = json.readTree(run(actor, new Request(false, rows)).responseJson());
 
         assertThat(result.path("importedDayCount").asInt()).isEqualTo(1);
         assertThat(result.path("failedDayCount").asInt()).isEqualTo(1);
-        assertThat(result.path("days").get(0).path("issues").get(0).path("code").asText()).isEqualTo("DAY_HAS_TIME");
+        assertThat(result.path("days").get(0).path("issues").get(0).path("code").asText())
+                .isEqualTo("DAY_HAS_TIME");
         var saved = ArgumentCaptor.forClass(TimeTrackingModels.Session.class);
         verify(timers, times(1)).save(saved.capture());
         assertThat(saved.getValue().workItemId()).isEqualTo(itemB);
-        assertThat(saved.getValue().startedAt()).isEqualTo(DAY.plusDays(1).atTime(9, 0).atZone(ZONE).toInstant());
+        assertThat(saved.getValue().startedAt())
+                .isEqualTo(DAY.plusDays(1).atTime(9, 0).atZone(ZONE).toInstant());
     }
 
     @Test
     void prefersTheOnlyOpenItemOverArchivedNamesakes() {
-        when(items.findTitles(company, project)).thenReturn(List.of(
-                new WorkItemRepository.WorkItemTitle(itemA, "接口开发", false),
-                new WorkItemRepository.WorkItemTitle(UUID.randomUUID(), "接口开发", true),
-                new WorkItemRepository.WorkItemTitle(itemB, "联调测试", false),
-                new WorkItemRepository.WorkItemTitle(UUID.randomUUID(), "联调测试", false)));
+        when(items.findTitles(company, project))
+                .thenReturn(List.of(
+                        new WorkItemRepository.WorkItemTitle(itemA, "接口开发", false),
+                        new WorkItemRepository.WorkItemTitle(UUID.randomUUID(), "接口开发", true),
+                        new WorkItemRepository.WorkItemTitle(itemB, "联调测试", false),
+                        new WorkItemRepository.WorkItemTitle(UUID.randomUUID(), "联调测试", false)));
         var rows = List.of(new Row(member, DAY, "交付项目", "接口开发", 60), new Row(member, DAY, "交付项目", "联调测试", 30));
         var result = json.readTree(run(actor, new Request(false, rows)).responseJson());
 
-        assertThat(result.path("skippedRows")).isEqualTo(json.valueToTree(List.of(new MigratedTimeImportService.SkippedRow(1, "WORK_ITEM_AMBIGUOUS"))));
+        assertThat(result.path("skippedRows"))
+                .isEqualTo(
+                        json.valueToTree(List.of(new MigratedTimeImportService.SkippedRow(1, "WORK_ITEM_AMBIGUOUS"))));
         var saved = ArgumentCaptor.forClass(TimeTrackingModels.Session.class);
         verify(timers, times(1)).save(saved.capture());
         assertThat(saved.getValue().workItemId()).isEqualTo(itemA);
     }
 
     private TimeTrackingModels.Session migratedRecord(UUID item, LocalDate day, int fromHour, int toHour) {
-        return new TimeTrackingModels.Session(UUID.randomUUID(), company, project, item, member,
-                day.atTime(fromHour, 0).atZone(ZONE).toInstant(), day.atTime(toHour, 0).atZone(ZONE).toInstant(), "MANUAL", 0, null, null, null, null, true);
+        return new TimeTrackingModels.Session(
+                UUID.randomUUID(),
+                company,
+                project,
+                item,
+                member,
+                day.atTime(fromHour, 0).atZone(ZONE).toInstant(),
+                day.atTime(toHour, 0).atZone(ZONE).toInstant(),
+                "MANUAL",
+                0,
+                null,
+                null,
+                null,
+                null,
+                true);
     }
 
     private static List<TimeTrackingModels.MySessionRow> rowsOf(TimeTrackingModels.Session... sessions) {
-        return java.util.Arrays.stream(sessions).map(session -> new TimeTrackingModels.MySessionRow(session, null, null, null, false, false)).toList();
+        return java.util.Arrays.stream(sessions)
+                .map(session -> new TimeTrackingModels.MySessionRow(session, null, null, null, false, false))
+                .toList();
     }
 
     @Test
     void rejectsRowsOutsideTheMinuteRange() {
         assertThatThrownBy(() -> run(actor, new Request(true, List.of(new Row(member, DAY, "交付项目", "接口开发", 0)))))
-                .isInstanceOfSatisfying(ApplicationException.class, e -> assertThat(e.fieldViolations()).extracting(v -> v.code()).containsExactly("INVALID_RANGE"));
-        assertThatThrownBy(() -> run(actor, new Request(true, List.of(
-                new Row(member, DAY, "交付项目", "接口开发", 800), new Row(member, DAY, "交付项目", "联调测试", 700)))))
-                .isInstanceOfSatisfying(ApplicationException.class, e -> assertThat(e.fieldViolations()).extracting(v -> v.code()).containsExactly("INVALID_RANGE"));
+                .isInstanceOfSatisfying(
+                        ApplicationException.class,
+                        e -> assertThat(e.fieldViolations())
+                                .extracting(v -> v.code())
+                                .containsExactly("INVALID_RANGE"));
+        assertThatThrownBy(() -> run(
+                        actor,
+                        new Request(
+                                true,
+                                List.of(
+                                        new Row(member, DAY, "交付项目", "接口开发", 800),
+                                        new Row(member, DAY, "交付项目", "联调测试", 700)))))
+                .isInstanceOfSatisfying(
+                        ApplicationException.class,
+                        e -> assertThat(e.fieldViolations())
+                                .extracting(v -> v.code())
+                                .containsExactly("INVALID_RANGE"));
     }
 }

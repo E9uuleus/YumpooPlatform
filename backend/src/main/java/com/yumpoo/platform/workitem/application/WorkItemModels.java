@@ -13,76 +13,257 @@ public final class WorkItemModels {
 
     public record WorkItemLocator(UUID workItemId, UUID projectId, UUID contentId) {}
 
-    public record WorkItemSummary(UUID id, UUID projectId, UUID contentId, String itemNo,
-            String contentName, String contentColorToken, String title, String statusCode,
-            String statusCategory, String priority,
-            UUID assigneeUserId, String assigneeDisplayName, List<WorkItemAssignee> assignees, UUID reporterUserId,
-            String reporterDisplayName, String description, String notes,
-            LocalDate timelineStartDate, LocalDate timelineEndDate, LocalDate dueDate,
-            String dueTime, Instant completedAt,
-            long rowVersion, String etag, WorkItemCapabilities capabilities, Instant updatedAt) {}
+    public record WorkItemSummary(
+            UUID id,
+            UUID projectId,
+            UUID contentId,
+            String itemNo,
+            String contentName,
+            String contentColorToken,
+            String title,
+            String statusCode,
+            String statusCategory,
+            String priority,
+            UUID assigneeUserId,
+            String assigneeDisplayName,
+            List<WorkItemAssignee> assignees,
+            UUID reporterUserId,
+            String reporterDisplayName,
+            String description,
+            String notes,
+            LocalDate timelineStartDate,
+            LocalDate timelineEndDate,
+            LocalDate dueDate,
+            String dueTime,
+            Instant completedAt,
+            long rowVersion,
+            String etag,
+            WorkItemCapabilities capabilities,
+            Instant updatedAt) {}
 
-    public record WorkItemDetail(UUID id, UUID projectId, UUID contentId, String itemNo,
-            String contentName, String contentColorToken, String title, String statusCode,
-            String statusCategory, String priority,
-            UUID assigneeUserId, String assigneeDisplayName, List<WorkItemAssignee> assignees, UUID reporterUserId,
-            String reporterDisplayName, String description, String notes,
-            LocalDate timelineStartDate, LocalDate timelineEndDate, LocalDate dueDate,
-            String dueTime, Instant completedAt,
-            long rowVersion, String etag, WorkItemCapabilities capabilities,
-            Instant createdAt, Instant updatedAt, boolean deleted, Instant deletedAt,
-            UUID deletedByUserId, String deleteReason, UUID updatedByUserId, String updatedByDisplayName,
+    public record WorkItemDetail(
+            UUID id,
+            UUID projectId,
+            UUID contentId,
+            String itemNo,
+            String contentName,
+            String contentColorToken,
+            String title,
+            String statusCode,
+            String statusCategory,
+            String priority,
+            UUID assigneeUserId,
+            String assigneeDisplayName,
+            List<WorkItemAssignee> assignees,
+            UUID reporterUserId,
+            String reporterDisplayName,
+            String description,
+            String notes,
+            LocalDate timelineStartDate,
+            LocalDate timelineEndDate,
+            LocalDate dueDate,
+            String dueTime,
+            Instant completedAt,
+            long rowVersion,
+            String etag,
+            WorkItemCapabilities capabilities,
+            Instant createdAt,
+            Instant updatedAt,
+            boolean deleted,
+            Instant deletedAt,
+            UUID deletedByUserId,
+            String deleteReason,
+            UUID updatedByUserId,
+            String updatedByDisplayName,
             boolean archived) {}
 
-    public record WorkItemTransitionOption(String toStatus, String displayName,
-            String statusCategory, boolean requiresResolution) {}
+    public record WorkItemTransitionOption(
+            String toStatus, String displayName, String statusCategory, boolean requiresResolution) {}
 
-    public record WorkItemCapabilities(boolean canEditFields, boolean canMoveInKanban,
-            boolean canMoveInProjectOrder, boolean canDiscuss,
-            boolean canDelete, boolean canRestore,
+    public record WorkItemCapabilities(
+            boolean canEditFields,
+            boolean canMoveInKanban,
+            boolean canMoveInProjectOrder,
+            boolean canDiscuss,
+            boolean canDelete,
+            boolean canRestore,
             List<WorkItemTransitionOption> availableTransitions) {
-        public WorkItemCapabilities { availableTransitions = List.copyOf(availableTransitions); }
+        public WorkItemCapabilities {
+            availableTransitions = List.copyOf(availableTransitions);
+        }
     }
 
-    public record WorkItemPage(List<WorkItemSummary> items, int page, int size,
-            long totalElements, int totalPages) {
-        public WorkItemPage { items = List.copyOf(items); }
+    public record WorkItemPage(List<WorkItemSummary> items, int page, int size, long totalElements, int totalPages) {
+        public WorkItemPage {
+            items = List.copyOf(items);
+        }
     }
 
     /** Archived items are read-only, so updatedAt and updatedByDisplayName record when and by whom the item was archived. */
-    public record ArchivedWorkItem(UUID id, String itemNo, String title, String statusCode, String statusCategory,
-            String parentTitle, long subitemCount, Instant updatedAt, String updatedByDisplayName, String etag) {}
+    public record ArchivedWorkItem(
+            UUID id,
+            String itemNo,
+            String title,
+            String statusCode,
+            String statusCategory,
+            String parentTitle,
+            long subitemCount,
+            Instant updatedAt,
+            String updatedByDisplayName,
+            String etag) {}
 
-    public record ArchivedWorkItemPage(List<ArchivedWorkItem> items, int page, int size, long totalElements, int totalPages) {}
+    public record ArchivedWorkItemPage(
+            List<ArchivedWorkItem> items, int page, int size, long totalElements, int totalPages) {}
 
-    public record ProjectWorkItemListItem(UUID id, UUID projectId, UUID contentId,
-            String contentName, String contentColorToken, String itemNo, String title, String statusCode,
-            String statusCategory, String priority, UUID assigneeUserId,
-            String assigneeDisplayName, List<WorkItemAssignee> assignees, LocalDate dueDate, String dueTime, Instant completedAt,
-            long rowVersion, String etag,
-            WorkItemCapabilities capabilities, long subitemCount, long discussionCount, Instant updatedAt, UUID updatedByUserId, String updatedByDisplayName, TimeTrackingModels.TimeTrackingSummary timeTracking, long matchedSubitemCount) {
-        public ProjectWorkItemListItem(UUID id, UUID projectId, UUID contentId,
-            String contentName, String contentColorToken, String itemNo, String title, String statusCode,
-            String statusCategory, String priority, UUID assigneeUserId,
-            String assigneeDisplayName, List<WorkItemAssignee> assignees, LocalDate dueDate, String dueTime, Instant completedAt,
-            long rowVersion, String etag,
-            WorkItemCapabilities capabilities, long subitemCount, long discussionCount, Instant updatedAt, UUID updatedByUserId, String updatedByDisplayName) {
-            this(id,projectId,contentId,contentName,contentColorToken,itemNo,title,statusCode,statusCategory,priority,assigneeUserId,assigneeDisplayName,assignees,dueDate,dueTime,completedAt,rowVersion,etag,capabilities,subitemCount,discussionCount,updatedAt,updatedByUserId,updatedByDisplayName,null,0);
+    public record ProjectWorkItemListItem(
+            UUID id,
+            UUID projectId,
+            UUID contentId,
+            String contentName,
+            String contentColorToken,
+            String itemNo,
+            String title,
+            String statusCode,
+            String statusCategory,
+            String priority,
+            UUID assigneeUserId,
+            String assigneeDisplayName,
+            List<WorkItemAssignee> assignees,
+            LocalDate dueDate,
+            String dueTime,
+            Instant completedAt,
+            long rowVersion,
+            String etag,
+            WorkItemCapabilities capabilities,
+            long subitemCount,
+            long discussionCount,
+            Instant updatedAt,
+            UUID updatedByUserId,
+            String updatedByDisplayName,
+            TimeTrackingModels.TimeTrackingSummary timeTracking,
+            long matchedSubitemCount) {
+        public ProjectWorkItemListItem(
+                UUID id,
+                UUID projectId,
+                UUID contentId,
+                String contentName,
+                String contentColorToken,
+                String itemNo,
+                String title,
+                String statusCode,
+                String statusCategory,
+                String priority,
+                UUID assigneeUserId,
+                String assigneeDisplayName,
+                List<WorkItemAssignee> assignees,
+                LocalDate dueDate,
+                String dueTime,
+                Instant completedAt,
+                long rowVersion,
+                String etag,
+                WorkItemCapabilities capabilities,
+                long subitemCount,
+                long discussionCount,
+                Instant updatedAt,
+                UUID updatedByUserId,
+                String updatedByDisplayName) {
+            this(
+                    id,
+                    projectId,
+                    contentId,
+                    contentName,
+                    contentColorToken,
+                    itemNo,
+                    title,
+                    statusCode,
+                    statusCategory,
+                    priority,
+                    assigneeUserId,
+                    assigneeDisplayName,
+                    assignees,
+                    dueDate,
+                    dueTime,
+                    completedAt,
+                    rowVersion,
+                    etag,
+                    capabilities,
+                    subitemCount,
+                    discussionCount,
+                    updatedAt,
+                    updatedByUserId,
+                    updatedByDisplayName,
+                    null,
+                    0);
         }
+
         public ProjectWorkItemListItem withMatchedSubitemCount(long count) {
-            return new ProjectWorkItemListItem(id,projectId,contentId,contentName,contentColorToken,itemNo,title,statusCode,statusCategory,priority,assigneeUserId,assigneeDisplayName,assignees,dueDate,dueTime,completedAt,rowVersion,etag,capabilities,subitemCount,discussionCount,updatedAt,updatedByUserId,updatedByDisplayName,timeTracking,count);
+            return new ProjectWorkItemListItem(
+                    id,
+                    projectId,
+                    contentId,
+                    contentName,
+                    contentColorToken,
+                    itemNo,
+                    title,
+                    statusCode,
+                    statusCategory,
+                    priority,
+                    assigneeUserId,
+                    assigneeDisplayName,
+                    assignees,
+                    dueDate,
+                    dueTime,
+                    completedAt,
+                    rowVersion,
+                    etag,
+                    capabilities,
+                    subitemCount,
+                    discussionCount,
+                    updatedAt,
+                    updatedByUserId,
+                    updatedByDisplayName,
+                    timeTracking,
+                    count);
         }
+
         public ProjectWorkItemListItem withTime(TimeTrackingModels.TimeTrackingSummary summary) {
-            return new ProjectWorkItemListItem(id,projectId,contentId,contentName,contentColorToken,itemNo,title,statusCode,statusCategory,priority,assigneeUserId,assigneeDisplayName,assignees,dueDate,dueTime,completedAt,rowVersion,etag,capabilities,subitemCount,discussionCount,updatedAt,updatedByUserId,updatedByDisplayName,summary,matchedSubitemCount);
+            return new ProjectWorkItemListItem(
+                    id,
+                    projectId,
+                    contentId,
+                    contentName,
+                    contentColorToken,
+                    itemNo,
+                    title,
+                    statusCode,
+                    statusCategory,
+                    priority,
+                    assigneeUserId,
+                    assigneeDisplayName,
+                    assignees,
+                    dueDate,
+                    dueTime,
+                    completedAt,
+                    rowVersion,
+                    etag,
+                    capabilities,
+                    subitemCount,
+                    discussionCount,
+                    updatedAt,
+                    updatedByUserId,
+                    updatedByDisplayName,
+                    summary,
+                    matchedSubitemCount);
         }
     }
 
     public record WorkItemSubitemList(List<ProjectWorkItemListItem> items) {
-        public WorkItemSubitemList { items = List.copyOf(items); }
+        public WorkItemSubitemList {
+            items = List.copyOf(items);
+        }
     }
 
-    public record ProjectWorkItemCursorPage(List<ProjectWorkItemListItem> items,
-            String nextCursor) {
+    public record ProjectWorkItemCursorPage(List<ProjectWorkItemListItem> items, String nextCursor) {
         public ProjectWorkItemCursorPage {
             items = List.copyOf(items);
             if (nextCursor != null && nextCursor.isBlank())
@@ -92,8 +273,9 @@ public final class WorkItemModels {
 
     public record ProjectWorkItemFilterOption(String value, String label, long count) {}
 
-    public record ProjectWorkItemFilterOptionCursorPage(
-            List<ProjectWorkItemFilterOption> items, String nextCursor) {
-        public ProjectWorkItemFilterOptionCursorPage { items = List.copyOf(items); }
+    public record ProjectWorkItemFilterOptionCursorPage(List<ProjectWorkItemFilterOption> items, String nextCursor) {
+        public ProjectWorkItemFilterOptionCursorPage {
+            items = List.copyOf(items);
+        }
     }
 }

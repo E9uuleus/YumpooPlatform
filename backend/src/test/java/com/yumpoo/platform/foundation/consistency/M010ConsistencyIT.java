@@ -1,5 +1,8 @@
 package com.yumpoo.platform.foundation.consistency;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.yumpoo.platform.foundation.api.http.IdempotencyKeyParser;
 import com.yumpoo.platform.foundation.api.http.IdempotencyRequestHasher;
 import com.yumpoo.platform.foundation.api.http.IfMatchParser;
@@ -10,6 +13,22 @@ import com.yumpoo.platform.foundation.testing.M010ProbeApplicationService;
 import com.yumpoo.platform.foundation.testing.M010ProbeController;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
 import com.yumpoo.platform.testing.TestProbeSecurityConfiguration;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,48 +42,19 @@ import org.springframework.test.context.jdbc.Sql;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.Callable;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 @Import({
-        PostgreSqlTestContainerConfiguration.class,
-        TestProbeSecurityConfiguration.class,
-        M010ProbeApplicationService.class,
-        M010ProbeController.class
+    PostgreSqlTestContainerConfiguration.class,
+    TestProbeSecurityConfiguration.class,
+    M010ProbeApplicationService.class,
+    M010ProbeController.class
 })
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Sql(
-        scripts = "/sql/m0-10-probe-schema.sql",
-        executionPhase = Sql.ExecutionPhase.BEFORE_TEST_CLASS
-)
-@Sql(
-        scripts = "/sql/m0-10-probe-drop.sql",
-        executionPhase = Sql.ExecutionPhase.AFTER_TEST_CLASS
-)
+@Sql(scripts = "/sql/m0-10-probe-schema.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_CLASS)
+@Sql(scripts = "/sql/m0-10-probe-drop.sql", executionPhase = Sql.ExecutionPhase.AFTER_TEST_CLASS)
 class M010ConsistencyIT {
 
     private static final String PROBE_PATH = "/api/v1/__test/m0-10/probes";
-    private static final UUID OTHER_ACTOR_ID = UUID.fromString(
-            "00000000-0000-0000-0000-000000000011"
-    );
+    private static final UUID OTHER_ACTOR_ID = UUID.fromString("00000000-0000-0000-0000-000000000011");
 
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
@@ -85,7 +75,8 @@ class M010ConsistencyIT {
 
     @BeforeEach
     void resetProbeFacts() {
-        jdbcClient.sql("TRUNCATE TABLE yumpoo.m010_probe, yumpoo.idempotency_record")
+        jdbcClient
+                .sql("TRUNCATE TABLE yumpoo.m010_probe, yumpoo.idempotency_record")
                 .update();
     }
 
@@ -111,14 +102,10 @@ class M010ConsistencyIT {
     void twentyConcurrentRetriesCreateOneFactAndReturnOneSemanticResult() throws Exception {
         UUID idempotencyKey = UUID.randomUUID();
 
-        List<HttpResponse<String>> responses = runConcurrently(
-                20,
-                () -> postProbe(idempotencyKey, "concurrent")
-        );
+        List<HttpResponse<String>> responses = runConcurrently(20, () -> postProbe(idempotencyKey, "concurrent"));
 
-        assertThat(responses).allSatisfy(response ->
-                assertThat(response.statusCode()).isEqualTo(201)
-        );
+        assertThat(responses)
+                .allSatisfy(response -> assertThat(response.statusCode()).isEqualTo(201));
         JsonNode expectedBody = readJson(responses.getFirst().body());
         assertThat(responses).allSatisfy(response -> {
             try {
@@ -139,26 +126,18 @@ class M010ConsistencyIT {
         AtomicInteger sequence = new AtomicInteger();
 
         List<HttpResponse<String>> responses = runConcurrently(
-                2,
-                () -> patchProbe(
-                        probeId,
-                        IfMatchParser.format(0),
-                        "candidate-" + sequence.incrementAndGet()
-                )
-        );
+                2, () -> patchProbe(probeId, IfMatchParser.format(0), "candidate-" + sequence.incrementAndGet()));
 
-        assertThat(responses.stream().map(HttpResponse::statusCode).toList())
-                .containsExactlyInAnyOrder(200, 412);
+        assertThat(responses.stream().map(HttpResponse::statusCode).toList()).containsExactlyInAnyOrder(200, 412);
         HttpResponse<String> conflict = responses.stream()
                 .filter(response -> response.statusCode() == 412)
                 .findFirst()
                 .orElseThrow();
         assertError(conflict, 412, StandardErrorCode.VERSION_CONFLICT);
 
-        M010ProbeApplicationService.ProbeResponse stored = applicationService.findVisible(
-                M010ProbeController.FIXED_ACTOR_ID,
-                probeId
-        ).orElseThrow();
+        M010ProbeApplicationService.ProbeResponse stored = applicationService
+                .findVisible(M010ProbeController.FIXED_ACTOR_ID, probeId)
+                .orElseThrow();
         assertThat(stored.rowVersion()).isOne();
         assertThat(stored.name()).isIn("candidate-1", "candidate-2");
     }
@@ -173,37 +152,16 @@ class M010ConsistencyIT {
         assertError(hiddenWithoutIfMatch, 404, StandardErrorCode.RESOURCE_NOT_FOUND);
 
         UUID visibleId = UUID.randomUUID();
-        applicationService.insertDirect(
-                M010ProbeController.FIXED_ACTOR_ID,
-                visibleId,
-                "visible",
-                "ACTIVE",
-                0
-        );
-        assertError(
-                patchProbe(visibleId, null, "changed"),
-                428,
-                StandardErrorCode.PRECONDITION_REQUIRED
-        );
-        assertError(
-                patchProbe(visibleId, "W/\"0\"", "changed"),
-                400,
-                StandardErrorCode.MALFORMED_REQUEST
-        );
+        applicationService.insertDirect(M010ProbeController.FIXED_ACTOR_ID, visibleId, "visible", "ACTIVE", 0);
+        assertError(patchProbe(visibleId, null, "changed"), 428, StandardErrorCode.PRECONDITION_REQUIRED);
+        assertError(patchProbe(visibleId, "W/\"0\"", "changed"), 400, StandardErrorCode.MALFORMED_REQUEST);
 
         UUID inactiveId = UUID.randomUUID();
-        applicationService.insertDirect(
-                M010ProbeController.FIXED_ACTOR_ID,
-                inactiveId,
-                "inactive",
-                "ARCHIVED",
-                0
-        );
+        applicationService.insertDirect(M010ProbeController.FIXED_ACTOR_ID, inactiveId, "inactive", "ARCHIVED", 0);
         assertError(
                 patchProbe(inactiveId, IfMatchParser.format(0), "changed"),
                 409,
-                StandardErrorCode.INVALID_STATE_TRANSITION
-        );
+                StandardErrorCode.INVALID_STATE_TRANSITION);
     }
 
     @Test
@@ -212,22 +170,15 @@ class M010ConsistencyIT {
         RequestHash requestHash = requestHashFor("rollback");
 
         assertThatThrownBy(() -> applicationService.createThenFail(
-                M010ProbeController.FIXED_ACTOR_ID,
-                idempotencyKey,
-                requestHash,
-                "rollback"
-        )).isInstanceOf(IllegalStateException.class)
+                        M010ProbeController.FIXED_ACTOR_ID, idempotencyKey, requestHash, "rollback"))
+                .isInstanceOf(IllegalStateException.class)
                 .hasMessage("forced M0-10 transaction rollback");
 
         assertThat(probeCount()).isZero();
         assertThat(idempotencyRecordCount()).isZero();
 
-        IdempotencyExecutionResult retry = applicationService.create(
-                M010ProbeController.FIXED_ACTOR_ID,
-                idempotencyKey,
-                requestHash,
-                "rollback"
-        );
+        IdempotencyExecutionResult retry =
+                applicationService.create(M010ProbeController.FIXED_ACTOR_ID, idempotencyKey, requestHash, "rollback");
         assertThat(retry.replayed()).isFalse();
         assertThat(probeCount()).isOne();
         assertThat(idempotencyRecordCount()).isOne();
@@ -237,7 +188,8 @@ class M010ConsistencyIT {
     void aCommittedProcessingClaimReturnsRetryableConflictWithRetryAfter() throws Exception {
         UUID idempotencyKey = UUID.randomUUID();
         RequestHash requestHash = requestHashFor("processing");
-        jdbcClient.sql("""
+        jdbcClient
+                .sql("""
                         INSERT INTO yumpoo.idempotency_record (
                             id, actor_user_id, http_method, route_key, idempotency_key,
                             request_hash, state, lease_until, created_at, expires_at
@@ -263,8 +215,7 @@ class M010ConsistencyIT {
 
     @Test
     void databaseConstraintMatchesTheStrongNonNegativeLongEtagBoundary() {
-        assertThat(insertCompletedRecordWithEtag("\"9223372036854775807\""))
-                .isOne();
+        assertThat(insertCompletedRecordWithEtag("\"9223372036854775807\"")).isOne();
         assertThat(idempotencyRecordCount()).isOne();
 
         assertStoredEtagRejected("W/\"0\"");
@@ -279,7 +230,8 @@ class M010ConsistencyIT {
     }
 
     private int insertCompletedRecordWithEtag(String responseEtag) {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                         INSERT INTO yumpoo.idempotency_record (
                             id, actor_user_id, http_method, route_key, idempotency_key,
                             request_hash, state, http_status, response_json, response_etag,
@@ -306,17 +258,9 @@ class M010ConsistencyIT {
         RequestHash requestHash = requestHashFor("actor-scoped");
 
         IdempotencyExecutionResult first = applicationService.create(
-                M010ProbeController.FIXED_ACTOR_ID,
-                idempotencyKey,
-                requestHash,
-                "actor-scoped"
-        );
-        IdempotencyExecutionResult second = applicationService.create(
-                OTHER_ACTOR_ID,
-                idempotencyKey,
-                requestHash,
-                "actor-scoped"
-        );
+                M010ProbeController.FIXED_ACTOR_ID, idempotencyKey, requestHash, "actor-scoped");
+        IdempotencyExecutionResult second =
+                applicationService.create(OTHER_ACTOR_ID, idempotencyKey, requestHash, "actor-scoped");
 
         assertThat(first.result().resourceId()).isNotEqualTo(second.result().resourceId());
         assertThat(probeCount()).isEqualTo(2);
@@ -328,65 +272,54 @@ class M010ConsistencyIT {
                 .header(HttpHeaders.CONTENT_TYPE, "application/json")
                 .header(IdempotencyKeyParser.HEADER_NAME, idempotencyKey.toString())
                 .POST(HttpRequest.BodyPublishers.ofString(
-                        objectMapper.writeValueAsString(Map.of("name", name)),
-                        StandardCharsets.UTF_8
-                ))
+                        objectMapper.writeValueAsString(Map.of("name", name)), StandardCharsets.UTF_8))
                 .build();
         return httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
     }
 
     private HttpResponse<String> patchProbe(UUID probeId, String ifMatch, String name) throws Exception {
-        HttpRequest.Builder request = baseRequest(PROBE_PATH + "/" + probeId)
-                .header(HttpHeaders.CONTENT_TYPE, "application/json");
+        HttpRequest.Builder request =
+                baseRequest(PROBE_PATH + "/" + probeId).header(HttpHeaders.CONTENT_TYPE, "application/json");
         if (ifMatch != null) {
             request.header(IfMatchParser.HEADER_NAME, ifMatch);
         }
         request.method(
                 "PATCH",
                 HttpRequest.BodyPublishers.ofString(
-                        objectMapper.writeValueAsString(Map.of("name", name)),
-                        StandardCharsets.UTF_8
-                )
-        );
+                        objectMapper.writeValueAsString(Map.of("name", name)), StandardCharsets.UTF_8));
         return httpClient.send(request.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
     }
 
     private HttpRequest.Builder baseRequest(String path) {
-        return HttpRequest.newBuilder()
-                .uri(URI.create("http://127.0.0.1:" + port + path));
+        return HttpRequest.newBuilder().uri(URI.create("http://127.0.0.1:" + port + path));
     }
 
     private RequestHash requestHashFor(String name) {
         return requestHasher.hash(
-                M010ProbeApplicationService.CREATE_ROUTE_KEY,
-                Map.of(),
-                objectMapper.valueToTree(Map.of("name", name))
-        );
+                M010ProbeApplicationService.CREATE_ROUTE_KEY, Map.of(), objectMapper.valueToTree(Map.of("name", name)));
     }
 
     private JsonNode readJson(String body) throws Exception {
         return objectMapper.readTree(body);
     }
 
-    private void assertError(
-            HttpResponse<String> response,
-            int expectedStatus,
-            StandardErrorCode expectedCode
-    ) throws Exception {
+    private void assertError(HttpResponse<String> response, int expectedStatus, StandardErrorCode expectedCode)
+            throws Exception {
         assertThat(response.statusCode()).isEqualTo(expectedStatus);
-        assertThat(readJson(response.body()).get("code").stringValue())
-                .isEqualTo(expectedCode.name());
+        assertThat(readJson(response.body()).get("code").stringValue()).isEqualTo(expectedCode.name());
         assertThat(response.headers().firstValue("X-Request-Id")).isPresent();
     }
 
     private long probeCount() {
-        return jdbcClient.sql("SELECT count(*) FROM yumpoo.m010_probe")
+        return jdbcClient
+                .sql("SELECT count(*) FROM yumpoo.m010_probe")
                 .query(Long.class)
                 .single();
     }
 
     private long idempotencyRecordCount() {
-        return jdbcClient.sql("SELECT count(*) FROM yumpoo.idempotency_record")
+        return jdbcClient
+                .sql("SELECT count(*) FROM yumpoo.idempotency_record")
                 .query(Long.class)
                 .single();
     }

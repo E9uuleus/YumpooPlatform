@@ -1,5 +1,11 @@
 package com.yumpoo.platform.catalog.infrastructure.project;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,13 +19,6 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 @Testcontainers
 class UnifiedProjectModelMigrationIT {
     private static final UUID COMPANY = UUID.fromString("00000000-0000-4000-8000-000000000001");
@@ -27,13 +26,18 @@ class UnifiedProjectModelMigrationIT {
     private static final UUID PROJECT = UUID.randomUUID();
     private static final UUID PRODUCT = UUID.randomUUID();
     private static final List<String> RETIRED_EVENTS = List.of(
-            "catalog.project_created", "catalog.project_activated", "catalog.project_template_applied",
-            "templateworkflow.project_template_published", "templateworkflow.project_template_retired");
+            "catalog.project_created",
+            "catalog.project_activated",
+            "catalog.project_template_applied",
+            "templateworkflow.project_template_published",
+            "templateworkflow.project_template_retired");
 
     @Container
-    private final PostgreSQLContainer postgres = new PostgreSQLContainer(
-            DockerImageName.parse("postgres:17.10-alpine"))
-            .withDatabaseName("up2_migration").withUsername("yumpoo_test").withPassword("yumpoo_test");
+    private final PostgreSQLContainer postgres = new PostgreSQLContainer(DockerImageName.parse("postgres:17.10-alpine"))
+            .withDatabaseName("up2_migration")
+            .withUsername("yumpoo_test")
+            .withPassword("yumpoo_test");
+
     private JdbcClient jdbc;
     private DriverManagerDataSource dataSource;
 
@@ -102,64 +106,130 @@ class UnifiedProjectModelMigrationIT {
         var contentRepository = new com.yumpoo.platform.workitem.infrastructure.content.JdbcContentRepository(jdbc);
         contentRepository.initializeCatalog(COMPANY, PROJECT, java.time.Instant.now());
         contentRepository.insertAll(List.of(com.yumpoo.platform.workitem.domain.Content.initial(
-                UUID.randomUUID(), COMPANY, PROJECT, "LEGACY_CATEGORY", "保留类别", "BERRY", 10,
-                USER, java.time.Instant.now())));
+                UUID.randomUUID(),
+                COMPANY,
+                PROJECT,
+                "LEGACY_CATEGORY",
+                "保留类别",
+                "BERRY",
+                10,
+                USER,
+                java.time.Instant.now())));
         new com.yumpoo.platform.workitem.infrastructure.label.JdbcWorkItemLabelRepository(jdbc)
                 .initialize(COMPANY, PROJECT, java.time.Instant.now());
-        sql("UPDATE yumpoo.project_work_item_status_label SET display_name='既有状态' WHERE project_id=:project AND status_code='STUCK'").update();
+        sql("UPDATE yumpoo.project_work_item_status_label SET display_name='既有状态' WHERE project_id=:project AND status_code='STUCK'")
+                .update();
         var contents = rows("content");
-        var statuses = jdbc.sql("SELECT * FROM yumpoo.project_work_item_status_label ORDER BY status_code").query().listOfRows();
-        var priorities = jdbc.sql("SELECT * FROM yumpoo.project_work_item_priority_label ORDER BY priority_code").query().listOfRows();
+        var statuses = jdbc.sql("SELECT * FROM yumpoo.project_work_item_status_label ORDER BY status_code")
+                .query()
+                .listOfRows();
+        var priorities = jdbc.sql("SELECT * FROM yumpoo.project_work_item_priority_label ORDER BY priority_code")
+                .query()
+                .listOfRows();
         var activities = rows("activity_event");
         var audits = rows("security_audit_event");
         var memberships = rows("project_membership");
         flyway("61").migrate();
-        assertThat(sql("SELECT lifecycle FROM yumpoo.project WHERE id=:project").query(String.class).single()).isEqualTo("ACTIVE");
+        assertThat(sql("SELECT lifecycle FROM yumpoo.project WHERE id=:project")
+                        .query(String.class)
+                        .single())
+                .isEqualTo("ACTIVE");
         assertThat(rows("content")).isEqualTo(contents);
-        assertThat(jdbc.sql("SELECT * FROM yumpoo.project_work_item_status_label ORDER BY status_code").query().listOfRows()).isEqualTo(statuses);
-        assertThat(jdbc.sql("SELECT * FROM yumpoo.project_work_item_priority_label ORDER BY priority_code").query().listOfRows()).isEqualTo(priorities);
+        assertThat(jdbc.sql("SELECT * FROM yumpoo.project_work_item_status_label ORDER BY status_code")
+                        .query()
+                        .listOfRows())
+                .isEqualTo(statuses);
+        assertThat(jdbc.sql("SELECT * FROM yumpoo.project_work_item_priority_label ORDER BY priority_code")
+                        .query()
+                        .listOfRows())
+                .isEqualTo(priorities);
         assertThat(rows("activity_event")).isEqualTo(activities);
         assertThat(rows("security_audit_event")).isEqualTo(audits);
         assertThat(rows("project_membership")).isEqualTo(memberships);
         assertThat(jdbc.sql("SELECT event_type || '@' || event_version FROM yumpoo.outbox_event ORDER BY event_type")
-                .query(String.class).list()).containsExactly("catalog.project_created@2", "identity.user_account_disabled@1");
+                        .query(String.class)
+                        .list())
+                .containsExactly("catalog.project_created@2", "identity.user_account_disabled@1");
         assertThat(count("outbox_consumer_receipt")).isEqualTo(2);
-        for (String table : List.of("project_template_definition", "project_template_content_blueprint",
-                "workflow_status_definition", "workflow_transition_definition")) {
-            assertThat(jdbc.sql("SELECT to_regclass(:table) IS NULL").param("table", "yumpoo."+table).query(Boolean.class).single()).isTrue();
+        for (String table : List.of(
+                "project_template_definition",
+                "project_template_content_blueprint",
+                "workflow_status_definition",
+                "workflow_transition_definition")) {
+            assertThat(jdbc.sql("SELECT to_regclass(:table) IS NULL")
+                            .param("table", "yumpoo." + table)
+                            .query(Boolean.class)
+                            .single())
+                    .isTrue();
         }
-        assertThat(jdbc.sql("SELECT column_name FROM information_schema.columns WHERE table_schema='yumpoo' AND table_name='project'")
-                .query(String.class).list()).doesNotContain("project_type", "template_key", "template_version", "customer_name",
-                        "customer_reference", "delivery_site", "contact_note", "activated_at");
-        assertThatThrownBy(() -> sql("UPDATE yumpoo.project SET lifecycle='DRAFT' WHERE id=:project").update())
-                .isInstanceOf(DataAccessException.class).hasMessageContaining("ck_project_lifecycle");
-        assertThatThrownBy(() -> sql("UPDATE yumpoo.project SET lifecycle='ARCHIVED' WHERE id=:project").update())
-                .isInstanceOf(DataAccessException.class).hasMessageContaining("ck_project_lifecycle_times");
-        sql("UPDATE yumpoo.project SET lifecycle='ARCHIVED', archived_at=updated_at WHERE id=:project").update();
-        assertThat(sql("SELECT lifecycle FROM yumpoo.project WHERE id=:project").query(String.class).single()).isEqualTo("ARCHIVED");
-        sql("UPDATE yumpoo.project SET lifecycle='ACTIVE', archived_at=NULL WHERE id=:project").update();
+        assertThat(jdbc.sql(
+                                "SELECT column_name FROM information_schema.columns WHERE table_schema='yumpoo' AND table_name='project'")
+                        .query(String.class)
+                        .list())
+                .doesNotContain(
+                        "project_type",
+                        "template_key",
+                        "template_version",
+                        "customer_name",
+                        "customer_reference",
+                        "delivery_site",
+                        "contact_note",
+                        "activated_at");
+        assertThatThrownBy(() -> sql("UPDATE yumpoo.project SET lifecycle='DRAFT' WHERE id=:project")
+                        .update())
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("ck_project_lifecycle");
+        assertThatThrownBy(() -> sql("UPDATE yumpoo.project SET lifecycle='ARCHIVED' WHERE id=:project")
+                        .update())
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("ck_project_lifecycle_times");
+        sql("UPDATE yumpoo.project SET lifecycle='ARCHIVED', archived_at=updated_at WHERE id=:project")
+                .update();
+        assertThat(sql("SELECT lifecycle FROM yumpoo.project WHERE id=:project")
+                        .query(String.class)
+                        .single())
+                .isEqualTo("ARCHIVED");
+        sql("UPDATE yumpoo.project SET lifecycle='ACTIVE', archived_at=NULL WHERE id=:project")
+                .update();
     }
 
     private Flyway flyway(String target) {
-        return Flyway.configure().dataSource(dataSource).locations("classpath:db/migration")
-                .defaultSchema("yumpoo").schemas("yumpoo").createSchemas(true)
-                .target(target).validateOnMigrate(true).cleanDisabled(true).load();
+        return Flyway.configure()
+                .dataSource(dataSource)
+                .locations("classpath:db/migration")
+                .defaultSchema("yumpoo")
+                .schemas("yumpoo")
+                .createSchemas(true)
+                .target(target)
+                .validateOnMigrate(true)
+                .cleanDisabled(true)
+                .load();
     }
 
     private JdbcClient.StatementSpec sql(String statement) {
-        return jdbc.sql(statement).param("id", UUID.randomUUID()).param("company", COMPANY)
-                .param("user", USER).param("project", PROJECT).param("product", PRODUCT);
+        return jdbc.sql(statement)
+                .param("id", UUID.randomUUID())
+                .param("company", COMPANY)
+                .param("user", USER)
+                .param("project", PROJECT)
+                .param("product", PRODUCT);
     }
 
     private long count(String table) {
-        return jdbc.sql("SELECT count(*) FROM yumpoo." + table).query(Long.class).single();
+        return jdbc.sql("SELECT count(*) FROM yumpoo." + table)
+                .query(Long.class)
+                .single();
     }
 
     private List<Map<String, Object>> rows(String table) {
-        return jdbc.sql("SELECT * FROM yumpoo." + table + " ORDER BY id").query().listOfRows();
+        return jdbc.sql("SELECT * FROM yumpoo." + table + " ORDER BY id")
+                .query()
+                .listOfRows();
     }
 
-    private void insertEvent(String type) { insertEvent(type, 1); }
+    private void insertEvent(String type) {
+        insertEvent(type, 1);
+    }
 
     private void insertEvent(String type, int version) {
         UUID eventId = UUID.randomUUID();
@@ -169,7 +239,11 @@ class UnifiedProjectModelMigrationIT {
                     request_id, correlation_id, payload_json, status, next_attempt_at, created_at)
                 VALUES (:eventId, :type, :version, 'MigrationFixture', :eventId, 0, :company, 'USER', :user, now(),
                     'up1', 'up1', '{}', 'PENDING', now(), now())
-                """).param("eventId", eventId).param("type", type).param("version", version).update();
+                """)
+                .param("eventId", eventId)
+                .param("type", type)
+                .param("version", version)
+                .update();
         sql("""
                 INSERT INTO yumpoo.outbox_consumer_receipt (consumer_name, event_id, completed_at)
                 VALUES ('up1-fixture', :eventId, now())
@@ -183,7 +257,11 @@ class UnifiedProjectModelMigrationIT {
                     occurred_at, template_code, entity_version, request_id, correlation_id)
                 VALUES (:id, :id, 'ACTIVITY_V1', :company, :scope, :project, :entityType, :project,
                     :eventType, 'USER', :user, 'UP1 Owner', now(), 'UP1_FIXTURE', 0, 'up1', 'up1')
-                """).param("scope", scope).param("entityType", entityType).param("eventType", eventType).update();
+                """)
+                .param("scope", scope)
+                .param("entityType", entityType)
+                .param("eventType", eventType)
+                .update();
     }
 
     private void insertIssue(String targetType, UUID targetId) {

@@ -10,8 +10,7 @@ public record ProductDesktopAuthExchange(
         String clientProtocolVersion,
         Instant handoffIssuedAt,
         Instant consumedAt,
-        boolean rememberMe
-) {
+        boolean rememberMe) {
     public ProductDesktopAuthExchange {
         Objects.requireNonNull(userId, "userId must not be null");
         Objects.requireNonNull(clientVersion, "clientVersion must not be null");

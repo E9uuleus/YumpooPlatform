@@ -6,6 +6,5 @@ import java.nio.file.Path;
 /** 服务端内容/魔数识别端口。 */
 public interface AttachmentContentDetector {
 
-    DetectedAttachmentContent detect(Path sealedContent, AttachmentFileName fileName)
-            throws IOException;
+    DetectedAttachmentContent detect(Path sealedContent, AttachmentFileName fileName) throws IOException;
 }

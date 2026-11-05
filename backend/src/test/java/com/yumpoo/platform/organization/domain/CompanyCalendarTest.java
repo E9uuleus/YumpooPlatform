@@ -1,6 +1,7 @@
 package com.yumpoo.platform.organization.domain;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.DayOfWeek;
 import java.time.Instant;
@@ -10,9 +11,7 @@ import java.time.ZoneId;
 import java.util.Map;
 import java.util.TimeZone;
 import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
 
 class CompanyCalendarTest {
 
@@ -22,9 +21,18 @@ class CompanyCalendarTest {
     @Test
     void resolvesHolidayWithZeroMinutesAndNote() {
         LocalDate date = LocalDate.parse("2026-10-01");
-        ResolvedCalendarDay result = calendar.resolve(company("Asia/Shanghai"), date,
-                Map.of(date, new CalendarDayOverride(date, CalendarDayOverride.DayType.HOLIDAY, 0,
-                        CalendarDayOverride.Source.MANUAL, "国庆节", 0)));
+        ResolvedCalendarDay result = calendar.resolve(
+                company("Asia/Shanghai"),
+                date,
+                Map.of(
+                        date,
+                        new CalendarDayOverride(
+                                date,
+                                CalendarDayOverride.DayType.HOLIDAY,
+                                0,
+                                CalendarDayOverride.Source.MANUAL,
+                                "国庆节",
+                                0)));
 
         assertThat(result.workday()).isFalse();
         assertThat(result.standardMinutes()).isZero();
@@ -57,8 +65,7 @@ class CompanyCalendarTest {
                 friday,
                 override(friday, CalendarDayOverride.DayType.NON_WORKDAY, 0, 4),
                 saturday,
-                override(saturday, CalendarDayOverride.DayType.WORKDAY, 420, 5)
-        );
+                override(saturday, CalendarDayOverride.DayType.WORKDAY, 420, 5));
 
         ResolvedCalendarDay holiday = calendar.resolve(company, friday, overrides);
         ResolvedCalendarDay makeupWorkday = calendar.resolve(company, saturday, overrides);
@@ -77,10 +84,7 @@ class CompanyCalendarTest {
         LocalDate saturday = LocalDate.parse("2026-10-10");
 
         ResolvedCalendarDay result = calendar.resolve(
-                company,
-                saturday,
-                Map.of(saturday, override(saturday, CalendarDayOverride.DayType.WORKDAY, null, 2))
-        );
+                company, saturday, Map.of(saturday, override(saturday, CalendarDayOverride.DayType.WORKDAY, null, 2)));
 
         assertThat(result.standardMinutes()).isEqualTo(480);
     }
@@ -122,41 +126,19 @@ class CompanyCalendarTest {
 
     @Test
     void rejectsNonMondayCompanyWeekConfiguration() {
-        assertThatThrownBy(() -> new Company(
-                COMPANY_ID,
-                "Yumpoo",
-                ZoneId.of("Asia/Shanghai"),
-                DayOfWeek.SUNDAY,
-                480,
-                0
-        )).isInstanceOf(IllegalArgumentException.class)
+        assertThatThrownBy(
+                        () -> new Company(COMPANY_ID, "Yumpoo", ZoneId.of("Asia/Shanghai"), DayOfWeek.SUNDAY, 480, 0))
+                .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("MONDAY");
     }
 
     private static Company company(String timezone) {
-        return new Company(
-                COMPANY_ID,
-                "Yumpoo",
-                ZoneId.of(timezone),
-                DayOfWeek.MONDAY,
-                480,
-                3
-        );
+        return new Company(COMPANY_ID, "Yumpoo", ZoneId.of(timezone), DayOfWeek.MONDAY, 480, 3);
     }
 
     private static CalendarDayOverride override(
-            LocalDate date,
-            CalendarDayOverride.DayType dayType,
-            Integer minutes,
-            long rowVersion
-    ) {
+            LocalDate date, CalendarDayOverride.DayType dayType, Integer minutes, long rowVersion) {
         return new CalendarDayOverride(
-                date,
-                dayType,
-                minutes,
-                CalendarDayOverride.Source.MANUAL,
-                "test override",
-                rowVersion
-        );
+                date, dayType, minutes, CalendarDayOverride.Source.MANUAL, "test override", rowVersion);
     }
 }

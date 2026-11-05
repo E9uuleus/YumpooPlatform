@@ -5,6 +5,5 @@ package com.yumpoo.platform.workitem.api;
  */
 final class LayerMarker {
 
-    private LayerMarker() {
-    }
+    private LayerMarker() {}
 }

@@ -16,9 +16,18 @@ public final class DefaultProjectStructure {
     public static final List<Priority> PRIORITIES = List.of(
             new Priority("LOW", "低", "BLUE", 10), new Priority("MEDIUM", "中", "TEAL", 20),
             new Priority("HIGH", "高", "ORANGE", 30), new Priority("URGENT", "紧急", "RED", 40));
+
     private DefaultProjectStructure() {}
+
     public record Category(String contentCode, String displayName, String colorToken, int sortOrder) {}
-    public record Status(String code, String displayName, String colorToken, String category, int sortOrder,
-                         boolean protectedLabel) {}
+
+    public record Status(
+            String code,
+            String displayName,
+            String colorToken,
+            String category,
+            int sortOrder,
+            boolean protectedLabel) {}
+
     public record Priority(String code, String displayName, String colorToken, int sortOrder) {}
 }

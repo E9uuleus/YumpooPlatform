@@ -1,15 +1,9 @@
 package com.yumpoo.platform.foundation.application.outbox;
 
 import com.yumpoo.platform.foundation.application.event.DomainEventEnvelope;
-
 import java.time.Instant;
 
-public record OutboxClaim(
-        DomainEventEnvelope event,
-        int attemptCount,
-        OutboxLease lease,
-        Instant leaseUntil
-) {
+public record OutboxClaim(DomainEventEnvelope event, int attemptCount, OutboxLease lease, Instant leaseUntil) {
 
     public OutboxClaim {
         if (event == null || lease == null || leaseUntil == null) {

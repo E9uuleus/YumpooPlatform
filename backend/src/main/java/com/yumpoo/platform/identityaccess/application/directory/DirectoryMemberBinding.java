@@ -2,7 +2,6 @@ package com.yumpoo.platform.identityaccess.application.directory;
 
 import com.yumpoo.platform.identityaccess.domain.identity.ExternalIdentity;
 import com.yumpoo.platform.identityaccess.domain.identity.User;
-
 import java.util.Objects;
 
 public record DirectoryMemberBinding(User user, ExternalIdentity externalIdentity) {
@@ -10,8 +9,7 @@ public record DirectoryMemberBinding(User user, ExternalIdentity externalIdentit
     public DirectoryMemberBinding {
         Objects.requireNonNull(user, "user must not be null");
         Objects.requireNonNull(externalIdentity, "externalIdentity must not be null");
-        if (!user.id().equals(externalIdentity.userId())
-                || !user.companyId().equals(externalIdentity.companyId())) {
+        if (!user.id().equals(externalIdentity.userId()) || !user.companyId().equals(externalIdentity.companyId())) {
             throw new IllegalArgumentException("directory member binding is inconsistent");
         }
     }

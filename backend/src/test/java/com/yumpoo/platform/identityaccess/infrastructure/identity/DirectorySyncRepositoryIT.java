@@ -1,11 +1,14 @@
 package com.yumpoo.platform.identityaccess.infrastructure.identity;
 
-import com.yumpoo.platform.foundation.application.event.EventActor;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
+import com.yumpoo.platform.foundation.application.event.EventActor;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelation;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelationContext;
-import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
 import com.yumpoo.platform.identityaccess.application.administration.DirectoryRunQuery;
 import com.yumpoo.platform.identityaccess.application.administration.IdentityAdministrationRepository;
 import com.yumpoo.platform.identityaccess.application.administration.IdentityMemberQuery;
@@ -22,17 +25,9 @@ import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncRun
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncRunStatus;
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncTriggerType;
 import com.yumpoo.platform.identityaccess.application.directory.WeComMemberProfile;
-import com.yumpoo.platform.identityaccess.domain.identity.ProfileHash;
 import com.yumpoo.platform.identityaccess.application.session.SessionService;
+import com.yumpoo.platform.identityaccess.domain.identity.ProfileHash;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.simple.JdbcClient;
-
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -41,17 +36,19 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
 
 @Import(PostgreSqlTestContainerConfiguration.class)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 class DirectorySyncRepositoryIT {
 
-    private static final UUID COMPANY_ID = UUID.fromString(
-            "00000000-0000-4000-8000-000000000001"
-    );
+    private static final UUID COMPANY_ID = UUID.fromString("00000000-0000-4000-8000-000000000001");
     private static final Duration LEASE = Duration.ofMinutes(5);
 
     @Autowired
@@ -72,7 +69,8 @@ class DirectorySyncRepositoryIT {
     @BeforeEach
     @AfterEach
     void removeDirectoryFacts() {
-        jdbcClient.sql("DELETE FROM yumpoo.security_audit_event WHERE company_id = :companyId")
+        jdbcClient
+                .sql("DELETE FROM yumpoo.security_audit_event WHERE company_id = :companyId")
                 .param("companyId", COMPANY_ID)
                 .update();
         jdbcClient.sql("""
@@ -81,8 +79,7 @@ class DirectorySyncRepositoryIT {
                            OR event_type LIKE 'identity.user_employment_%'
                            OR event_type = 'identity.user_sessions_revoked'
                            OR event_type = 'identity.user_account_disabled'
-                        """)
-                .update();
+                        """).update();
         jdbcClient.sql("DELETE FROM yumpoo.directory_sync_run").update();
         jdbcClient.sql("DELETE FROM yumpoo.login_session").update();
         jdbcClient.sql("DELETE FROM yumpoo.external_identity").update();
@@ -91,26 +88,14 @@ class DirectorySyncRepositoryIT {
 
     @Test
     void importsThenUpdatesStableMemberWithoutDuplicatingUser() {
-        DirectorySyncRunSnapshot created = execute(
-                "m104-run-created",
-                "Alice",
-                DirectoryOptionalField.present("alice@example.test"),
-                "a"
-        );
+        DirectorySyncRunSnapshot created =
+                execute("m104-run-created", "Alice", DirectoryOptionalField.present("alice@example.test"), "a");
         UUID userId = singleUserId();
 
-        DirectorySyncRunSnapshot unavailable = execute(
-                "m104-run-unavailable",
-                "Alice Renamed",
-                DirectoryOptionalField.unavailable(),
-                "b"
-        );
-        DirectorySyncRunSnapshot cleared = execute(
-                "m104-run-cleared",
-                "Alice Renamed",
-                DirectoryOptionalField.clear(),
-                "c"
-        );
+        DirectorySyncRunSnapshot unavailable =
+                execute("m104-run-unavailable", "Alice Renamed", DirectoryOptionalField.unavailable(), "b");
+        DirectorySyncRunSnapshot cleared =
+                execute("m104-run-cleared", "Alice Renamed", DirectoryOptionalField.clear(), "c");
 
         assertThat(created.status()).isEqualTo(DirectorySyncRunStatus.SUCCEEDED);
         assertThat(created.counts().created()).isOne();
@@ -119,10 +104,12 @@ class DirectorySyncRepositoryIT {
         assertThat(singleUserId()).isEqualTo(userId);
         assertThat(count("identity_user")).isOne();
         assertThat(count("external_identity")).isOne();
-        assertThat(jdbcClient.sql("SELECT email FROM yumpoo.identity_user WHERE id = :id")
-                .param("id", userId)
-                .query(String.class)
-                .optional()).isEmpty();
+        assertThat(jdbcClient
+                        .sql("SELECT email FROM yumpoo.identity_user WHERE id = :id")
+                        .param("id", userId)
+                        .query(String.class)
+                        .optional())
+                .isEmpty();
         assertThat(count("directory_sync_staging_member")).isZero();
         assertThat(jdbcClient.sql("""
                         SELECT count(*) FROM yumpoo.directory_sync_run
@@ -154,25 +141,19 @@ class DirectorySyncRepositoryIT {
                         DirectoryOptionalField.present("alice.admin@example.test"),
                         DirectoryOptionalField.present("13800000000"),
                         "研发部",
-                        new ProfileHash("a".repeat(64))))
-        );
+                        new ProfileHash("a".repeat(64)))));
         OffsetPageRequest firstPage = OffsetPageRequest.of(0, 20);
 
         var members = administrationRepository.findMembers(
                 COMPANY_ID,
-                new IdentityMemberQuery(
-                        "admin", "m111-external-member-secret",
-                        "ACTIVE", "ENABLED", firstPage)
-        );
+                new IdentityMemberQuery("admin", "m111-external-member-secret", "ACTIVE", "ENABLED", firstPage));
         var runs = administrationRepository.findRuns(
-                COMPANY_ID,
-                new DirectoryRunQuery("SUCCEEDED", "SCHEDULED", firstPage)
-        );
-        var unfiltered = administrationRepository.findRuns(COMPANY_ID,
-                new DirectoryRunQuery(null, null, firstPage));
+                COMPANY_ID, new DirectoryRunQuery("SUCCEEDED", "SCHEDULED", firstPage));
+        var unfiltered = administrationRepository.findRuns(COMPANY_ID, new DirectoryRunQuery(null, null, firstPage));
         assertThat(unfiltered.total()).isOne();
         assertThat(unfiltered.items()).extracting("runId").containsExactly(run.runId());
-        jdbcClient.sql("""
+        jdbcClient
+                .sql("""
                         INSERT INTO yumpoo.directory_sync_item (
                             run_id, external_user_id, profile_hash, user_id,
                             action, result, error_code, created_at, updated_at
@@ -185,8 +166,7 @@ class DirectorySyncRepositoryIT {
                 .param("runId", run.runId())
                 .param("externalUserId", "m111-sensitive-member-reference")
                 .update();
-        var failures = administrationRepository.findFailures(
-                COMPANY_ID, run.runId(), firstPage);
+        var failures = administrationRepository.findFailures(COMPANY_ID, run.runId(), firstPage);
 
         assertThat(members.total()).isOne();
         assertThat(members.items()).singleElement().satisfies(member -> {
@@ -214,19 +194,14 @@ class DirectorySyncRepositoryIT {
             DirectorySyncClaim owner = repository.claim(COMPANY_ID, first, LEASE);
 
             DirectorySyncClaim replay = repository.claim(COMPANY_ID, first, LEASE);
-            DirectorySyncClaim different = repository.claim(
-                    COMPANY_ID,
-                    command("m104-active-b"),
-                    LEASE
-            );
+            DirectorySyncClaim different = repository.claim(COMPANY_ID, command("m104-active-b"), LEASE);
 
             assertThat(owner.executionOwner()).isTrue();
             assertThat(replay.executionOwner()).isFalse();
             assertThat(different.executionOwner()).isFalse();
             assertThat(owner.disposition()).isEqualTo(DirectorySyncClaimDisposition.NEW);
             assertThat(replay.disposition()).isEqualTo(DirectorySyncClaimDisposition.REPLAY);
-            assertThat(different.disposition())
-                    .isEqualTo(DirectorySyncClaimDisposition.ACTIVE_CONFLICT);
+            assertThat(different.disposition()).isEqualTo(DirectorySyncClaimDisposition.ACTIVE_CONFLICT);
             assertThat(replay.snapshot().runId()).isEqualTo(owner.snapshot().runId());
             assertThat(different.snapshot().runId()).isEqualTo(owner.snapshot().runId());
             repository.fail(
@@ -234,8 +209,7 @@ class DirectorySyncRepositoryIT {
                     owner.leaseToken(),
                     "DIRECTORY_TEST_ABORTED",
                     "The integration test closed the active run",
-                    first.actor()
-            );
+                    first.actor());
         }
     }
 
@@ -244,41 +218,36 @@ class DirectorySyncRepositoryIT {
         try (RequestCorrelationContext.Scope ignored = correlation("m104-expired-context")) {
             DirectorySyncCommand first = command("m104-expired-a");
             DirectorySyncClaim expired = repository.claim(COMPANY_ID, first, LEASE);
-            jdbcClient.sql("""
+            jdbcClient
+                    .sql("""
                         UPDATE yumpoo.directory_sync_run
                         SET lease_until = :expiredAt
                         WHERE id = :runId
                         """)
-                .param("expiredAt", OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(1))
-                .param("runId", expired.snapshot().runId())
-                .update();
+                    .param("expiredAt", OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(1))
+                    .param("runId", expired.snapshot().runId())
+                    .update();
 
             DirectorySyncCommand replacementCommand = command("m104-expired-b");
-            DirectorySyncClaim replacement = repository.claim(
-                    COMPANY_ID,
-                    replacementCommand,
-                    LEASE
-            );
+            DirectorySyncClaim replacement = repository.claim(COMPANY_ID, replacementCommand, LEASE);
 
             assertThat(replacement.executionOwner()).isTrue();
-            assertThat(repository.find(expired.snapshot().runId()).status())
-                    .isEqualTo(DirectorySyncRunStatus.FAILED);
+            assertThat(repository.find(expired.snapshot().runId()).status()).isEqualTo(DirectorySyncRunStatus.FAILED);
             assertThatThrownBy(() -> repository.stageIdPage(
-                    expired.snapshot().runId(),
-                    expired.leaseToken(),
-                    1,
-                    1,
-                    "cursor-secret",
-                    List.of("member-a"),
-                    LEASE
-            )).isInstanceOf(DirectorySyncLeaseLostException.class);
+                            expired.snapshot().runId(),
+                            expired.leaseToken(),
+                            1,
+                            1,
+                            "cursor-secret",
+                            List.of("member-a"),
+                            LEASE))
+                    .isInstanceOf(DirectorySyncLeaseLostException.class);
             repository.fail(
                     replacement.snapshot().runId(),
                     replacement.leaseToken(),
                     "DIRECTORY_TEST_ABORTED",
                     "The integration test closed the replacement run",
-                    replacementCommand.actor()
-            );
+                    replacementCommand.actor());
         }
     }
 
@@ -287,21 +256,16 @@ class DirectorySyncRepositoryIT {
         CountDownLatch ready = new CountDownLatch(2);
         CountDownLatch start = new CountDownLatch(1);
         try (var executor = Executors.newFixedThreadPool(2)) {
-            Future<DirectorySyncClaim> first = executor.submit(() -> concurrentClaim(
-                    "m104-concurrent-a",
-                    ready,
-                    start
-            ));
-            Future<DirectorySyncClaim> second = executor.submit(() -> concurrentClaim(
-                    "m104-concurrent-b",
-                    ready,
-                    start
-            ));
+            Future<DirectorySyncClaim> first =
+                    executor.submit(() -> concurrentClaim("m104-concurrent-a", ready, start));
+            Future<DirectorySyncClaim> second =
+                    executor.submit(() -> concurrentClaim("m104-concurrent-b", ready, start));
             ready.await();
             start.countDown();
 
             List<DirectorySyncClaim> claims = List.of(first.get(), second.get());
-            assertThat(claims).extracting(claim -> claim.snapshot().runId())
+            assertThat(claims)
+                    .extracting(claim -> claim.snapshot().runId())
                     .containsOnly(claims.getFirst().snapshot().runId());
             assertThat(claims).filteredOn(DirectorySyncClaim::executionOwner).hasSize(1);
             DirectorySyncClaim owner = claims.stream()
@@ -314,8 +278,7 @@ class DirectorySyncRepositoryIT {
                         owner.leaseToken(),
                         "DIRECTORY_TEST_ABORTED",
                         "The integration test closed the concurrent run",
-                        EventActor.system("DIRECTORY_SYNC_TEST")
-                );
+                        EventActor.system("DIRECTORY_SYNC_TEST"));
             }
         }
     }
@@ -331,21 +294,23 @@ class DirectorySyncRepositoryIT {
         DirectorySyncRunSnapshot left = executeProfiles("m105-left", List.of(alice));
 
         assertThat(left.counts().left()).isOne();
-        assertThat(memberState("member-b"))
-                .isEqualTo("LEFT|LEFT|DISABLED|2|DIRECTORY_SNAPSHOT_MISSING");
+        assertThat(memberState("member-b")).isEqualTo("LEFT|LEFT|DISABLED|2|DIRECTORY_SNAPSHOT_MISSING");
         assertThatThrownBy(() -> sessionService.authenticate(bobSession.sessionCredential()))
-                .isInstanceOfSatisfying(ApplicationException.class, exception ->
-                        assertThat(exception.errorCode())
-                                .isEqualTo(StandardErrorCode.ACCOUNT_DISABLED));
-        assertThat(jdbcClient.sql("""
+                .isInstanceOfSatisfying(
+                        ApplicationException.class,
+                        exception -> assertThat(exception.errorCode()).isEqualTo(StandardErrorCode.ACCOUNT_DISABLED));
+        assertThat(jdbcClient
+                        .sql("""
                         SELECT status || '|' || revoke_reason
                         FROM yumpoo.login_session
                         WHERE id = :sessionId
                         """)
-                .param("sessionId", bobSession.session().id())
-                .query(String.class)
-                .single()).isEqualTo("REVOKED|EMPLOYMENT_LEFT");
-        assertThat(jdbcClient.sql("""
+                        .param("sessionId", bobSession.session().id())
+                        .query(String.class)
+                        .single())
+                .isEqualTo("REVOKED|EMPLOYMENT_LEFT");
+        assertThat(jdbcClient
+                        .sql("""
                         SELECT count(*)
                         FROM yumpoo.outbox_event
                         WHERE event_type = 'identity.user_sessions_revoked'
@@ -353,41 +318,42 @@ class DirectorySyncRepositoryIT {
                           AND aggregate_id = :userId
                           AND payload_json ->> 'reasonCode' = 'EMPLOYMENT_LEFT'
                         """)
-                .param("userId", bobUserId)
-                .query(Integer.class)
-                .single()).isOne();
+                        .param("userId", bobUserId)
+                        .query(Integer.class)
+                        .single())
+                .isOne();
 
-        DirectorySyncRunSnapshot returned = executeProfiles(
-                "m105-returned",
-                List.of(alice, bob)
-        );
+        DirectorySyncRunSnapshot returned = executeProfiles("m105-returned", List.of(alice, bob));
 
         assertThat(returned.counts().returned()).isOne();
         assertThat(userId("member-b")).isEqualTo(bobUserId);
-        assertThat(memberState("member-b"))
-                .isEqualTo("ACTIVE|ACTIVE|DISABLED|3|DIRECTORY_SNAPSHOT_MISSING");
+        assertThat(memberState("member-b")).isEqualTo("ACTIVE|ACTIVE|DISABLED|3|DIRECTORY_SNAPSHOT_MISSING");
         assertThatThrownBy(() -> sessionService.authenticate(bobSession.sessionCredential()))
-                .isInstanceOfSatisfying(ApplicationException.class, exception ->
-                        assertThat(exception.errorCode())
-                                .isEqualTo(StandardErrorCode.ACCOUNT_DISABLED));
-        assertThat(jdbcClient.sql("""
+                .isInstanceOfSatisfying(
+                        ApplicationException.class,
+                        exception -> assertThat(exception.errorCode()).isEqualTo(StandardErrorCode.ACCOUNT_DISABLED));
+        assertThat(jdbcClient
+                        .sql("""
                         SELECT count(*)
                         FROM yumpoo.outbox_event
                         WHERE event_type = 'identity.user_employment_left'
                           AND aggregate_id = :userId
                         """)
-                .param("userId", bobUserId)
-                .query(Integer.class)
-                .single()).isOne();
-        assertThat(jdbcClient.sql("""
+                        .param("userId", bobUserId)
+                        .query(Integer.class)
+                        .single())
+                .isOne();
+        assertThat(jdbcClient
+                        .sql("""
                         SELECT count(*)
                         FROM yumpoo.outbox_event
                         WHERE event_type = 'identity.user_employment_returned'
                           AND aggregate_id = :userId
                         """)
-                .param("userId", bobUserId)
-                .query(Integer.class)
-                .single()).isOne();
+                        .param("userId", bobUserId)
+                        .query(Integer.class)
+                        .single())
+                .isOne();
     }
 
     @Test
@@ -397,20 +363,37 @@ class DirectorySyncRepositoryIT {
         executeProfiles("provider-baseline", List.of(alice, bob));
         UUID userId = userId("member-b");
         var session = sessionService.issueWebSession(userId, "directory-account-test");
-        var disabled = new WeComMemberProfile(bob.externalUserId(), bob.displayName(), bob.email(), bob.mobile(),
-                bob.departmentSummary(), bob.rawProfileHash(), true);
-        var newDisabled = new WeComMemberProfile("member-c", "Disabled New Member", alice.email(), alice.mobile(),
-                alice.departmentSummary(), new ProfileHash("c".repeat(64)), true);
+        var disabled = new WeComMemberProfile(
+                bob.externalUserId(),
+                bob.displayName(),
+                bob.email(),
+                bob.mobile(),
+                bob.departmentSummary(),
+                bob.rawProfileHash(),
+                true);
+        var newDisabled = new WeComMemberProfile(
+                "member-c",
+                "Disabled New Member",
+                alice.email(),
+                alice.mobile(),
+                alice.departmentSummary(),
+                new ProfileHash("c".repeat(64)),
+                true);
 
         var first = executeProfiles("provider-disabled", List.of(alice, disabled, newDisabled));
         assertThat(first.counts().updated()).isOne();
         assertThat(first.counts().created()).isOne();
         assertThat(memberState("member-b")).isEqualTo("ACTIVE|ACTIVE|DISABLED|1|");
         assertThat(memberState("member-c")).isEqualTo("ACTIVE|ACTIVE|DISABLED|1|");
-        assertThat(jdbcClient.sql("SELECT status || '|' || revoke_reason FROM yumpoo.login_session WHERE id = :id")
-                .param("id", session.session().id()).query(String.class).single()).isEqualTo("REVOKED|ACCOUNT_DISABLED");
+        assertThat(jdbcClient
+                        .sql("SELECT status || '|' || revoke_reason FROM yumpoo.login_session WHERE id = :id")
+                        .param("id", session.session().id())
+                        .query(String.class)
+                        .single())
+                .isEqualTo("REVOKED|ACCOUNT_DISABLED");
         assertThatThrownBy(() -> sessionService.authenticate(session.sessionCredential()))
-                .isInstanceOfSatisfying(ApplicationException.class,
+                .isInstanceOfSatisfying(
+                        ApplicationException.class,
                         error -> assertThat(error.errorCode()).isEqualTo(StandardErrorCode.ACCOUNT_DISABLED));
 
         executeProfiles("provider-disabled-repeat", List.of(alice, disabled, newDisabled));
@@ -420,13 +403,24 @@ class DirectorySyncRepositoryIT {
                         SELECT count(*) FROM yumpoo.outbox_event
                         WHERE aggregate_id = :id AND event_type = 'identity.user_account_disabled'
                           AND event_version = 2 AND payload_json ->> 'reasonCode' = 'DIRECTORY_ACCOUNT_DISABLED'
-                        """).param("id", userId).query(Integer.class).single()).isOne();
-        assertThat(jdbcClient.sql("""
+                        """).param("id", userId).query(Integer.class).single())
+                .isOne();
+        assertThat(jdbcClient
+                        .sql("""
                         SELECT count(*) FROM yumpoo.security_audit_event
                         WHERE target_id = :id AND action = 'ACCOUNT_DISABLED'
-                        """).param("id", userId.toString()).query(Integer.class).single()).isOne();
-        assertThat(jdbcClient.sql("SELECT account_disabled_by_user_id FROM yumpoo.identity_user WHERE id = :id")
-                .param("id", userId).query().singleRow().get("account_disabled_by_user_id")).isNull();
+                        """)
+                        .param("id", userId.toString())
+                        .query(Integer.class)
+                        .single())
+                .isOne();
+        assertThat(jdbcClient
+                        .sql("SELECT account_disabled_by_user_id FROM yumpoo.identity_user WHERE id = :id")
+                        .param("id", userId)
+                        .query()
+                        .singleRow()
+                        .get("account_disabled_by_user_id"))
+                .isNull();
     }
 
     @Test
@@ -457,8 +451,12 @@ class DirectorySyncRepositoryIT {
         var completed = executeProfiles("legacy-left-repair", List.of(alice));
         assertThat(completed.counts().left()).isZero();
         assertThat(memberState("member-b")).isEqualTo("LEFT|LEFT|DISABLED|2|DIRECTORY_SNAPSHOT_MISSING");
-        assertThat(jdbcClient.sql("SELECT account_disabled_reason FROM yumpoo.identity_user WHERE id = :id")
-                .param("id", carolId).query(String.class).single()).isEqualTo("Manual security review");
+        assertThat(jdbcClient
+                        .sql("SELECT account_disabled_reason FROM yumpoo.identity_user WHERE id = :id")
+                        .param("id", carolId)
+                        .query(String.class)
+                        .single())
+                .isEqualTo("Manual security review");
         executeProfiles("legacy-left-repeat", List.of(alice));
         assertThat(memberState("member-b")).isEqualTo("LEFT|LEFT|DISABLED|2|DIRECTORY_SNAPSHOT_MISSING");
     }
@@ -476,25 +474,15 @@ class DirectorySyncRepositoryIT {
             UUID leaseToken = claim.leaseToken();
             WeComMemberProfile carol = profile("member-c", "Carol", "c");
             List<WeComMemberProfile> profiles = List.of(alice, carol);
-            List<String> members = profiles.stream()
-                    .map(WeComMemberProfile::externalUserId)
-                    .toList();
+            List<String> members =
+                    profiles.stream().map(WeComMemberProfile::externalUserId).toList();
             confirm(runId, leaseToken, members);
-            profiles.forEach(profile -> repository.stageProfile(
-                    runId,
-                    leaseToken,
-                    profile,
-                    LEASE
-            ));
+            profiles.forEach(profile -> repository.stageProfile(runId, leaseToken, profile, LEASE));
             repository.beginApplying(runId, leaseToken, LEASE);
             itemApplyService.apply(runId, leaseToken, alice, command.actor(), LEASE);
             repository.markApplyFailed(runId, leaseToken, "member-c", LEASE);
 
-            DirectorySyncRunSnapshot partial = repository.completePartial(
-                    runId,
-                    leaseToken,
-                    command.actor()
-            );
+            DirectorySyncRunSnapshot partial = repository.completePartial(runId, leaseToken, command.actor());
 
             assertThat(partial.status()).isEqualTo(DirectorySyncRunStatus.PARTIALLY_SUCCEEDED);
             assertThat(partial.counts().failed()).isOne();
@@ -505,55 +493,33 @@ class DirectorySyncRepositoryIT {
     }
 
     private DirectorySyncRunSnapshot execute(
-            String triggerKey,
-            String displayName,
-            DirectoryOptionalField email,
-            String hashCharacter
-    ) {
-        return executeProfiles(triggerKey, List.of(new WeComMemberProfile(
-                "member-a",
-                displayName,
-                email,
-                DirectoryOptionalField.present("13800000000"),
-                "研发部",
-                new ProfileHash(hashCharacter.repeat(64))
-        )));
+            String triggerKey, String displayName, DirectoryOptionalField email, String hashCharacter) {
+        return executeProfiles(
+                triggerKey,
+                List.of(new WeComMemberProfile(
+                        "member-a",
+                        displayName,
+                        email,
+                        DirectoryOptionalField.present("13800000000"),
+                        "研发部",
+                        new ProfileHash(hashCharacter.repeat(64)))));
     }
 
-    private DirectorySyncRunSnapshot executeProfiles(
-            String triggerKey,
-            List<WeComMemberProfile> profiles
-    ) {
+    private DirectorySyncRunSnapshot executeProfiles(String triggerKey, List<WeComMemberProfile> profiles) {
         try (RequestCorrelationContext.Scope ignored = correlation(triggerKey)) {
             DirectorySyncCommand command = command(triggerKey);
             DirectorySyncClaim claim = repository.claim(COMPANY_ID, command, LEASE);
             UUID runId = claim.snapshot().runId();
             UUID leaseToken = claim.leaseToken();
-            List<String> members = profiles.stream()
-                    .map(WeComMemberProfile::externalUserId)
-                    .toList();
+            List<String> members =
+                    profiles.stream().map(WeComMemberProfile::externalUserId).toList();
             confirm(runId, leaseToken, members);
-            profiles.forEach(profile -> repository.stageProfile(
-                    runId,
-                    leaseToken,
-                    profile,
-                    LEASE
-            ));
+            profiles.forEach(profile -> repository.stageProfile(runId, leaseToken, profile, LEASE));
             repository.beginApplying(runId, leaseToken, LEASE);
             var staged = repository.stagedProfiles(runId, leaseToken);
             assertThat(staged).containsExactlyInAnyOrderElementsOf(profiles);
-            staged.forEach(profile -> itemApplyService.apply(
-                    runId,
-                    leaseToken,
-                    profile,
-                    command.actor(),
-                    LEASE
-            ));
-            DirectorySyncRunSnapshot completed = repository.complete(
-                runId,
-                leaseToken,
-                command.actor()
-        );
+            staged.forEach(profile -> itemApplyService.apply(runId, leaseToken, profile, command.actor(), LEASE));
+            DirectorySyncRunSnapshot completed = repository.complete(runId, leaseToken, command.actor());
 
             DirectorySyncClaim replay = repository.claim(COMPANY_ID, command, LEASE);
             assertThat(replay.executionOwner()).isFalse();
@@ -572,47 +538,33 @@ class DirectorySyncRepositoryIT {
                         DirectoryScanResult.CursorTerminationMode.EXPLICIT_EMPTY,
                         1,
                         DirectoryCanonicalHash.strings("directory-members-v1", members),
-                        DirectoryCanonicalHash.strings("directory-pages-v1", List.of(
-                                DirectoryCanonicalHash.strings("directory-page-v1", members)
-                        ))
-                ),
-                LEASE
-        );
+                        DirectoryCanonicalHash.strings(
+                                "directory-pages-v1",
+                                List.of(DirectoryCanonicalHash.strings("directory-page-v1", members)))),
+                LEASE);
     }
 
-    private static WeComMemberProfile profile(
-            String externalUserId,
-            String displayName,
-            String hashCharacter
-    ) {
+    private static WeComMemberProfile profile(String externalUserId, String displayName, String hashCharacter) {
         return new WeComMemberProfile(
                 externalUserId,
                 displayName,
                 DirectoryOptionalField.present(displayName.toLowerCase() + "@example.test"),
                 DirectoryOptionalField.present("13800000000"),
                 "研发部",
-                new ProfileHash(hashCharacter.repeat(64))
-        );
+                new ProfileHash(hashCharacter.repeat(64)));
     }
 
     private static DirectorySyncCommand command(String triggerKey) {
         return new DirectorySyncCommand(
-                triggerKey,
-                DirectorySyncTriggerType.SCHEDULED,
-                EventActor.system("DIRECTORY_SYNC_TEST"),
-                triggerKey
-        );
+                triggerKey, DirectorySyncTriggerType.SCHEDULED, EventActor.system("DIRECTORY_SYNC_TEST"), triggerKey);
     }
 
     private static RequestCorrelationContext.Scope correlation(String requestId) {
         return RequestCorrelationContext.open(RequestCorrelation.root(requestId));
     }
 
-    private DirectorySyncClaim concurrentClaim(
-            String triggerKey,
-            CountDownLatch ready,
-            CountDownLatch start
-    ) throws InterruptedException {
+    private DirectorySyncClaim concurrentClaim(String triggerKey, CountDownLatch ready, CountDownLatch start)
+            throws InterruptedException {
         ready.countDown();
         start.await();
         try (RequestCorrelationContext.Scope ignored = correlation(triggerKey)) {
@@ -621,13 +573,15 @@ class DirectorySyncRepositoryIT {
     }
 
     private UUID singleUserId() {
-        return jdbcClient.sql("SELECT id FROM yumpoo.identity_user")
+        return jdbcClient
+                .sql("SELECT id FROM yumpoo.identity_user")
                 .query(UUID.class)
                 .single();
     }
 
     private UUID userId(String externalUserId) {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                         SELECT user_id
                         FROM yumpoo.external_identity
                         WHERE external_user_id = :externalUserId
@@ -638,7 +592,8 @@ class DirectorySyncRepositoryIT {
     }
 
     private String memberState(String externalUserId) {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                         SELECT identity_user.employment_status || '|'
                             || external_identity.provider_employment_status || '|'
                             || identity_user.account_status || '|'
@@ -655,14 +610,12 @@ class DirectorySyncRepositoryIT {
     }
 
     private int count(String table) {
-        if (!List.of(
-                "identity_user",
-                "external_identity",
-                "directory_sync_staging_member"
-        ).contains(table)) {
+        if (!List.of("identity_user", "external_identity", "directory_sync_staging_member")
+                .contains(table)) {
             throw new IllegalArgumentException("Unsupported table");
         }
-        return jdbcClient.sql("SELECT count(*) FROM yumpoo." + table)
+        return jdbcClient
+                .sql("SELECT count(*) FROM yumpoo." + table)
                 .query(Integer.class)
                 .single();
     }

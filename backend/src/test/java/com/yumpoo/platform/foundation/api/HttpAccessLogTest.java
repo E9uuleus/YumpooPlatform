@@ -22,24 +22,15 @@ class HttpAccessLogTest {
         var beans = new org.springframework.beans.factory.support.DefaultListableBeanFactory();
         beans.registerSingleton("meterRegistry", registry);
         var filter = new com.yumpoo.platform.foundation.api.web.RequestIdFilter(
-            new com.yumpoo.platform.foundation.api.error.ApiErrorWriter(
-                tools.jackson.databind.json.JsonMapper.builder().build()
-            ),
-            beans.getBeanProvider(io.micrometer.core.instrument.MeterRegistry.class)
-        );
+                new com.yumpoo.platform.foundation.api.error.ApiErrorWriter(
+                        tools.jackson.databind.json.JsonMapper.builder().build()),
+                beans.getBeanProvider(io.micrometer.core.instrument.MeterRegistry.class));
         for (String path : List.of(
-            "/api/v1/projects",
-            "/api/v1/projects/failure",
-            "/api/v1/admin/operations/logs",
-            "/actuator/health"
-        )) {
+                "/api/v1/projects", "/api/v1/projects/failure", "/api/v1/admin/operations/logs", "/actuator/health")) {
             filter.doFilter(
-                new MockHttpServletRequest("GET", path),
-                new MockHttpServletResponse(),
-                (request, response) -> {
-                    if (path.endsWith("failure")) throw new IllegalStateException("business failure");
-                }
-            );
+                    new MockHttpServletRequest("GET", path), new MockHttpServletResponse(), (request, response) -> {
+                        if (path.endsWith("failure")) throw new IllegalStateException("business failure");
+                    });
         }
         var timer = registry.get("yumpoo.http.business").timer();
         assertThat(timer.count()).isEqualTo(2);
@@ -62,8 +53,8 @@ class HttpAccessLogTest {
                 HttpAccessLog.completed(request, new MockHttpServletResponse(), System.nanoTime());
             }
             assertThat(captured.list)
-                .extracting(ILoggingEvent::getLevel)
-                .containsExactly(Level.INFO, Level.INFO, Level.DEBUG, Level.DEBUG);
+                    .extracting(ILoggingEvent::getLevel)
+                    .containsExactly(Level.INFO, Level.INFO, Level.DEBUG, Level.DEBUG);
             var request = new MockHttpServletRequest("GET", "/api/v1/projects/123");
             request.setAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE, "/api/v1/projects/{projectId}");
             var response = new MockHttpServletResponse();
@@ -71,9 +62,8 @@ class HttpAccessLogTest {
             HttpAccessLog.completed(request, response, System.nanoTime());
             var failure = captured.list.getLast();
             assertThat(failure.getFormattedMessage()).isEqualTo("http request failed");
-            assertThat(failure.getKeyValuePairs()).anyMatch(
-                field -> field.key.equals("route") && field.value.equals("/api/v1/projects/{projectId}")
-            );
+            assertThat(failure.getKeyValuePairs())
+                    .anyMatch(field -> field.key.equals("route") && field.value.equals("/api/v1/projects/{projectId}"));
         } finally {
             logger.detachAppender(captured);
             captured.stop();
@@ -91,8 +81,8 @@ class HttpAccessLogTest {
         logger.setLevel(Level.INFO);
         try {
             var request = new MockHttpServletRequest("POST", "/api/v1/projects/123/work-item-imports");
-            request.setAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE,
-                    "/api/v1/projects/{projectId}/work-item-imports");
+            request.setAttribute(
+                    HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE, "/api/v1/projects/{projectId}/work-item-imports");
             HttpAccessLog.rejected(request, "VALIDATION_FAILED", null, List.of("rows[3].notes:SIZE"));
             HttpAccessLog.stage(request, "COMMIT");
             var response = new MockHttpServletResponse();
@@ -100,12 +90,12 @@ class HttpAccessLogTest {
             HttpAccessLog.completed(request, response, System.nanoTime());
             var rejected = captured.list.getLast();
             assertThat(rejected.getLevel()).isEqualTo(Level.INFO);
-            assertThat(rejected.getKeyValuePairs()).anyMatch(
-                    field -> field.key.equals("errorCode") && field.value.equals("VALIDATION_FAILED"));
-            assertThat(rejected.getKeyValuePairs()).anyMatch(
-                    field -> field.key.equals("fieldErrors") && field.value.equals("rows[3].notes:SIZE"));
-            assertThat(rejected.getKeyValuePairs()).anyMatch(
-                    field -> field.key.equals("stage") && field.value.equals("COMMIT"));
+            assertThat(rejected.getKeyValuePairs())
+                    .anyMatch(field -> field.key.equals("errorCode") && field.value.equals("VALIDATION_FAILED"));
+            assertThat(rejected.getKeyValuePairs())
+                    .anyMatch(field -> field.key.equals("fieldErrors") && field.value.equals("rows[3].notes:SIZE"));
+            assertThat(rejected.getKeyValuePairs())
+                    .anyMatch(field -> field.key.equals("stage") && field.value.equals("COMMIT"));
         } finally {
             logger.detachAppender(captured);
             captured.stop();

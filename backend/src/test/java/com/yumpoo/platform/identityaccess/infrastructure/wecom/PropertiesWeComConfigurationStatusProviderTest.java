@@ -1,10 +1,9 @@
 package com.yumpoo.platform.identityaccess.infrastructure.wecom;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.net.URI;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 class PropertiesWeComConfigurationStatusProviderTest {
 
@@ -31,7 +30,7 @@ class PropertiesWeComConfigurationStatusProviderTest {
         assertThat(status.oauth().corpIdMasked()).isEqualTo("****5678");
         assertThat(status.directory().corpIdMasked()).isEqualTo("****5678");
         assertThat(status.toString())
-                .doesNotContain("oauth-super-secret", "directory-super-secret",
-                        "profile-super-secret", "ww-corp-12345678");
+                .doesNotContain(
+                        "oauth-super-secret", "directory-super-secret", "profile-super-secret", "ww-corp-12345678");
     }
 }

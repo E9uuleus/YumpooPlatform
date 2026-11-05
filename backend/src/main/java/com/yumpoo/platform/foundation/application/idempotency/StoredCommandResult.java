@@ -5,12 +5,7 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 
 /** 允许安全持久化和重放的成功响应或稳定客户端拒绝。 */
-public record StoredCommandResult(
-        int httpStatus,
-        String responseJson,
-        UUID resourceId,
-        String etag
-) {
+public record StoredCommandResult(int httpStatus, String responseJson, UUID resourceId, String etag) {
 
     private static final int MAX_ETAG_LENGTH = 128;
     private static final Pattern STRONG_DECIMAL_ETAG = Pattern.compile("^\"[0-9]+\"$");
@@ -25,13 +20,13 @@ public record StoredCommandResult(
         }
         if (etag != null && !isSupportedStrongEtag(etag)) {
             throw new IllegalArgumentException(
-                    "etag must be null or a strong decimal ETag containing a non-negative long"
-            );
+                    "etag must be null or a strong decimal ETag containing a non-negative long");
         }
     }
 
     private static boolean isSupportedStrongEtag(String etag) {
-        if (etag.length() > MAX_ETAG_LENGTH || !STRONG_DECIMAL_ETAG.matcher(etag).matches()) {
+        if (etag.length() > MAX_ETAG_LENGTH
+                || !STRONG_DECIMAL_ETAG.matcher(etag).matches()) {
             return false;
         }
         try {

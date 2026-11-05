@@ -2,7 +2,6 @@ package com.yumpoo.platform.identityaccess.application.account;
 
 import com.yumpoo.platform.identityaccess.domain.identity.AccountStatus;
 import com.yumpoo.platform.identityaccess.domain.identity.EmploymentStatus;
-
 import java.util.Objects;
 import java.util.UUID;
 
@@ -11,8 +10,7 @@ public record AccountStatusChangeResult(
         EmploymentStatus employmentStatus,
         AccountStatus accountStatus,
         long authorizationVersion,
-        long rowVersion
-) {
+        long rowVersion) {
 
     public AccountStatusChangeResult {
         Objects.requireNonNull(userId, "userId must not be null");

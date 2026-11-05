@@ -14,6 +14,9 @@ import com.yumpoo.platform.identityaccess.application.desktopauth.ProductDesktop
 import com.yumpoo.platform.identityaccess.application.session.IssuedSession;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -22,10 +25,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import tools.jackson.databind.ObjectMapper;
-
-import java.io.IOException;
-import java.net.URI;
-import java.nio.charset.StandardCharsets;
 
 @ApiV1Controller
 public final class DesktopAuthenticationController {
@@ -38,14 +37,15 @@ public final class DesktopAuthenticationController {
     public DesktopAuthenticationController(
             ProductDesktopAuthenticationService authenticationService,
             ApiErrorWriter errorWriter,
-            ObjectMapper objectMapper
-    ) {
+            ObjectMapper objectMapper) {
         this.authenticationService = authenticationService;
         this.errorWriter = errorWriter;
         this.objectMapper = objectMapper;
     }
 
-    @PostMapping(path = "/electron/auth/attempts", consumes = MediaType.APPLICATION_JSON_VALUE,
+    @PostMapping(
+            path = "/electron/auth/attempts",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE)
     void begin(
             @RequestBody(required = false) DesktopAuthAttemptRequest body,
@@ -53,23 +53,26 @@ public final class DesktopAuthenticationController {
             @RequestHeader(name = "X-Client-Version", required = false) String clientVersion,
             @RequestHeader(name = "X-Client-Protocol-Version", required = false) String protocolVersion,
             HttpServletRequest request,
-            HttpServletResponse response
-    ) throws IOException {
+            HttpServletResponse response)
+            throws IOException {
         applySecurityHeaders(response);
         String requestId = requestId(request);
         try {
-            if (body == null || !"ELECTRON".equals(clientType)
-                    || !"S256".equals(body.codeChallengeMethod())) {
+            if (body == null || !"ELECTRON".equals(clientType) || !"S256".equals(body.codeChallengeMethod())) {
                 throw malformedRequest();
             }
             // Shells before the 7-day sign-in option send no remember field and keep remembering.
             ProductDesktopAuthorization authorization = authenticationService.begin(
-                    parseToken(body.state()), new PkceS256Challenge(body.codeChallenge()),
-                    requestId, clientVersion, protocolVersion, !Boolean.FALSE.equals(body.remember())
-            );
-            writeJson(response, HttpStatus.CREATED, new DesktopAuthAttemptResponse(
-                    authorization.authorizationUri(), authorization.expiresAt()
-            ));
+                    parseToken(body.state()),
+                    new PkceS256Challenge(body.codeChallenge()),
+                    requestId,
+                    clientVersion,
+                    protocolVersion,
+                    !Boolean.FALSE.equals(body.remember()));
+            writeJson(
+                    response,
+                    HttpStatus.CREATED,
+                    new DesktopAuthAttemptResponse(authorization.authorizationUri(), authorization.expiresAt()));
         } catch (NullPointerException | IllegalArgumentException exception) {
             errorWriter.write(response, malformedRequest(), requestId);
         } catch (ApplicationException exception) {
@@ -82,9 +85,7 @@ public final class DesktopAuthenticationController {
         applySecurityHeaders(response);
         try {
             DesktopHandoffAuthorization handoff = authenticationService.completeAuthorization(
-                    singleParameter(request, "code"),
-                    parseToken(singleParameter(request, "state"))
-            );
+                    singleParameter(request, "code"), parseToken(singleParameter(request, "state")));
             response.setStatus(HttpStatus.FOUND.value());
             response.setHeader(HttpHeaders.LOCATION, deepLink(handoff).toASCIIString());
         } catch (IllegalArgumentException exception) {
@@ -93,12 +94,14 @@ public final class DesktopAuthenticationController {
             writeSafeCallbackFailure(
                     response,
                     exception.errorCode() == StandardErrorCode.DEPENDENCY_UNAVAILABLE
-                            ? HttpStatus.SERVICE_UNAVAILABLE : HttpStatus.UNAUTHORIZED
-            );
+                            ? HttpStatus.SERVICE_UNAVAILABLE
+                            : HttpStatus.UNAUTHORIZED);
         }
     }
 
-    @PostMapping(path = "/electron/auth/exchange", consumes = MediaType.APPLICATION_JSON_VALUE,
+    @PostMapping(
+            path = "/electron/auth/exchange",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE)
     void exchange(
             @RequestBody(required = false) DesktopAuthExchangeRequest body,
@@ -106,23 +109,26 @@ public final class DesktopAuthenticationController {
             @RequestHeader(name = "X-Client-Version", required = false) String clientVersion,
             @RequestHeader(name = "X-Client-Protocol-Version", required = false) String protocolVersion,
             HttpServletRequest request,
-            HttpServletResponse response
-    ) throws IOException {
+            HttpServletResponse response)
+            throws IOException {
         applySecurityHeaders(response);
         String requestId = requestId(request);
         try {
-            if (body == null || !"ELECTRON".equals(clientType)
-                    || clientVersion == null || !"1".equals(protocolVersion)) {
+            if (body == null
+                    || !"ELECTRON".equals(clientType)
+                    || clientVersion == null
+                    || !"1".equals(protocolVersion)) {
                 throw malformedRequest();
             }
             IssuedSession issued = authenticationService.exchange(
-                    parseToken(body.handoffCode()), parseToken(body.state()),
-                    PkceVerifier.of(body.codeVerifier())
-            );
-            writeJson(response, HttpStatus.OK, new DesktopAuthExchangeResponse(
-                    issued.sessionCredential().value(), issued.csrfCredential().value(),
-                    issued.absoluteExpiresAt()
-            ));
+                    parseToken(body.handoffCode()), parseToken(body.state()), PkceVerifier.of(body.codeVerifier()));
+            writeJson(
+                    response,
+                    HttpStatus.OK,
+                    new DesktopAuthExchangeResponse(
+                            issued.sessionCredential().value(),
+                            issued.csrfCredential().value(),
+                            issued.absoluteExpiresAt()));
         } catch (NullPointerException | IllegalArgumentException exception) {
             errorWriter.write(response, malformedRequest(), requestId);
         } catch (ApplicationException exception) {
@@ -130,8 +136,7 @@ public final class DesktopAuthenticationController {
         }
     }
 
-    private void writeJson(HttpServletResponse response, HttpStatus status, Object body)
-            throws IOException {
+    private void writeJson(HttpServletResponse response, HttpStatus status, Object body) throws IOException {
         response.setStatus(status.value());
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
@@ -139,8 +144,8 @@ public final class DesktopAuthenticationController {
     }
 
     private static URI deepLink(DesktopHandoffAuthorization handoff) {
-        return URI.create("yumpoo://auth/callback?code=" + handoff.handoffCode().value()
-                + "&state=" + handoff.desktopState().value());
+        return URI.create("yumpoo://auth/callback?code=" + handoff.handoffCode().value() + "&state="
+                + handoff.desktopState().value());
     }
 
     private static DesktopAuthToken parseToken(String value) {
@@ -160,17 +165,16 @@ public final class DesktopAuthenticationController {
         response.setHeader(HttpHeaders.PRAGMA, "no-cache");
         response.setHeader("Referrer-Policy", "no-referrer");
         response.setHeader("X-Content-Type-Options", "nosniff");
-        response.setHeader("Content-Security-Policy",
-                "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
+        response.setHeader("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
     }
 
-    private static void writeSafeCallbackFailure(HttpServletResponse response, HttpStatus status)
-            throws IOException {
+    private static void writeSafeCallbackFailure(HttpServletResponse response, HttpStatus status) throws IOException {
         response.setStatus(status.value());
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.setContentType(MediaType.TEXT_HTML_VALUE);
-        response.getWriter().write("<!doctype html><html lang=\"zh-CN\"><title>登录未完成</title>"
-                + "<p>登录未完成，请关闭此页面并返回 Yumpoo 重新开始。</p></html>");
+        response.getWriter()
+                .write("<!doctype html><html lang=\"zh-CN\"><title>登录未完成</title>"
+                        + "<p>登录未完成，请关闭此页面并返回 Yumpoo 重新开始。</p></html>");
     }
 
     private static String requestId(HttpServletRequest request) {

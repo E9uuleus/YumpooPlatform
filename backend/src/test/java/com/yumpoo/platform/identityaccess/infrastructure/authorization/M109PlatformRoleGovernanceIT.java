@@ -1,5 +1,8 @@
 package com.yumpoo.platform.identityaccess.infrastructure.authorization;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.yumpoo.platform.administration.application.governance.GovernanceIssueQuery;
 import com.yumpoo.platform.administration.application.governance.GovernanceIssueQueryUseCase;
 import com.yumpoo.platform.administration.application.governance.GovernanceIssueStatus;
@@ -19,8 +22,8 @@ import com.yumpoo.platform.identityaccess.application.authorization.AppManagerAv
 import com.yumpoo.platform.identityaccess.application.authorization.GrantPlatformRoleCommand;
 import com.yumpoo.platform.identityaccess.application.authorization.InitialRoleBootstrapCommand;
 import com.yumpoo.platform.identityaccess.application.authorization.InitialRoleBootstrapResult;
-import com.yumpoo.platform.identityaccess.application.authorization.MaintenanceRoleCommand;
 import com.yumpoo.platform.identityaccess.application.authorization.MaintenanceRoleActor;
+import com.yumpoo.platform.identityaccess.application.authorization.MaintenanceRoleCommand;
 import com.yumpoo.platform.identityaccess.application.authorization.MaintenanceRoleMode;
 import com.yumpoo.platform.identityaccess.application.authorization.ManagedPlatformRole;
 import com.yumpoo.platform.identityaccess.application.authorization.PlatformRoleAssignmentQueryUseCase;
@@ -33,6 +36,10 @@ import com.yumpoo.platform.identityaccess.application.authorization.RoleAssignme
 import com.yumpoo.platform.identityaccess.application.authorization.RoleCommandActor;
 import com.yumpoo.platform.identityaccess.domain.identity.AccountStatus;
 import com.yumpoo.platform.testing.JdbcIntegrationTest;
+import java.time.Instant;
+import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,14 +48,6 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
-
-import java.time.Instant;
-import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executors;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @JdbcIntegrationTest
 class M109PlatformRoleGovernanceIT {
@@ -60,22 +59,31 @@ class M109PlatformRoleGovernanceIT {
 
     @Autowired
     private PlatformRoleManagementUseCase managementUseCase;
+
     @Autowired
     private PlatformRoleMaintenanceUseCase maintenanceUseCase;
+
     @Autowired
     private PlatformRoleAssignmentQueryUseCase assignmentQuery;
+
     @Autowired
     private AccountStatusUseCase accountStatusUseCase;
+
     @Autowired
     private AppManagerAvailabilityCoordinator availabilityCoordinator;
+
     @Autowired
     private GovernanceIssueQueryUseCase governanceIssueQuery;
+
     @Autowired
     private JdbcGovernanceIssueProjection governanceIssueProjection;
+
     @Autowired
     private PlatformTransactionManager transactionManager;
+
     @Autowired
     private JdbcClient jdbcClient;
+
     @Autowired
     private ObjectMapper objectMapper;
 
@@ -94,31 +102,40 @@ class M109PlatformRoleGovernanceIT {
 
     @Test
     void bootstrapIsOneTimeAndBreakGlassOnlyRecoversMissingState() {
-        PlatformRoleMutationResult bootstrapped = execute("m109-bootstrap", () ->
-                maintenanceUseCase.execute(new MaintenanceRoleCommand(
+        PlatformRoleMutationResult bootstrapped = execute(
+                "m109-bootstrap",
+                () -> maintenanceUseCase.execute(new MaintenanceRoleCommand(
                         COMPANY_ID, MANAGER_A, MaintenanceRoleMode.BOOTSTRAP, "initial-approval")));
 
         assertThat(bootstrapped.role()).isEqualTo(ManagedPlatformRole.APP_MANAGER);
         assertThat(state()).isEqualTo("AVAILABLE|1");
         assertThat(systemActor(bootstrapped.assignmentId())).isEqualTo("APP_MANAGER_BOOTSTRAP");
-        assertError(() -> maintenanceUseCase.execute(new MaintenanceRoleCommand(
-                        COMPANY_ID, MANAGER_B, MaintenanceRoleMode.BOOTSTRAP, "repeat")),
+        assertError(
+                () -> maintenanceUseCase.execute(
+                        new MaintenanceRoleCommand(COMPANY_ID, MANAGER_B, MaintenanceRoleMode.BOOTSTRAP, "repeat")),
                 StandardErrorCode.INVALID_STATE_TRANSITION);
-        assertError(() -> maintenanceUseCase.execute(new MaintenanceRoleCommand(
+        assertError(
+                () -> maintenanceUseCase.execute(new MaintenanceRoleCommand(
                         COMPANY_ID, MANAGER_B, MaintenanceRoleMode.BREAK_GLASS, "not-missing")),
                 StandardErrorCode.INVALID_STATE_TRANSITION);
 
         insertDirectRole(MANAGER_B, "COMPANY_ADMIN", "COMPANY");
         markManagerLeftAndReconcile(MANAGER_A);
         assertThat(state()).isEqualTo("MISSING|2");
-        PlatformRoleMutationResult recovered = execute("m109-break-glass", () ->
-                maintenanceUseCase.execute(new MaintenanceRoleCommand(
+        PlatformRoleMutationResult recovered = execute(
+                "m109-break-glass",
+                () -> maintenanceUseCase.execute(new MaintenanceRoleCommand(
                         COMPANY_ID, MANAGER_B, MaintenanceRoleMode.BREAK_GLASS, "incident-42")));
 
         assertThat(systemActor(recovered.assignmentId())).isEqualTo("APP_MANAGER_BREAK_GLASS");
         assertThat(activeRoleCount(MANAGER_B)).isOne();
-        assertThat(jdbcClient.sql("SELECT revoked_by_actor_type FROM yumpoo.platform_role_assignment WHERE user_id=:id AND role_code='COMPANY_ADMIN'")
-                .param("id", MANAGER_B).query(String.class).single()).isEqualTo("SYSTEM");
+        assertThat(jdbcClient
+                        .sql(
+                                "SELECT revoked_by_actor_type FROM yumpoo.platform_role_assignment WHERE user_id=:id AND role_code='COMPANY_ADMIN'")
+                        .param("id", MANAGER_B)
+                        .query(String.class)
+                        .single())
+                .isEqualTo("SYSTEM");
         assertThat(state()).isEqualTo("AVAILABLE|3");
         assertThat(eventCount("identity.app_manager_missing_detected")).isOne();
         assertThat(eventCount("identity.app_manager_availability_restored")).isOne();
@@ -126,21 +143,21 @@ class M109PlatformRoleGovernanceIT {
 
     @Test
     void maintenanceActorReusesExistingManagerAndRecoversOnlyWhenNoneRemain() {
-        MaintenanceRoleActor bootstrapped = execute("m109-actor-bootstrap", () ->
-                maintenanceUseCase.ensureAvailableAppManager(
-                        COMPANY_ID, MANAGER_A, "local fixture"));
+        MaintenanceRoleActor bootstrapped = execute(
+                "m109-actor-bootstrap",
+                () -> maintenanceUseCase.ensureAvailableAppManager(COMPANY_ID, MANAGER_A, "local fixture"));
         assertThat(bootstrapped.userId()).isEqualTo(MANAGER_A);
 
-        MaintenanceRoleActor reused = execute("m109-actor-reuse", () ->
-                maintenanceUseCase.ensureAvailableAppManager(
-                        COMPANY_ID, MANAGER_B, "local fixture"));
+        MaintenanceRoleActor reused = execute(
+                "m109-actor-reuse",
+                () -> maintenanceUseCase.ensureAvailableAppManager(COMPANY_ID, MANAGER_B, "local fixture"));
         assertThat(reused).isEqualTo(bootstrapped);
         assertThat(activeRoleCount(MANAGER_B)).isZero();
 
         markManagerLeftAndReconcile(MANAGER_A);
-        MaintenanceRoleActor recovered = execute("m109-actor-recovery", () ->
-                maintenanceUseCase.ensureAvailableAppManager(
-                        COMPANY_ID, MANAGER_B, "local fixture"));
+        MaintenanceRoleActor recovered = execute(
+                "m109-actor-recovery",
+                () -> maintenanceUseCase.ensureAvailableAppManager(COMPANY_ID, MANAGER_B, "local fixture"));
         assertThat(recovered.userId()).isEqualTo(MANAGER_B);
         assertThat(activeRoleCount(MANAGER_B)).isOne();
         assertThat(state()).isEqualTo("AVAILABLE|3");
@@ -149,21 +166,15 @@ class M109PlatformRoleGovernanceIT {
     @Test
     void initialIdentityBootstrapAtomicallyGrantsDistinctPlatformAndCompanyAdministrators() {
         UUID directoryRunId = UUID.randomUUID();
-        InitialRoleBootstrapResult result = execute("m115-initial-roles", () ->
-                maintenanceUseCase.bootstrapInitialRoles(new InitialRoleBootstrapCommand(
-                        COMPANY_ID,
-                        MANAGER_A,
-                        MANAGER_B,
-                        directoryRunId,
-                        "approved production initialization"
-                )));
+        InitialRoleBootstrapResult result = execute(
+                "m115-initial-roles",
+                () -> maintenanceUseCase.bootstrapInitialRoles(new InitialRoleBootstrapCommand(
+                        COMPANY_ID, MANAGER_A, MANAGER_B, directoryRunId, "approved production initialization")));
 
         assertThat(activeRoleCount(MANAGER_A)).isOne();
         assertThat(activeRoleCount(MANAGER_B)).isOne();
-        assertThat(systemActor(result.appManagerAssignmentId()))
-                .isEqualTo("INITIAL_IDENTITY_BOOTSTRAP");
-        assertThat(systemActor(result.companyAdminAssignmentId()))
-                .isEqualTo("INITIAL_IDENTITY_BOOTSTRAP");
+        assertThat(systemActor(result.appManagerAssignmentId())).isEqualTo("INITIAL_IDENTITY_BOOTSTRAP");
+        assertThat(systemActor(result.companyAdminAssignmentId())).isEqualTo("INITIAL_IDENTITY_BOOTSTRAP");
         assertThat(state()).isEqualTo("AVAILABLE|1");
         assertThat(userRowVersion(MANAGER_A)).isEqualTo(1);
         assertThat(userRowVersion(MANAGER_B)).isEqualTo(1);
@@ -172,14 +183,9 @@ class M109PlatformRoleGovernanceIT {
         assertThat(auditActionCount("INITIAL_IDENTITY_BOOTSTRAP_SUCCEEDED")).isOne();
         assertThat(bootstrapAuditSensitiveKeyCount()).isZero();
 
-        assertError(() -> maintenanceUseCase.bootstrapInitialRoles(
-                        new InitialRoleBootstrapCommand(
-                                COMPANY_ID,
-                                MANAGER_A,
-                                MANAGER_B,
-                                UUID.randomUUID(),
-                                "repeat"
-                        )),
+        assertError(
+                () -> maintenanceUseCase.bootstrapInitialRoles(
+                        new InitialRoleBootstrapCommand(COMPANY_ID, MANAGER_A, MANAGER_B, UUID.randomUUID(), "repeat")),
                 StandardErrorCode.INVALID_STATE_TRANSITION);
     }
 
@@ -195,14 +201,15 @@ class M109PlatformRoleGovernanceIT {
                 FOR EACH ROW EXECUTE FUNCTION yumpoo.m110_fail_role_audit()
                 """).update();
 
-        assertThatThrownBy(() -> execute("m115-initial-roles-rollback", () ->
-                maintenanceUseCase.bootstrapInitialRoles(new InitialRoleBootstrapCommand(
-                        COMPANY_ID,
-                        MANAGER_A,
-                        MANAGER_B,
-                        UUID.randomUUID(),
-                        "approved production initialization"
-                )))).isInstanceOf(RuntimeException.class);
+        assertThatThrownBy(() -> execute(
+                        "m115-initial-roles-rollback",
+                        () -> maintenanceUseCase.bootstrapInitialRoles(new InitialRoleBootstrapCommand(
+                                COMPANY_ID,
+                                MANAGER_A,
+                                MANAGER_B,
+                                UUID.randomUUID(),
+                                "approved production initialization"))))
+                .isInstanceOf(RuntimeException.class);
 
         assertThat(activeRoleCount(MANAGER_A)).isZero();
         assertThat(activeRoleCount(MANAGER_B)).isZero();
@@ -216,40 +223,70 @@ class M109PlatformRoleGovernanceIT {
         PlatformRoleMutationResult manager = bootstrapA();
         UUID companyAdminKey = UUID.randomUUID();
         GrantPlatformRoleCommand companyAdminGrant = grantCommand(
-                MEMBER, ManagedPlatformRole.COMPANY_ADMIN, 0, MANAGER_A,
-                manager.authorizationVersion(), companyAdminKey, "a".repeat(64));
+                MEMBER,
+                ManagedPlatformRole.COMPANY_ADMIN,
+                0,
+                MANAGER_A,
+                manager.authorizationVersion(),
+                companyAdminKey,
+                "a".repeat(64));
 
         var first = execute("m109-company-admin-grant", () -> managementUseCase.grant(companyAdminGrant));
         var replay = execute("m109-company-admin-replay", () -> managementUseCase.grant(companyAdminGrant));
         assertThat(first.replayed()).isFalse();
         assertThat(replay.replayed()).isTrue();
 
-        assertError(() -> managementUseCase.grant(grantCommand(
-                MEMBER, ManagedPlatformRole.APP_MANAGER, 1, MANAGER_A,
-                manager.authorizationVersion(), UUID.randomUUID(), "b".repeat(64))),
+        assertError(
+                () -> managementUseCase.grant(grantCommand(
+                        MEMBER,
+                        ManagedPlatformRole.APP_MANAGER,
+                        1,
+                        MANAGER_A,
+                        manager.authorizationVersion(),
+                        UUID.randomUUID(),
+                        "b".repeat(64))),
                 StandardErrorCode.INVALID_STATE_TRANSITION);
-        var tierChange = execute("m109-tier-change", () -> managementUseCase.changeTier(
-                new com.yumpoo.platform.identityaccess.application.authorization.ChangePlatformRoleTierCommand(
-                        COMPANY_ID, MEMBER,
-                        com.yumpoo.platform.identityaccess.application.authorization.MemberRoleTier.APP_MANAGER,
-                        1, recentActor(MANAGER_A, manager.authorizationVersion()), UUID.randomUUID(),
-                        new RequestHash("e".repeat(64)), "tier promotion")));
+        var tierChange = execute(
+                "m109-tier-change",
+                () -> managementUseCase.changeTier(
+                        new com.yumpoo.platform.identityaccess.application.authorization.ChangePlatformRoleTierCommand(
+                                COMPANY_ID,
+                                MEMBER,
+                                com.yumpoo.platform.identityaccess.application.authorization.MemberRoleTier.APP_MANAGER,
+                                1,
+                                recentActor(MANAGER_A, manager.authorizationVersion()),
+                                UUID.randomUUID(),
+                                new RequestHash("e".repeat(64)),
+                                "tier promotion")));
         assertThat(tierChange.result().responseJson()).contains("\"authorizationVersion\":2");
-        UUID appManagerAssignment = jdbcClient.sql("SELECT id FROM yumpoo.platform_role_assignment WHERE user_id=:id AND status='ACTIVE'")
-                .param("id", MEMBER).query(UUID.class).single();
+        UUID appManagerAssignment = jdbcClient
+                .sql("SELECT id FROM yumpoo.platform_role_assignment WHERE user_id=:id AND status='ACTIVE'")
+                .param("id", MEMBER)
+                .query(UUID.class)
+                .single();
         assertThat(activeRoleCount(MEMBER)).isOne();
 
         PlatformRoleMutationResult revoked = revokeResult(new RevokePlatformRoleCommand(
-                COMPANY_ID, appManagerAssignment, ManagedPlatformRole.APP_MANAGER, 0,
+                COMPANY_ID,
+                appManagerAssignment,
+                ManagedPlatformRole.APP_MANAGER,
+                0,
                 recentActor(MANAGER_A, manager.authorizationVersion()),
-                UUID.randomUUID(), new RequestHash("c".repeat(64)), "rotation-complete"));
+                UUID.randomUUID(),
+                new RequestHash("c".repeat(64)),
+                "rotation-complete"));
         assertThat(revoked.status()).isEqualTo(RoleAssignmentStatus.REVOKED);
         assertThat(revoked.assignmentRowVersion()).isEqualTo(1);
         assertThat(revoked.authorizationVersion()).isEqualTo(3);
 
         PlatformRoleMutationResult regrant = grantResult(grantCommand(
-                MEMBER, ManagedPlatformRole.APP_MANAGER, 3, MANAGER_A,
-                manager.authorizationVersion(), UUID.randomUUID(), "d".repeat(64)));
+                MEMBER,
+                ManagedPlatformRole.APP_MANAGER,
+                3,
+                MANAGER_A,
+                manager.authorizationVersion(),
+                UUID.randomUUID(),
+                "d".repeat(64)));
         assertThat(regrant.assignmentId()).isNotEqualTo(appManagerAssignment);
         assertThat(historyCount(MEMBER, "APP_MANAGER")).isEqualTo(2);
         assertThat(eventCount("identity.platform_role_granted")).isEqualTo(4);
@@ -270,22 +307,31 @@ class M109PlatformRoleGovernanceIT {
                 FOR EACH ROW EXECUTE FUNCTION yumpoo.m110_fail_role_audit()
                 """).update();
 
-        assertThatThrownBy(() -> execute("m110-role-audit-rollback", () ->
-                managementUseCase.grant(grantCommand(
-                        MEMBER, ManagedPlatformRole.COMPANY_ADMIN, 0, MANAGER_A,
-                        manager.authorizationVersion(), idempotencyKey, "9".repeat(64)))))
+        assertThatThrownBy(() -> execute(
+                        "m110-role-audit-rollback",
+                        () -> managementUseCase.grant(grantCommand(
+                                MEMBER,
+                                ManagedPlatformRole.COMPANY_ADMIN,
+                                0,
+                                MANAGER_A,
+                                manager.authorizationVersion(),
+                                idempotencyKey,
+                                "9".repeat(64)))))
                 .isInstanceOf(RuntimeException.class);
 
         assertThat(activeRoleCount(MEMBER)).isZero();
         assertThat(userRowVersion(MEMBER)).isZero();
         assertThat(eventCount("identity.platform_role_granted")).isOne();
-        assertThat(jdbcClient.sql("""
+        assertThat(jdbcClient
+                        .sql("""
                         SELECT count(*) FROM yumpoo.idempotency_record
                         WHERE actor_user_id = :actorId AND idempotency_key = :key
                         """)
-                .param("actorId", MANAGER_A)
-                .param("key", idempotencyKey)
-                .query(Integer.class).single()).isZero();
+                        .param("actorId", MANAGER_A)
+                        .param("key", idempotencyKey)
+                        .query(Integer.class)
+                        .single())
+                .isZero();
     }
 
     @Test
@@ -293,26 +339,52 @@ class M109PlatformRoleGovernanceIT {
         PlatformRoleMutationResult manager = bootstrapA();
         insertDirectRole(MANAGER_B, "COMPANY_ADMIN", "COMPANY");
 
-        assertError(() -> managementUseCase.grant(new GrantPlatformRoleCommand(
-                        COMPANY_ID, MEMBER, ManagedPlatformRole.COMPANY_ADMIN, 0,
-                        recentActor(MANAGER_B, 0), UUID.randomUUID(),
-                        new RequestHash("e".repeat(64)), "company-admin-denied")),
+        assertError(
+                () -> managementUseCase.grant(new GrantPlatformRoleCommand(
+                        COMPANY_ID,
+                        MEMBER,
+                        ManagedPlatformRole.COMPANY_ADMIN,
+                        0,
+                        recentActor(MANAGER_B, 0),
+                        UUID.randomUUID(),
+                        new RequestHash("e".repeat(64)),
+                        "company-admin-denied")),
                 StandardErrorCode.ACCESS_DENIED);
-        assertError(() -> managementUseCase.grant(new GrantPlatformRoleCommand(
-                        COMPANY_ID, MEMBER, ManagedPlatformRole.COMPANY_ADMIN, 99,
-                        recentActor(MANAGER_A, manager.authorizationVersion()), UUID.randomUUID(),
-                        new RequestHash("f".repeat(64)), "stale-target")),
+        assertError(
+                () -> managementUseCase.grant(new GrantPlatformRoleCommand(
+                        COMPANY_ID,
+                        MEMBER,
+                        ManagedPlatformRole.COMPANY_ADMIN,
+                        99,
+                        recentActor(MANAGER_A, manager.authorizationVersion()),
+                        UUID.randomUUID(),
+                        new RequestHash("f".repeat(64)),
+                        "stale-target")),
                 StandardErrorCode.VERSION_CONFLICT);
-        assertError(() -> managementUseCase.grant(new GrantPlatformRoleCommand(
-                        COMPANY_ID, MEMBER, ManagedPlatformRole.COMPANY_ADMIN, 0,
-                        new RoleCommandActor(MANAGER_A, manager.authorizationVersion(),
+        assertError(
+                () -> managementUseCase.grant(new GrantPlatformRoleCommand(
+                        COMPANY_ID,
+                        MEMBER,
+                        ManagedPlatformRole.COMPANY_ADMIN,
+                        0,
+                        new RoleCommandActor(
+                                MANAGER_A,
+                                manager.authorizationVersion(),
                                 Instant.now().minusSeconds(901)),
-                        UUID.randomUUID(), new RequestHash("0".repeat(64)), "expired-auth")),
+                        UUID.randomUUID(),
+                        new RequestHash("0".repeat(64)),
+                        "expired-auth")),
                 StandardErrorCode.ACCESS_DENIED);
-        assertError(() -> managementUseCase.grant(new GrantPlatformRoleCommand(
-                        UUID.randomUUID(), MEMBER, ManagedPlatformRole.COMPANY_ADMIN, 0,
-                        recentActor(MANAGER_A, manager.authorizationVersion()), UUID.randomUUID(),
-                        new RequestHash("1".repeat(64)), "cross-company")),
+        assertError(
+                () -> managementUseCase.grant(new GrantPlatformRoleCommand(
+                        UUID.randomUUID(),
+                        MEMBER,
+                        ManagedPlatformRole.COMPANY_ADMIN,
+                        0,
+                        recentActor(MANAGER_A, manager.authorizationVersion()),
+                        UUID.randomUUID(),
+                        new RequestHash("1".repeat(64)),
+                        "cross-company")),
                 StandardErrorCode.RESOURCE_NOT_FOUND);
     }
 
@@ -320,18 +392,21 @@ class M109PlatformRoleGovernanceIT {
     void concurrentMutationsAndAccountDisableCannotRemoveLastAvailableManager() throws Exception {
         PlatformRoleMutationResult managerA = bootstrapA();
         PlatformRoleMutationResult managerB = grantResult(grantCommand(
-                MANAGER_B, ManagedPlatformRole.APP_MANAGER, 0, MANAGER_A,
-                managerA.authorizationVersion(), UUID.randomUUID(), "2".repeat(64)));
+                MANAGER_B,
+                ManagedPlatformRole.APP_MANAGER,
+                0,
+                MANAGER_A,
+                managerA.authorizationVersion(),
+                UUID.randomUUID(),
+                "2".repeat(64)));
         CountDownLatch ready = new CountDownLatch(2);
         CountDownLatch start = new CountDownLatch(1);
 
         try (var executor = Executors.newFixedThreadPool(2)) {
             var revokeB = executor.submit(() -> concurrentRevoke(
-                    ready, start, managerB.assignmentId(), MANAGER_A,
-                    managerA.authorizationVersion(), "3".repeat(64)));
+                    ready, start, managerB.assignmentId(), MANAGER_A, managerA.authorizationVersion(), "3".repeat(64)));
             var revokeA = executor.submit(() -> concurrentRevoke(
-                    ready, start, managerA.assignmentId(), MANAGER_B,
-                    managerB.authorizationVersion(), "4".repeat(64)));
+                    ready, start, managerA.assignmentId(), MANAGER_B, managerB.authorizationVersion(), "4".repeat(64)));
             ready.await();
             start.countDown();
             revokeA.get();
@@ -342,11 +417,16 @@ class M109PlatformRoleGovernanceIT {
         UUID remaining = activeRoleCount(MANAGER_A) == 1 ? MANAGER_A : MANAGER_B;
         long remainingVersion = userRowVersion(remaining);
         insertDirectRole(MEMBER, "COMPANY_ADMIN", "COMPANY");
-        assertError(() -> accountStatusUseCase.change(new AccountStatusChangeCommand(
-                        COMPANY_ID, remaining,
+        assertError(
+                () -> accountStatusUseCase.change(new AccountStatusChangeCommand(
+                        COMPANY_ID,
+                        remaining,
                         new AccountStatusCommandActor(MEMBER, 0, Instant.now()),
-                        AccountStatus.DISABLED, remainingVersion,
-                        UUID.randomUUID(), new RequestHash("5".repeat(64)), "disable-last")),
+                        AccountStatus.DISABLED,
+                        remainingVersion,
+                        UUID.randomUUID(),
+                        new RequestHash("5".repeat(64)),
+                        "disable-last")),
                 StandardErrorCode.INVALID_STATE_TRANSITION);
         assertThat(availableManagerCount()).isOne();
     }
@@ -354,38 +434,41 @@ class M109PlatformRoleGovernanceIT {
     @Test
     void assignmentAndGovernanceIssueQueriesArePagedReasonFreeAndProjectionIsIdempotent() {
         PlatformRoleMutationResult manager = bootstrapA();
-        grantResult(grantCommand(MEMBER, ManagedPlatformRole.COMPANY_ADMIN, 0, MANAGER_A,
-                manager.authorizationVersion(), UUID.randomUUID(), "6".repeat(64)));
+        grantResult(grantCommand(
+                MEMBER,
+                ManagedPlatformRole.COMPANY_ADMIN,
+                0,
+                MANAGER_A,
+                manager.authorizationVersion(),
+                UUID.randomUUID(),
+                "6".repeat(64)));
 
         var page = assignmentQuery.find(new RoleAssignmentQuery(
-                COMPANY_ID, MANAGER_A, MEMBER, ManagedPlatformRole.COMPANY_ADMIN,
-                RoleAssignmentStatus.ACTIVE, 0, 20));
+                COMPANY_ID, MANAGER_A, MEMBER, ManagedPlatformRole.COMPANY_ADMIN, RoleAssignmentStatus.ACTIVE, 0, 20));
         assertThat(page.total()).isOne();
         assertThat(page.items().getFirst().userId()).isEqualTo(MEMBER);
 
         Instant missingAt = Instant.parse("2026-08-14T08:20:00Z");
-        DomainEventEnvelope missing = governanceEvent(
-                UUID.randomUUID(), "identity.app_manager_missing_detected", 10, missingAt);
+        DomainEventEnvelope missing =
+                governanceEvent(UUID.randomUUID(), "identity.app_manager_missing_detected", 10, missingAt);
         governanceIssueProjection.consume(missing);
         governanceIssueProjection.consume(missing);
         var open = governanceIssueQuery.find(new GovernanceIssueQuery(
-                COMPANY_ID, GovernanceIssueType.APP_MANAGER_MISSING,
-                GovernanceIssueStatus.OPEN, 0, 10));
+                COMPANY_ID, GovernanceIssueType.APP_MANAGER_MISSING, GovernanceIssueStatus.OPEN, 0, 10));
         assertThat(open.total()).isOne();
 
         governanceIssueProjection.consume(governanceEvent(
-                UUID.randomUUID(), "identity.app_manager_availability_restored",
-                11, missingAt.plusSeconds(60)));
+                UUID.randomUUID(), "identity.app_manager_availability_restored", 11, missingAt.plusSeconds(60)));
         var resolved = governanceIssueQuery.find(new GovernanceIssueQuery(
-                COMPANY_ID, GovernanceIssueType.APP_MANAGER_MISSING,
-                GovernanceIssueStatus.RESOLVED, 0, 10));
+                COMPANY_ID, GovernanceIssueType.APP_MANAGER_MISSING, GovernanceIssueStatus.RESOLVED, 0, 10));
         assertThat(resolved.total()).isOne();
         assertThat(resolved.items().getFirst().resolvedEventId()).isNotNull();
     }
 
     private PlatformRoleMutationResult bootstrapA() {
-        return execute("m109-bootstrap-" + UUID.randomUUID(), () ->
-                maintenanceUseCase.execute(new MaintenanceRoleCommand(
+        return execute(
+                "m109-bootstrap-" + UUID.randomUUID(),
+                () -> maintenanceUseCase.execute(new MaintenanceRoleCommand(
                         COMPANY_ID, MANAGER_A, MaintenanceRoleMode.BOOTSTRAP, "initial-approval")));
     }
 
@@ -396,12 +479,16 @@ class M109PlatformRoleGovernanceIT {
             UUID actor,
             long actorAuthorizationVersion,
             UUID key,
-            String hash
-    ) {
+            String hash) {
         return new GrantPlatformRoleCommand(
-                COMPANY_ID, target, role, targetVersion,
-                recentActor(actor, actorAuthorizationVersion), key,
-                new RequestHash(hash), "approved-change");
+                COMPANY_ID,
+                target,
+                role,
+                targetVersion,
+                recentActor(actor, actorAuthorizationVersion),
+                key,
+                new RequestHash(hash),
+                "approved-change");
     }
 
     private RoleCommandActor recentActor(UUID actor, long authorizationVersion) {
@@ -432,19 +519,23 @@ class M109PlatformRoleGovernanceIT {
             UUID assignmentId,
             UUID actorId,
             long actorAuthorizationVersion,
-            String hash
-    ) throws InterruptedException {
+            String hash)
+            throws InterruptedException {
         ready.countDown();
         start.await();
         try {
             revokeResult(new RevokePlatformRoleCommand(
-                    COMPANY_ID, assignmentId, ManagedPlatformRole.APP_MANAGER, 0,
-                    recentActor(actorId, actorAuthorizationVersion), UUID.randomUUID(),
-                    new RequestHash(hash), "concurrent-revoke"));
+                    COMPANY_ID,
+                    assignmentId,
+                    ManagedPlatformRole.APP_MANAGER,
+                    0,
+                    recentActor(actorId, actorAuthorizationVersion),
+                    UUID.randomUUID(),
+                    new RequestHash(hash),
+                    "concurrent-revoke"));
         } catch (ApplicationException exception) {
-            assertThat(exception.errorCode()).isIn(
-                    StandardErrorCode.ACCESS_DENIED,
-                    StandardErrorCode.INVALID_STATE_TRANSITION);
+            assertThat(exception.errorCode())
+                    .isIn(StandardErrorCode.ACCESS_DENIED, StandardErrorCode.INVALID_STATE_TRANSITION);
         }
         return null;
     }
@@ -463,26 +554,33 @@ class M109PlatformRoleGovernanceIT {
                             WHERE id = :userId
                             """).param("userId", userId).update();
                 availabilityCoordinator.reconcile(
-                        before, "EMPLOYMENT_LEFT", userId,
-                        EventActor.system("WECOM_DIRECTORY_SYNC"));
+                        before, "EMPLOYMENT_LEFT", userId, EventActor.system("WECOM_DIRECTORY_SYNC"));
             });
             return null;
         });
     }
 
     private DomainEventEnvelope governanceEvent(
-            UUID eventId, String eventType, long aggregateVersion, Instant occurredAt
-    ) {
+            UUID eventId, String eventType, long aggregateVersion, Instant occurredAt) {
         return new DomainEventEnvelope(
-                eventId, eventType, 1, occurredAt,
-                "AppManagerGovernanceState", COMPANY_ID, aggregateVersion, COMPANY_ID,
-                EventActor.system("M1_09_TEST"), "m109-projection", "m109-projection",
-                null, objectMapper.createObjectNode());
+                eventId,
+                eventType,
+                1,
+                occurredAt,
+                "AppManagerGovernanceState",
+                COMPANY_ID,
+                aggregateVersion,
+                COMPANY_ID,
+                EventActor.system("M1_09_TEST"),
+                "m109-projection",
+                "m109-projection",
+                null,
+                objectMapper.createObjectNode());
     }
 
     private <T> T execute(String requestId, java.util.concurrent.Callable<T> callback) {
-        try (RequestCorrelationContext.Scope ignored = RequestCorrelationContext.open(
-                RequestCorrelation.root(requestId))) {
+        try (RequestCorrelationContext.Scope ignored =
+                RequestCorrelationContext.open(RequestCorrelation.root(requestId))) {
             return callback.call();
         } catch (RuntimeException exception) {
             throw exception;
@@ -493,14 +591,17 @@ class M109PlatformRoleGovernanceIT {
 
     private void assertError(Runnable action, StandardErrorCode expected) {
         assertThatThrownBy(() -> execute("m109-error-" + UUID.randomUUID(), () -> {
-            action.run();
-            return null;
-        })).isInstanceOfSatisfying(ApplicationException.class,
-                exception -> assertThat(exception.errorCode()).isEqualTo(expected));
+                    action.run();
+                    return null;
+                }))
+                .isInstanceOfSatisfying(
+                        ApplicationException.class,
+                        exception -> assertThat(exception.errorCode()).isEqualTo(expected));
     }
 
     private void insertUser(UUID userId, String name) {
-        jdbcClient.sql("""
+        jdbcClient
+                .sql("""
                         INSERT INTO yumpoo.identity_user (
                             id, company_id, employment_status, account_status,
                             display_name, directory_synced_at,
@@ -518,7 +619,8 @@ class M109PlatformRoleGovernanceIT {
     }
 
     private void insertDirectRole(UUID userId, String role, String scope) {
-        jdbcClient.sql("""
+        jdbcClient
+                .sql("""
                         INSERT INTO yumpoo.platform_role_assignment (
                             id, company_id, user_id, role_code, scope_type, scope_id, status,
                             granted_by_actor_type, granted_by_system_code, grant_reason,
@@ -538,26 +640,38 @@ class M109PlatformRoleGovernanceIT {
     }
 
     private String state() {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                         SELECT lifecycle_status || '|' || event_version
                         FROM yumpoo.app_manager_governance_state WHERE company_id = :companyId
-                        """).param("companyId", COMPANY_ID).query(String.class).single();
+                        """)
+                .param("companyId", COMPANY_ID)
+                .query(String.class)
+                .single();
     }
 
     private String systemActor(UUID assignmentId) {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                         SELECT granted_by_system_code FROM yumpoo.platform_role_assignment
                         WHERE id = :assignmentId
-                        """).param("assignmentId", assignmentId).query(String.class).single();
+                        """)
+                .param("assignmentId", assignmentId)
+                .query(String.class)
+                .single();
     }
 
     private int eventCount(String eventType) {
-        return jdbcClient.sql("SELECT count(*) FROM yumpoo.outbox_event WHERE event_type = :eventType")
-                .param("eventType", eventType).query(Integer.class).single();
+        return jdbcClient
+                .sql("SELECT count(*) FROM yumpoo.outbox_event WHERE event_type = :eventType")
+                .param("eventType", eventType)
+                .query(Integer.class)
+                .single();
     }
 
     private int auditActionCount(String action) {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                         SELECT count(*) FROM yumpoo.security_audit_event
                         WHERE company_id = :companyId AND action = :action
                         """)
@@ -568,7 +682,8 @@ class M109PlatformRoleGovernanceIT {
     }
 
     private int bootstrapAuditSensitiveKeyCount() {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                         SELECT count(*)
                         FROM yumpoo.security_audit_event event
                         WHERE event.company_id = :companyId
@@ -598,15 +713,20 @@ class M109PlatformRoleGovernanceIT {
     }
 
     private int historyCount(UUID userId, String role) {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                         SELECT count(*) FROM yumpoo.platform_role_assignment
                         WHERE user_id = :userId AND role_code = :role
-                        """).param("userId", userId).param("role", role)
-                .query(Integer.class).single();
+                        """)
+                .param("userId", userId)
+                .param("role", role)
+                .query(Integer.class)
+                .single();
     }
 
     private int availableManagerCount() {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                         SELECT count(*) FROM yumpoo.platform_role_assignment assignment
                         JOIN yumpoo.identity_user member ON member.id = assignment.user_id
                         WHERE assignment.company_id = :companyId
@@ -614,32 +734,62 @@ class M109PlatformRoleGovernanceIT {
                           AND assignment.status = 'ACTIVE'
                           AND member.employment_status = 'ACTIVE'
                           AND member.account_status = 'ENABLED'
-                        """).param("companyId", COMPANY_ID).query(Integer.class).single();
+                        """)
+                .param("companyId", COMPANY_ID)
+                .query(Integer.class)
+                .single();
     }
 
     private long userRowVersion(UUID userId) {
-        return jdbcClient.sql("SELECT row_version FROM yumpoo.identity_user WHERE id = :userId")
-                .param("userId", userId).query(Long.class).single();
+        return jdbcClient
+                .sql("SELECT row_version FROM yumpoo.identity_user WHERE id = :userId")
+                .param("userId", userId)
+                .query(Long.class)
+                .single();
     }
 
     private void cleanUp() {
-        jdbcClient.sql("DROP TRIGGER IF EXISTS m110_fail_role_audit ON yumpoo.security_audit_event").update();
+        jdbcClient
+                .sql("DROP TRIGGER IF EXISTS m110_fail_role_audit ON yumpoo.security_audit_event")
+                .update();
         jdbcClient.sql("DROP FUNCTION IF EXISTS yumpoo.m110_fail_role_audit()").update();
         jdbcClient.sql("DELETE FROM yumpoo.outbox_consumer_receipt").update();
-        jdbcClient.sql("DELETE FROM yumpoo.security_audit_event WHERE company_id = :companyId")
-                .param("companyId", COMPANY_ID).update();
-        jdbcClient.sql("DELETE FROM yumpoo.governance_issue WHERE company_id = :companyId")
-                .param("companyId", COMPANY_ID).update();
-        jdbcClient.sql("DELETE FROM yumpoo.idempotency_record WHERE actor_user_id IN (:a, :b, :m)")
-                .param("a", MANAGER_A).param("b", MANAGER_B).param("m", MEMBER).update();
-        jdbcClient.sql("DELETE FROM yumpoo.login_session WHERE user_id IN (:a, :b, :m)")
-                .param("a", MANAGER_A).param("b", MANAGER_B).param("m", MEMBER).update();
-        jdbcClient.sql("DELETE FROM yumpoo.outbox_event WHERE company_id = :companyId")
-                .param("companyId", COMPANY_ID).update();
-        jdbcClient.sql("DELETE FROM yumpoo.platform_role_assignment WHERE user_id IN (:a, :b, :m)")
-                .param("a", MANAGER_A).param("b", MANAGER_B).param("m", MEMBER).update();
-        jdbcClient.sql("DELETE FROM yumpoo.identity_user WHERE id IN (:a, :b, :m)")
-                .param("a", MANAGER_A).param("b", MANAGER_B).param("m", MEMBER).update();
+        jdbcClient
+                .sql("DELETE FROM yumpoo.security_audit_event WHERE company_id = :companyId")
+                .param("companyId", COMPANY_ID)
+                .update();
+        jdbcClient
+                .sql("DELETE FROM yumpoo.governance_issue WHERE company_id = :companyId")
+                .param("companyId", COMPANY_ID)
+                .update();
+        jdbcClient
+                .sql("DELETE FROM yumpoo.idempotency_record WHERE actor_user_id IN (:a, :b, :m)")
+                .param("a", MANAGER_A)
+                .param("b", MANAGER_B)
+                .param("m", MEMBER)
+                .update();
+        jdbcClient
+                .sql("DELETE FROM yumpoo.login_session WHERE user_id IN (:a, :b, :m)")
+                .param("a", MANAGER_A)
+                .param("b", MANAGER_B)
+                .param("m", MEMBER)
+                .update();
+        jdbcClient
+                .sql("DELETE FROM yumpoo.outbox_event WHERE company_id = :companyId")
+                .param("companyId", COMPANY_ID)
+                .update();
+        jdbcClient
+                .sql("DELETE FROM yumpoo.platform_role_assignment WHERE user_id IN (:a, :b, :m)")
+                .param("a", MANAGER_A)
+                .param("b", MANAGER_B)
+                .param("m", MEMBER)
+                .update();
+        jdbcClient
+                .sql("DELETE FROM yumpoo.identity_user WHERE id IN (:a, :b, :m)")
+                .param("a", MANAGER_A)
+                .param("b", MANAGER_B)
+                .param("m", MEMBER)
+                .update();
         jdbcClient.sql("""
                         UPDATE yumpoo.app_manager_governance_state
                         SET lifecycle_status = 'UNINITIALIZED', initialized_at = NULL,
