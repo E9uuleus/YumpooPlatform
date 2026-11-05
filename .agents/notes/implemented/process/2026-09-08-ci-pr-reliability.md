@@ -26,7 +26,7 @@ Status: implemented
 
 生产部署校验完整保留回环监听、Secret 与普通配置分离、会话时限、日志路径与轮转、Nginx/IIS 响应头与代理规则、内部端点隔离、SPA 路由不被遮蔽、WinSW 锁定摘要与服务策略；不再断言 RUNBOOK 或清单的文字。Windows 安装与更新验证继续保留 `CI=true` 门槛和本机配置备份恢复。
 
-冻结标识包括 `.github/workflows/m0-18-ci.yml`、`Platform CI`、`linux`、`windows_delivery`、`windows` 三个 Job ID 与名称（新增的 `static`、`backend` 不被外部系统引用）、`m1-15-server-*`/`desktop-*` artifact、`out/m1-15/` 与服务器 ZIP 名、服务器 manifest/report 字段、`collect-desktop-release.mjs` 路径，以及后端 Java 类、profile 和配置标识（只迁移备份输出环境变量）。这些标识分别绑定发布工具、Sigstore、主机引擎或后端测试，后续先兼容新旧标识再协调切换，回退窗口结束后退役旧标识。
+冻结标识包括 `.github/workflows/m0-18-ci.yml`、`Platform CI`、`linux`、`windows_delivery`、`windows` 三个 Job ID 与名称（新增的 `static`、`backend` 不被外部系统引用）、`m1-15-server-*`/`desktop-*` artifact、`out/m1-15/` 与服务器 ZIP 名、服务器 manifest/report 字段、`collect-desktop-release.mjs` 路径，以及后端验证夹具 `M113FixtureRunner`、`M014BoundedHeapVerification`、`M017BackupRestoreIT` 及其配置标识；M0-12/M0-15 企微诊断探针未被发布工具、Sigstore 或主机引擎引用，已于 2026-11-04 退役。这些标识分别绑定发布工具、Sigstore、主机引擎或后端测试，后续先兼容新旧标识再协调切换，回退窗口结束后退役旧标识。
 
 ## Alternatives considered
 

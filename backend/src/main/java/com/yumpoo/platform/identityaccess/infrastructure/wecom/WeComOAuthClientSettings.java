@@ -17,16 +17,6 @@ record WeComOAuthClientSettings(
         Objects.requireNonNull(callbackUri, "callbackUri must not be null");
     }
 
-    static WeComOAuthClientSettings from(M012WeComProperties properties) {
-        Objects.requireNonNull(properties, "properties must not be null");
-        return new WeComOAuthClientSettings(
-                properties.getCorpId(),
-                properties.getAgentId(),
-                properties.getAppSecret(),
-                properties.getCallbackUri()
-        );
-    }
-
     @Override
     public String toString() {
         return "WeComOAuthClientSettings[corpId=REDACTED, agentId="
