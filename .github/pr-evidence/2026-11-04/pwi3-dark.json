@@ -1,0 +1,25 @@
+{
+  "theme": "dark",
+  "project": {
+    "allRows": 3,
+    "matchingMember": 2,
+    "matchingMemberAndPriority": 1,
+    "toolbarCount": 2,
+    "afterRefresh": [
+      "查验设计"
+    ],
+    "afterClear": 3,
+    "optionsResponses": 12
+  },
+  "dashboard": {
+    "allRows": 3,
+    "matchingMember": 2,
+    "matchingMemberAndPriority": 1,
+    "toolbarCount": 2,
+    "afterRefresh": [
+      "查验设计"
+    ],
+    "afterClear": 3,
+    "optionsResponses": 12
+  }
+}

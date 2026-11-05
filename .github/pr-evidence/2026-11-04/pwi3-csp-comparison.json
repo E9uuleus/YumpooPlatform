@@ -1,0 +1,165 @@
+{
+  "base": {
+    "commit": "f696edeb",
+    "themes": {
+      "light": {
+        "counts": {
+          "theme": "light",
+          "project": {
+            "allRows": 3,
+            "matchingMember": 2,
+            "matchingMemberAndPriority": 1,
+            "toolbarCount": 2,
+            "afterRefresh": [
+              "查验设计"
+            ],
+            "afterClear": 3,
+            "optionsResponses": 12
+          },
+          "dashboard": {
+            "allRows": 3,
+            "matchingMember": 2,
+            "matchingMemberAndPriority": 1,
+            "toolbarCount": 2,
+            "afterRefresh": [
+              "查验设计"
+            ],
+            "afterClear": 3,
+            "optionsResponses": 12
+          }
+        },
+        "consoleErrors": [
+          {
+            "path": "/workspace/:workspaceSlug/dashboards/:dashboardId",
+            "message": "Loading the image 'data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\" stroke=\"%23666\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" viewBox=\"0 0 20 20\"><path d=\"m10 3 2 2H8l2-2v14l-2-2h4l-2 2\"/></svg>' violates the following Content Security Policy directive: \"default-src 'self'\". Note that 'img-src' was not explicitly set, so 'default-src' is used as a fallback. The action has been blocked."
+          },
+          {
+            "path": "/workspace/:workspaceSlug/dashboards/:dashboardId",
+            "message": "Loading the image 'data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\" stroke=\"%23666\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" viewBox=\"0 0 20 20\"><path d=\"m10 3 2 2H8l2-2v14l-2-2h4l-2 2\"/></svg>' violates the following Content Security Policy directive: \"default-src 'self'\". Note that 'img-src' was not explicitly set, so 'default-src' is used as a fallback. The action has been blocked."
+          }
+        ]
+      },
+      "dark": {
+        "counts": {
+          "theme": "dark",
+          "project": {
+            "allRows": 3,
+            "matchingMember": 2,
+            "matchingMemberAndPriority": 1,
+            "toolbarCount": 2,
+            "afterRefresh": [
+              "查验设计"
+            ],
+            "afterClear": 3,
+            "optionsResponses": 12
+          },
+          "dashboard": {
+            "allRows": 3,
+            "matchingMember": 2,
+            "matchingMemberAndPriority": 1,
+            "toolbarCount": 2,
+            "afterRefresh": [
+              "查验设计"
+            ],
+            "afterClear": 3,
+            "optionsResponses": 12
+          }
+        },
+        "consoleErrors": [
+          {
+            "path": "/workspace/:workspaceSlug/dashboards/:dashboardId",
+            "message": "Loading the image 'data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\" stroke=\"%23666\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" viewBox=\"0 0 20 20\"><path d=\"m10 3 2 2H8l2-2v14l-2-2h4l-2 2\"/></svg>' violates the following Content Security Policy directive: \"default-src 'self'\". Note that 'img-src' was not explicitly set, so 'default-src' is used as a fallback. The action has been blocked."
+          },
+          {
+            "path": "/workspace/:workspaceSlug/dashboards/:dashboardId",
+            "message": "Loading the image 'data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\" stroke=\"%23666\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" viewBox=\"0 0 20 20\"><path d=\"m10 3 2 2H8l2-2v14l-2-2h4l-2 2\"/></svg>' violates the following Content Security Policy directive: \"default-src 'self'\". Note that 'img-src' was not explicitly set, so 'default-src' is used as a fallback. The action has been blocked."
+          }
+        ]
+      }
+    }
+  },
+  "head": {
+    "commit": "26ba53357f084c0a7c09af4b7235e425023e4e67",
+    "themes": {
+      "light": {
+        "counts": {
+          "theme": "light",
+          "project": {
+            "allRows": 3,
+            "matchingMember": 2,
+            "matchingMemberAndPriority": 1,
+            "toolbarCount": 2,
+            "afterRefresh": [
+              "查验设计"
+            ],
+            "afterClear": 3,
+            "optionsResponses": 12
+          },
+          "dashboard": {
+            "allRows": 3,
+            "matchingMember": 2,
+            "matchingMemberAndPriority": 1,
+            "toolbarCount": 2,
+            "afterRefresh": [
+              "查验设计"
+            ],
+            "afterClear": 3,
+            "optionsResponses": 12
+          }
+        },
+        "consoleErrors": [
+          {
+            "path": "/workspace/:workspaceSlug/dashboards/:dashboardId",
+            "message": "Loading the image 'data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\" stroke=\"%23666\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" viewBox=\"0 0 20 20\"><path d=\"m10 3 2 2H8l2-2v14l-2-2h4l-2 2\"/></svg>' violates the following Content Security Policy directive: \"default-src 'self'\". Note that 'img-src' was not explicitly set, so 'default-src' is used as a fallback. The action has been blocked."
+          },
+          {
+            "path": "/workspace/:workspaceSlug/dashboards/:dashboardId",
+            "message": "Loading the image 'data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\" stroke=\"%23666\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" viewBox=\"0 0 20 20\"><path d=\"m10 3 2 2H8l2-2v14l-2-2h4l-2 2\"/></svg>' violates the following Content Security Policy directive: \"default-src 'self'\". Note that 'img-src' was not explicitly set, so 'default-src' is used as a fallback. The action has been blocked."
+          }
+        ]
+      },
+      "dark": {
+        "counts": {
+          "theme": "dark",
+          "project": {
+            "allRows": 3,
+            "matchingMember": 2,
+            "matchingMemberAndPriority": 1,
+            "toolbarCount": 2,
+            "afterRefresh": [
+              "查验设计"
+            ],
+            "afterClear": 3,
+            "optionsResponses": 12
+          },
+          "dashboard": {
+            "allRows": 3,
+            "matchingMember": 2,
+            "matchingMemberAndPriority": 1,
+            "toolbarCount": 2,
+            "afterRefresh": [
+              "查验设计"
+            ],
+            "afterClear": 3,
+            "optionsResponses": 12
+          }
+        },
+        "consoleErrors": [
+          {
+            "path": "/workspace/:workspaceSlug/dashboards/:dashboardId",
+            "message": "Loading the image 'data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\" stroke=\"%23666\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" viewBox=\"0 0 20 20\"><path d=\"m10 3 2 2H8l2-2v14l-2-2h4l-2 2\"/></svg>' violates the following Content Security Policy directive: \"default-src 'self'\". Note that 'img-src' was not explicitly set, so 'default-src' is used as a fallback. The action has been blocked."
+          },
+          {
+            "path": "/workspace/:workspaceSlug/dashboards/:dashboardId",
+            "message": "Loading the image 'data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\" stroke=\"%23666\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" viewBox=\"0 0 20 20\"><path d=\"m10 3 2 2H8l2-2v14l-2-2h4l-2 2\"/></svg>' violates the following Content Security Policy directive: \"default-src 'self'\". Note that 'img-src' was not explicitly set, so 'default-src' is used as a fallback. The action has been blocked."
+          }
+        ]
+      }
+    }
+  },
+  "comparison": "same functional results and same two CSP console errors for each theme",
+  "asset": "gridstack/dist/gridstack.css",
+  "source": "DashboardGrid.vue",
+  "directive": "default-src 'self'",
+  "strictFixtureExitCode": 1
+}
