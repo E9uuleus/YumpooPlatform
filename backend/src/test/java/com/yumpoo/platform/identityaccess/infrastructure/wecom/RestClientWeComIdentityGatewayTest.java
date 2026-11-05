@@ -18,10 +18,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
-import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
@@ -255,69 +253,24 @@ class RestClientWeComIdentityGatewayTest {
         fixture.server().verify();
     }
 
-    @Test
-    void validatesEnabledConfigurationButLeavesDisabledDefaultsUsable() {
-        M012WeComProperties disabled = new M012WeComProperties();
-        assertThatCode(disabled::validateForEnabled).doesNotThrowAnyException();
-
-        M012WeComProperties valid = validProperties();
-        assertThatCode(valid::validateForEnabled).doesNotThrowAnyException();
-
-        valid.setAgentId("agent-1");
-        assertThatThrownBy(valid::validateForEnabled)
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage("M0-12 WeCom live verification configuration is invalid");
-
-        valid = validProperties();
-        valid.setCallbackUri(URI.create("https://login.example.test/different/callback"));
-        assertThatThrownBy(valid::validateForEnabled).isInstanceOf(IllegalStateException.class);
-
-        valid = validProperties();
-        valid.setCallbackUri(URI.create(
-                "https://login.example.test/_m0/m0-12/wecom/callback?returnUrl=https://evil.example"
-        ));
-        assertThatThrownBy(valid::validateForEnabled).isInstanceOf(IllegalStateException.class);
-    }
-
-    @Test
-    void trimsIdentifiersAndRejectsBlankAllowlistEntry() {
-        M012WeComProperties properties = validProperties();
-        properties.setCorpId("  " + CORP_ID + "  ");
-        properties.setAgentId("  " + AGENT_ID + "  ");
-        properties.setAppSecret("  " + APP_SECRET + "  ");
-        properties.setAllowedMemberIds(Set.of("  member-a  "));
-
-        properties.validateForEnabled();
-
-        assertThat(properties.getCorpId()).isEqualTo(CORP_ID);
-        assertThat(properties.getAgentId()).isEqualTo(AGENT_ID);
-        assertThat(properties.getAppSecret()).isEqualTo(APP_SECRET);
-        assertThat(properties.getAllowedMemberIds()).containsExactly("member-a");
-
-        properties.setAllowedMemberIds(Set.of("   "));
-        assertThatThrownBy(properties::validateForEnabled).isInstanceOf(IllegalStateException.class);
-    }
-
     private static GatewayFixture fixture(MutableClock clock) {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         RestClientWeComIdentityGateway gateway = new RestClientWeComIdentityGateway(
                 builder,
-                validProperties(),
+                validSettings(),
                 clock
         );
         return new GatewayFixture(gateway, server);
     }
 
-    private static M012WeComProperties validProperties() {
-        M012WeComProperties properties = new M012WeComProperties();
-        properties.setEnabled(true);
-        properties.setCorpId(CORP_ID);
-        properties.setAgentId(AGENT_ID);
-        properties.setAppSecret(APP_SECRET);
-        properties.setCallbackUri(URI.create("https://login.example.test/_m0/m0-12/wecom/callback"));
-        properties.setAllowedMemberIds(Set.of("member-a"));
-        return properties;
+    private static WeComOAuthClientSettings validSettings() {
+        return new WeComOAuthClientSettings(
+                CORP_ID,
+                AGENT_ID,
+                APP_SECRET,
+                URI.create("https://login.example.test/_m0/m0-12/wecom/callback")
+        );
     }
 
     private static void expectToken(MockRestServiceServer server, String token, long expiresIn) {
