@@ -8,6 +8,8 @@ Work Item 是跨 Content、Project 生命周期与归档治理的长期事实。
 
 ## Decision
 
+工作项应用层按查询、创建与编辑、排序、生命周期拆为 `WorkItemQueryService`、`WorkItemCommandService`、`WorkItemOrderingService`、`WorkItemLifecycleService`。共享只读组装（含响应序列化）由 `WorkItemViews` 持有，事件由 `WorkItemEvents` 组装，纯静态校验由 `WorkItemRules` 持有；避免重复组装与服务间循环依赖。方法体、锁序和原事务注解属性保持不变，共享组件不引入事务边界。事件冻结清单继续使用历史生产者标识 `WorkItemService`，审计将其映射到事件组件和生命周期服务的源文件，契约不随类拆分重命名。
+
 M2-19A 起，Project 级状态/优先级标签目录成为运行时可选值、展示和排序真源；受保护初始状态、停用/删除及粗统计兼容语义见 [Project 级标签目录决策](../data/2026-08-26-project-work-item-label-catalog.md)。下文关于固定模板迁移图和固定优先级秩的描述仅适用于 M2-19A 前事实，不再作为当前初始化来源；新项目使用 [统一项目模型](../product/2026-09-30-unified-project-model.md) 的内置默认结构，旧项目类别与标签保持原值。
 
 `work_item` 保存完整领域列。创建与 M2-11 字段更新使用标题、优先级、处理人、描述、备注、计划起止日和截止日的快照；`priority` 与其他可空字段必须显式出现，传 `null` 表示暂不设置或清空。摘要、详情、事件和数据库列共同接受空优先级，V39 只移除 `priority` 的非空约束而不改写既有值。备注规范化为最多 16 KiB 的纯文本；描述自 V55 起为受限富文本 HTML（净化后最多 64 KiB），由[富文本描述决定](../product/2026-09-25-work-item-rich-description.md)持有；自然日使用 `LocalDate`/`YYYY-MM-DD`，不经过服务器或浏览器本地时区换算。既有 v1 创建契约继续允许旧客户端省略新增处理人和日期，初始值按空处理；新 Web 固定提交完整八字段。
@@ -60,7 +62,7 @@ workitem 通过公开只读端口向 administration 报告 `OPEN_WORK_ITEMS`，�
 
 工作项行菜单的归档使用 V53 独立 `archived` 事实，与状态和软删除正交；不将归档映射成 CANCELED 或删除。归档保留编号、字段、完成时间、排序键及关系，普通列表、筛选计数、直接子项列表和关系候选排除归档项。父项归档只隐藏其树，不级联改写子项，也不把子项提升为根项。按稳定详情链接仍可读取归档项并取消归档；归档期间字段、状态、排序、关系新增、讨论及附件写入关闭，删除仍复用原软删除命令。计时候选和最近事项排除归档项，历史计时保留只读，已开始的本人计时仍可停止。归档保留排序占位，恢复不分配新顺序；`OPEN_WORK_ITEMS` 仍按未删除的 TODO/IN_PROGRESS 统计，因为归档不代表业务完成。
 
-`POST /work-items/{id}/archive` 与 `/unarchive` 复用可写项目成员权限、Project → Content → Work Item 锁前缀、强 If-Match、XSRF 和持久化幂等响应。有效变化增版并发布 `workitem.work_item_archived/unarchived` v1，由既有 Activity 投影呈现中文摘要；同状态且版本匹配时为无事件、无增版 no-op，墓碑不允许取消归档。详情兼容追加只读 `archived`，旧响应缺失时客户端按未归档处理。对应实现与回归由 `WorkItemService.archive`、`JdbcWorkItemRepository`、`WorkItemHttpIT` 和行菜单组件测试持有。
+`POST /work-items/{id}/archive` 与 `/unarchive` 复用可写项目成员权限、Project → Content → Work Item 锁前缀、强 If-Match、XSRF 和持久化幂等响应。有效变化增版并发布 `workitem.work_item_archived/unarchived` v1，由既有 Activity 投影呈现中文摘要；同状态且版本匹配时为无事件、无增版 no-op，墓碑不允许取消归档。详情兼容追加只读 `archived`，旧响应缺失时客户端按未归档处理。对应实现与回归由 `WorkItemLifecycleService.archive`、`JdbcWorkItemRepository`、`WorkItemHttpIT` 和行菜单组件测试持有。
 
 主子表共享行菜单，打开详情、同级排序、创建、父子关系和软删除沿用既有端口。置顶／置底使用完整同级列表，显式排序时关闭手工定位；下方创建先保存再定位，定位失败明确保留已创建结果，避免伪报创建失败。转为子工作项在行菜单旁展开父项选择浮层，空间不足时翻向另一侧；搜索与候选选择保持在同一菜单上下文中，Esc 只收起选择浮层并返回原菜单。候选使用服务端资格与既有永久两层约束，已有子项的根项禁止转换；子项不提供第三层创建入口。
 

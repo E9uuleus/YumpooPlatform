@@ -1,6 +1,7 @@
 package com.yumpoo.platform.workitem.application.connection;
 
-import com.yumpoo.platform.workitem.application.WorkItemService;
+import com.yumpoo.platform.workitem.application.WorkItemCommandService;
+import com.yumpoo.platform.workitem.application.WorkItemQueryService;
 import com.yumpoo.platform.workitem.application.content.ContentRepository;
 import com.yumpoo.platform.workitem.application.label.WorkItemLabelRepository;
 import com.yumpoo.platform.foundation.application.event.DomainEventEnvelope;
@@ -23,7 +24,8 @@ import static org.assertj.core.api.Assertions.*;
 @Transactional
 class ConnectionNotificationIT {
     @Autowired JdbcClient jdbc;
-    @Autowired WorkItemService items;
+    @Autowired WorkItemCommandService items;
+    @Autowired private WorkItemQueryService queries;
     @Autowired ConnectColumnService columns;
     @Autowired WorkItemConnectionService connections;
     @Autowired ContentRepository contents;
@@ -90,7 +92,7 @@ class ConnectionNotificationIT {
         assertThat(inbox.list(targetOwner,ListState.ALL,Group.PROJECT,null,20).items()).singleElement().satisfies(notification->{
             assertThat(notification.target()).isEqualTo(Target.inaccessible(TargetKind.WORK_ITEM));
         });
-        assertThatThrownBy(()->items.find(targetOwner,targetItem))
+        assertThatThrownBy(()->queries.find(targetOwner,targetItem))
                 .isInstanceOf(com.yumpoo.platform.foundation.application.error.ApplicationException.class);
     }
 

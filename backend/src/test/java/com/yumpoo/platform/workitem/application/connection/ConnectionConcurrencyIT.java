@@ -3,7 +3,7 @@ package com.yumpoo.platform.workitem.application.connection;
 import com.yumpoo.platform.workitem.application.DueTimeChange;
 import com.yumpoo.platform.workitem.application.WorkItemCommands;
 import com.yumpoo.platform.workitem.application.WorkItemModels;
-import com.yumpoo.platform.workitem.application.WorkItemService;
+import com.yumpoo.platform.workitem.application.WorkItemCommandService;
 import com.yumpoo.platform.workitem.application.content.ContentRepository;
 import com.yumpoo.platform.workitem.application.label.WorkItemLabelRepository;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
@@ -42,7 +42,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class ConnectionConcurrencyIT {
     @Autowired private JdbcClient jdbc;
-    @Autowired private WorkItemService items;
+    @Autowired private WorkItemCommandService items;
     @Autowired private ConnectColumnService columns;
     @Autowired private WorkItemConnectionService connections;
     @Autowired private ContentRepository contents;

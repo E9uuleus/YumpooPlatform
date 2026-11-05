@@ -1,6 +1,6 @@
 package com.yumpoo.platform.workitem.application.connection;
 
-import com.yumpoo.platform.workitem.application.WorkItemService;
+import com.yumpoo.platform.workitem.application.WorkItemCommandService;
 import com.yumpoo.platform.workitem.application.content.ContentRepository;
 import com.yumpoo.platform.workitem.application.label.WorkItemLabelRepository;
 import com.yumpoo.platform.audit.api.ActivityProjectionService;
@@ -32,7 +32,7 @@ class ConnectionEventProjectionIT {
     private static final Set<String> TYPES = Set.of("workitem.connect_column_created", "workitem.connect_column_updated",
             "workitem.connect_column_deleted", "workitem.connection_created", "workitem.connection_deleted");
     @Autowired private JdbcClient jdbc;
-    @Autowired private WorkItemService items;
+    @Autowired private WorkItemCommandService items;
     @Autowired private ConnectColumnService columns;
     @Autowired private WorkItemConnectionService connections;
     @Autowired private ContentRepository contents;

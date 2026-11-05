@@ -3,7 +3,8 @@ package com.yumpoo.platform.workitem.application.connection;
 import com.yumpoo.platform.workitem.application.WorkItemModels;
 import com.yumpoo.platform.workitem.application.WorkItemQuery;
 import com.yumpoo.platform.workitem.application.WorkItemRepository;
-import com.yumpoo.platform.workitem.application.WorkItemService;
+import com.yumpoo.platform.workitem.application.WorkItemCommandService;
+import com.yumpoo.platform.workitem.application.WorkItemQueryService;
 import com.yumpoo.platform.workitem.application.content.ContentRepository;
 import com.yumpoo.platform.workitem.application.label.WorkItemLabelRepository;
 import com.yumpoo.platform.foundation.api.pagination.CursorPageRequest;
@@ -26,7 +27,8 @@ import static org.assertj.core.api.Assertions.*;
 @Transactional
 class ConnectionFilterIT {
     @Autowired JdbcClient jdbc;
-    @Autowired WorkItemService items;
+    @Autowired WorkItemCommandService items;
+    @Autowired private WorkItemQueryService queries;
     @Autowired WorkItemRepository repository;
     @Autowired ConnectColumnService columns;
     @Autowired WorkItemConnectionService connections;
@@ -62,14 +64,14 @@ class ConnectionFilterIT {
         assertThat(list(sourceOwner, source, request(Set.of(column.id()), Set.of(another.id()), Set.of()))).containsExactly(second.id());
         assertThat(repository.countProjectPage(COMPANY, source.id(), WorkItemQuery.parse(connected, Set.of("NOT_STARTED"))))
                 .isEqualTo(2);
-        var options = items.listProjectFilterOptions(sourceOwner, source.id(), "CONTENT", false, connected, CursorPageRequest.of(null, 100));
+        var options = queries.listProjectFilterOptions(sourceOwner, source.id(), "CONTENT", false, connected, CursorPageRequest.of(null, 100));
         assertThat(options.items()).singleElement().satisfies(option -> assertThat(option.count()).isEqualTo(2));
     }
 
     @Test void incomingCountsItemsOnceAcrossColumnsWithoutRequiringSourceMembership() {
         var incoming = request(Set.of(), Set.of(), Set.of(source.id()));
         assertThat(list(targetOwner, target, incoming)).containsExactly(targetFirst.id(), targetSecond.id());
-        var options = items.listProjectFilterOptions(targetOwner, target.id(), "INCOMING_PROJECT", false,
+        var options = queries.listProjectFilterOptions(targetOwner, target.id(), "INCOMING_PROJECT", false,
                 request(Set.of(), Set.of(), Set.of()), CursorPageRequest.of(null, 100));
         assertThat(options.items()).singleElement().satisfies(option -> {
             assertThat(option.value()).isEqualTo(source.id().toString());
@@ -91,8 +93,8 @@ class ConnectionFilterIT {
         assertThat(list(targetOwner, target, request(Set.of(), Set.of(), Set.of(source.id(), otherSource.id()))))
                 .containsExactly(targetFirst.id(), targetSecond.id(), otherTarget.id());
         var context = request(Set.of(), Set.of(), Set.of());
-        var firstPage = items.listProjectFilterOptions(targetOwner, target.id(), "INCOMING_PROJECT", false, context, CursorPageRequest.of(null, 1));
-        var secondPage = items.listProjectFilterOptions(targetOwner, target.id(), "INCOMING_PROJECT", false, context,
+        var firstPage = queries.listProjectFilterOptions(targetOwner, target.id(), "INCOMING_PROJECT", false, context, CursorPageRequest.of(null, 1));
+        var secondPage = queries.listProjectFilterOptions(targetOwner, target.id(), "INCOMING_PROJECT", false, context,
                 CursorPageRequest.of(firstPage.nextCursor(), 1));
         var expected = List.of(source.id().toString(), otherSource.id().toString()).stream().sorted().toList();
         assertThat(List.of(firstPage.items().getFirst().value(), secondPage.items().getFirst().value())).isEqualTo(expected);
@@ -102,11 +104,11 @@ class ConnectionFilterIT {
 
     @Test void cursorBindsConnectionFiltersAndNormalizesTheirOrder() {
         var connected = request(Set.of(column.id()), Set.of(), Set.of());
-        var page = items.listProject(sourceOwner, source.id(), connected, "TABLE", CursorPageRequest.of(null, 1));
+        var page = queries.listProject(sourceOwner, source.id(), connected, "TABLE", CursorPageRequest.of(null, 1));
         assertThat(page.items()).extracting(WorkItemModels.ProjectWorkItemListItem::id).containsExactly(first.id());
-        assertThat(items.listProject(sourceOwner, source.id(), connected, "TABLE", CursorPageRequest.of(page.nextCursor(), 1)).items())
+        assertThat(queries.listProject(sourceOwner, source.id(), connected, "TABLE", CursorPageRequest.of(page.nextCursor(), 1)).items())
                 .extracting(WorkItemModels.ProjectWorkItemListItem::id).containsExactly(second.id());
-        assertThatThrownBy(() -> items.listProject(sourceOwner, source.id(), request(Set.of(another.id()), Set.of(), Set.of()),
+        assertThatThrownBy(() -> queries.listProject(sourceOwner, source.id(), request(Set.of(another.id()), Set.of(), Set.of()),
                 "TABLE", CursorPageRequest.of(page.nextCursor(), 1))).isInstanceOf(ApplicationException.class);
         var one = request(Set.of(column.id(), another.id()), Set.of(), Set.of());
         var reverse = request(new java.util.LinkedHashSet<>(List.of(another.id(), column.id())), Set.of(), Set.of());
@@ -148,7 +150,7 @@ class ConnectionFilterIT {
                 .withConnections(connected, unconnected, incoming);
     }
     private List<UUID> list(CurrentActor actor, Project project, WorkItemQuery.Request request) {
-        return items.listProject(actor, project.id(), request, "TABLE", CursorPageRequest.of(null, 100)).items()
+        return queries.listProject(actor, project.id(), request, "TABLE", CursorPageRequest.of(null, 100)).items()
                 .stream().map(WorkItemModels.ProjectWorkItemListItem::id).toList();
     }
 }

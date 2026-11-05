@@ -16,7 +16,7 @@ Status: implemented
 
 写入遵守项目 UUID 字符串升序 → 连接列目录 → 列 → 内容目录与类别 → 工作项（项目 UUID、工作项 UUID 升序）→ 连接的锁序，各命令只获取其需要的锁。项目成员端使用 `ProjectFactWriteGuard`，不要求成员的目标端使用 catalog 公开端口 `ProjectConnectionTargetQuery.lockAsConnectionTarget`；两者均与项目归档的排他锁互斥。获得项目锁后重新读取访问与生命周期。列共享锁保护目标集合，等待列更新后另查目标行，避免等待前的查询快照继续认可已移除目标。
 
-新建并关联通过 `WorkItemService.createRootItemForConnection` 的 MANDATORY 入口复用 `createItem`，内部只引入 `ItemWriteTarget(companyId, projectId, projectCode)`，沿用编号、标签、秩、项目顺序和工作项事件逻辑。普通根项、子项和连接创建共用类别加锁入口：首次使用先取得内容目录锁，再锁类别，避免持有类别共享锁等待目录时发生锁升级死锁；已使用类别只取共享锁，不占用内容目录管理锁。`createItem` 在秩通道、项目顺序和工作项写入前统一完成 `everUsed` 标记，连接入口不复制该过程。失败时类别标记、目录版本、工作项与事件一起回滚。普通创建参数重构单独提交并有根项、子项和处理人校验回归。
+新建并关联通过 `WorkItemCommandService.createRootItemForConnection` 的 MANDATORY 入口复用 `createItem`，内部只引入 `ItemWriteTarget(companyId, projectId, projectCode)`，沿用编号、标签、秩、项目顺序和工作项事件逻辑。普通根项、子项和连接创建共用类别加锁入口：首次使用先取得内容目录锁，再锁类别，避免持有类别共享锁等待目录时发生锁升级死锁；已使用类别只取共享锁，不占用内容目录管理锁。`createItem` 在秩通道、项目顺序和工作项写入前统一完成 `everUsed` 标记，连接入口不复制该过程。失败时类别标记、目录版本、工作项与事件一起回滚。普通创建参数重构单独提交并有根项、子项和处理人校验回归。
 
 连接通过 `lockProjectItemIncludingDeleted(companyId, projectId, workItemId)` 直接锁定端点，再显式检查删除与归档：创建遇到删除返回 404，归档返回 `WORK_ITEM_ARCHIVED`；解除允许端点工作项已删除。锁查询不以预读的类别 ID 限定工作项，等待期间移动类别不会误报 404。既有 `lockProjectItem` 会直接过滤归档项，不适合连接所要求的 409 语义，因此保留其现状与普通关系调用方。
 
