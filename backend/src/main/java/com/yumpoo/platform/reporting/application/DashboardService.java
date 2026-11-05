@@ -17,6 +17,7 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -143,7 +144,27 @@ public class DashboardService {
             var p = visible.get(id);
             return p == null ? new Connection(id, null, null, null, false) : new Connection(id, p.name(), p.code(), p.lifecycle(), true);
         }).toList();
-        return new View(d.id(), d.name(), d.configuration(), connections, d.version(), StrongEtag.format(d.version()), d.updatedAt());
+        Configuration stored = d.configuration();
+        Configuration configuration = new Configuration(stored.projectIds(),
+                stored.widgets().stream().map(DashboardService::widgetForView).toList(), stored.filters());
+        return new View(d.id(), d.name(), configuration, connections, d.version(), StrongEtag.format(d.version()), d.updatedAt());
+    }
+
+    private static Widget widgetForView(Widget widget) {
+        Chart chart = widget.chart();
+        if (chart == null || chart.filters() == null) return widget;
+        var f = chart.filters();
+        var filters = new WorkItemStatisticsQuery.Filters(
+                Objects.requireNonNullElse(f.projectIds(), List.of()), Objects.requireNonNullElse(f.assignees(), List.of()),
+                Objects.requireNonNullElse(f.statuses(), List.of()), Objects.requireNonNullElse(f.priorities(), List.of()),
+                Objects.requireNonNullElse(f.contentIds(), List.of()), Objects.requireNonNullElse(f.categories(), List.of()),
+                f.dueFrom(), f.dueTo(), f.includeArchived(), Objects.requireNonNullElse(f.query(), ""), f.hasTime());
+        Chart result = new Chart(chart.type(), chart.dimension(), chart.series(), chart.dateInterval(), chart.timezone(),
+                chart.measure(), chart.xMeasure(), chart.sizeMeasure(), chart.stacked(), chart.showLegend(), chart.showValues(),
+                chart.valueFormat(), chart.sort(), chart.limit(), chart.showEmpty(), chart.projectIds(), filters,
+                chart.labels(), chart.detailColumns());
+        return new Widget(widget.id(), widget.kind(), widget.title(), widget.metric(), widget.grouping(), widget.sort(),
+                widget.showLegend(), widget.showValues(), widget.wide(), widget.medium(), result);
     }
     static void validateQueryWidgets(List<Widget> widgets, WorkItemStatisticsQuery statistics) {
         if (widgets.size() > 40 || widgets.stream().anyMatch(w -> w == null || w.kind() == null || w.metric() == null || w.grouping() == null || w.sort() == null))
