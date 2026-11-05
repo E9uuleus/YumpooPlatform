@@ -1,5 +1,6 @@
 package com.yumpoo.platform.testing;
 
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 
@@ -17,6 +18,7 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = "yumpoo.outbox.enabled=false")
-@Import(PostgreSqlTestContainerConfiguration.class)
+@Import({PostgreSqlTestContainerConfiguration.class, OpenApiResponseValidationConfiguration.class})
+@ExtendWith(OpenApiResponseValidationExtension.class)
 public @interface HttpIntegrationTest {
 }

@@ -286,6 +286,11 @@ class DashboardHttpIT {
                     .param("id",id).query(String.class).single();
             assertThat(cleared).doesNotContain(PROJECT_ID.toString());
             var after=ok(get(path,owner));
+            var chartFilters = after.at("/configuration/widgets/0/chart/filters");
+            for (String key : List.of("assignees", "statuses", "priorities", "contentIds", "categories")) {
+                assertThat(chartFilters.get(key)).as(key).isEqualTo(json.createArrayNode());
+            }
+            assertThat(chartFilters.get("query")).isEqualTo(json.getNodeFactory().stringNode(""));
             assertThat(mutate("PATCH",path,owner,dashboardReferenceBody(PROJECT_ID,"ALL",false).toString(),
                     after.path("etag").asText(),UUID.randomUUID()).statusCode()).isEqualTo(404);
             assertThat(jdbc.sql("SELECT configuration::text FROM yumpoo.personal_dashboard WHERE id=:id")

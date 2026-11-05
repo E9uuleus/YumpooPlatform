@@ -10,7 +10,7 @@ Status: implemented
 
 foundation 提供 `ScheduledJob` SPI 与调度服务，V73 建立无公司外键的 `scheduled_job`，按公司和任务码保存启用状态、Spring 六段 cron、最近一次结果与配置版本。未保存的任务默认停用，规则为每天 02:00，ETag 为 `"0"`。COMPANY_ADMIN（含 APP_MANAGER）可查看和配置；PUT 复用 XSRF 与 If-Match，未知任务先返回 404，配置冲突返回 412。
 
-保存时快照公司时区并计算 next_run_at；执行前通过预期 next_run_at 做 CAS 认领，再从当前时间计算下一次计划。服务停机后最多补跑一次，不逐个重放错过的时刻。执行更新不改变 row_version，避免后台运行使管理员保存发生无关冲突。独立守护线程 `yumpoo-job-runner` 每 60 秒检查一次，隔离共享 Outbox 调度池。
+保存时快照公司时区并计算 next_run_at；执行前通过预期 next_run_at 做 CAS 认领，再从当前时间计算下一次计划。服务停机后最多补跑一次，不逐个重放错过的时刻。执行更新不改变 row_version，避免后台运行使管理员保存发生无关冲突。独立守护线程 `yumpoo-job-runner` 每 60 秒检查一次，不占用 `@Scheduled` 调度池。
 
 每次执行创建根 requestId，同时打开 RequestCorrelationContext 和含 requestId、correlationId、job 的 MDC 上下文。结果输出 `scheduler.job.completed`、`scheduler.job.failed` 或 `scheduler.job.skipped`，携带 outcome、errorCode、durationMs；未预期异常记录原因并映射为 FAILED / SCHEDULED_JOB_UNEXPECTED_FAILURE。日志模块仍由 logger 包名派生，沿用[运维中心的诊断边界](2026-09-26-operations-center.md)。定时任务页和同步运行详情只向 APP_MANAGER 展示按 requestId 跳转运行日志的入口。
 
@@ -30,3 +30,5 @@ identityaccess 的 DIRECTORY_SYNC bean 通过 ObjectProvider 取得现有通讯�
 配置只保存最近一次结果，历史留在业务运行表和运行日志；公司时区变更后需重新保存计划才能使用新时区。执行中进程崩溃会留下 lastStartedAt 大于 lastFinishedAt 的运行中状态，直到下次运行覆盖。新增任务需要一个 ScheduledJob bean 和前端任务元数据，不依赖 foundation 反向调用业务模块。活动记录仍由各业务事件负责，调度不产生额外活动投影。
 
 第二个任务 WORK_HOURS_ANOMALY 以计划时刻 triggerKey 推导前一自然日的检查日，口径与去重由[工作日历与工时异常决策](../product/2026-10-12-work-calendar-and-overtime.md)拥有。
+
+`@Scheduled` 轮询器（Outbox、附件处理与维护、项目清除、Session 与 OAuth 清理）共用 `yumpoo-scheduler-` 线程池，池大小等于轮询器数量，任何一个轮询器的长批次都不会推迟 Outbox 投递。[SchedulingPoolSizeTest](../../../../backend/src/test/java/com/yumpoo/platform/architecture/SchedulingPoolSizeTest.java) 在新增轮询器而未扩池时失败。

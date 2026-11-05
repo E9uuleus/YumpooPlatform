@@ -24,9 +24,9 @@ spring:
     baseline-on-migrate: false
   task:
     scheduling:
-      thread-name-prefix: yumpoo-outbox-scheduler-
+      thread-name-prefix: yumpoo-scheduler-
       pool:
-        size: 1
+        size: 6
   lifecycle:
     timeout-per-shutdown-phase: 45s
 
