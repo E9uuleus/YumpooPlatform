@@ -72,9 +72,9 @@ final class OpenApiNullableReferences {
         JsonNode type = object.remove("type");
         object.remove("nullable");
         object.remove("allOf");
-        ArrayNode oneOf = object.putArray("oneOf");
-        oneOf.add(allOf.get(0));
-        ObjectNode nullOnly = oneOf.addObject();
+        ArrayNode anyOf = object.putArray("anyOf");
+        anyOf.add(allOf.get(0));
+        ObjectNode nullOnly = anyOf.addObject();
         nullOnly.set("type", type);
         nullOnly.put("nullable", true);
         nullOnly.putArray("enum").addNull();

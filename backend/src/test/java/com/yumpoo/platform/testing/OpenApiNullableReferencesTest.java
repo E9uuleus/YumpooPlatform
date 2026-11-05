@@ -42,6 +42,10 @@ class OpenApiNullableReferencesTest {
                                     type: object
                                     nullable: true
                                     allOf: [{$ref: "#/components/schemas/Child"}]
+                                  nullableTarget:
+                                    type: object
+                                    nullable: true
+                                    allOf: [{$ref: "#/components/schemas/AlreadyNullable"}]
                                   choice:
                                     $ref: "#/components/schemas/NullableChoice"
                 components:
@@ -50,6 +54,12 @@ class OpenApiNullableReferencesTest {
                       type: object
                       additionalProperties: false
                       required: [name]
+                      properties:
+                        name: {type: string}
+                    AlreadyNullable:
+                      type: object
+                      nullable: true
+                      additionalProperties: false
                       properties:
                         name: {type: string}
                     NullableChoice:
@@ -88,6 +98,14 @@ class OpenApiNullableReferencesTest {
         assertThat(validate(body).getMessages()).anyMatch(message ->
                 message.getLevel() == ValidationReport.Level.ERROR
                         && message.getKey().startsWith("validation.response.body.schema."));
+    }
+
+    @Test
+    void acceptsNullWhenTheReferencedSchemaAlsoAllowsNull() {
+        ValidationReport report = validate("""
+                {"child":null,"choice":null,"nullableTarget":null}
+                """);
+        assertThat(report.hasErrors()).withFailMessage(() -> report.getMessages().toString()).isFalse();
     }
 
     @Test
