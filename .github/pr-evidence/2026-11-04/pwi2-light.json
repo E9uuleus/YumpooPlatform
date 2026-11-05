@@ -1,0 +1,69 @@
+{
+  "theme": "light",
+  "initialColumns": [
+    "assignee",
+    "status",
+    "priority",
+    "content",
+    "dueDate",
+    "timeTracking",
+    "updatedAt"
+  ],
+  "reorderedColumns": [
+    "assignee",
+    "priority",
+    "content",
+    "status",
+    "dueDate",
+    "timeTracking",
+    "updatedAt"
+  ],
+  "oldWidth": 90,
+  "width": 154,
+  "normal": {
+    "before": [
+      "拖拽工作项 8",
+      "拖拽工作项 7",
+      "拖拽工作项 6",
+      "拖拽工作项 5",
+      "拖拽工作项 4",
+      "拖拽工作项 3",
+      "拖拽工作项 2",
+      "拖拽工作项 1"
+    ],
+    "after": [
+      "拖拽工作项 7",
+      "拖拽工作项 6",
+      "拖拽工作项 8",
+      "拖拽工作项 5",
+      "拖拽工作项 4",
+      "拖拽工作项 3",
+      "拖拽工作项 2",
+      "拖拽工作项 1"
+    ],
+    "immediateClickSuppressed": true
+  },
+  "grouped": {
+    "before": [
+      "拖拽工作项 7",
+      "拖拽工作项 6",
+      "拖拽工作项 8",
+      "拖拽工作项 5",
+      "拖拽工作项 4",
+      "拖拽工作项 3",
+      "拖拽工作项 2",
+      "拖拽工作项 1"
+    ],
+    "after": [
+      "拖拽工作项 6",
+      "拖拽工作项 8",
+      "拖拽工作项 7",
+      "拖拽工作项 5",
+      "拖拽工作项 4",
+      "拖拽工作项 3",
+      "拖拽工作项 2",
+      "拖拽工作项 1"
+    ],
+    "immediateClickSuppressed": true
+  }
+}
