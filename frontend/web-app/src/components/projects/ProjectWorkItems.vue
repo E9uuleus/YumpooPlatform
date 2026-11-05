@@ -4,6 +4,9 @@ import { usePageLoad } from '../../brand/page-progress'
 
 import { projectWritable } from './projectStatus'
 import './workItemCompactTable.css'
+import './workItemDragPreview.css'
+import { useTableRowDrag } from './useTableRowDrag'
+import { useTableColumnDrag, type BuiltInColumnKey, type MovableColumnKey } from './useTableColumnDrag'
 import { useWorkItemEdits, type WorkItemPatchField, type WorkItemPatchValue } from './useWorkItemEdits'
 import { isWorkItemViewControl } from './workItemViewControls'
 import { vBrandLoading as vLoading } from '../../brand/loading'
@@ -239,13 +242,6 @@ const detailLoading = ref(false)
 const detail = ref<WorkItemDetail>()
 const detailTab = ref<'details' | 'discussion' | 'activity'>('details')
 const dragging = ref<ProjectWorkItemListItem>()
-const tableDragging = ref<ProjectWorkItemListItem>()
-const tableDraggingIndex = ref<number>(-1)
-const tableDropIndex = ref<number>()
-const columnDraggingKey = ref<MovableColumnKey>()
-const columnDraggingIndex = ref(-1)
-const columnDropIndex = ref<number>()
-const columnResizingKey = ref<MovableColumnKey>()
 const selectedWorkItemIds = ref(new Set<string>())
 const tableRef = ref<{
   $el: HTMLElement
@@ -254,36 +250,6 @@ const tableRef = ref<{
   toggleRowSelection: (row: ProjectWorkItemListItem, selected?: boolean) => void
 }>()
 const tableSentinel = ref<HTMLElement>()
-let tableDragPreview: HTMLElement | undefined
-let tableColumnDragPreview: HTMLElement | undefined
-let tableDragPointerOffset = { x: 0, y: 0 }
-let tableColumnDragPointerOffset = { x: 0, y: 0 }
-let tablePointerCandidate: {
-  pointerId: number
-  row: HTMLElement
-  item: ProjectWorkItemListItem
-  index: number
-  startX: number
-  startY: number
-} | undefined
-let tableColumnPointerCandidate: {
-  pointerId: number
-  key: MovableColumnKey
-  header: HTMLTableCellElement
-  headerRects: Array<{ left: number; width: number }>
-  index: number
-  startX: number
-  startY: number
-} | undefined
-let tableColumnResizeCandidate: {
-  pointerId: number
-  key: BuiltInColumnKey
-  minWidth: number
-  startWidth: number
-  startX: number
-} | undefined
-let suppressTableClick = false
-let suppressTableClickTimer: number | undefined
 const loadingMoreError = ref<ApiProblem>()
 const editingCell = ref('')
 const createDisabled = computed(() => creatingTop.value || Boolean(editingCell.value) || tableSorting.value)
@@ -374,9 +340,7 @@ onBeforeUnmount(stopTimerUpdates)
 // The desktop quick panel changes statuses and creates items in its own window.
 onBeforeUnmount(onProjectWorkItemsChanged(() => projectId.value,
   () => void (selectedView.value === 'table' ? reloadSortedTableInPlace() : refreshCurrentView())))
-type BuiltInColumnKey = 'title' | 'assignee' | 'status' | 'priority' | 'content' | 'dueDate' | 'timeTracking' | 'updatedAt'
 type ColumnKey = BuiltInColumnKey | ConnectColumnKey
-type MovableColumnKey = Exclude<BuiltInColumnKey, 'title'>
 const columns: Array<{ key: BuiltInColumnKey; label: string; defaultWidth: number; minWidth: number }> = [
   { key: 'title', label: '工作项名称', defaultWidth: 320, minWidth: 220 },
   { key: 'assignee', label: '处理人', defaultWidth: 90, minWidth: 72 },
@@ -1981,402 +1945,38 @@ async function toggleColumn(key: ColumnKey, checked: boolean): Promise<void> {
 
 const TABLE_DRAG_TILT_DEGREES = 1
 const TABLE_DRAG_POINTER_THRESHOLD = 5
-const TABLE_COLUMN_RESIZE_HANDLE_WIDTH = 8
 
-function removeTableDragPreview(): void {
-  tableDragPreview?.remove()
-  tableDragPreview = undefined
-  tableDragPointerOffset = { x: 0, y: 0 }
-}
+const {
+  removeTableDragPreview, resetTableDragState, tableRowDragStyle, clearTablePointerTracking,
+  suppressClickAfterTableDrag, onTableClickCapture, onTablePointerDown, tableDragging,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- 既有组件测试通过实例读取拖拽状态和入口。
+  moveTableDragPreview, createTableDragPreview, updateTableDropTarget,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- 既有组件测试通过实例读取拖拽状态和入口。
+  onTablePointerMove, onTablePointerUp, onTablePointerCancel,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- 既有组件测试通过实例读取拖拽状态和入口。
+  commitTableDrop, tableDraggingIndex, tableDropIndex,
+} = useTableRowDrag({
+  tableRef, tableRowHeight, tableItems, tableNextCursor, tableLoading, tableSorting, grouped, groupCountsReady, grouping,
+  inlineDraft, hasExplicitSort, sortRules, projectId, error, resolveTableScrollElement, loadTable, syncUrl, replaceLightItem,
+  TABLE_DRAG_TILT_DEGREES, TABLE_DRAG_POINTER_THRESHOLD,
+})
 
-function moveTableDragPreview(clientX: number, clientY: number): void {
-  if (!tableDragPreview || (clientX === 0 && clientY === 0)) return
-  tableDragPreview.style.left = `${Math.round(clientX - tableDragPointerOffset.x)}px`
-  tableDragPreview.style.top = `${Math.round(clientY - tableDragPointerOffset.y)}px`
-}
-
-function createTableDragPreview(source: HTMLElement, clientX: number, clientY: number): HTMLElement {
-  removeTableDragPreview()
-  const rect = source.getBoundingClientRect()
-  const width = Math.max(rect.width, source.offsetWidth, 1)
-  const height = Math.max(rect.height, source.offsetHeight, tableRowHeight.value)
-  tableDragPointerOffset = {
-    x: Math.min(Math.max(clientX - rect.left, 0), width),
-    y: Math.min(Math.max(clientY - rect.top, 0), height),
-  }
-
-  const preview = document.createElement('div')
-  preview.className = 'work-item-drag-preview'
-  preview.setAttribute('aria-hidden', 'true')
-  preview.style.width = `${width}px`
-  preview.style.height = `${height}px`
-  preview.style.transform = `rotate(${TABLE_DRAG_TILT_DEGREES}deg)`
-  preview.style.transformOrigin = `${tableDragPointerOffset.x}px ${tableDragPointerOffset.y}px`
-
-  const previewTable = document.createElement('table')
-  previewTable.className = 'work-item-drag-preview__table'
-  previewTable.style.width = `${width}px`
-  const previewBody = document.createElement('tbody')
-  const previewRow = source.cloneNode(true) as HTMLTableRowElement
-  previewRow.classList.remove('work-item-table-row--dragging')
-  previewRow.classList.add('work-item-drag-preview__row')
-  previewRow.removeAttribute('draggable')
-  previewRow.removeAttribute('style')
-  previewRow.querySelectorAll('[id]').forEach(element => element.removeAttribute('id'))
-  previewRow.querySelectorAll<HTMLElement>('button,input,select,textarea,[tabindex]').forEach(element => {
-    element.tabIndex = -1
-  })
-
-  const sourceCells = source.querySelectorAll('td')
-  const previewCells = previewRow.querySelectorAll<HTMLElement>('td')
-  sourceCells.forEach((cell, index) => {
-    const previewCell = previewCells[index]
-    if (!previewCell) return
-    const cellWidth = cell.getBoundingClientRect().width
-    previewCell.style.width = `${cellWidth}px`
-    previewCell.style.minWidth = `${cellWidth}px`
-    previewCell.style.maxWidth = `${cellWidth}px`
-    previewCell.style.boxSizing = 'border-box'
-  })
-
-  previewBody.appendChild(previewRow)
-  previewTable.appendChild(previewBody)
-  preview.appendChild(previewTable)
-  document.body.appendChild(preview)
-  tableDragPreview = preview
-  moveTableDragPreview(clientX, clientY)
-  return preview
-}
-
-function resetTableDragState(): void {
-  removeTableDragPreview()
-  tableDragging.value = undefined
-  tableDraggingIndex.value = -1
-  tableDropIndex.value = undefined
-}
-
-function removeTableColumnDragPreview(): void {
-  tableColumnDragPreview?.remove()
-  tableColumnDragPreview = undefined
-  tableColumnDragPointerOffset = { x: 0, y: 0 }
-}
-
-function moveTableColumnDragPreview(clientX: number, clientY: number): void {
-  if (!tableColumnDragPreview || (clientX === 0 && clientY === 0)) return
-  tableColumnDragPreview.style.left = `${Math.round(clientX - tableColumnDragPointerOffset.x)}px`
-  tableColumnDragPreview.style.top = `${Math.round(clientY - tableColumnDragPointerOffset.y)}px`
-}
-
-function sanitizeColumnDragPreview(root: HTMLElement): void {
-  root.removeAttribute('id')
-  root.removeAttribute('style')
-  root.querySelectorAll('[id]').forEach(element => element.removeAttribute('id'))
-  root.querySelectorAll<HTMLElement>('button,input,select,textarea,[tabindex]').forEach(element => {
-    element.tabIndex = -1
-  })
-}
-
-function createTableColumnDragPreview(header: HTMLTableCellElement, clientX: number, clientY: number): HTMLElement {
-  removeTableColumnDragPreview()
-  const headerRect = header.getBoundingClientRect()
-  const width = Math.max(headerRect.width, header.offsetWidth, 1)
-  const tableRect = tableRef.value?.$el?.getBoundingClientRect()
-  const height = Math.max(headerRect.height, Math.min(tableRect?.height ?? 420, window.innerHeight - 24))
-  tableColumnDragPointerOffset = {
-    x: Math.min(Math.max(clientX - headerRect.left, 0), width),
-    y: Math.min(Math.max(clientY - headerRect.top, 0), height),
-  }
-
-  const preview = document.createElement('div')
-  preview.className = 'work-item-column-drag-preview'
-  preview.setAttribute('aria-hidden', 'true')
-  preview.style.width = `${width}px`
-  preview.style.height = `${height}px`
-  preview.style.transform = `rotate(${TABLE_DRAG_TILT_DEGREES}deg)`
-  preview.style.transformOrigin = `${tableColumnDragPointerOffset.x}px ${tableColumnDragPointerOffset.y}px`
-
-  const previewTable = document.createElement('table')
-  previewTable.className = 'work-item-column-drag-preview__table'
-  previewTable.style.width = `${width}px`
-  const previewHead = document.createElement('thead')
-  const previewHeadRow = document.createElement('tr')
-  const previewHeader = header.cloneNode(true) as HTMLTableCellElement
-  sanitizeColumnDragPreview(previewHeader)
-  previewHeader.classList.add('work-item-column-drag-preview__header')
-  previewHeader.style.width = `${width}px`
-  previewHeadRow.appendChild(previewHeader)
-  previewHead.appendChild(previewHeadRow)
-  previewTable.appendChild(previewHead)
-
-  const headerIndex = header.parentElement ? [...header.parentElement.children].indexOf(header) : -1
-  const previewBody = document.createElement('tbody')
-  const sourceRows = tableRef.value?.$el?.querySelectorAll<HTMLTableRowElement>(
-    '.el-table__body-wrapper tbody tr.work-item-table-row',
-  ) ?? []
-  sourceRows.forEach(sourceRow => {
-    const sourceCell = sourceRow.children[headerIndex]
-    if (!(sourceCell instanceof HTMLTableCellElement)) return
-    const previewRow = document.createElement('tr')
-    const previewCell = sourceCell.cloneNode(true) as HTMLTableCellElement
-    sanitizeColumnDragPreview(previewCell)
-    previewCell.classList.add('work-item-column-drag-preview__cell')
-    previewCell.style.width = `${width}px`
-    previewRow.appendChild(previewCell)
-    previewBody.appendChild(previewRow)
-  })
-  previewTable.appendChild(previewBody)
-  preview.appendChild(previewTable)
-  document.body.appendChild(preview)
-  tableColumnDragPreview = preview
-  moveTableColumnDragPreview(clientX, clientY)
-  return preview
-}
-
-function resetTableColumnDragState(): void {
-  removeTableColumnDragPreview()
-  columnDraggingKey.value = undefined
-  columnDraggingIndex.value = -1
-  columnDropIndex.value = undefined
-}
-
-function tableColumnDragStyle(columnKey?: string): CSSProperties {
-  const draggedKey = columnDraggingKey.value
-  const dropIndex = columnDropIndex.value
-  const from = columnDraggingIndex.value
-  if (!draggedKey || dropIndex === undefined || from < 0 || !columnKey || columnKey === 'title') return {}
-  const index = movableVisibleColumns.value.findIndex(column => column.key === columnKey)
-  if (index < 0) return {}
-  if (columnKey === draggedKey) return { opacity: 0, pointerEvents: 'none' }
-
-  const draggedWidth = tableColumnPointerCandidate?.headerRects[from]?.width || columnWidths[draggedKey]
-  if (from < dropIndex && index > from && index < dropIndex) {
-    return { transform: `translateX(-${draggedWidth}px)` }
-  }
-  if (from > dropIndex && index >= dropIndex && index < from) {
-    return { transform: `translateX(${draggedWidth}px)` }
-  }
-  return { transform: 'translateX(0px)' }
-}
-
-function tableCellStyle({ row, column }: { row: TableDisplayRow; column: { property?: string; columnKey?: string } }): CSSProperties {
-  const style = tableColumnDragStyle(column.property)
-  const color = cellColoring(row, column)
-  return color ? { ...style, '--work-item-condition-cell-bg': color } : style
-}
-
-function tableHeaderCellStyle({ column }: { column: { property?: string } }): CSSProperties {
-  return tableColumnDragStyle(column.property)
-}
-
-function movableHeaderCells(source?: HTMLTableCellElement): HTMLTableCellElement[] {
-  if (grouped.value) {
-    const row = source?.parentElement ?? tableRef.value?.$el?.querySelector('.work-item-group-columns:not(.work-item-group-collapsed)')
-    return [...(row?.querySelectorAll<HTMLTableCellElement>('td.monday-movable-column-header') ?? [])]
-  }
-  return [...(tableRef.value?.$el?.querySelectorAll<HTMLTableCellElement>(
-    ':scope > .el-table__inner-wrapper > .el-table__header-wrapper th.monday-movable-column-header',
-  ) ?? [])]
-}
-
-function updateTableColumnDropTarget(clientX: number): void {
-  const headerRects = tableColumnPointerCandidate?.headerRects ?? movableHeaderCells().map(header => {
-    const rect = header.getBoundingClientRect()
-    return { left: rect.left, width: rect.width }
-  })
-  let target = headerRects.findIndex(rect => clientX < rect.left + rect.width / 2)
-  if (target < 0) target = headerRects.length
-  columnDropIndex.value = target
-}
-
-function clearTableColumnPointerTracking(): void {
-  tableColumnPointerCandidate = undefined
-  window.removeEventListener('pointermove', onTableColumnPointerMove, true)
-  window.removeEventListener('pointerup', onTableColumnPointerUp, true)
-  window.removeEventListener('pointercancel', onTableColumnPointerCancel, true)
-}
-
-function clearTableColumnResizeTracking(): void {
-  tableColumnResizeCandidate = undefined
-  columnResizingKey.value = undefined
-  window.removeEventListener('pointermove', onTableColumnResizePointerMove, true)
-  window.removeEventListener('pointerup', onTableColumnResizePointerUp, true)
-  window.removeEventListener('pointercancel', onTableColumnResizePointerCancel, true)
-  document.body.style.removeProperty('cursor')
-  document.body.style.removeProperty('user-select')
-}
-
-function applyTableColumnResize(clientX: number): void {
-  const candidate = tableColumnResizeCandidate
-  if (!candidate) return
-  const nextWidth = Math.max(
-    candidate.minWidth,
-    Math.round(candidate.startWidth + clientX - candidate.startX),
-  )
-  if (columnWidths[candidate.key] === nextWidth) return
-  columnWidths[candidate.key] = nextWidth
-  scheduleResponsiveTableLayout()
-}
-
-function onTableColumnResizePointerDown(event: PointerEvent, handle: HTMLElement): void {
-  const columnKey = handle.dataset.columnKey as BuiltInColumnKey | undefined
-  const config = columnKey ? columnByKey.get(columnKey) : undefined
-  const header = handle.closest<HTMLTableCellElement>(grouped.value ? '.work-item-group-column-header' : '.monday-movable-column-header')
-  if (!columnKey || !config || (columnKey === 'title' && !grouped.value) || !header) return
-  const key = columnKey
-
-  clearTableColumnPointerTracking()
-  clearTableColumnResizeTracking()
-  const renderedWidth = header.getBoundingClientRect().width
-  tableColumnResizeCandidate = {
-    pointerId: event.pointerId,
-    key,
-    minWidth: config.minWidth,
-    startWidth: renderedWidth > 0 ? renderedWidth : columnWidths[key],
-    startX: event.clientX,
-  }
-  if (key !== 'title') columnResizingKey.value = key
-  event.preventDefault()
-  event.stopPropagation()
-  document.body.style.cursor = 'col-resize'
-  document.body.style.userSelect = 'none'
-  window.addEventListener('pointermove', onTableColumnResizePointerMove, { capture: true, passive: false })
-  window.addEventListener('pointerup', onTableColumnResizePointerUp, true)
-  window.addEventListener('pointercancel', onTableColumnResizePointerCancel, true)
-}
-
-function onTableColumnResizePointerMove(event: PointerEvent): void {
-  if (!tableColumnResizeCandidate || tableColumnResizeCandidate.pointerId !== event.pointerId) return
-  event.preventDefault()
-  event.stopPropagation()
-  applyTableColumnResize(event.clientX)
-}
-
-function onTableColumnResizePointerUp(event: PointerEvent): void {
-  if (!tableColumnResizeCandidate || tableColumnResizeCandidate.pointerId !== event.pointerId) return
-  event.preventDefault()
-  event.stopPropagation()
-  applyTableColumnResize(event.clientX)
-  clearTableColumnResizeTracking()
-  void nextTick(flushResponsiveTableLayout)
-  persistTablePrefs()
-  suppressClickAfterTableDrag()
-}
-
-function onTableColumnResizePointerCancel(event: PointerEvent): void {
-  if (!tableColumnResizeCandidate || tableColumnResizeCandidate.pointerId !== event.pointerId) return
-  clearTableColumnResizeTracking()
-  void nextTick(flushResponsiveTableLayout)
-  persistTablePrefs()
-  suppressClickAfterTableDrag()
-}
-
-function onTableColumnPointerDown(event: PointerEvent): void {
-  if (!event.isPrimary || event.button !== 0 || tableDragging.value || columnDraggingKey.value || columnResizingKey.value) return
-  const target = event.target as HTMLElement | null
-  const resizeHandle = target?.closest<HTMLElement>('.monday-column-resize-handle')
-  if (resizeHandle) {
-    onTableColumnResizePointerDown(event, resizeHandle)
-    return
-  }
-  if (target?.closest('.sort-by-column, .work-item-column-menu, .work-item-column-expand')) return
-  const header = target?.closest<HTMLTableCellElement>('.monday-movable-column-header')
-  if (!header) return
-  const rect = header.getBoundingClientRect()
-  if (rect.width > 0 && rect.right - event.clientX < TABLE_COLUMN_RESIZE_HANDLE_WIDTH) return
-  const headers = movableHeaderCells(header)
-  const index = headers.indexOf(header)
-  const key = movableVisibleColumns.value[index]?.key as MovableColumnKey | undefined
-  if (!key) return
-
-  clearTableColumnPointerTracking()
-  tableColumnPointerCandidate = {
-    pointerId: event.pointerId,
-    key,
-    header,
-    headerRects: headers.map(candidate => {
-      const candidateRect = candidate.getBoundingClientRect()
-      return { left: candidateRect.left, width: candidateRect.width }
-    }),
-    index,
-    startX: event.clientX,
-    startY: event.clientY,
-  }
-  window.addEventListener('pointermove', onTableColumnPointerMove, { capture: true, passive: false })
-  window.addEventListener('pointerup', onTableColumnPointerUp, true)
-  window.addEventListener('pointercancel', onTableColumnPointerCancel, true)
-}
-
-function onTableColumnPointerMove(event: PointerEvent): void {
-  const candidate = tableColumnPointerCandidate
-  if (!candidate || candidate.pointerId !== event.pointerId) return
-  if (!columnDraggingKey.value) {
-    const distance = Math.hypot(event.clientX - candidate.startX, event.clientY - candidate.startY)
-    if (distance < TABLE_DRAG_POINTER_THRESHOLD) return
-    createTableColumnDragPreview(candidate.header, candidate.startX, candidate.startY)
-    columnDraggingKey.value = candidate.key
-    columnDraggingIndex.value = candidate.index
-    columnDropIndex.value = candidate.index
-    suppressClickAfterTableDrag()
-  }
-  event.preventDefault()
-  moveTableColumnDragPreview(event.clientX, event.clientY)
-  updateTableColumnDropTarget(event.clientX)
-}
-
-function commitTableColumnDrop(): void {
-  const draggedKey = columnDraggingKey.value
-  const from = columnDraggingIndex.value
-  let target = columnDropIndex.value
-  resetTableColumnDragState()
-  if (!draggedKey || from < 0 || target === undefined) return
-  const visibleKeys = movableVisibleColumns.value.map(column => column.key as MovableColumnKey)
-  const currentVisibleIndex = visibleKeys.indexOf(draggedKey)
-  if (currentVisibleIndex < 0) return
-  const remainingVisible = visibleKeys.filter(key => key !== draggedKey)
-  if (currentVisibleIndex < target) target -= 1
-  target = Math.max(0, Math.min(target, remainingVisible.length))
-  if (target === currentVisibleIndex) return
-
-  const nextOrder = movableColumnOrder.value.filter(key => key !== draggedKey)
-  const beforeKey = remainingVisible[target]
-  if (beforeKey) {
-    nextOrder.splice(nextOrder.indexOf(beforeKey), 0, draggedKey)
-  } else {
-    const lastVisibleKey = remainingVisible.at(-1)
-    const insertionIndex = lastVisibleKey ? nextOrder.indexOf(lastVisibleKey) + 1 : nextOrder.length
-    nextOrder.splice(insertionIndex, 0, draggedKey)
-  }
-  movableColumnOrder.value = nextOrder
-  persistTablePrefs()
-  schedulePageScrollbarSync()
-}
-
-function onTableColumnPointerUp(event: PointerEvent): void {
-  const candidate = tableColumnPointerCandidate
-  if (!candidate || candidate.pointerId !== event.pointerId) return
-  const dragged = Boolean(columnDraggingKey.value)
-  clearTableColumnPointerTracking()
-  if (!dragged) return
-  event.preventDefault()
-  event.stopPropagation()
-  suppressClickAfterTableDrag()
-  commitTableColumnDrop()
-}
-
-function onTableColumnPointerCancel(event: PointerEvent): void {
-  if (!tableColumnPointerCandidate || tableColumnPointerCandidate.pointerId !== event.pointerId) return
-  const dragged = Boolean(columnDraggingKey.value)
-  clearTableColumnPointerTracking()
-  if (dragged) suppressClickAfterTableDrag()
-  resetTableColumnDragState()
-}
-
-function onTableSurfacePointerDown(event: PointerEvent): void {
-  if ((event.target as Element | null)?.closest('.timer-cell')) return
-  if ((event.target as HTMLElement | null)?.closest('.subitem-table-shell')) return
-  onTableColumnPointerDown(event)
-  if (!tableColumnPointerCandidate && !tableColumnResizeCandidate) onTablePointerDown(event)
-}
+const {
+  removeTableColumnDragPreview, tableCellStyle, tableHeaderCellStyle, clearTableColumnPointerTracking,
+  clearTableColumnResizeTracking, onTableSurfacePointerDown, columnDraggingKey, columnResizingKey,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- 既有组件测试通过实例读取拖拽状态和入口。
+  tableColumnDragStyle, onTableColumnResizePointerDown, onTableColumnResizePointerMove,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- 既有组件测试通过实例读取拖拽状态和入口。
+  onTableColumnResizePointerUp, onTableColumnPointerDown, onTableColumnPointerMove,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- 既有组件测试通过实例读取拖拽状态和入口。
+  commitTableColumnDrop, onTableColumnPointerUp, columnDraggingIndex,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- 既有组件测试通过实例读取拖拽状态和入口。
+  columnDropIndex,
+} = useTableColumnDrag({
+  tableRef, grouped, tableDragging, movableVisibleColumns, movableColumnOrder, columnWidths, columnByKey, cellColoring,
+  scheduleResponsiveTableLayout, flushResponsiveTableLayout, schedulePageScrollbarSync, persistTablePrefs,
+  suppressClickAfterTableDrag, onTablePointerDown, TABLE_DRAG_TILT_DEGREES, TABLE_DRAG_POINTER_THRESHOLD,
+})
 
 function isRowSelected(rowId: string): boolean {
   if (selectedWorkItemIds.value.has(rowId)) return true
@@ -2427,260 +2027,6 @@ function tableRowStyle(context: { row: ProjectWorkItemListItem; rowIndex: number
   const style = tableRowDragStyle(context)
   const color = rowColoring(context.row)?.row
   return color ? { ...style, '--work-item-condition-row-bg': color } : style
-}
-
-function tableRowDragStyle({ rowIndex }: { row: ProjectWorkItemListItem; rowIndex: number }): CSSProperties {
-  if (!tableDragging.value || tableDraggingIndex.value < 0 || tableDropIndex.value === undefined) {
-    return {}
-  }
-  const from = tableDraggingIndex.value
-  const to = tableDropIndex.value
-  let offset = 0
-
-  if (rowIndex === from) {
-    return { opacity: 0, pointerEvents: 'none' }
-  } else if (from < to && rowIndex > from && rowIndex < to) {
-    offset = -tableRowHeight.value
-  } else if (from > to && rowIndex >= to && rowIndex < from) {
-    offset = tableRowHeight.value
-  }
-
-  if (offset === 0) {
-    return { transform: 'translateY(0px)' }
-  }
-  return { transform: `translateY(${offset}px)` }
-}
-
-function captureTablePositions(): Map<string, number> {
-  const rows = tableRef.value?.$el?.querySelectorAll(
-    '.el-table__body-wrapper tbody tr.work-item-table-row',
-  ) as NodeListOf<HTMLElement> | undefined
-  return new Map([...(rows ?? [])].flatMap(row => {
-    const id = row.querySelector<HTMLElement>('[data-work-item-id]')?.dataset.workItemId
-    return id ? [[id, row.getBoundingClientRect().top] as const] : []
-  }))
-}
-
-function animateTableReorder(previous: Map<string, number>): void {
-  const rows = tableRef.value?.$el?.querySelectorAll(
-    '.el-table__body-wrapper tbody tr.work-item-table-row',
-  ) as NodeListOf<HTMLElement> | undefined
-  rows?.forEach(row => {
-    const id = row.querySelector<HTMLElement>('[data-work-item-id]')?.dataset.workItemId
-    const before = id ? previous.get(id) : undefined
-    if (!row || before === undefined) return
-    const delta = before - row.getBoundingClientRect().top
-    if (Math.abs(delta) < 1) return
-    row.animate([{ transform: `translateY(${delta}px)` }, { transform: 'translateY(0)' }], {
-      duration: 140,
-      easing: 'cubic-bezier(.2, 0, 0, 1)',
-    })
-  })
-}
-
-function rowIndexFromTarget(target: EventTarget | null): number {
-  const row = (target as HTMLElement | null)?.closest('tr.work-item-table-row')
-  if (!row) return -1
-  const id = row.querySelector<HTMLElement>('[data-work-item-id]')?.dataset.workItemId
-  return tableItems.value.findIndex(item => item.id === id)
-}
-
-function clearTablePointerTracking(): void {
-  tablePointerCandidate = undefined
-  window.removeEventListener('pointermove', onTablePointerMove, true)
-  window.removeEventListener('pointerup', onTablePointerUp, true)
-  window.removeEventListener('pointercancel', onTablePointerCancel, true)
-}
-
-function suppressClickAfterTableDrag(): void {
-  suppressTableClick = true
-  if (suppressTableClickTimer) window.clearTimeout(suppressTableClickTimer)
-  suppressTableClickTimer = window.setTimeout(() => {
-    suppressTableClick = false
-    suppressTableClickTimer = undefined
-  }, 50)
-}
-
-function onTableClickCapture(event: MouseEvent): void {
-  if ((event.target as Element | null)?.closest('.timer-cell')) return
-  if ((event.target as HTMLElement | null)?.closest('.subitem-table-shell')) return
-  if (!suppressTableClick) return
-  event.preventDefault()
-  event.stopPropagation()
-  suppressTableClick = false
-  if (suppressTableClickTimer) window.clearTimeout(suppressTableClickTimer)
-  suppressTableClickTimer = undefined
-}
-
-function updateTableDropTarget(clientY: number): void {
-  const rows = [...(tableRef.value?.$el?.querySelectorAll<HTMLElement>(
-    '.el-table__body-wrapper tbody tr.work-item-table-row',
-  ) ?? [])]
-  if (grouped.value && tableDragging.value) {
-    const key = grouping.keyOf(tableDragging.value)
-    const groupRows = rows.filter(row => {
-      const id = row.querySelector<HTMLElement>('[data-work-item-id]')?.dataset.workItemId
-      return grouping.page(key).items.some(item => item.id === id) && row.getBoundingClientRect().height > 0
-    })
-    const first = groupRows[0]?.getBoundingClientRect()
-    const last = groupRows.at(-1)?.getBoundingClientRect()
-    if (!first || !last || clientY < first.top - 16 || clientY > last.bottom + 16) {
-      tableDropIndex.value = undefined
-      return
-    }
-    const row = groupRows.find(candidate => clientY < candidate.getBoundingClientRect().top + candidate.getBoundingClientRect().height / 2)
-    tableDropIndex.value = row ? rowIndexFromTarget(row) : rowIndexFromTarget(groupRows.at(-1)!) + 1
-    return
-  }
-  const hasMeasuredRows = rows.some(row => row.getBoundingClientRect().height > 0)
-  if (hasMeasuredRows) {
-    const target = rows.findIndex(row => clientY < row.getBoundingClientRect().top
-      + row.getBoundingClientRect().height / 2)
-    tableDropIndex.value = target < 0 ? tableItems.value.length : target
-  } else {
-    const bodyWrapper = tableRef.value?.$el?.querySelector('.el-table__body-wrapper') as HTMLElement | null
-    if (bodyWrapper && bodyWrapper.getBoundingClientRect().height > 0) {
-      const rect = bodyWrapper.getBoundingClientRect()
-      const scrollTop = resolveTableScrollElement()?.scrollTop ?? bodyWrapper.scrollTop
-      const relativeY = clientY - rect.top + scrollTop
-      tableDropIndex.value = Math.max(0, Math.min(tableItems.value.length,
-        Math.round(relativeY / tableRowHeight.value)))
-    }
-  }
-  if (clientY >= window.innerHeight - 48) {
-    window.scrollBy({ top: 28, behavior: 'smooth' })
-    if (tableNextCursor.value && !tableLoading.value && !tableSorting.value) void loadTable(tableNextCursor.value, true)
-  } else if (clientY <= 48) {
-    window.scrollBy({ top: -28, behavior: 'smooth' })
-  }
-}
-
-function onTablePointerDown(event: PointerEvent): void {
-  if (!event.isPrimary || event.button !== 0 || tableDragging.value || inlineDraft.value) return
-  const target = event.target as HTMLElement | null
-  if (target?.closest('.subitem-expand-button, .monday-subitems-counter-component, .work-item-name-cell--editing, .work-item-detail-button')) return
-  const dragArea = target?.closest('.work-item-link, .monday-selection-column')
-  if (!dragArea) return
-  const index = rowIndexFromTarget(target)
-  const item = tableItems.value[index]
-  const row = target?.closest('tr.work-item-table-row') as HTMLElement | null
-  if (!row || !item?.capabilities.canMoveInProjectOrder) return
-  if (grouped.value && (!groupCountsReady.value || !grouping.page(grouping.keyOf(item)).loaded)) return
-
-  clearTablePointerTracking()
-  tablePointerCandidate = {
-    pointerId: event.pointerId,
-    row,
-    item,
-    index,
-    startX: event.clientX,
-    startY: event.clientY,
-  }
-  window.addEventListener('pointermove', onTablePointerMove, { capture: true, passive: false })
-  window.addEventListener('pointerup', onTablePointerUp, true)
-  window.addEventListener('pointercancel', onTablePointerCancel, true)
-}
-
-function onTablePointerMove(event: PointerEvent): void {
-  const candidate = tablePointerCandidate
-  if (!candidate || candidate.pointerId !== event.pointerId) return
-
-  if (!tableDragging.value) {
-    const distance = Math.hypot(event.clientX - candidate.startX, event.clientY - candidate.startY)
-    if (distance < TABLE_DRAG_POINTER_THRESHOLD) return
-    if (hasExplicitSort.value) {
-      event.preventDefault()
-      suppressClickAfterTableDrag()
-      clearTablePointerTracking()
-      sortRules.value = []
-      void syncUrl()
-      ElMessage.info('已清除排序，请在列表恢复手工顺序后再次拖动。')
-      return
-    }
-    createTableDragPreview(candidate.row, candidate.startX, candidate.startY)
-    tableDragging.value = candidate.item
-    tableDraggingIndex.value = candidate.index
-    tableDropIndex.value = candidate.index
-    suppressClickAfterTableDrag()
-  }
-
-  event.preventDefault()
-  moveTableDragPreview(event.clientX, event.clientY)
-  updateTableDropTarget(event.clientY)
-}
-
-function onTablePointerUp(event: PointerEvent): void {
-  const candidate = tablePointerCandidate
-  if (!candidate || candidate.pointerId !== event.pointerId) return
-  const dragged = Boolean(tableDragging.value)
-  clearTablePointerTracking()
-  if (!dragged) return
-  event.preventDefault()
-  event.stopPropagation()
-  suppressClickAfterTableDrag()
-  void commitTableDrop()
-}
-
-function onTablePointerCancel(event: PointerEvent): void {
-  if (!tablePointerCandidate || tablePointerCandidate.pointerId !== event.pointerId) return
-  const dragged = Boolean(tableDragging.value)
-  clearTablePointerTracking()
-  if (dragged) suppressClickAfterTableDrag()
-  resetTableDragState()
-}
-
-async function commitTableDrop(): Promise<void> {
-  const item = tableDragging.value
-  let target = tableDropIndex.value
-  resetTableDragState()
-  if (!item || target === undefined) return
-  const groupKey = grouped.value ? grouping.keyOf(item) : undefined
-  const original = groupKey === undefined ? [...tableItems.value] : [...grouping.page(groupKey).items]
-  if (groupKey !== undefined) {
-    const offset = tableItems.value.findIndex(candidate => candidate.id === original[0]?.id)
-    target -= offset
-    if (offset < 0 || target < 0 || target > original.length) return
-  }
-  const applyOrder = (items: ProjectWorkItemListItem[]) => {
-    if (groupKey === undefined) tableItems.value = items
-    else grouping.replaceOrder(groupKey, items)
-  }
-  const from = original.findIndex(candidate => candidate.id === item.id)
-  if (from < 0) return
-  if (target === original.length && (groupKey === undefined ? tableNextCursor.value : grouping.page(groupKey).nextCursor)) {
-    ElMessage.info('正在加载更远的工作项，请稍后继续拖动。')
-    if (groupKey === undefined) await loadTable(tableNextCursor.value, true)
-    else await grouping.load(groupKey)
-    return
-  }
-  const reordered = [...original]
-  reordered.splice(from, 1)
-  if (from < target) target -= 1
-  target = Math.max(0, Math.min(target, reordered.length))
-  reordered.splice(target, 0, item)
-  if (reordered.map(row => row.id).join() === original.map(row => row.id).join()) return
-  const previousPositions = captureTablePositions()
-  applyOrder(reordered)
-  await nextTick()
-  animateTableReorder(previousPositions)
-  const csrf = readCsrfToken()
-  if (!csrf) { applyOrder(original); error.value = localProblem('缺少 CSRF 凭据，请刷新后重试。'); return }
-  try {
-    const updated = await workItemsApi.moveProjectWorkItemOrder({
-      projectId: projectId.value, workItemId: item.id, xXSRFTOKEN: csrf, ifMatch: item.etag,
-      idempotencyKey: globalThis.crypto.randomUUID(),
-      projectWorkItemOrderMoveRequest: {
-        previousVisibleWorkItemId: reordered[target - 1]?.id ?? null,
-        nextVisibleWorkItemId: reordered[target + 1]?.id ?? null,
-      },
-    })
-    replaceLightItem(item.id, updated)
-    ElMessage.success('工作项顺序已更新')
-  } catch (reason) {
-    applyOrder(original)
-    error.value = await toApiProblem(reason)
-    await loadTable(null, false)
-  }
 }
 
 function clearFilters(): void {
@@ -2839,7 +2185,6 @@ onBeforeUnmount(() => {
   groupObserver?.disconnect()
   activeController?.abort(); if (searchTimer) window.clearTimeout(searchTimer)
   if (memberSearchTimer) window.clearTimeout(memberSearchTimer)
-  if (suppressTableClickTimer) window.clearTimeout(suppressTableClickTimer)
   tableObserver?.disconnect(); kanbanObserver?.disconnect()
   document.removeEventListener('pointerdown', onDocumentPointerDown)
   clearTablePointerTracking()
@@ -5538,125 +4883,6 @@ onBeforeUnmount(() => {
 </style>
 
 <style>
-.work-item-drag-preview,
-.work-item-column-drag-preview {
-  position: fixed;
-  z-index: 100000;
-  pointer-events: none;
-  overflow: hidden;
-  border: 1px solid var(--yp-border-strong);
-  border-radius: 4px;
-  background: linear-gradient(180deg, var(--yp-bg-raised) 0%, var(--yp-bg-sunken) 100%);
-  box-shadow:
-    var(--yp-shadow-overlay),
-    0 7px 16px color-mix(in srgb, var(--yp-text-primary) 20%, transparent),
-    inset 0 1px 0 color-mix(in srgb, var(--yp-bg-surface) 96%, transparent),
-    inset 0 -1px 0 color-mix(in srgb, var(--yp-text-primary) 18%, transparent);
-  filter: grayscale(1);
-  opacity: 0.96;
-  cursor: grabbing;
-  user-select: none;
-  will-change: left, top, transform;
-}
-
-.work-item-drag-preview::after,
-.work-item-column-drag-preview::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--yp-bg-surface) 17%, transparent),
-    color-mix(in srgb, var(--yp-text-primary) 10%, transparent)
-  );
-  pointer-events: none;
-}
-
-.work-item-drag-preview::after {
-  box-shadow: inset 6px 0 0 rgb(87, 155, 252);
-}
-
-.work-item-column-drag-preview::after {
-  box-shadow: inset 6px 0 0 var(--yp-text-muted);
-}
-
-.work-item-drag-preview__table {
-  height: 100%;
-  table-layout: fixed;
-  border-spacing: 0;
-  border-collapse: collapse;
-  color: var(--yp-text-secondary);
-  background: var(--yp-bg-sunken);
-}
-
-.work-item-drag-preview__row,
-.work-item-drag-preview__row > td {
-  height: 36px;
-}
-
-.work-item-drag-preview__row > td {
-  padding: 0;
-  overflow: hidden;
-  color: var(--yp-text-secondary) !important;
-  background: var(--yp-bg-sunken) !important;
-  border-right: 1px solid var(--yp-border-default) !important;
-  border-bottom: 1px solid var(--yp-border-strong) !important;
-  box-sizing: border-box;
-}
-
-.work-item-drag-preview__row > td:nth-child(even) {
-  background: var(--yp-bg-hover) !important;
-}
-
-.work-item-column-drag-preview__table {
-  width: 100%;
-  table-layout: fixed;
-  border-spacing: 0;
-  border-collapse: collapse;
-  color: var(--yp-text-primary);
-  background: var(--yp-bg-surface);
-}
-
-.work-item-column-drag-preview {
-  filter: none;
-  opacity: 1;
-}
-
-.work-item-column-drag-preview::after {
-  background: transparent;
-  box-shadow: none;
-}
-
-.work-item-column-drag-preview__header {
-  height: 38px;
-  padding: 0 var(--yp-space-2);
-  overflow: hidden;
-  color: var(--yp-text-secondary) !important;
-  background: var(--yp-monday-header-bg) !important;
-  border-right: 1px solid var(--yp-monday-grid-border) !important;
-  border-bottom: 1px solid var(--yp-monday-grid-border) !important;
-  box-sizing: border-box;
-  text-align: center;
-}
-
-.work-item-column-drag-preview__cell {
-  height: 36px;
-  padding: 0;
-  overflow: hidden;
-  color: var(--yp-text-primary) !important;
-  background: var(--yp-bg-surface) !important;
-  border-right: 1px solid var(--yp-monday-grid-border) !important;
-  border-bottom: 1px solid var(--yp-monday-grid-border) !important;
-  box-sizing: border-box;
-  text-align: center;
-}
-
-.work-item-drag-preview *,
-.work-item-column-drag-preview * {
-  pointer-events: none !important;
-  cursor: grabbing !important;
-}
-
 /* 抽屉无蒙版交互穿透 */
 .work-items-drawer-overlay {
   --el-transition-duration: var(--yp-work-items-drawer-duration, 300ms);
