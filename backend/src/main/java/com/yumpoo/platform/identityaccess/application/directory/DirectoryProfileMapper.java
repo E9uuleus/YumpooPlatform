@@ -9,13 +9,9 @@ public final class DirectoryProfileMapper {
 
     private static final int MAX_SUMMARY_LENGTH = 1000;
 
-    private DirectoryProfileMapper() {
-    }
+    private DirectoryProfileMapper() {}
 
-    public static WeComMemberProfile map(
-            WeComRawMemberProfile raw,
-            Map<Long, String> departmentNames
-    ) {
+    public static WeComMemberProfile map(WeComRawMemberProfile raw, Map<Long, String> departmentNames) {
         Objects.requireNonNull(raw, "raw must not be null");
         Objects.requireNonNull(departmentNames, "departmentNames must not be null");
         List<String> names = new ArrayList<>();
@@ -24,8 +20,7 @@ public final class DirectoryProfileMapper {
             if (name == null || name.isBlank()) {
                 throw new DirectorySyncException(
                         "DIRECTORY_DEPARTMENT_UNAVAILABLE",
-                        "A member department was outside the readable directory scope"
-                );
+                        "A member department was outside the readable directory scope");
             }
             names.add(name.trim());
         }
@@ -33,8 +28,7 @@ public final class DirectoryProfileMapper {
         if (summary != null && summary.length() > MAX_SUMMARY_LENGTH) {
             throw new DirectorySyncException(
                     "DIRECTORY_DEPARTMENT_SUMMARY_TOO_LONG",
-                    "The normalized department summary exceeded the storage limit"
-            );
+                    "The normalized department summary exceeded the storage limit");
         }
         return new WeComMemberProfile(
                 raw.externalUserId(),
@@ -43,7 +37,6 @@ public final class DirectoryProfileMapper {
                 raw.mobile(),
                 summary,
                 DirectoryCanonicalHash.profile(raw, summary),
-                raw.accountDisabled()
-        );
+                raw.accountDisabled());
     }
 }

@@ -7,6 +7,5 @@ final class WebAuthenticationPaths {
     static final String LOGOUT = "/api/v1/auth/logout";
     static final String ME = "/api/v1/auth/me";
 
-    private WebAuthenticationPaths() {
-    }
+    private WebAuthenticationPaths() {}
 }

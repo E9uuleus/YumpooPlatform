@@ -1,13 +1,12 @@
 package com.yumpoo.platform.foundation.infrastructure.outbox;
 
 import com.yumpoo.platform.foundation.application.outbox.OutboxConsumerReceiptPort;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Repository;
-
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.UUID;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Repository;
 
 @Repository
 public class JdbcOutboxConsumerReceiptRepository implements OutboxConsumerReceiptPort {
@@ -33,10 +32,12 @@ public class JdbcOutboxConsumerReceiptRepository implements OutboxConsumerReceip
 
     @Override
     public boolean tryBegin(String consumerName, UUID eventId, Instant completedAt) {
-        return jdbcClient.sql(TRY_INSERT)
-                .param("consumerName", consumerName)
-                .param("eventId", eventId)
-                .param("completedAt", OffsetDateTime.ofInstant(completedAt, ZoneOffset.UTC))
-                .update() == 1;
+        return jdbcClient
+                        .sql(TRY_INSERT)
+                        .param("consumerName", consumerName)
+                        .param("eventId", eventId)
+                        .param("completedAt", OffsetDateTime.ofInstant(completedAt, ZoneOffset.UTC))
+                        .update()
+                == 1;
     }
 }

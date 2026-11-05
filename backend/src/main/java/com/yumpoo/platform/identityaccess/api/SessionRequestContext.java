@@ -7,8 +7,7 @@ final class SessionRequestContext {
 
     static final String ATTRIBUTE = SessionRequestContext.class.getName() + ".authenticatedSession";
 
-    private SessionRequestContext() {
-    }
+    private SessionRequestContext() {}
 
     static AuthenticatedSession required(HttpServletRequest request) {
         Object value = request.getAttribute(ATTRIBUTE);

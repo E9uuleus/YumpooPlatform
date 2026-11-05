@@ -10,12 +10,12 @@ import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
 import com.yumpoo.platform.reporting.application.ProjectStatisticsModels.*;
 import com.yumpoo.platform.workitem.api.TeamWorkQuery;
 import com.yumpoo.platform.workitem.api.WorkItemStatisticsQuery;
-import org.springframework.stereotype.Service;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
+import org.springframework.stereotype.Service;
 
 @Service
 public class ProjectStatisticsService {
@@ -26,30 +26,55 @@ public class ProjectStatisticsService {
     private final MinimalUserSnapshotQuery users;
     private final CompanyConfigurationQuery company;
     private final Clock clock;
-    public ProjectStatisticsService(WorkItemStatisticsQuery statistics, TeamWorkQuery work, ProjectActiveMembershipQuery memberships,
-            MinimalUserSnapshotQuery users, CompanyConfigurationQuery company, Clock clock) {
-        this.statistics = statistics; this.work = work; this.memberships = memberships;
-        this.users = users; this.company = company; this.clock = clock;
+
+    public ProjectStatisticsService(
+            WorkItemStatisticsQuery statistics,
+            TeamWorkQuery work,
+            ProjectActiveMembershipQuery memberships,
+            MinimalUserSnapshotQuery users,
+            CompanyConfigurationQuery company,
+            Clock clock) {
+        this.statistics = statistics;
+        this.work = work;
+        this.memberships = memberships;
+        this.users = users;
+        this.company = company;
+        this.clock = clock;
     }
 
     public StatisticsResponse query(CurrentActor actor, UUID projectId, StatisticsQuery query) {
-        if (query.widgets() == null) throw ApplicationException.validation(new FieldViolation("widgets", "REQUIRED", "图表配置不能为空"));
+        if (query.widgets() == null)
+            throw ApplicationException.validation(new FieldViolation("widgets", "REQUIRED", "图表配置不能为空"));
         DashboardService.validateQueryWidgets(query.widgets(), statistics);
         Instant asOf = clock.instant();
-        return new StatisticsResponse(asOf, statistics.projectCharts(actor, projectId, query.filters(),
-                query.widgets().stream().map(DashboardCharts::request).toList(), asOf));
+        return new StatisticsResponse(
+                asOf,
+                statistics.projectCharts(
+                        actor,
+                        projectId,
+                        query.filters(),
+                        query.widgets().stream().map(DashboardCharts::request).toList(),
+                        asOf));
     }
 
     public WorkItemStatisticsQuery.Page items(CurrentActor actor, UUID projectId, DashboardModels.ItemsQuery query) {
         var widget = widget(query.widget());
-        return statistics.projectChartItems(actor, projectId, query.filters(), DashboardCharts.request(widget),
-                query.selection(), query.offset(), query.limit());
+        return statistics.projectChartItems(
+                actor,
+                projectId,
+                query.filters(),
+                DashboardCharts.request(widget),
+                query.selection(),
+                query.offset(),
+                query.limit());
     }
 
     /** The path project wins; the body projectId only exists because the shared table request requires it. */
-    public WorkItemStatisticsQuery.TablePage table(CurrentActor actor, UUID projectId, DashboardModels.TableQuery query) {
+    public WorkItemStatisticsQuery.TablePage table(
+            CurrentActor actor, UUID projectId, DashboardModels.TableQuery query) {
         var widget = widget(query.widget());
-        return statistics.projectTable(actor, projectId, query.filters(), DashboardCharts.request(widget), query.selection(), query.table());
+        return statistics.projectTable(
+                actor, projectId, query.filters(), DashboardCharts.request(widget), query.selection(), query.table());
     }
 
     public Worklog worklog(CurrentActor actor, UUID projectId, LocalDate from, LocalDate to) {
@@ -57,14 +82,27 @@ public class ProjectStatisticsService {
             throw ApplicationException.validation(new FieldViolation("to", "INVALID_VALUE", "统计区间需在 1–93 天之间"));
         Instant asOf = clock.instant();
         Map<List<UUID>, WorklogEntry> totals = new LinkedHashMap<>();
-        for (var e : work.projectTimeEntries(actor, projectId, from, to, company.current().timezone(), asOf))
-            totals.merge(List.of(e.userId(), e.workItemId()), new WorklogEntry(e.userId(), e.workItemId(), e.itemNo(), e.title(), e.durationMs()),
-                    (a, b) -> new WorklogEntry(a.userId(), a.workItemId(), a.itemNo(), a.title(), a.durationMs() + b.durationMs()));
-        var userIds = totals.values().stream().map(WorklogEntry::userId).distinct().toList();
-        Map<UUID, MinimalUserSnapshot> found = userIds.isEmpty() ? Map.of() : users.findByUserIds(actor.companyId(), userIds);
-        Set<UUID> members = userIds.isEmpty() ? Set.of() : memberships.findActiveMemberIds(actor.companyId(), projectId, userIds);
-        return new Worklog(from, to, asOf,
-                userIds.stream().map(id -> new WorklogMember(id, found.containsKey(id) ? found.get(id).displayName() : "历史成员", members.contains(id))).toList(),
+        for (var e : work.projectTimeEntries(
+                actor, projectId, from, to, company.current().timezone(), asOf))
+            totals.merge(
+                    List.of(e.userId(), e.workItemId()),
+                    new WorklogEntry(e.userId(), e.workItemId(), e.itemNo(), e.title(), e.durationMs()),
+                    (a, b) -> new WorklogEntry(
+                            a.userId(), a.workItemId(), a.itemNo(), a.title(), a.durationMs() + b.durationMs()));
+        var userIds =
+                totals.values().stream().map(WorklogEntry::userId).distinct().toList();
+        Map<UUID, MinimalUserSnapshot> found =
+                userIds.isEmpty() ? Map.of() : users.findByUserIds(actor.companyId(), userIds);
+        Set<UUID> members =
+                userIds.isEmpty() ? Set.of() : memberships.findActiveMemberIds(actor.companyId(), projectId, userIds);
+        return new Worklog(
+                from,
+                to,
+                asOf,
+                userIds.stream()
+                        .map(id -> new WorklogMember(
+                                id, found.containsKey(id) ? found.get(id).displayName() : "历史成员", members.contains(id)))
+                        .toList(),
                 List.copyOf(totals.values()));
     }
 

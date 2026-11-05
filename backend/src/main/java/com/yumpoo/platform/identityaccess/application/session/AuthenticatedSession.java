@@ -1,14 +1,10 @@
 package com.yumpoo.platform.identityaccess.application.session;
 
 import com.yumpoo.platform.identityaccess.domain.session.LoginSession;
-
-import java.util.Objects;
 import java.time.Instant;
+import java.util.Objects;
 
-public record AuthenticatedSession(
-        LoginSession session,
-        UserAuthorizationRecord user
-) {
+public record AuthenticatedSession(LoginSession session, UserAuthorizationRecord user) {
 
     public AuthenticatedSession {
         Objects.requireNonNull(session, "session must not be null");

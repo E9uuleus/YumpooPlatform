@@ -1,9 +1,11 @@
 package com.yumpoo.platform.identityaccess.infrastructure.oauth;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.identityaccess.application.oauth.OAuthAttempt;
-import com.yumpoo.platform.identityaccess.application.oauth.OAuthAttemptHash;
 import com.yumpoo.platform.identityaccess.application.oauth.OAuthAttemptHasher;
 import com.yumpoo.platform.identityaccess.application.oauth.OAuthAttemptStore;
 import com.yumpoo.platform.identityaccess.application.oauth.OAuthAttemptToken;
@@ -13,13 +15,6 @@ import com.yumpoo.platform.identityaccess.application.oauth.WeComMemberIdentity;
 import com.yumpoo.platform.identityaccess.application.oauth.WeComOAuthAuthorization;
 import com.yumpoo.platform.identityaccess.application.oauth.WeComOAuthVerificationService;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.simple.JdbcClient;
-
 import java.net.URI;
 import java.time.Clock;
 import java.time.Duration;
@@ -34,9 +29,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
 
 @Import(PostgreSqlTestContainerConfiguration.class)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
@@ -63,19 +61,12 @@ class JdbcOAuthAttemptRepositoryIT {
     void wrongNonceDoesNotConsumeAndTheCorrectNonceCanStillWin() {
         attemptStore.create(attempt(STATE, NONCE, CREATED_AT.plus(Duration.ofMinutes(5))));
 
-        boolean wrong = attemptStore.consume(
-                HASHER.hash(STATE),
-                HASHER.hash(WRONG_NONCE),
-                CREATED_AT.plusSeconds(1)
-        );
+        boolean wrong = attemptStore.consume(HASHER.hash(STATE), HASHER.hash(WRONG_NONCE), CREATED_AT.plusSeconds(1));
 
         assertThat(wrong).isFalse();
         assertThat(consumedAt()).isNull();
-        assertThat(attemptStore.consume(
-                HASHER.hash(STATE),
-                HASHER.hash(NONCE),
-                CREATED_AT.plusSeconds(2)
-        )).isTrue();
+        assertThat(attemptStore.consume(HASHER.hash(STATE), HASHER.hash(NONCE), CREATED_AT.plusSeconds(2)))
+                .isTrue();
         assertThat(consumedAt()).isEqualTo(CREATED_AT.plusSeconds(2));
     }
 
@@ -84,11 +75,8 @@ class JdbcOAuthAttemptRepositoryIT {
         Instant expiresAt = CREATED_AT.plus(Duration.ofMinutes(5));
         attemptStore.create(attempt(STATE, NONCE, expiresAt));
 
-        assertThat(attemptStore.consume(
-                HASHER.hash(STATE),
-                HASHER.hash(NONCE),
-                expiresAt
-        )).isFalse();
+        assertThat(attemptStore.consume(HASHER.hash(STATE), HASHER.hash(NONCE), expiresAt))
+                .isFalse();
         assertThat(consumedAt()).isNull();
     }
 
@@ -107,11 +95,7 @@ class JdbcOAuthAttemptRepositoryIT {
                     if (!start.await(10, TimeUnit.SECONDS)) {
                         throw new IllegalStateException("concurrent callback start timed out");
                     }
-                    return attemptStore.consume(
-                            HASHER.hash(STATE),
-                            HASHER.hash(NONCE),
-                            CREATED_AT.plusSeconds(1)
-                    );
+                    return attemptStore.consume(HASHER.hash(STATE), HASHER.hash(NONCE), CREATED_AT.plusSeconds(1));
                 }));
             }
             assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
@@ -123,11 +107,8 @@ class JdbcOAuthAttemptRepositoryIT {
             }
             assertThat(outcomes).containsOnlyOnce(true);
             assertThat(outcomes.stream().filter(Boolean::booleanValue)).hasSize(1);
-            assertThat(attemptStore.consume(
-                    HASHER.hash(STATE),
-                    HASHER.hash(NONCE),
-                    CREATED_AT.plusSeconds(2)
-            )).isFalse();
+            assertThat(attemptStore.consume(HASHER.hash(STATE), HASHER.hash(NONCE), CREATED_AT.plusSeconds(2)))
+                    .isFalse();
         } finally {
             start.countDown();
             executor.shutdownNow();
@@ -140,18 +121,12 @@ class JdbcOAuthAttemptRepositoryIT {
         attemptStore.create(attempt(STATE, NONCE, CREATED_AT.plus(Duration.ofMinutes(5))));
 
         JdbcOAuthAttemptRepository restartedRepository = new JdbcOAuthAttemptRepository(jdbcClient);
-        assertThat(restartedRepository.consume(
-                HASHER.hash(STATE),
-                HASHER.hash(NONCE),
-                CREATED_AT.plusSeconds(1)
-        )).isTrue();
+        assertThat(restartedRepository.consume(HASHER.hash(STATE), HASHER.hash(NONCE), CREATED_AT.plusSeconds(1)))
+                .isTrue();
 
         JdbcOAuthAttemptRepository secondRestart = new JdbcOAuthAttemptRepository(jdbcClient);
-        assertThat(secondRestart.consume(
-                HASHER.hash(STATE),
-                HASHER.hash(NONCE),
-                CREATED_AT.plusSeconds(2)
-        )).isFalse();
+        assertThat(secondRestart.consume(HASHER.hash(STATE), HASHER.hash(NONCE), CREATED_AT.plusSeconds(2)))
+                .isFalse();
     }
 
     @Test
@@ -174,22 +149,24 @@ class JdbcOAuthAttemptRepositoryIT {
         WeComOAuthAuthorization authorization = firstProcess.begin("request-gateway-failure");
 
         assertThatThrownBy(() -> firstProcess.verify(
-                "one-time-code",
-                authorization.state().value(),
-                authorization.nonce().value()
-        )).isInstanceOfSatisfying(ApplicationException.class, exception ->
-                assertThat(exception.errorCode()).isEqualTo(StandardErrorCode.DEPENDENCY_UNAVAILABLE)
-        );
+                        "one-time-code",
+                        authorization.state().value(),
+                        authorization.nonce().value()))
+                .isInstanceOfSatisfying(
+                        ApplicationException.class,
+                        exception ->
+                                assertThat(exception.errorCode()).isEqualTo(StandardErrorCode.DEPENDENCY_UNAVAILABLE));
         assertThat(consumedAt()).isEqualTo(CREATED_AT);
 
         WeComOAuthVerificationService restartedProcess = service(unavailableGateway, clock);
         assertThatThrownBy(() -> restartedProcess.verify(
-                "one-time-code",
-                authorization.state().value(),
-                authorization.nonce().value()
-        )).isInstanceOfSatisfying(ApplicationException.class, exception ->
-                assertThat(exception.errorCode()).isEqualTo(StandardErrorCode.AUTHENTICATION_REQUIRED)
-        );
+                        "one-time-code",
+                        authorization.state().value(),
+                        authorization.nonce().value()))
+                .isInstanceOfSatisfying(
+                        ApplicationException.class,
+                        exception ->
+                                assertThat(exception.errorCode()).isEqualTo(StandardErrorCode.AUTHENTICATION_REQUIRED));
         assertThat(gatewayCalls).hasValue(1);
     }
 
@@ -203,30 +180,18 @@ class JdbcOAuthAttemptRepositoryIT {
                         WHERE table_schema = 'yumpoo'
                           AND table_name = 'wecom_oauth_attempt'
                         ORDER BY ordinal_position
-                        """)
-                .query(String.class)
-                .list();
+                        """).query(String.class).list();
         String storedState = jdbcClient.sql("""
                         SELECT state_hash
                         FROM yumpoo.wecom_oauth_attempt
-                        """)
-                .query(String.class)
-                .single();
+                        """).query(String.class).single();
         String storedNonce = jdbcClient.sql("""
                         SELECT nonce_hash
                         FROM yumpoo.wecom_oauth_attempt
-                        """)
-                .query(String.class)
-                .single();
+                        """).query(String.class).single();
 
-        assertThat(columns).containsExactly(
-                "state_hash",
-                "nonce_hash",
-                "request_id",
-                "created_at",
-                "expires_at",
-                "consumed_at"
-        );
+        assertThat(columns)
+                .containsExactly("state_hash", "nonce_hash", "request_id", "created_at", "expires_at", "consumed_at");
         assertThat(storedState).isEqualTo(HASHER.hash(STATE).value()).doesNotContain(STATE.value());
         assertThat(storedNonce).isEqualTo(HASHER.hash(NONCE).value()).doesNotContain(NONCE.value());
     }
@@ -243,9 +208,11 @@ class JdbcOAuthAttemptRepositoryIT {
 
         assertThat(attemptStore.purgeExpired(CREATED_AT.plusSeconds(10), 1)).isOne();
         assertThat(attemptStore.purgeExpired(CREATED_AT.plusSeconds(10), 10)).isOne();
-        assertThat(jdbcClient.sql("SELECT count(*) FROM yumpoo.wecom_oauth_attempt")
-                .query(Integer.class)
-                .single()).isOne();
+        assertThat(jdbcClient
+                        .sql("SELECT count(*) FROM yumpoo.wecom_oauth_attempt")
+                        .query(Integer.class)
+                        .single())
+                .isOne();
     }
 
     private WeComOAuthVerificationService service(WeComIdentityGateway gateway, Clock clock) {
@@ -257,26 +224,16 @@ class JdbcOAuthAttemptRepositoryIT {
                 HASHER,
                 clock,
                 "corp-test",
-                Set.of("member-test")
-        );
+                Set.of("member-test"));
     }
 
-    private static OAuthAttempt attempt(
-            OAuthAttemptToken state,
-            OAuthAttemptToken nonce,
-            Instant expiresAt
-    ) {
-        return new OAuthAttempt(
-                HASHER.hash(state),
-                HASHER.hash(nonce),
-                "request-persistence",
-                CREATED_AT,
-                expiresAt
-        );
+    private static OAuthAttempt attempt(OAuthAttemptToken state, OAuthAttemptToken nonce, Instant expiresAt) {
+        return new OAuthAttempt(HASHER.hash(state), HASHER.hash(nonce), "request-persistence", CREATED_AT, expiresAt);
     }
 
     private Instant consumedAt() {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                         SELECT consumed_at
                         FROM yumpoo.wecom_oauth_attempt
                         WHERE state_hash = :stateHash

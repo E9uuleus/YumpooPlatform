@@ -4,8 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.charset.StandardCharsets;
 import org.flywaydb.core.api.Location;
-import org.flywaydb.core.internal.resource.classpath.ClassPathResource;
 import org.flywaydb.core.internal.resolver.ChecksumCalculator;
+import org.flywaydb.core.internal.resource.classpath.ClassPathResource;
 import org.junit.jupiter.api.Test;
 
 class MigrationChecksumTest {

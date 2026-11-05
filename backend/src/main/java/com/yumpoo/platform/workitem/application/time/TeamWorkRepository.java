@@ -7,16 +7,49 @@ import java.util.List;
 import java.util.UUID;
 
 public interface TeamWorkRepository {
-    record TimeEntry(UUID userId, UUID workItemId, UUID projectId, String itemNo, String title, LocalDate date, long durationMs, long migratedDurationMs) {}
-    record CategoryEntry(UUID userId, String timeCategory, UUID projectId, LocalDate date, long durationMs) {}
-    record Load(UUID userId, long todo, long inProgress, long other, long overdue) {}
-    record Task(UUID id, UUID projectId, String itemNo, String title, String statusCode, String statusName, String statusCategory, String statusColor,
-            String priorityName, String priorityColor, LocalDate dueDate, boolean overdue) {}
+    record TimeEntry(
+            UUID userId,
+            UUID workItemId,
+            UUID projectId,
+            String itemNo,
+            String title,
+            LocalDate date,
+            long durationMs,
+            long migratedDurationMs) {}
 
-    List<TimeEntry> timeEntries(UUID companyId, List<UUID> projectIds, List<UUID> userIds, LocalDate from, LocalDate to, ZoneId zone, Instant asOf);
+    record CategoryEntry(UUID userId, String timeCategory, UUID projectId, LocalDate date, long durationMs) {}
+
+    record Load(UUID userId, long todo, long inProgress, long other, long overdue) {}
+
+    record Task(
+            UUID id,
+            UUID projectId,
+            String itemNo,
+            String title,
+            String statusCode,
+            String statusName,
+            String statusCategory,
+            String statusColor,
+            String priorityName,
+            String priorityColor,
+            LocalDate dueDate,
+            boolean overdue) {}
+
+    List<TimeEntry> timeEntries(
+            UUID companyId,
+            List<UUID> projectIds,
+            List<UUID> userIds,
+            LocalDate from,
+            LocalDate to,
+            ZoneId zone,
+            Instant asOf);
     /** An empty user list means every user of the company. */
-    List<CategoryEntry> categoryEntries(UUID companyId, List<UUID> userIds, LocalDate from, LocalDate to, ZoneId zone, Instant asOf);
+    List<CategoryEntry> categoryEntries(
+            UUID companyId, List<UUID> userIds, LocalDate from, LocalDate to, ZoneId zone, Instant asOf);
+
     List<Load> currentLoad(UUID companyId, List<UUID> projectIds, LocalDate today);
+
     List<Task> currentTasks(UUID companyId, List<UUID> projectIds, UUID userId, LocalDate today, int offset, int limit);
+
     long countCurrentTasks(UUID companyId, List<UUID> projectIds, UUID userId);
 }

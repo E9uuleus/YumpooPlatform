@@ -11,11 +11,14 @@ public record WeComRawMemberProfile(
         DirectoryOptionalField email,
         DirectoryOptionalField mobile,
         List<Long> departmentIds,
-        boolean accountDisabled
-) {
+        boolean accountDisabled) {
 
-    public WeComRawMemberProfile(String externalUserId, String displayName,
-            DirectoryOptionalField email, DirectoryOptionalField mobile, List<Long> departmentIds) {
+    public WeComRawMemberProfile(
+            String externalUserId,
+            String displayName,
+            DirectoryOptionalField email,
+            DirectoryOptionalField mobile,
+            List<Long> departmentIds) {
         this(externalUserId, displayName, email, mobile, departmentIds, false);
     }
 

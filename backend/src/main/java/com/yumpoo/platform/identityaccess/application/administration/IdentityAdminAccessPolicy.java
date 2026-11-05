@@ -5,9 +5,8 @@ import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.identityaccess.application.authorization.ManagedPlatformRole;
 import com.yumpoo.platform.identityaccess.application.authorization.RoleGovernanceRepository;
 import com.yumpoo.platform.identityaccess.application.authorization.RoleUserSnapshot;
-import org.springframework.stereotype.Service;
-
 import java.util.UUID;
+import org.springframework.stereotype.Service;
 
 @Service
 public class IdentityAdminAccessPolicy {
@@ -20,9 +19,9 @@ public class IdentityAdminAccessPolicy {
 
     public RoleUserSnapshot requireReader(UUID companyId, UUID actorUserId) {
         RoleUserSnapshot actor = requireAvailable(companyId, actorUserId);
-        if (actor.activeRoles().stream().noneMatch(role ->
-                role == ManagedPlatformRole.APP_MANAGER
-                        || role == ManagedPlatformRole.COMPANY_ADMIN)) {
+        if (actor.activeRoles().stream()
+                .noneMatch(
+                        role -> role == ManagedPlatformRole.APP_MANAGER || role == ManagedPlatformRole.COMPANY_ADMIN)) {
             throw denied();
         }
         return actor;
@@ -37,8 +36,8 @@ public class IdentityAdminAccessPolicy {
     }
 
     private RoleUserSnapshot requireAvailable(UUID companyId, UUID actorUserId) {
-        RoleUserSnapshot actor = repository.findUser(companyId, actorUserId)
-                .orElseThrow(IdentityAdminAccessPolicy::denied);
+        RoleUserSnapshot actor =
+                repository.findUser(companyId, actorUserId).orElseThrow(IdentityAdminAccessPolicy::denied);
         if (!actor.available()) {
             throw denied();
         }

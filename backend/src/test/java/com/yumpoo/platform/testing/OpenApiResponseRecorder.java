@@ -8,8 +8,7 @@ final class OpenApiResponseRecorder {
 
     private static final ConcurrentLinkedQueue<String> messages = new ConcurrentLinkedQueue<>();
 
-    private OpenApiResponseRecorder() {
-    }
+    private OpenApiResponseRecorder() {}
 
     static void clear() {
         messages.clear();

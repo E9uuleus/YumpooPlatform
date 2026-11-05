@@ -24,18 +24,16 @@ import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.workitem.api.InitializeProjectContentsPort;
 import com.yumpoo.platform.workitem.api.InitializedProjectContent;
 import com.yumpoo.platform.workitem.api.ProjectContentInitialization;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.ObjectMapper;
-
 import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 @Service
 public class ProjectCreationOrchestrator {
@@ -59,8 +57,7 @@ public class ProjectCreationOrchestrator {
             TransactionalEventPort eventPort,
             SecurityAuditAppendPort auditPort,
             ObjectMapper objectMapper,
-            Clock clock
-    ) {
+            Clock clock) {
         this.projectCommandPort = projectCommandPort;
         this.activeUserQuery = activeUserQuery;
         this.initializeContentsPort = initializeContentsPort;
@@ -75,29 +72,26 @@ public class ProjectCreationOrchestrator {
     public IdempotencyExecutionResult create(ProjectCreationCommand command) {
         requireActiveActor(command.actor());
         IdempotencyCommand idempotency = new IdempotencyCommand(
-                new IdempotencyScope(command.actor().userId(), "POST", "createProject",
-                        command.idempotencyKey()), command.requestHash());
+                new IdempotencyScope(command.actor().userId(), "POST", "createProject", command.idempotencyKey()),
+                command.requestHash());
         return idempotentCommandExecutor.execute(idempotency, () -> executeCreation(command));
     }
 
     private StoredCommandResult executeCreation(ProjectCreationCommand command) {
         ProjectSnapshot project = projectCommandPort.create(new ProjectCreationMutation(
-                command.actor().companyId(), command.name(),
+                command.actor().companyId(),
+                command.name(),
                 command.description(),
                 command.actor().userId()));
 
-        List<InitializedProjectContent> contents = initializeContentsPort.initialize(
-                new ProjectContentInitialization(project.companyId(), project.projectId(), command.actor().userId(), command.initialColors()));
+        List<InitializedProjectContent> contents = initializeContentsPort.initialize(new ProjectContentInitialization(
+                project.companyId(), project.projectId(), command.actor().userId(), command.initialColors()));
         appendAudit(project, contents.size(), command);
         appendCreated(project, contents.size(), command.actor());
         return stored(project);
     }
 
-    private void appendAudit(
-            ProjectSnapshot project,
-            int initializedContentCount,
-            ProjectCreationCommand command
-    ) {
+    private void appendAudit(ProjectSnapshot project, int initializedContentCount, ProjectCreationCommand command) {
         auditPort.append(new SecurityAuditDraft(
                 project.companyId(),
                 "project-created:" + project.projectId(),
@@ -117,8 +111,14 @@ public class ProjectCreationOrchestrator {
     }
 
     private void appendCreated(ProjectSnapshot project, int contentCount, CurrentActor actor) {
-        eventPort.append(new EventDraft(CREATED_EVENT, 2, "Project", project.projectId(),
-                project.rowVersion(), project.companyId(), EventActor.user(actor.userId()),
+        eventPort.append(new EventDraft(
+                CREATED_EVENT,
+                2,
+                "Project",
+                project.projectId(),
+                project.rowVersion(),
+                project.companyId(),
+                EventActor.user(actor.userId()),
                 objectMapper.valueToTree(safeSummary(project, contentCount))));
     }
 
@@ -145,8 +145,11 @@ public class ProjectCreationOrchestrator {
         body.put("ownerUserId", project.ownerUserId());
         body.put("rowVersion", project.rowVersion());
         try {
-            return new StoredCommandResult(201, objectMapper.writeValueAsString(body),
-                    project.projectId(), StrongEtag.format(project.rowVersion()));
+            return new StoredCommandResult(
+                    201,
+                    objectMapper.writeValueAsString(body),
+                    project.projectId(),
+                    StrongEtag.format(project.rowVersion()));
         } catch (JacksonException exception) {
             throw new IllegalStateException("project response serialization failed", exception);
         }

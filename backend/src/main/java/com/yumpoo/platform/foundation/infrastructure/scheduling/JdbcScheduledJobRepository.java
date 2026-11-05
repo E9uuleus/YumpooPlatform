@@ -3,9 +3,6 @@ package com.yumpoo.platform.foundation.infrastructure.scheduling;
 import com.yumpoo.platform.foundation.application.scheduling.ScheduledJobOutcome;
 import com.yumpoo.platform.foundation.application.scheduling.ScheduledJobRepository;
 import com.yumpoo.platform.foundation.application.scheduling.ScheduledJobResult;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Repository;
-
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
@@ -14,6 +11,8 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Repository;
 
 @Repository
 public class JdbcScheduledJobRepository implements ScheduledJobRepository {
@@ -26,18 +25,30 @@ public class JdbcScheduledJobRepository implements ScheduledJobRepository {
     @Override
     public List<Row> findAll(UUID companyId) {
         return jdbc.sql("SELECT * FROM yumpoo.scheduled_job WHERE company_id = :companyId")
-                .param("companyId", companyId).query(this::map).list();
+                .param("companyId", companyId)
+                .query(this::map)
+                .list();
     }
 
     @Override
     public List<Row> findDue(Instant now) {
         return jdbc.sql("SELECT * FROM yumpoo.scheduled_job WHERE enabled AND next_run_at <= :now ORDER BY next_run_at")
-                .param("now", utc(now)).query(this::map).list();
+                .param("now", utc(now))
+                .query(this::map)
+                .list();
     }
 
     @Override
-    public boolean save(UUID companyId, String jobCode, boolean enabled, String cron, ZoneId zoneId,
-            Instant nextRunAt, UUID actorUserId, Instant now, long expectedVersion) {
+    public boolean save(
+            UUID companyId,
+            String jobCode,
+            boolean enabled,
+            String cron,
+            ZoneId zoneId,
+            Instant nextRunAt,
+            UUID actorUserId,
+            Instant now,
+            long expectedVersion) {
         String sql = expectedVersion == 0 ? """
                 INSERT INTO yumpoo.scheduled_job (company_id, job_code, enabled, cron, zone_id, next_run_at,
                     updated_by_user_id, updated_at, row_version)
@@ -49,23 +60,40 @@ public class JdbcScheduledJobRepository implements ScheduledJobRepository {
                     row_version = row_version + 1
                 WHERE company_id = :companyId AND job_code = :jobCode AND row_version = :expected
                 """;
-        var statement = jdbc.sql(sql).param("companyId", companyId).param("jobCode", jobCode)
-                .param("enabled", enabled).param("cron", cron).param("zoneId", zoneId.getId())
-                .param("nextRunAt", utc(nextRunAt)).param("actorUserId", actorUserId).param("now", utc(now));
+        var statement = jdbc.sql(sql)
+                .param("companyId", companyId)
+                .param("jobCode", jobCode)
+                .param("enabled", enabled)
+                .param("cron", cron)
+                .param("zoneId", zoneId.getId())
+                .param("nextRunAt", utc(nextRunAt))
+                .param("actorUserId", actorUserId)
+                .param("now", utc(now));
         if (expectedVersion > 0) statement = statement.param("expected", expectedVersion);
         return statement.update() == 1;
     }
 
     @Override
-    public boolean claim(UUID companyId, String jobCode, Instant expectedNextRunAt, Instant followingRunAt,
-            Instant startedAt, String requestId) {
+    public boolean claim(
+            UUID companyId,
+            String jobCode,
+            Instant expectedNextRunAt,
+            Instant followingRunAt,
+            Instant startedAt,
+            String requestId) {
         return jdbc.sql("""
                 UPDATE yumpoo.scheduled_job SET next_run_at = :following, last_started_at = :startedAt,
                     last_request_id = :requestId
                 WHERE company_id = :companyId AND job_code = :jobCode AND enabled AND next_run_at = :expected
-                """).param("companyId", companyId).param("jobCode", jobCode)
-                .param("following", utc(followingRunAt)).param("startedAt", utc(startedAt))
-                .param("requestId", requestId).param("expected", utc(expectedNextRunAt)).update() == 1;
+                """)
+                        .param("companyId", companyId)
+                        .param("jobCode", jobCode)
+                        .param("following", utc(followingRunAt))
+                        .param("startedAt", utc(startedAt))
+                        .param("requestId", requestId)
+                        .param("expected", utc(expectedNextRunAt))
+                        .update()
+                == 1;
     }
 
     @Override
@@ -74,17 +102,30 @@ public class JdbcScheduledJobRepository implements ScheduledJobRepository {
                 UPDATE yumpoo.scheduled_job SET last_finished_at = :finishedAt, last_outcome = :outcome,
                     last_error_code = :errorCode
                 WHERE company_id = :companyId AND job_code = :jobCode
-                """).param("companyId", companyId).param("jobCode", jobCode).param("finishedAt", utc(finishedAt))
-                .param("outcome", result.outcome().name()).param("errorCode", result.errorCode()).update();
+                """)
+                .param("companyId", companyId)
+                .param("jobCode", jobCode)
+                .param("finishedAt", utc(finishedAt))
+                .param("outcome", result.outcome().name())
+                .param("errorCode", result.errorCode())
+                .update();
     }
 
     private Row map(ResultSet rs, int index) throws SQLException {
         String outcome = rs.getString("last_outcome");
-        return new Row(rs.getObject("company_id", UUID.class), rs.getString("job_code"), rs.getBoolean("enabled"),
-                rs.getString("cron"), ZoneId.of(rs.getString("zone_id")), instant(rs, "next_run_at"),
-                instant(rs, "last_started_at"), instant(rs, "last_finished_at"),
+        return new Row(
+                rs.getObject("company_id", UUID.class),
+                rs.getString("job_code"),
+                rs.getBoolean("enabled"),
+                rs.getString("cron"),
+                ZoneId.of(rs.getString("zone_id")),
+                instant(rs, "next_run_at"),
+                instant(rs, "last_started_at"),
+                instant(rs, "last_finished_at"),
                 outcome == null ? null : ScheduledJobOutcome.valueOf(outcome),
-                rs.getString("last_error_code"), rs.getString("last_request_id"), rs.getLong("row_version"));
+                rs.getString("last_error_code"),
+                rs.getString("last_request_id"),
+                rs.getLong("row_version"));
     }
 
     private static Instant instant(ResultSet rs, String column) throws SQLException {

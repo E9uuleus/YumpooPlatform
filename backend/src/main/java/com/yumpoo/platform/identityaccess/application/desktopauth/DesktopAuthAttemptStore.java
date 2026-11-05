@@ -14,15 +14,13 @@ public interface DesktopAuthAttemptStore {
             DesktopAuthTokenHash handoffCodeHash,
             DesktopIdentityFingerprint identityFingerprint,
             Instant issuedAt,
-            Instant expiresAt
-    );
+            Instant expiresAt);
 
     Optional<DesktopAuthExchange> consume(
             DesktopAuthTokenHash desktopStateHash,
             DesktopAuthTokenHash handoffCodeHash,
             PkceS256Challenge pkceChallenge,
-            Instant consumedAt
-    );
+            Instant consumedAt);
 
     default void createProduct(ProductDesktopAuthAttempt attempt) {
         throw new UnsupportedOperationException("product desktop authentication is unavailable");
@@ -37,8 +35,7 @@ public interface DesktopAuthAttemptStore {
             DesktopAuthTokenHash handoffCodeHash,
             UUID userId,
             Instant issuedAt,
-            Instant expiresAt
-    ) {
+            Instant expiresAt) {
         throw new UnsupportedOperationException("product desktop authentication is unavailable");
     }
 
@@ -46,8 +43,7 @@ public interface DesktopAuthAttemptStore {
             DesktopAuthTokenHash stateHash,
             DesktopAuthTokenHash handoffCodeHash,
             PkceS256Challenge pkceChallenge,
-            Instant consumedAt
-    ) {
+            Instant consumedAt) {
         throw new UnsupportedOperationException("product desktop authentication is unavailable");
     }
 }

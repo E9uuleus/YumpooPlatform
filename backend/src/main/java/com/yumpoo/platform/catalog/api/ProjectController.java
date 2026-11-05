@@ -1,12 +1,12 @@
 package com.yumpoo.platform.catalog.api;
 
+import com.yumpoo.platform.catalog.application.project.ProjectActorAccess;
 import com.yumpoo.platform.catalog.application.project.ProjectDetail;
 import com.yumpoo.platform.catalog.application.project.ProjectLifecycleFilter;
-import com.yumpoo.platform.catalog.application.project.ProjectService;
-import com.yumpoo.platform.catalog.application.project.ProjectSummary;
-import com.yumpoo.platform.catalog.application.project.ProjectActorAccess;
 import com.yumpoo.platform.catalog.application.project.ProjectOwnerOption;
 import com.yumpoo.platform.catalog.application.project.ProjectSearchCriteria;
+import com.yumpoo.platform.catalog.application.project.ProjectService;
+import com.yumpoo.platform.catalog.application.project.ProjectSummary;
 import com.yumpoo.platform.catalog.application.project.ProjectUpdateCommand;
 import com.yumpoo.platform.foundation.api.http.IfMatchParser;
 import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
@@ -15,6 +15,9 @@ import com.yumpoo.platform.foundation.api.web.ApiV1Controller;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.CurrentActorProvider;
 import jakarta.validation.Valid;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,10 +27,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 
-import java.time.Instant;
-import java.util.List;
-import java.util.UUID;
-
 @ApiV1Controller
 public final class ProjectController {
 
@@ -35,8 +34,7 @@ public final class ProjectController {
     private final ProjectService service;
     private final IfMatchParser ifMatchParser;
 
-    public ProjectController(CurrentActorProvider actorProvider, ProjectService service,
-                             IfMatchParser ifMatchParser) {
+    public ProjectController(CurrentActorProvider actorProvider, ProjectService service, IfMatchParser ifMatchParser) {
         this.actorProvider = actorProvider;
         this.service = service;
         this.ifMatchParser = ifMatchParser;
@@ -54,35 +52,44 @@ public final class ProjectController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         CurrentActor actor = actorProvider.requiredActive();
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(service.findAll(actor, new ProjectSearchCriteria(query,
-                                ownerUserIds, actorAccesses, updatedSince, lifecycle, ended, ids),
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(service.findAll(
+                        actor,
+                        new ProjectSearchCriteria(
+                                query, ownerUserIds, actorAccesses, updatedSince, lifecycle, ended, ids),
                         OffsetPageRequest.of(page, size)));
     }
 
     @GetMapping("/projects/owner-options")
     ResponseEntity<List<ProjectOwnerOption>> ownerOptions() {
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
                 .body(service.findOwnerOptions(actorProvider.requiredActive()));
     }
 
     @GetMapping("/projects/{projectId}")
     ResponseEntity<ProjectDetail> detail(@PathVariable UUID projectId) {
         ProjectDetail project = service.findVisible(actorProvider.requiredActive(), projectId);
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .eTag(Long.toString(project.rowVersion())).body(project);
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .eTag(Long.toString(project.rowVersion()))
+                .body(project);
     }
 
     @PatchMapping("/projects/{projectId}")
-    ResponseEntity<ProjectDetail> update(@PathVariable UUID projectId,
+    ResponseEntity<ProjectDetail> update(
+            @PathVariable UUID projectId,
             @Valid @RequestBody ProjectUpdateRequest body,
             @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatch) {
         CurrentActor actor = actorProvider.requiredActive();
         service.findVisible(actor, projectId);
         long version = ifMatchParser.parseForVisibleResource(true, ifMatch);
-        ProjectDetail project = service.update(new ProjectUpdateCommand(actor, projectId, version,
-                body.name(), body.description()));
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .eTag(Long.toString(project.rowVersion())).body(project);
+        ProjectDetail project =
+                service.update(new ProjectUpdateCommand(actor, projectId, version, body.name(), body.description()));
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .eTag(Long.toString(project.rowVersion()))
+                .body(project);
     }
 }

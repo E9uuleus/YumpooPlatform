@@ -11,8 +11,7 @@ public record CompanyConfigurationSnapshot(
         ZoneId timezone,
         DayOfWeek weekStartDay,
         int defaultWorkdayMinutes,
-        long rowVersion
-) {
+        long rowVersion) {
 
     public CompanyConfigurationSnapshot {
         Objects.requireNonNull(companyId, "companyId must not be null");

@@ -4,10 +4,9 @@ import com.yumpoo.platform.foundation.application.event.EventActor;
 import com.yumpoo.platform.foundation.application.scheduling.ScheduledJob;
 import com.yumpoo.platform.foundation.application.scheduling.ScheduledJobOutcome;
 import com.yumpoo.platform.foundation.application.scheduling.ScheduledJobResult;
+import java.util.UUID;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
-
-import java.util.UUID;
 
 @Service
 public class DirectorySyncScheduledJob implements ScheduledJob {
@@ -18,17 +17,24 @@ public class DirectorySyncScheduledJob implements ScheduledJob {
     }
 
     @Override
-    public String code() { return "DIRECTORY_SYNC"; }
+    public String code() {
+        return "DIRECTORY_SYNC";
+    }
 
     @Override
-    public boolean available() { return provider.getIfAvailable() != null; }
+    public boolean available() {
+        return provider.getIfAvailable() != null;
+    }
 
     @Override
     public ScheduledJobResult run(UUID companyId, String triggerKey, String requestId) {
         DirectorySyncAdministrationUseCase useCase = provider.getIfAvailable();
         if (useCase == null) return new ScheduledJobResult(ScheduledJobOutcome.SKIPPED, "DIRECTORY_SYNC_DISABLED");
         DirectorySyncExecutionResult execution = useCase.executeWithDisposition(new DirectorySyncCommand(
-                triggerKey, DirectorySyncTriggerType.SCHEDULED, EventActor.system("DIRECTORY_SYNC_SCHEDULER"), requestId));
+                triggerKey,
+                DirectorySyncTriggerType.SCHEDULED,
+                EventActor.system("DIRECTORY_SYNC_SCHEDULER"),
+                requestId));
         if (execution.disposition() != DirectorySyncClaimDisposition.NEW) {
             return new ScheduledJobResult(ScheduledJobOutcome.SKIPPED, "DIRECTORY_SYNC_" + execution.disposition());
         }

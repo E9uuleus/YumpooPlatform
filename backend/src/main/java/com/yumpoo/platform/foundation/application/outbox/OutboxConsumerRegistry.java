@@ -3,8 +3,6 @@ package com.yumpoo.platform.foundation.application.outbox;
 import com.yumpoo.platform.foundation.application.event.DomainEventEnvelope;
 import com.yumpoo.platform.foundation.application.event.EventSubscription;
 import com.yumpoo.platform.foundation.application.event.OutboxEventConsumer;
-import org.springframework.stereotype.Component;
-
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -13,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
+import org.springframework.stereotype.Component;
 
 @Component
 public class OutboxConsumerRegistry {
@@ -40,21 +39,18 @@ public class OutboxConsumerRegistry {
             }
             for (EventSubscription subscription : Set.copyOf(declared)) {
                 eventTypes.add(subscription.eventType());
-                subscriptions.computeIfAbsent(subscription, ignored -> new ArrayList<>()).add(consumer);
+                subscriptions
+                        .computeIfAbsent(subscription, ignored -> new ArrayList<>())
+                        .add(consumer);
             }
         }
-        subscriptions.values().forEach(list -> list.sort(
-                Comparator.comparing(OutboxEventConsumer::consumerName)
-        ));
+        subscriptions.values().forEach(list -> list.sort(Comparator.comparing(OutboxEventConsumer::consumerName)));
         this.bySubscription = Map.copyOf(subscriptions);
         this.knownEventTypes = Set.copyOf(eventTypes);
     }
 
     public List<OutboxEventConsumer> consumersFor(DomainEventEnvelope event) {
-        return bySubscription.getOrDefault(
-                new EventSubscription(event.eventType(), event.eventVersion()),
-                List.of()
-        );
+        return bySubscription.getOrDefault(new EventSubscription(event.eventType(), event.eventVersion()), List.of());
     }
 
     public boolean knowsEventType(String eventType) {

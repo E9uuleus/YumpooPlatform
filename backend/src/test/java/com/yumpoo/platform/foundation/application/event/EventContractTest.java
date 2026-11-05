@@ -1,13 +1,12 @@
 package com.yumpoo.platform.foundation.application.event;
 
-import org.junit.jupiter.api.Test;
-import tools.jackson.databind.node.JsonNodeFactory;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.node.JsonNodeFactory;
 
 class EventContractTest {
 
@@ -22,10 +21,8 @@ class EventContractTest {
 
         assertThatThrownBy(() -> new EventActor(EventActorType.USER, null, null, null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> EventActor.system("unsafe code"))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> EventActor.adminOverride(userId, " "))
-                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> EventActor.system("unsafe code")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> EventActor.adminOverride(userId, " ")).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -33,47 +30,47 @@ class EventContractTest {
         UUID id = UUID.randomUUID();
 
         assertThatThrownBy(() -> new EventDraft(
-                "ProbeRecorded",
-                1,
-                "Probe",
-                id,
-                0,
-                UUID.randomUUID(),
-                EventActor.user(UUID.randomUUID()),
-                JsonNodeFactory.instance.objectNode()
-        )).isInstanceOf(IllegalArgumentException.class);
+                        "ProbeRecorded",
+                        1,
+                        "Probe",
+                        id,
+                        0,
+                        UUID.randomUUID(),
+                        EventActor.user(UUID.randomUUID()),
+                        JsonNodeFactory.instance.objectNode()))
+                .isInstanceOf(IllegalArgumentException.class);
 
         assertThatThrownBy(() -> new DomainEventEnvelope(
-                UUID.randomUUID(),
-                "foundation.probe_recorded",
-                0,
-                Instant.now(),
-                "Probe",
-                id,
-                0,
-                UUID.randomUUID(),
-                EventActor.user(UUID.randomUUID()),
-                "request-1",
-                "request-1",
-                null,
-                JsonNodeFactory.instance.arrayNode()
-        )).isInstanceOf(IllegalArgumentException.class);
+                        UUID.randomUUID(),
+                        "foundation.probe_recorded",
+                        0,
+                        Instant.now(),
+                        "Probe",
+                        id,
+                        0,
+                        UUID.randomUUID(),
+                        EventActor.user(UUID.randomUUID()),
+                        "request-1",
+                        "request-1",
+                        null,
+                        JsonNodeFactory.instance.arrayNode()))
+                .isInstanceOf(IllegalArgumentException.class);
 
         assertThatThrownBy(() -> new DomainEventEnvelope(
-                UUID.fromString("00000000-0000-3000-8000-000000000001"),
-                "foundation.probe_recorded",
-                1,
-                Instant.now(),
-                "Probe",
-                id,
-                0,
-                UUID.randomUUID(),
-                EventActor.user(UUID.randomUUID()),
-                "request-1",
-                "request-1",
-                null,
-                JsonNodeFactory.instance.objectNode()
-        )).isInstanceOf(IllegalArgumentException.class)
+                        UUID.fromString("00000000-0000-3000-8000-000000000001"),
+                        "foundation.probe_recorded",
+                        1,
+                        Instant.now(),
+                        "Probe",
+                        id,
+                        0,
+                        UUID.randomUUID(),
+                        EventActor.user(UUID.randomUUID()),
+                        "request-1",
+                        "request-1",
+                        null,
+                        JsonNodeFactory.instance.objectNode()))
+                .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("eventId must be UUIDv4");
     }
 }

@@ -10,9 +10,6 @@ import com.yumpoo.platform.identityaccess.domain.identity.ExternalIdentityProvid
 import com.yumpoo.platform.identityaccess.domain.identity.ProfileHash;
 import com.yumpoo.platform.identityaccess.domain.identity.User;
 import com.yumpoo.platform.identityaccess.domain.identity.WorkspaceSlug;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Repository;
-
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -26,10 +23,11 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Repository;
 
 @Repository
-public class JdbcDirectoryMemberProvisioningRepository
-        implements DirectoryMemberProvisioningRepository {
+public class JdbcDirectoryMemberProvisioningRepository implements DirectoryMemberProvisioningRepository {
 
     private static final String SELECT_BINDING = """
             SELECT
@@ -75,13 +73,10 @@ public class JdbcDirectoryMemberProvisioningRepository
     }
 
     @Override
-    public void acquireProvisionLock(
-            UUID companyId,
-            ExternalIdentityProvider provider,
-            String externalUserId
-    ) {
+    public void acquireProvisionLock(UUID companyId, ExternalIdentityProvider provider, String externalUserId) {
         int[] keys = advisoryLockKeys(companyId, provider, externalUserId);
-        jdbcClient.sql("SELECT pg_advisory_xact_lock(:namespaceKey, :identityKey)")
+        jdbcClient
+                .sql("SELECT pg_advisory_xact_lock(:namespaceKey, :identityKey)")
                 .param("namespaceKey", keys[0])
                 .param("identityKey", keys[1])
                 .query((resultSet, rowNumber) -> Boolean.TRUE)
@@ -90,11 +85,9 @@ public class JdbcDirectoryMemberProvisioningRepository
 
     @Override
     public Optional<DirectoryMemberBinding> findByExternalIdentity(
-            UUID companyId,
-            ExternalIdentityProvider provider,
-            String externalUserId
-    ) {
-        List<DirectoryMemberBinding> bindings = jdbcClient.sql(SELECT_BINDING)
+            UUID companyId, ExternalIdentityProvider provider, String externalUserId) {
+        List<DirectoryMemberBinding> bindings = jdbcClient
+                .sql(SELECT_BINDING)
                 .param("companyId", companyId)
                 .param("provider", provider.name())
                 .param("externalUserId", externalUserId)
@@ -107,20 +100,13 @@ public class JdbcDirectoryMemberProvisioningRepository
     }
 
     @Override
-    public DirectoryMemberBinding create(
-            UUID companyId,
-            WeComMemberProfile profile,
-            Instant now
-    ) {
+    public DirectoryMemberBinding create(UUID companyId, WeComMemberProfile profile, Instant now) {
         UUID userId = UUID.randomUUID();
         UUID externalIdentityId = UUID.randomUUID();
-        WorkspaceSlug workspaceSlug = allocateWorkspaceSlug(
-                companyId,
-                profile.externalUserId(),
-                userId
-        );
+        WorkspaceSlug workspaceSlug = allocateWorkspaceSlug(companyId, profile.externalUserId(), userId);
         OffsetDateTime databaseNow = OffsetDateTime.ofInstant(now, ZoneOffset.UTC);
-        int insertedUsers = jdbcClient.sql("""
+        int insertedUsers = jdbcClient
+                .sql("""
                         INSERT INTO yumpoo.identity_user (
                             id, company_id, employment_status, account_status,
                             display_name, workspace_slug, email, mobile, department_summary,
@@ -142,7 +128,8 @@ public class JdbcDirectoryMemberProvisioningRepository
                 .update();
         requireOne(insertedUsers, "create User");
 
-        int insertedIdentities = jdbcClient.sql("""
+        int insertedIdentities = jdbcClient
+                .sql("""
                         INSERT INTO yumpoo.external_identity (
                             id, company_id, user_id, provider, external_user_id,
                             provider_employment_status, raw_profile_hash,
@@ -180,8 +167,7 @@ public class JdbcDirectoryMemberProvisioningRepository
                         0,
                         0,
                         now,
-                        now
-                ),
+                        now),
                 new ExternalIdentity(
                         externalIdentityId,
                         companyId,
@@ -192,22 +178,17 @@ public class JdbcDirectoryMemberProvisioningRepository
                         profile.rawProfileHash(),
                         now,
                         now,
-                        now
-                )
-        );
+                        now));
     }
 
     @Override
-    public DirectoryMemberBinding refresh(
-            DirectoryMemberBinding current,
-            WeComMemberProfile profile,
-            Instant now
-    ) {
+    public DirectoryMemberBinding refresh(DirectoryMemberBinding current, WeComMemberProfile profile, Instant now) {
         User user = current.user();
         boolean returned = user.employmentStatus() == EmploymentStatus.LEFT
                 || current.externalIdentity().providerEmploymentStatus() == EmploymentStatus.LEFT;
         OffsetDateTime databaseNow = OffsetDateTime.ofInstant(now, ZoneOffset.UTC);
-        int updatedUsers = jdbcClient.sql("""
+        int updatedUsers = jdbcClient
+                .sql("""
                         UPDATE yumpoo.identity_user
                         SET employment_status = 'ACTIVE',
                             display_name = :displayName,
@@ -235,7 +216,8 @@ public class JdbcDirectoryMemberProvisioningRepository
         requireOne(updatedUsers, "refresh User");
 
         ExternalIdentity identity = current.externalIdentity();
-        int updatedIdentities = jdbcClient.sql("""
+        int updatedIdentities = jdbcClient
+                .sql("""
                         UPDATE yumpoo.external_identity
                         SET provider_employment_status = 'ACTIVE',
                             raw_profile_hash = :rawProfileHash,
@@ -272,8 +254,7 @@ public class JdbcDirectoryMemberProvisioningRepository
                         user.authorizationVersion() + (returned ? 1 : 0),
                         user.rowVersion() + 1,
                         user.createdAt(),
-                        now
-                ),
+                        now),
                 new ExternalIdentity(
                         identity.id(),
                         identity.companyId(),
@@ -284,13 +265,10 @@ public class JdbcDirectoryMemberProvisioningRepository
                         profile.rawProfileHash(),
                         now,
                         identity.createdAt(),
-                        now
-                )
-        );
+                        now));
     }
 
-    private static DirectoryMemberBinding mapBinding(ResultSet resultSet, int rowNumber)
-            throws SQLException {
+    private static DirectoryMemberBinding mapBinding(ResultSet resultSet, int rowNumber) throws SQLException {
         UUID companyId = resultSet.getObject("company_id", UUID.class);
         UUID userId = resultSet.getObject("user_id", UUID.class);
         User user = new User(
@@ -311,8 +289,7 @@ public class JdbcDirectoryMemberProvisioningRepository
                 resultSet.getLong("authorization_version"),
                 resultSet.getLong("row_version"),
                 instant(resultSet, "user_created_at"),
-                instant(resultSet, "user_updated_at")
-        );
+                instant(resultSet, "user_updated_at"));
         ExternalIdentity identity = new ExternalIdentity(
                 resultSet.getObject("external_identity_id", UUID.class),
                 companyId,
@@ -323,16 +300,11 @@ public class JdbcDirectoryMemberProvisioningRepository
                 new ProfileHash(resultSet.getString("raw_profile_hash")),
                 instant(resultSet, "last_seen_at"),
                 instant(resultSet, "identity_created_at"),
-                instant(resultSet, "identity_updated_at")
-        );
+                instant(resultSet, "identity_updated_at"));
         return new DirectoryMemberBinding(user, identity);
     }
 
-    private WorkspaceSlug allocateWorkspaceSlug(
-            UUID companyId,
-            String externalUserId,
-            UUID userId
-    ) {
+    private WorkspaceSlug allocateWorkspaceSlug(UUID companyId, String externalUserId, UUID userId) {
         acquireWorkspaceSlugAllocationLock(companyId);
         WorkspaceSlug preferred = WorkspaceSlug.fromExternalUserId(externalUserId, userId);
         if (!workspaceSlugExists(companyId, preferred)) {
@@ -351,7 +323,8 @@ public class JdbcDirectoryMemberProvisioningRepository
 
     private void acquireWorkspaceSlugAllocationLock(UUID companyId) {
         int[] keys = advisoryLockKeys(companyId + "\0WORKSPACE_SLUG");
-        jdbcClient.sql("SELECT pg_advisory_xact_lock(:namespaceKey, :identityKey)")
+        jdbcClient
+                .sql("SELECT pg_advisory_xact_lock(:namespaceKey, :identityKey)")
                 .param("namespaceKey", keys[0])
                 .param("identityKey", keys[1])
                 .query((resultSet, rowNumber) -> Boolean.TRUE)
@@ -359,7 +332,8 @@ public class JdbcDirectoryMemberProvisioningRepository
     }
 
     private boolean workspaceSlugExists(UUID companyId, WorkspaceSlug workspaceSlug) {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                         SELECT EXISTS (
                             SELECT 1
                             FROM yumpoo.identity_user
@@ -382,11 +356,7 @@ public class JdbcDirectoryMemberProvisioningRepository
         return timestamp == null ? null : timestamp.toInstant();
     }
 
-    private static int[] advisoryLockKeys(
-            UUID companyId,
-            ExternalIdentityProvider provider,
-            String externalUserId
-    ) {
+    private static int[] advisoryLockKeys(UUID companyId, ExternalIdentityProvider provider, String externalUserId) {
         Objects.requireNonNull(companyId, "companyId must not be null");
         Objects.requireNonNull(provider, "provider must not be null");
         Objects.requireNonNull(externalUserId, "externalUserId must not be null");
@@ -399,7 +369,7 @@ public class JdbcDirectoryMemberProvisioningRepository
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hash = digest.digest(lockIdentity.getBytes(StandardCharsets.UTF_8));
             ByteBuffer keys = ByteBuffer.wrap(hash);
-            return new int[]{keys.getInt(), keys.getInt()};
+            return new int[] {keys.getInt(), keys.getInt()};
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 is not available", exception);
         }

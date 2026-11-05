@@ -13,8 +13,7 @@ public record PlatformRoleAssignmentMutation(
         long assignmentRowVersion,
         long userRowVersion,
         long authorizationVersion,
-        Instant changedAt
-) {
+        Instant changedAt) {
 
     public PlatformRoleAssignmentMutation {
         Objects.requireNonNull(assignmentId, "assignmentId must not be null");

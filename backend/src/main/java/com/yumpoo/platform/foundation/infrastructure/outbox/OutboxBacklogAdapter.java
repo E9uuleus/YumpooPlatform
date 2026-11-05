@@ -18,7 +18,7 @@ public class OutboxBacklogAdapter implements OutboxBacklogPort {
     @Override
     public Backlog read() {
         return jdbc.queryForObject(
-            """
+                """
             SELECT count(*) FILTER (WHERE status='PENDING') AS pending,
               count(*) FILTER (WHERE status='PROCESSING') AS processing,
               count(*) FILTER (WHERE status='RETRY') AS retry,
@@ -26,14 +26,13 @@ public class OutboxBacklogAdapter implements OutboxBacklogPort {
               min(occurred_at) FILTER (WHERE status<>'DEAD') AS oldest
             FROM yumpoo.outbox_event WHERE status IN ('PENDING','PROCESSING','RETRY','DEAD')
             """,
-            (rs, n) ->
-                new Backlog(
-                    rs.getLong("pending"),
-                    rs.getLong("processing"),
-                    rs.getLong("retry"),
-                    rs.getLong("dead"),
-                    rs.getTimestamp("oldest") == null ? null : rs.getTimestamp("oldest").toInstant()
-                )
-        );
+                (rs, n) -> new Backlog(
+                        rs.getLong("pending"),
+                        rs.getLong("processing"),
+                        rs.getLong("retry"),
+                        rs.getLong("dead"),
+                        rs.getTimestamp("oldest") == null
+                                ? null
+                                : rs.getTimestamp("oldest").toInstant()));
     }
 }

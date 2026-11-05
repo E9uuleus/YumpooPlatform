@@ -18,13 +18,15 @@ public class SessionCleanupScheduler {
 
     @Scheduled(
             fixedDelayString = "${yumpoo.session.cleanup-delay:1h}",
-            initialDelayString = "${yumpoo.session.cleanup-delay:1h}"
-    )
+            initialDelayString = "${yumpoo.session.cleanup-delay:1h}")
     public void purgeDueSessions() {
         int deleted = sessionService.purgeDueSessions();
         if (deleted > 0) {
-            LOGGER.atInfo().setMessage("due sessions purged").addKeyValue("event", "session.cleanup.completed")
-                    .addKeyValue("deletedCount", deleted).log();
+            LOGGER.atInfo()
+                    .setMessage("due sessions purged")
+                    .addKeyValue("event", "session.cleanup.completed")
+                    .addKeyValue("deletedCount", deleted)
+                    .log();
         }
     }
 }

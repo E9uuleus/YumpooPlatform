@@ -7,11 +7,23 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 
 public record Content(
-        UUID id, UUID companyId, UUID projectId, String code, String name, String colorToken,
-        int sortOrder, boolean active, boolean protectedContent, boolean everUsed, long rowVersion,
-        Instant createdAt, UUID createdByUserId, Instant updatedAt, UUID updatedByUserId,
-        Instant deletedAt, UUID deletedByUserId
-) {
+        UUID id,
+        UUID companyId,
+        UUID projectId,
+        String code,
+        String name,
+        String colorToken,
+        int sortOrder,
+        boolean active,
+        boolean protectedContent,
+        boolean everUsed,
+        long rowVersion,
+        Instant createdAt,
+        UUID createdByUserId,
+        Instant updatedAt,
+        UUID updatedByUserId,
+        Instant deletedAt,
+        UUID deletedByUserId) {
     private static final Pattern STABLE_CODE = Pattern.compile("^[A-Z][A-Z0-9_]{1,31}$");
     private static final Set<String> PROTECTED_CODES = Set.of("REQUIREMENTS", "TASKS", "DEFECTS");
 
@@ -37,39 +49,136 @@ public record Content(
         }
     }
 
-    public static Content initial(UUID id, UUID companyId, UUID projectId, String code,
-            String name, String colorToken, int sortOrder, UUID actorUserId, Instant now) {
-        return new Content(id, companyId, projectId, code, name, colorToken, sortOrder,
-                true, PROTECTED_CODES.contains(code), false, 0,
-                now, actorUserId, now, actorUserId, null, null);
+    public static Content initial(
+            UUID id,
+            UUID companyId,
+            UUID projectId,
+            String code,
+            String name,
+            String colorToken,
+            int sortOrder,
+            UUID actorUserId,
+            Instant now) {
+        return new Content(
+                id,
+                companyId,
+                projectId,
+                code,
+                name,
+                colorToken,
+                sortOrder,
+                true,
+                PROTECTED_CODES.contains(code),
+                false,
+                0,
+                now,
+                actorUserId,
+                now,
+                actorUserId,
+                null,
+                null);
     }
 
-    public static Content create(UUID id, UUID companyId, UUID projectId, String code,
-            String name, String colorToken, int sortOrder, UUID actorUserId, Instant now) {
-        return new Content(id, companyId, projectId, code, name, colorToken, sortOrder,
-                true, false, false, 0, now, actorUserId, now, actorUserId, null, null);
+    public static Content create(
+            UUID id,
+            UUID companyId,
+            UUID projectId,
+            String code,
+            String name,
+            String colorToken,
+            int sortOrder,
+            UUID actorUserId,
+            Instant now) {
+        return new Content(
+                id,
+                companyId,
+                projectId,
+                code,
+                name,
+                colorToken,
+                sortOrder,
+                true,
+                false,
+                false,
+                0,
+                now,
+                actorUserId,
+                now,
+                actorUserId,
+                null,
+                null);
     }
 
-    public Content update(String nextName, String nextColorToken, int nextSortOrder,
-            boolean nextActive, UUID actorUserId, Instant now) {
+    public Content update(
+            String nextName,
+            String nextColorToken,
+            int nextSortOrder,
+            boolean nextActive,
+            UUID actorUserId,
+            Instant now) {
         if (deletedAt != null) throw new IllegalStateException("deleted content is read only");
-        return new Content(id, companyId, projectId, code, nextName, nextColorToken,
-                nextSortOrder, nextActive, protectedContent, everUsed, rowVersion + 1,
-                createdAt, createdByUserId, now, actorUserId, null, null);
+        return new Content(
+                id,
+                companyId,
+                projectId,
+                code,
+                nextName,
+                nextColorToken,
+                nextSortOrder,
+                nextActive,
+                protectedContent,
+                everUsed,
+                rowVersion + 1,
+                createdAt,
+                createdByUserId,
+                now,
+                actorUserId,
+                null,
+                null);
     }
 
     public Content markUsed(UUID actorUserId, Instant now) {
         if (everUsed) return this;
-        return new Content(id, companyId, projectId, code, name, colorToken, sortOrder,
-                active, protectedContent, true, rowVersion + 1, createdAt, createdByUserId,
-                now, actorUserId, null, null);
+        return new Content(
+                id,
+                companyId,
+                projectId,
+                code,
+                name,
+                colorToken,
+                sortOrder,
+                active,
+                protectedContent,
+                true,
+                rowVersion + 1,
+                createdAt,
+                createdByUserId,
+                now,
+                actorUserId,
+                null,
+                null);
     }
 
     public Content delete(UUID actorUserId, Instant now) {
         if (protectedContent || everUsed) throw new IllegalStateException("content cannot be deleted");
-        return new Content(id, companyId, projectId, code, name, colorToken, sortOrder,
-                false, false, false, rowVersion + 1, createdAt, createdByUserId,
-                now, actorUserId, now, actorUserId);
+        return new Content(
+                id,
+                companyId,
+                projectId,
+                code,
+                name,
+                colorToken,
+                sortOrder,
+                false,
+                false,
+                false,
+                rowVersion + 1,
+                createdAt,
+                createdByUserId,
+                now,
+                actorUserId,
+                now,
+                actorUserId);
     }
 
     private static String requireCode(String value) {

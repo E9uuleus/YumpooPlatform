@@ -1,7 +1,6 @@
 package com.yumpoo.platform.workitem.application;
 
 import com.yumpoo.platform.catalog.api.ProjectFactWriteSnapshot;
-
 import java.util.Objects;
 import java.util.UUID;
 

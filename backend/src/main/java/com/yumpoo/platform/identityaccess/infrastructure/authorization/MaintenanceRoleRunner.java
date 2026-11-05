@@ -1,12 +1,14 @@
 package com.yumpoo.platform.identityaccess.infrastructure.authorization;
 
+import com.yumpoo.platform.foundation.application.request.RequestCorrelation;
+import com.yumpoo.platform.foundation.application.request.RequestCorrelationContext;
 import com.yumpoo.platform.identityaccess.application.authorization.MaintenanceRoleCommand;
 import com.yumpoo.platform.identityaccess.application.authorization.MaintenanceRoleMode;
 import com.yumpoo.platform.identityaccess.application.authorization.PlatformRoleMaintenanceUseCase;
 import com.yumpoo.platform.identityaccess.application.authorization.PlatformRoleMutationResult;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
-import com.yumpoo.platform.foundation.application.request.RequestCorrelation;
-import com.yumpoo.platform.foundation.application.request.RequestCorrelationContext;
+import java.util.Objects;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -16,15 +18,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.stereotype.Component;
 
-import java.util.Objects;
-import java.util.UUID;
-
 @Component
-@ConditionalOnProperty(
-        prefix = "yumpoo.maintenance.app-manager",
-        name = "enabled",
-        havingValue = "true"
-)
+@ConditionalOnProperty(prefix = "yumpoo.maintenance.app-manager", name = "enabled", havingValue = "true")
 public class MaintenanceRoleRunner implements ApplicationRunner {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MaintenanceRoleRunner.class);
@@ -38,8 +33,7 @@ public class MaintenanceRoleRunner implements ApplicationRunner {
             MaintenanceRoleRunnerProperties properties,
             CompanyConfigurationQuery companyConfigurationQuery,
             PlatformRoleMaintenanceUseCase maintenanceUseCase,
-            ConfigurableApplicationContext applicationContext
-    ) {
+            ConfigurableApplicationContext applicationContext) {
         this.properties = properties;
         this.companyConfigurationQuery = companyConfigurationQuery;
         this.maintenanceUseCase = maintenanceUseCase;
@@ -49,8 +43,8 @@ public class MaintenanceRoleRunner implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         String requestId = UUID.randomUUID().toString();
-        try (RequestCorrelationContext.Scope ignored = RequestCorrelationContext.open(
-                RequestCorrelation.root(requestId))) {
+        try (RequestCorrelationContext.Scope ignored =
+                RequestCorrelationContext.open(RequestCorrelation.root(requestId))) {
             execute(requestId);
         }
     }
@@ -62,13 +56,15 @@ public class MaintenanceRoleRunner implements ApplicationRunner {
                 companyConfigurationQuery.current().companyId(),
                 Objects.requireNonNull(properties.targetUserId(), "targetUserId is required"),
                 mode,
-                requireText(properties.reasonReference(), "reasonReference")
-        ));
-        LOGGER.atInfo().setMessage("app-manager maintenance completed").addKeyValue("event", "identity.maintenance.completed")
-                    .addKeyValue("requestId", requestId)
-                    .addKeyValue("mode", mode)
-                    .addKeyValue("assignmentId", result.assignmentId())
-                    .addKeyValue("outcome", result.status()).log();
+                requireText(properties.reasonReference(), "reasonReference")));
+        LOGGER.atInfo()
+                .setMessage("app-manager maintenance completed")
+                .addKeyValue("event", "identity.maintenance.completed")
+                .addKeyValue("requestId", requestId)
+                .addKeyValue("mode", mode)
+                .addKeyValue("assignmentId", result.assignmentId())
+                .addKeyValue("outcome", result.status())
+                .log();
         SpringApplication.exit(applicationContext, () -> 0);
     }
 

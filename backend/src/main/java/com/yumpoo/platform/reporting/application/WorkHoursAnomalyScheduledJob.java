@@ -9,10 +9,6 @@ import com.yumpoo.platform.foundation.application.scheduling.ScheduledJob;
 import com.yumpoo.platform.foundation.application.scheduling.ScheduledJobResult;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
 import com.yumpoo.platform.workitem.api.TeamWorkQuery;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import tools.jackson.databind.ObjectMapper;
-
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -21,6 +17,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.ObjectMapper;
 
 @Service
 public class WorkHoursAnomalyScheduledJob implements ScheduledJob {
@@ -32,13 +31,26 @@ public class WorkHoursAnomalyScheduledJob implements ScheduledJob {
     private final ObjectMapper json;
     private final Clock clock;
 
-    public WorkHoursAnomalyScheduledJob(WorkHoursAlertRepository repository, CompanyProjectQuery projects, TeamWorkQuery work,
-            CompanyConfigurationQuery company, TransactionalEventPort events, ObjectMapper json, Clock clock) {
-        this.repository = repository; this.projects = projects; this.work = work; this.company = company;
-        this.events = events; this.json = json; this.clock = clock;
+    public WorkHoursAnomalyScheduledJob(
+            WorkHoursAlertRepository repository,
+            CompanyProjectQuery projects,
+            TeamWorkQuery work,
+            CompanyConfigurationQuery company,
+            TransactionalEventPort events,
+            ObjectMapper json,
+            Clock clock) {
+        this.repository = repository;
+        this.projects = projects;
+        this.work = work;
+        this.company = company;
+        this.events = events;
+        this.json = json;
+        this.clock = clock;
     }
 
-    public String code() { return "WORK_HOURS_ANOMALY"; }
+    public String code() {
+        return "WORK_HOURS_ANOMALY";
+    }
 
     @Transactional
     public ScheduledJobResult run(UUID companyId, String triggerKey, String requestId) {
@@ -46,10 +58,14 @@ public class WorkHoursAnomalyScheduledJob implements ScheduledJob {
         // 调度器恢复后会把下次执行推进到未来，因此本次需补齐计划日期到昨天。
         Instant planned = Instant.ofEpochSecond(Long.parseLong(triggerKey.substring(triggerKey.lastIndexOf(':') + 1)));
         LocalDate firstDay = LocalDate.ofInstant(planned, zone).minusDays(1);
-        int threshold = repository.setting(companyId).map(WorkHoursAlertRepository.Setting::dailyThresholdMinutes)
+        int threshold = repository
+                .setting(companyId)
+                .map(WorkHoursAlertRepository.Setting::dailyThresholdMinutes)
                 .orElse(WorkHoursAlertService.DEFAULT_THRESHOLD_MINUTES);
         List<UUID> projectIds = projects.listForScheduler(companyId).stream()
-                .filter(project -> "ACTIVE".equals(project.lifecycle())).map(MemberProjectQuery.Project::id).toList();
+                .filter(project -> "ACTIVE".equals(project.lifecycle()))
+                .map(MemberProjectQuery.Project::id)
+                .toList();
         Instant now = clock.instant();
         LocalDate yesterday = LocalDate.ofInstant(now, zone).minusDays(1);
         for (LocalDate day = firstDay; !day.isAfter(yesterday); day = day.plusDays(1)) {
@@ -58,15 +74,34 @@ public class WorkHoursAnomalyScheduledJob implements ScheduledJob {
         return ScheduledJobResult.succeeded();
     }
 
-    private void checkDay(UUID companyId, List<UUID> projectIds, LocalDate day, ZoneId zone, Instant now, int threshold) {
+    private void checkDay(
+            UUID companyId, List<UUID> projectIds, LocalDate day, ZoneId zone, Instant now, int threshold) {
         Map<UUID, Long> totals = new LinkedHashMap<>();
-        work.timeEntriesForScheduler(companyId, projectIds, day, day, zone, now).forEach(e -> totals.merge(e.userId(), e.durationMs(), Long::sum));
-        work.categoryEntriesForScheduler(companyId, day, day, zone, now).forEach(e -> totals.merge(e.userId(), e.durationMs(), Long::sum));
+        work.timeEntriesForScheduler(companyId, projectIds, day, day, zone, now)
+                .forEach(e -> totals.merge(e.userId(), e.durationMs(), Long::sum));
+        work.categoryEntriesForScheduler(companyId, day, day, zone, now)
+                .forEach(e -> totals.merge(e.userId(), e.durationMs(), Long::sum));
         totals.forEach((userId, total) -> {
             if (total <= threshold * 60_000L) return;
-            repository.recordAlert(companyId, userId, day, total, threshold, now).ifPresent(alertId -> events.append(new EventDraft(
-                    "reporting.work_hours_anomaly_detected", 1, "WorkHoursAlert", alertId, 1, companyId, EventActor.system("WORK_HOURS_MONITOR"),
-                    json.valueToTree(Map.of("userId", userId, "workDate", day, "totalDurationMs", total, "thresholdMinutes", threshold)))));
+            repository
+                    .recordAlert(companyId, userId, day, total, threshold, now)
+                    .ifPresent(alertId -> events.append(new EventDraft(
+                            "reporting.work_hours_anomaly_detected",
+                            1,
+                            "WorkHoursAlert",
+                            alertId,
+                            1,
+                            companyId,
+                            EventActor.system("WORK_HOURS_MONITOR"),
+                            json.valueToTree(Map.of(
+                                    "userId",
+                                    userId,
+                                    "workDate",
+                                    day,
+                                    "totalDurationMs",
+                                    total,
+                                    "thresholdMinutes",
+                                    threshold)))));
         });
     }
 }

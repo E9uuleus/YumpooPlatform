@@ -3,8 +3,6 @@ package com.yumpoo.platform.identityaccess.infrastructure.wecom;
 import com.yumpoo.platform.identityaccess.application.authentication.WebIdentityProvider;
 import com.yumpoo.platform.identityaccess.application.oauth.WeComAuthenticationFailedException;
 import com.yumpoo.platform.identityaccess.application.oauth.WeComMemberIdentity;
-import org.springframework.web.util.UriComponentsBuilder;
-
 import java.net.URI;
 import java.security.SecureRandom;
 import java.time.Clock;
@@ -13,6 +11,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.web.util.UriComponentsBuilder;
 
 final class ControlledWebIdentityProvider implements WebIdentityProvider {
 
@@ -25,10 +24,7 @@ final class ControlledWebIdentityProvider implements WebIdentityProvider {
     private final SecureRandom random = new SecureRandom();
     private final Map<String, Instant> codes = new ConcurrentHashMap<>();
 
-    ControlledWebIdentityProvider(
-            ControlledAuthenticationProperties properties,
-            Clock clock
-    ) {
+    ControlledWebIdentityProvider(ControlledAuthenticationProperties properties, Clock clock) {
         properties.validateForEnabled();
         this.corpId = properties.getCorpId();
         this.memberId = properties.getMemberId();

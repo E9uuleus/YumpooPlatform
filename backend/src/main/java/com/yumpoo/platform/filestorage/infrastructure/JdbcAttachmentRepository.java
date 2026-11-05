@@ -4,23 +4,19 @@ import com.yumpoo.platform.filestorage.application.AttachmentData.CreateIntent;
 import com.yumpoo.platform.filestorage.application.AttachmentData.Finalization;
 import com.yumpoo.platform.filestorage.application.AttachmentData.RescanResult;
 import com.yumpoo.platform.filestorage.application.AttachmentData.ScanClaim;
-import com.yumpoo.platform.filestorage.domain.AttachmentOwnerType;
-import com.yumpoo.platform.filestorage.domain.AttachmentRejectedCode;
-import com.yumpoo.platform.filestorage.domain.AttachmentState;
 import com.yumpoo.platform.filestorage.application.AttachmentFileName;
 import com.yumpoo.platform.filestorage.application.AttachmentRecord;
 import com.yumpoo.platform.filestorage.application.AttachmentRepository;
 import com.yumpoo.platform.filestorage.application.QuarantineStorage;
+import com.yumpoo.platform.filestorage.domain.AttachmentOwnerType;
+import com.yumpoo.platform.filestorage.domain.AttachmentRejectedCode;
+import com.yumpoo.platform.filestorage.domain.AttachmentState;
 import com.yumpoo.platform.foundation.application.concurrency.StrongEtag;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.FieldViolation;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Repository;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.sql.ResultSet;
 import java.io.IOException;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -28,6 +24,9 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 @Repository
 public class JdbcAttachmentRepository implements AttachmentRepository {
@@ -39,8 +38,13 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
 
     @Override
     @Transactional
-    public AttachmentRecord insertIntent(CreateIntent command, AttachmentFileName fileName,
-            long reservedBytes, long companyLimit, long projectLimit, Instant expiresAt) {
+    public AttachmentRecord insertIntent(
+            CreateIntent command,
+            AttachmentFileName fileName,
+            long reservedBytes,
+            long companyLimit,
+            long projectLimit,
+            Instant expiresAt) {
         ensureQuotaRows(command.companyId(), command.projectId(), command.now());
         List<Quota> quotas = jdbc.sql("""
                 SELECT scope_type, reserved_bytes, available_bytes
@@ -50,14 +54,16 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
                      OR (scope_type = 'PROJECT' AND scope_id = :projectId))
                  ORDER BY scope_type
                  FOR UPDATE
-                """).param("companyId", command.companyId()).param("projectId", command.projectId())
-                .query((rs, row) -> new Quota(rs.getString(1), rs.getLong(2), rs.getLong(3))).list();
+                """)
+                .param("companyId", command.companyId())
+                .param("projectId", command.projectId())
+                .query((rs, row) -> new Quota(rs.getString(1), rs.getLong(2), rs.getLong(3)))
+                .list();
         JdbcAttachmentPurgeFence.requireWritable(jdbc, command.companyId(), command.projectId());
         for (Quota quota : quotas) {
             long limit = quota.scopeType().equals("COMPANY") ? companyLimit : projectLimit;
             if (quota.reserved() + quota.available() + reservedBytes > limit) {
-                throw ApplicationException.validation(new FieldViolation("sizeBytes",
-                        "QUOTA_EXCEEDED", "附件配额不足"));
+                throw ApplicationException.validation(new FieldViolation("sizeBytes", "QUOTA_EXCEEDED", "附件配额不足"));
             }
         }
         adjustQuota(command.companyId(), command.projectId(), reservedBytes, 0, command.now());
@@ -72,38 +78,58 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
                     :fileName, :extension, :declaredMime, 'UPLOADING',
                     :reservedBytes, :uploadedBy, :expiresAt, :now, :now
                 )
-                """).param("id", command.id()).param("companyId", command.companyId())
-                .param("projectId", command.projectId()).param("ownerType", command.ownerType().name())
-                .param("ownerId", command.ownerId()).param("fileName", fileName.displayName())
-                .param("extension", fileName.extension()).param("declaredMime", command.declaredMime())
-                .param("reservedBytes", reservedBytes).param("uploadedBy", command.uploadedByUserId())
-                .param("expiresAt", utc(expiresAt)).param("now", utc(command.now())).update();
+                """)
+                .param("id", command.id())
+                .param("companyId", command.companyId())
+                .param("projectId", command.projectId())
+                .param("ownerType", command.ownerType().name())
+                .param("ownerId", command.ownerId())
+                .param("fileName", fileName.displayName())
+                .param("extension", fileName.extension())
+                .param("declaredMime", command.declaredMime())
+                .param("reservedBytes", reservedBytes)
+                .param("uploadedBy", command.uploadedByUserId())
+                .param("expiresAt", utc(expiresAt))
+                .param("now", utc(command.now()))
+                .update();
         return required(command.companyId(), command.id());
     }
 
     @Override
     public Optional<AttachmentRecord> find(UUID companyId, UUID attachmentId) {
         return jdbc.sql("SELECT * FROM yumpoo.attachment WHERE company_id=:companyId AND id=:id")
-                .param("companyId", companyId).param("id", attachmentId)
-                .query(this::mapAttachment).optional();
+                .param("companyId", companyId)
+                .param("id", attachmentId)
+                .query(this::mapAttachment)
+                .optional();
     }
 
     @Override
     public boolean isProjectPurging(UUID companyId, UUID projectId) {
-        return jdbc.sql("SELECT EXISTS (SELECT 1 FROM yumpoo.attachment_project_purge WHERE company_id=:company AND project_id=:project)")
-                .param("company", companyId).param("project", projectId).query(Boolean.class).single();
+        return jdbc.sql(
+                        "SELECT EXISTS (SELECT 1 FROM yumpoo.attachment_project_purge WHERE company_id=:company AND project_id=:project)")
+                .param("company", companyId)
+                .param("project", projectId)
+                .query(Boolean.class)
+                .single();
     }
 
     @Override
-    public List<AttachmentRecord> list(UUID companyId, AttachmentOwnerType ownerType, UUID ownerId,
-            Instant beforeCreatedAt, UUID beforeId, int limit) {
-        String cursor = beforeCreatedAt == null ? "" :
-                " AND (created_at, id) < (:beforeCreatedAt, :beforeId) ";
+    public List<AttachmentRecord> list(
+            UUID companyId,
+            AttachmentOwnerType ownerType,
+            UUID ownerId,
+            Instant beforeCreatedAt,
+            UUID beforeId,
+            int limit) {
+        String cursor = beforeCreatedAt == null ? "" : " AND (created_at, id) < (:beforeCreatedAt, :beforeId) ";
         JdbcClient.StatementSpec spec = jdbc.sql("SELECT * FROM yumpoo.attachment WHERE company_id=:companyId "
-                + "AND owner_type=:ownerType AND owner_id=:ownerId AND status <> 'DELETED' " + cursor
-                + "ORDER BY created_at DESC, id DESC LIMIT :limit")
-                .param("companyId", companyId).param("ownerType", ownerType.name())
-                .param("ownerId", ownerId).param("limit", limit);
+                        + "AND owner_type=:ownerType AND owner_id=:ownerId AND status <> 'DELETED' " + cursor
+                        + "ORDER BY created_at DESC, id DESC LIMIT :limit")
+                .param("companyId", companyId)
+                .param("ownerType", ownerType.name())
+                .param("ownerId", ownerId)
+                .param("limit", limit);
         if (beforeCreatedAt != null) {
             spec = spec.param("beforeCreatedAt", utc(beforeCreatedAt)).param("beforeId", beforeId);
         }
@@ -112,8 +138,8 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
 
     @Override
     @Transactional
-    public Optional<AttachmentRecord> beginUpload(UUID companyId, UUID attachmentId, UUID leaseToken,
-            Instant now, Instant leaseUntil) {
+    public Optional<AttachmentRecord> beginUpload(
+            UUID companyId, UUID attachmentId, UUID leaseToken, Instant now, Instant leaseUntil) {
         AttachmentRecord current = locked(companyId, attachmentId);
         JdbcAttachmentPurgeFence.requireWritable(jdbc, companyId, current.projectId());
         int updated = jdbc.sql("""
@@ -123,19 +149,26 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
                  WHERE company_id=:companyId AND id=:id AND status='UPLOADING'
                    AND sealed_at IS NULL AND intent_expires_at > :now
                    AND (upload_lease_token IS NULL OR upload_lease_until < :now)
-                """).param("leaseToken", leaseToken).param("leaseUntil", utc(leaseUntil))
-                .param("now", utc(now)).param("companyId", companyId).param("id", attachmentId).update();
+                """)
+                .param("leaseToken", leaseToken)
+                .param("leaseUntil", utc(leaseUntil))
+                .param("now", utc(now))
+                .param("companyId", companyId)
+                .param("id", attachmentId)
+                .update();
         return updated == 1 ? find(companyId, attachmentId) : Optional.empty();
     }
 
     @Override
     @Transactional(rollbackFor = IOException.class)
-    public void mutateUpload(UUID companyId, UUID attachmentId, UUID leaseToken, Instant now,
-            QuarantineStorage.Mutation mutation) throws IOException {
+    public void mutateUpload(
+            UUID companyId, UUID attachmentId, UUID leaseToken, Instant now, QuarantineStorage.Mutation mutation)
+            throws IOException {
         AttachmentRecord current = locked(companyId, attachmentId);
         requireLease(current, leaseToken);
         JdbcAttachmentPurgeFence.requireWritable(jdbc, companyId, current.projectId());
-        if (current.status() != AttachmentState.UPLOADING || current.uploadLeaseUntil() == null
+        if (current.status() != AttachmentState.UPLOADING
+                || current.uploadLeaseUntil() == null
                 || !current.uploadLeaseUntil().isAfter(now)) throw invalid("UPLOAD_NOT_ACTIVE");
         // Only opening/replacing the empty part or an atomic rename/unlink belongs under this fence.
         // Streaming, digest calculation and fsync run outside the transaction.
@@ -144,8 +177,8 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
 
     @Override
     @Transactional
-    public AttachmentRecord seal(UUID companyId, UUID attachmentId, UUID leaseToken,
-            long sizeBytes, String sha256, Instant now) {
+    public AttachmentRecord seal(
+            UUID companyId, UUID attachmentId, UUID leaseToken, long sizeBytes, String sha256, Instant now) {
         AttachmentRecord current = locked(companyId, attachmentId);
         requireLease(current, leaseToken);
         JdbcAttachmentPurgeFence.requireWritable(jdbc, companyId, current.projectId());
@@ -159,18 +192,27 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
                     upload_lease_token=NULL, upload_lease_until=NULL,
                     scan_generation=:generation, row_version=row_version+1, updated_at=:now
                  WHERE company_id=:companyId AND id=:id AND upload_lease_token=:leaseToken
-                """).param("sizeBytes", sizeBytes).param("sha256", sha256)
-                .param("generation", generation).param("now", utc(now))
-                .param("companyId", companyId).param("id", attachmentId)
-                .param("leaseToken", leaseToken).update();
+                """)
+                .param("sizeBytes", sizeBytes)
+                .param("sha256", sha256)
+                .param("generation", generation)
+                .param("now", utc(now))
+                .param("companyId", companyId)
+                .param("id", attachmentId)
+                .param("leaseToken", leaseToken)
+                .update();
         jdbc.sql("""
                 INSERT INTO yumpoo.attachment_scan_task (
                     id, attachment_id, company_id, generation, status,
                     next_attempt_at, created_at, updated_at
                 ) VALUES (:taskId,:attachmentId,:companyId,:generation,'READY',:now,:now,:now)
-                """).param("taskId", UUID.randomUUID()).param("attachmentId", attachmentId)
-                .param("companyId", companyId).param("generation", generation)
-                .param("now", utc(now)).update();
+                """)
+                .param("taskId", UUID.randomUUID())
+                .param("attachmentId", attachmentId)
+                .param("companyId", companyId)
+                .param("generation", generation)
+                .param("now", utc(now))
+                .update();
         return required(companyId, attachmentId);
     }
 
@@ -182,14 +224,18 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
                     upload_lease_until=NULL, row_version=row_version+1, updated_at=:now
                  WHERE company_id=:companyId AND id=:id AND status='UPLOADING'
                    AND upload_lease_token=:leaseToken AND sealed_at IS NULL
-                """).param("now", utc(now)).param("companyId", companyId)
-                .param("id", attachmentId).param("leaseToken", leaseToken).update();
+                """)
+                .param("now", utc(now))
+                .param("companyId", companyId)
+                .param("id", attachmentId)
+                .param("leaseToken", leaseToken)
+                .update();
     }
 
     @Override
     @Transactional
-    public AttachmentRecord rejectUpload(UUID companyId, UUID attachmentId, UUID leaseToken,
-            AttachmentRejectedCode code, Instant now) {
+    public AttachmentRecord rejectUpload(
+            UUID companyId, UUID attachmentId, UUID leaseToken, AttachmentRejectedCode code, Instant now) {
         AttachmentRecord current = locked(companyId, attachmentId);
         requireLease(current, leaseToken);
         JdbcAttachmentPurgeFence.requireWritable(jdbc, companyId, current.projectId());
@@ -200,16 +246,19 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
                     upload_lease_token=NULL, upload_lease_until=NULL,
                     row_version=row_version+1, updated_at=:now
                  WHERE company_id=:companyId AND id=:id AND upload_lease_token=:leaseToken
-                """).param("code", code.name()).param("now", utc(now))
-                .param("companyId", companyId).param("id", attachmentId)
-                .param("leaseToken", leaseToken).update();
+                """)
+                .param("code", code.name())
+                .param("now", utc(now))
+                .param("companyId", companyId)
+                .param("id", attachmentId)
+                .param("leaseToken", leaseToken)
+                .update();
         return required(companyId, attachmentId);
     }
 
     @Override
     @Transactional
-    public Optional<ScanClaim> claimDue(String workerId, UUID leaseToken, Instant now,
-            Instant leaseUntil) {
+    public Optional<ScanClaim> claimDue(String workerId, UUID leaseToken, Instant now, Instant leaseUntil) {
         Optional<ScanClaim> claim = jdbc.sql("""
                 WITH candidate AS (
                     SELECT t.id FROM yumpoo.attachment_scan_task t
@@ -231,17 +280,25 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
                 SELECT c.id task_id, c.lease_token, a.*, c.generation task_generation,
                        c.attempt_count
                   FROM claimed c JOIN yumpoo.attachment a ON a.id=c.attachment_id
-                """).param("now", utc(now)).param("workerId", workerId)
-                .param("leaseToken", leaseToken).param("leaseUntil", utc(leaseUntil))
-                .query(this::mapClaim).optional();
+                """)
+                .param("now", utc(now))
+                .param("workerId", workerId)
+                .param("leaseToken", leaseToken)
+                .param("leaseUntil", utc(leaseUntil))
+                .query(this::mapClaim)
+                .optional();
         claim.ifPresent(value -> JdbcAttachmentPurgeFence.requireWritable(jdbc, value.companyId(), value.projectId()));
         claim.ifPresent(value -> jdbc.sql("""
                 UPDATE yumpoo.attachment SET processing_stage='SCANNING',
                     row_version=row_version+1, updated_at=:now
                  WHERE id=:id AND company_id=:companyId AND status='UPLOADING'
                    AND scan_generation=:generation
-                """).param("now", utc(now)).param("id", value.attachmentId())
-                .param("companyId", value.companyId()).param("generation", value.generation()).update());
+                """)
+                .param("now", utc(now))
+                .param("id", value.attachmentId())
+                .param("companyId", value.companyId())
+                .param("generation", value.generation())
+                .update());
         return claim;
     }
 
@@ -250,9 +307,13 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
     public void recordDetected(ScanClaim claim, String detectedMime, Instant now) {
         requireTaskLease(claim);
         jdbc.sql("UPDATE yumpoo.attachment SET detected_mime=:mime, updated_at=:now "
-                + "WHERE id=:id AND company_id=:companyId AND scan_generation=:generation")
-                .param("mime", detectedMime).param("now", utc(now)).param("id", claim.attachmentId())
-                .param("companyId", claim.companyId()).param("generation", claim.generation()).update();
+                        + "WHERE id=:id AND company_id=:companyId AND scan_generation=:generation")
+                .param("mime", detectedMime)
+                .param("now", utc(now))
+                .param("id", claim.attachmentId())
+                .param("companyId", claim.companyId())
+                .param("generation", claim.generation())
+                .update();
     }
 
     @Override
@@ -268,46 +329,71 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
                     row_version=yumpoo.attachment_blob.row_version+1
                  WHERE yumpoo.attachment_blob.sha256=:sha256
                    AND yumpoo.attachment_blob.size_bytes=:size
-                """).param("key",storageKey).param("sha256",claim.sha256())
-                .param("size",claim.sizeBytes()).param("now",utc(now)).update();
+                """)
+                .param("key", storageKey)
+                .param("sha256", claim.sha256())
+                .param("size", claim.sizeBytes())
+                .param("now", utc(now))
+                .update();
         jdbc.sql("UPDATE yumpoo.attachment SET storage_key=:key, processing_stage='FINALIZING', "
-                + "updated_at=:now WHERE id=:id AND company_id=:companyId AND scan_generation=:generation")
-                .param("key", storageKey).param("now", utc(now)).param("id", claim.attachmentId())
-                .param("companyId", claim.companyId()).param("generation", claim.generation()).update();
+                        + "updated_at=:now WHERE id=:id AND company_id=:companyId AND scan_generation=:generation")
+                .param("key", storageKey)
+                .param("now", utc(now))
+                .param("id", claim.attachmentId())
+                .param("companyId", claim.companyId())
+                .param("generation", claim.generation())
+                .update();
     }
 
     @Override
     @Transactional
-    public Boolean claimPublish(ScanClaim claim,String storageKey,String owner,UUID operationToken,
-            Instant now,Instant leaseUntil) {
+    public Boolean claimPublish(
+            ScanClaim claim, String storageKey, String owner, UUID operationToken, Instant now, Instant leaseUntil) {
         requireTaskLease(claim);
         jdbc.sql("""
                 INSERT INTO yumpoo.attachment_blob (
                     storage_key,sha256,size_bytes,presence_status,created_at,updated_at
                 ) VALUES (:key,:sha256,:size,'MISSING',:now,:now)
                 ON CONFLICT (storage_key) DO NOTHING
-                """).param("key",storageKey).param("sha256",claim.sha256())
-                .param("size",claim.sizeBytes()).param("now",utc(now)).update();
+                """)
+                .param("key", storageKey)
+                .param("sha256", claim.sha256())
+                .param("size", claim.sizeBytes())
+                .param("now", utc(now))
+                .update();
         return jdbc.sql("""
                 UPDATE yumpoo.attachment_blob SET operation_type='PUBLISH',operation_owner=:owner,
                     operation_token=:token,operation_lease_until=:until,updated_at=:now
                  WHERE storage_key=:key AND sha256=:sha256 AND size_bytes=:size
                    AND (operation_lease_until IS NULL OR operation_lease_until<=:now)
-                """).param("owner",owner).param("token",operationToken).param("until",utc(leaseUntil))
-                .param("now",utc(now)).param("key",storageKey).param("sha256",claim.sha256())
-                .param("size",claim.sizeBytes()).update()==1;
+                """)
+                        .param("owner", owner)
+                        .param("token", operationToken)
+                        .param("until", utc(leaseUntil))
+                        .param("now", utc(now))
+                        .param("key", storageKey)
+                        .param("sha256", claim.sha256())
+                        .param("size", claim.sizeBytes())
+                        .update()
+                == 1;
     }
 
     @Override
     @Transactional(rollbackFor = IOException.class)
-    public void mutatePublish(ScanClaim claim,String storageKey,UUID operationToken,Instant now,
-            QuarantineStorage.Mutation mutation) throws IOException {
+    public void mutatePublish(
+            ScanClaim claim, String storageKey, UUID operationToken, Instant now, QuarantineStorage.Mutation mutation)
+            throws IOException {
         requireTaskLease(claim);
         boolean owned = jdbc.sql("""
                 SELECT storage_key FROM yumpoo.attachment_blob WHERE storage_key=:key
                     AND operation_type='PUBLISH' AND operation_token=:token AND operation_lease_until>:now FOR UPDATE
-                """).param("key", storageKey).param("token", operationToken).param("now", utc(now))
-                .query(String.class).optional().isPresent();
+                """)
+                .param("key", storageKey)
+                .param("token", operationToken)
+                .param("now", utc(now))
+                .query(String.class)
+                .optional()
+                .isPresent();
         if (!owned) throw new IOException("publish lease is no longer active");
         // Verification happens outside this transaction; the guard covers only rename or sealed unlink.
         mutation.run();
@@ -315,37 +401,55 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
 
     @Override
     @Transactional
-    public void completePublish(String storageKey,UUID operationToken,Instant now) {
+    public void completePublish(String storageKey, UUID operationToken, Instant now) {
         jdbc.sql("""
                 UPDATE yumpoo.attachment_blob SET presence_status='PRESENT',last_verified_at=:now,
                     operation_type=NULL,operation_owner=NULL,operation_token=NULL,operation_lease_until=NULL,
                     updated_at=:now,row_version=row_version+1
                  WHERE storage_key=:key AND operation_type='PUBLISH' AND operation_token=:token
-                """).param("now",utc(now)).param("key",storageKey).param("token",operationToken).update();
+                """)
+                .param("now", utc(now))
+                .param("key", storageKey)
+                .param("token", operationToken)
+                .update();
     }
 
     @Override
     @Transactional
-    public void releasePublish(String storageKey,UUID operationToken,Instant now) {
+    public void releasePublish(String storageKey, UUID operationToken, Instant now) {
         jdbc.sql("""
                 UPDATE yumpoo.attachment_blob SET operation_type=NULL,operation_owner=NULL,
                     operation_token=NULL,operation_lease_until=NULL,updated_at=:now
                  WHERE storage_key=:key AND operation_type='PUBLISH' AND operation_token=:token
-                """).param("now",utc(now)).param("key",storageKey).param("token",operationToken).update();
+                """)
+                .param("now", utc(now))
+                .param("key", storageKey)
+                .param("token", operationToken)
+                .update();
     }
 
     @Override
     @Transactional
-    public Optional<Finalization> prepareFinalization(ScanClaim claim, String detectedMime,
-            String storageKey, Instant now) {
+    public Optional<Finalization> prepareFinalization(
+            ScanClaim claim, String detectedMime, String storageKey, Instant now) {
         requireTaskLease(claim);
         AttachmentRecord current = locked(claim.companyId(), claim.attachmentId());
-        if (current.status() != AttachmentState.UPLOADING
-                || current.scanGeneration() != claim.generation()) return Optional.empty();
-        return Optional.of(new Finalization(current.id(), current.companyId(), current.projectId(),
-                current.ownerType(), current.ownerId(), current.uploadedByUserId(),
-                current.originalFileName(), detectedMime, current.sizeBytes(), storageKey,
-                claim.generation(), claim.taskId(), claim.leaseToken()));
+        if (current.status() != AttachmentState.UPLOADING || current.scanGeneration() != claim.generation())
+            return Optional.empty();
+        return Optional.of(new Finalization(
+                current.id(),
+                current.companyId(),
+                current.projectId(),
+                current.ownerType(),
+                current.ownerId(),
+                current.uploadedByUserId(),
+                current.originalFileName(),
+                detectedMime,
+                current.sizeBytes(),
+                storageKey,
+                claim.generation(),
+                claim.taskId(),
+                claim.leaseToken()));
     }
 
     @Override
@@ -354,19 +458,23 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
         AttachmentRecord current = locked(finalization.companyId(), finalization.attachmentId());
         JdbcAttachmentPurgeFence.requireWritable(jdbc, current.companyId(), current.projectId());
         if (current.status() == AttachmentState.AVAILABLE) return current;
-        if (current.status() != AttachmentState.UPLOADING
-                || current.scanGeneration() != finalization.generation()) throw invalid("STALE_SCAN_TASK");
-        adjustQuota(current.companyId(), current.projectId(), -current.reservedBytes(),
-                current.sizeBytes(), now);
+        if (current.status() != AttachmentState.UPLOADING || current.scanGeneration() != finalization.generation())
+            throw invalid("STALE_SCAN_TASK");
+        adjustQuota(current.companyId(), current.projectId(), -current.reservedBytes(), current.sizeBytes(), now);
         int changed = jdbc.sql("""
                 UPDATE yumpoo.attachment SET status='AVAILABLE', processing_stage=NULL,
                     detected_mime=:mime, storage_key=:key, available_at=:now,
                     reserved_bytes=0, row_version=row_version+1, updated_at=:now
                  WHERE id=:id AND company_id=:companyId AND status='UPLOADING'
                    AND scan_generation=:generation
-                """).param("mime", finalization.detectedMime()).param("key", finalization.storageKey())
-                .param("now", utc(now)).param("id", current.id()).param("companyId", current.companyId())
-                .param("generation", finalization.generation()).update();
+                """)
+                .param("mime", finalization.detectedMime())
+                .param("key", finalization.storageKey())
+                .param("now", utc(now))
+                .param("id", current.id())
+                .param("companyId", current.companyId())
+                .param("generation", finalization.generation())
+                .update();
         if (changed != 1) throw invalid("STALE_SCAN_TASK");
         completeTask(finalization.taskId(), finalization.leaseToken(), "AVAILABLE", now);
         return required(current.companyId(), current.id());
@@ -374,8 +482,7 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
 
     @Override
     @Transactional
-    public void completeRejected(ScanClaim claim, AttachmentRejectedCode code, Instant now,
-            Instant retainUntil) {
+    public void completeRejected(ScanClaim claim, AttachmentRejectedCode code, Instant now, Instant retainUntil) {
         requireTaskLease(claim);
         AttachmentRecord current = locked(claim.companyId(), claim.attachmentId());
         if (current.status() != AttachmentState.UPLOADING) return;
@@ -386,10 +493,14 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
                     reserved_bytes=0, row_version=row_version+1, updated_at=:now
                  WHERE id=:id AND company_id=:companyId AND status='UPLOADING'
                    AND scan_generation=:generation
-                """).param("code", code.name()).param("now", utc(now))
+                """)
+                .param("code", code.name())
+                .param("now", utc(now))
                 .param("retainUntil", retainUntil == null ? null : utc(retainUntil))
-                .param("id", claim.attachmentId()).param("companyId", claim.companyId())
-                .param("generation", claim.generation()).update();
+                .param("id", claim.attachmentId())
+                .param("companyId", claim.companyId())
+                .param("generation", claim.generation())
+                .update();
         completeTask(claim.taskId(), claim.leaseToken(), code.name(), now);
     }
 
@@ -401,18 +512,29 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
                 UPDATE yumpoo.attachment_scan_task SET status='READY', next_attempt_at=:next,
                     lease_owner=NULL, lease_token=NULL, lease_until=NULL, updated_at=:now
                  WHERE id=:id AND lease_token=:leaseToken AND status='RUNNING'
-                """).param("next", utc(nextAttemptAt)).param("now", utc(now))
-                .param("id", claim.taskId()).param("leaseToken", claim.leaseToken()).update();
+                """)
+                .param("next", utc(nextAttemptAt))
+                .param("now", utc(now))
+                .param("id", claim.taskId())
+                .param("leaseToken", claim.leaseToken())
+                .update();
         jdbc.sql("UPDATE yumpoo.attachment SET processing_stage='QUEUED_SCAN', updated_at=:now "
-                + "WHERE id=:id AND company_id=:companyId AND status='UPLOADING'")
-                .param("now", utc(now)).param("id", claim.attachmentId())
-                .param("companyId", claim.companyId()).update();
+                        + "WHERE id=:id AND company_id=:companyId AND status='UPLOADING'")
+                .param("now", utc(now))
+                .param("id", claim.attachmentId())
+                .param("companyId", claim.companyId())
+                .update();
     }
 
     @Override
     @Transactional
-    public RescanResult rescan(UUID companyId, UUID attachmentId, long expectedVersion,
-            long companyLimit, long projectLimit, Instant now) {
+    public RescanResult rescan(
+            UUID companyId,
+            UUID attachmentId,
+            long expectedVersion,
+            long companyLimit,
+            long projectLimit,
+            Instant now) {
         AttachmentRecord current = locked(companyId, attachmentId);
         JdbcAttachmentPurgeFence.requireWritable(jdbc, companyId, current.projectId());
         if (current.rowVersion() != expectedVersion) throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
@@ -429,23 +551,37 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
                     rejected_code=NULL, rejected_at=NULL, reserved_bytes=size_bytes,
                     scan_generation=:generation, row_version=row_version+1, updated_at=:now
                  WHERE id=:id AND company_id=:companyId AND row_version=:version
-                """).param("generation", generation).param("now", utc(now)).param("id", attachmentId)
-                .param("companyId", companyId).param("version", expectedVersion).update();
+                """)
+                .param("generation", generation)
+                .param("now", utc(now))
+                .param("id", attachmentId)
+                .param("companyId", companyId)
+                .param("version", expectedVersion)
+                .update();
         jdbc.sql("""
                 INSERT INTO yumpoo.attachment_scan_task (
                     id,attachment_id,company_id,generation,status,next_attempt_at,created_at,updated_at
                 ) VALUES (:taskId,:id,:companyId,:generation,'READY',:now,:now,:now)
-                """).param("taskId", UUID.randomUUID()).param("id", attachmentId)
-                .param("companyId", companyId).param("generation", generation).param("now", utc(now)).update();
+                """)
+                .param("taskId", UUID.randomUUID())
+                .param("id", attachmentId)
+                .param("companyId", companyId)
+                .param("generation", generation)
+                .param("now", utc(now))
+                .update();
         AttachmentRecord after = required(companyId, attachmentId);
-        return new RescanResult(after.id(), after.status().name(), after.scanGeneration(),
-                after.rowVersion(), StrongEtag.format(after.rowVersion()));
+        return new RescanResult(
+                after.id(),
+                after.status().name(),
+                after.scanGeneration(),
+                after.rowVersion(),
+                StrongEtag.format(after.rowVersion()));
     }
 
     @Override
     @Transactional
-    public AttachmentRecord delete(UUID companyId, UUID attachmentId, UUID deletedByUserId,
-            String reason, long expectedVersion, Instant now) {
+    public AttachmentRecord delete(
+            UUID companyId, UUID attachmentId, UUID deletedByUserId, String reason, long expectedVersion, Instant now) {
         AttachmentRecord current = locked(companyId, attachmentId);
         JdbcAttachmentPurgeFence.requireWritable(jdbc, companyId, current.projectId());
         if (current.rowVersion() != expectedVersion) {
@@ -462,71 +598,93 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
                    AND ((scope_type='COMPANY' AND scope_id=:companyId)
                      OR (scope_type='PROJECT' AND scope_id=:projectId))
                  ORDER BY scope_type FOR UPDATE
-                """).param("companyId",companyId).param("projectId",current.projectId())
-                .query((rs,row)->new Quota(rs.getString(1),rs.getLong(2),rs.getLong(3))).list();
-        if (quotas.size()!=2 || quotas.stream().anyMatch(value->value.available()<current.sizeBytes())) {
+                """)
+                .param("companyId", companyId)
+                .param("projectId", current.projectId())
+                .query((rs, row) -> new Quota(rs.getString(1), rs.getLong(2), rs.getLong(3)))
+                .list();
+        if (quotas.size() != 2 || quotas.stream().anyMatch(value -> value.available() < current.sizeBytes())) {
             throw new ApplicationException(StandardErrorCode.DEPENDENCY_UNAVAILABLE);
         }
-        adjustQuota(companyId,current.projectId(),0,-current.sizeBytes(),now);
-        int changed=jdbc.sql("""
+        adjustQuota(companyId, current.projectId(), 0, -current.sizeBytes(), now);
+        int changed = jdbc.sql("""
                 UPDATE yumpoo.attachment
                    SET status='DELETED',deleted_by_user_id=:deletedBy,deleted_at=:now,
                        delete_reason=:reason,row_version=row_version+1,updated_at=:now
                  WHERE company_id=:companyId AND id=:id AND status='AVAILABLE'
                    AND row_version=:version
-                """).param("deletedBy",deletedByUserId).param("now",utc(now)).param("reason",reason)
-                .param("companyId",companyId).param("id",attachmentId)
-                .param("version",expectedVersion).update();
-        if(changed!=1) throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
-        return required(companyId,attachmentId);
+                """)
+                .param("deletedBy", deletedByUserId)
+                .param("now", utc(now))
+                .param("reason", reason)
+                .param("companyId", companyId)
+                .param("id", attachmentId)
+                .param("version", expectedVersion)
+                .update();
+        if (changed != 1) throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
+        return required(companyId, attachmentId);
     }
 
     @Override
     @Transactional
-    public void recordReconciliationIssue(String issueCode,String subjectType,String subjectKey,
-            UUID attachmentId,UUID companyId,Instant now) {
+    public void recordReconciliationIssue(
+            String issueCode, String subjectType, String subjectKey, UUID attachmentId, UUID companyId, Instant now) {
         if (!JdbcAttachmentPurgeFence.allowObservation(jdbc, subjectType, subjectKey, attachmentId)) return;
-        int updated=jdbc.sql("""
+        int updated = jdbc.sql("""
                 UPDATE yumpoo.attachment_reconciliation_issue
                    SET last_detected_at=:now,detection_count=detection_count+1,
                        row_version=row_version+1
                  WHERE issue_code=:code AND subject_type=:subjectType
                    AND subject_key=:subjectKey AND resolved_at IS NULL
-                """).param("now",utc(now)).param("code",issueCode).param("subjectType",subjectType)
-                .param("subjectKey",subjectKey).update();
-        if(updated==0) {
+                """)
+                .param("now", utc(now))
+                .param("code", issueCode)
+                .param("subjectType", subjectType)
+                .param("subjectKey", subjectKey)
+                .update();
+        if (updated == 0) {
             jdbc.sql("""
                     INSERT INTO yumpoo.attachment_reconciliation_issue (
                         id,issue_code,subject_type,subject_key,attachment_id,company_id,
                         first_detected_at,last_detected_at
                     ) VALUES (:id,:code,:subjectType,:subjectKey,:attachmentId,:companyId,:now,:now)
-                    """).param("id",UUID.randomUUID()).param("code",issueCode)
-                    .param("subjectType",subjectType).param("subjectKey",subjectKey)
-                    .param("attachmentId",attachmentId).param("companyId",companyId)
-                    .param("now",utc(now)).update();
+                    """)
+                    .param("id", UUID.randomUUID())
+                    .param("code", issueCode)
+                    .param("subjectType", subjectType)
+                    .param("subjectKey", subjectKey)
+                    .param("attachmentId", attachmentId)
+                    .param("companyId", companyId)
+                    .param("now", utc(now))
+                    .update();
         }
     }
 
     @Override
     @Transactional
-    public void resolveReconciliationIssues(String subjectType,String subjectKey,Instant now) {
+    public void resolveReconciliationIssues(String subjectType, String subjectKey, Instant now) {
         jdbc.sql("""
                 UPDATE yumpoo.attachment_reconciliation_issue
                    SET resolved_at=:now,row_version=row_version+1
                  WHERE subject_type=:subjectType AND subject_key=:subjectKey
                    AND resolved_at IS NULL
-                """).param("now",utc(now)).param("subjectType",subjectType)
-                .param("subjectKey",subjectKey).update();
+                """)
+                .param("now", utc(now))
+                .param("subjectType", subjectType)
+                .param("subjectKey", subjectKey)
+                .update();
     }
 
-    private void lockAndRequireQuota(UUID companyId, UUID projectId, long bytes,
-            long companyLimit, long projectLimit) {
+    private void lockAndRequireQuota(UUID companyId, UUID projectId, long bytes, long companyLimit, long projectLimit) {
         List<Quota> rows = jdbc.sql("""
                 SELECT scope_type,reserved_bytes,available_bytes FROM yumpoo.attachment_quota_usage
                  WHERE company_id=:companyId AND ((scope_type='COMPANY' AND scope_id=:companyId)
                     OR (scope_type='PROJECT' AND scope_id=:projectId)) ORDER BY scope_type FOR UPDATE
-                """).param("companyId", companyId).param("projectId", projectId)
-                .query((rs,row)->new Quota(rs.getString(1),rs.getLong(2),rs.getLong(3))).list();
+                """)
+                .param("companyId", companyId)
+                .param("projectId", projectId)
+                .query((rs, row) -> new Quota(rs.getString(1), rs.getLong(2), rs.getLong(3)))
+                .list();
         for (Quota row : rows) {
             long limit = row.scopeType().equals("COMPANY") ? companyLimit : projectLimit;
             if (row.reserved() + row.available() + bytes > limit) throw invalid("QUOTA_EXCEEDED");
@@ -539,12 +697,14 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
                     (company_id,scope_type,scope_id,updated_at)
                 VALUES (:companyId,'COMPANY',:companyId,:now),(:companyId,'PROJECT',:projectId,:now)
                 ON CONFLICT DO NOTHING
-                """).param("companyId", companyId).param("projectId", projectId)
-                .param("now", utc(now)).update();
+                """)
+                .param("companyId", companyId)
+                .param("projectId", projectId)
+                .param("now", utc(now))
+                .update();
     }
 
-    private void adjustQuota(UUID companyId, UUID projectId, long reservedDelta,
-            long availableDelta, Instant now) {
+    private void adjustQuota(UUID companyId, UUID projectId, long reservedDelta, long availableDelta, Instant now) {
         jdbc.sql("""
                 UPDATE yumpoo.attachment_quota_usage SET
                     reserved_bytes=reserved_bytes+:reservedDelta,
@@ -552,14 +712,21 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
                     row_version=row_version+1, updated_at=:now
                  WHERE company_id=:companyId AND ((scope_type='COMPANY' AND scope_id=:companyId)
                     OR (scope_type='PROJECT' AND scope_id=:projectId))
-                """).param("reservedDelta", reservedDelta).param("availableDelta", availableDelta)
-                .param("now", utc(now)).param("companyId", companyId).param("projectId", projectId).update();
+                """)
+                .param("reservedDelta", reservedDelta)
+                .param("availableDelta", availableDelta)
+                .param("now", utc(now))
+                .param("companyId", companyId)
+                .param("projectId", projectId)
+                .update();
     }
 
     private AttachmentRecord locked(UUID companyId, UUID attachmentId) {
         return jdbc.sql("SELECT * FROM yumpoo.attachment WHERE company_id=:companyId AND id=:id FOR UPDATE")
-                .param("companyId", companyId).param("id", attachmentId)
-                .query(this::mapAttachment).optional()
+                .param("companyId", companyId)
+                .param("id", attachmentId)
+                .query(this::mapAttachment)
+                .optional()
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
     }
 
@@ -573,10 +740,15 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
     }
 
     private void requireTaskLease(ScanClaim claim) {
-        boolean active = jdbc.sql("SELECT id FROM yumpoo.attachment_scan_task "
-                + "WHERE id=:id AND attachment_id=:attachment AND lease_token=:token AND status='RUNNING' FOR UPDATE")
-                .param("id", claim.taskId()).param("token", claim.leaseToken())
-                .param("attachment", claim.attachmentId()).query(UUID.class).optional().isPresent();
+        boolean active = jdbc.sql(
+                        "SELECT id FROM yumpoo.attachment_scan_task "
+                                + "WHERE id=:id AND attachment_id=:attachment AND lease_token=:token AND status='RUNNING' FOR UPDATE")
+                .param("id", claim.taskId())
+                .param("token", claim.leaseToken())
+                .param("attachment", claim.attachmentId())
+                .query(UUID.class)
+                .optional()
+                .isPresent();
         if (!active) throw invalid("STALE_SCAN_TASK");
         JdbcAttachmentPurgeFence.requireWritable(jdbc, claim.companyId(), claim.projectId());
     }
@@ -586,52 +758,91 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
                 UPDATE yumpoo.attachment_scan_task SET status='COMPLETED', final_result=:result,
                     lease_owner=NULL,lease_token=NULL,lease_until=NULL,updated_at=:now
                  WHERE id=:id AND lease_token=:token AND status='RUNNING'
-                """).param("result", result).param("now", utc(now))
-                .param("id", taskId).param("token", leaseToken).update();
+                """)
+                .param("result", result)
+                .param("now", utc(now))
+                .param("id", taskId)
+                .param("token", leaseToken)
+                .update();
     }
 
     private AttachmentRecord mapAttachment(ResultSet rs, int row) throws SQLException {
-        return new AttachmentRecord(rs.getObject("id", UUID.class), rs.getObject("company_id", UUID.class),
-                rs.getObject("quota_project_id", UUID.class), AttachmentOwnerType.valueOf(rs.getString("owner_type")),
-                rs.getObject("owner_id", UUID.class), rs.getString("original_file_name"),
-                rs.getString("file_extension"), rs.getString("declared_mime"), rs.getString("detected_mime"),
-                nullableLong(rs, "size_bytes"), rs.getString("sha256"), rs.getString("storage_key"),
-                AttachmentState.valueOf(rs.getString("status")), rs.getString("processing_stage"),
+        return new AttachmentRecord(
+                rs.getObject("id", UUID.class),
+                rs.getObject("company_id", UUID.class),
+                rs.getObject("quota_project_id", UUID.class),
+                AttachmentOwnerType.valueOf(rs.getString("owner_type")),
+                rs.getObject("owner_id", UUID.class),
+                rs.getString("original_file_name"),
+                rs.getString("file_extension"),
+                rs.getString("declared_mime"),
+                rs.getString("detected_mime"),
+                nullableLong(rs, "size_bytes"),
+                rs.getString("sha256"),
+                rs.getString("storage_key"),
+                AttachmentState.valueOf(rs.getString("status")),
+                rs.getString("processing_stage"),
                 enumOrNull(AttachmentRejectedCode.class, rs.getString("rejected_code")),
-                rs.getLong("reserved_bytes"), rs.getObject("uploaded_by_user_id", UUID.class),
-                instant(rs, "intent_expires_at"), instantOrNull(rs, "quarantine_retain_until"),
-                instantOrNull(rs, "available_at"), rs.getObject("upload_lease_token", UUID.class),
-                instantOrNull(rs, "upload_lease_until"),rs.getObject("deleted_by_user_id",UUID.class),
-                instantOrNull(rs,"deleted_at"),rs.getString("delete_reason"),rs.getInt("scan_generation"),
-                rs.getLong("row_version"), instant(rs, "created_at"));
+                rs.getLong("reserved_bytes"),
+                rs.getObject("uploaded_by_user_id", UUID.class),
+                instant(rs, "intent_expires_at"),
+                instantOrNull(rs, "quarantine_retain_until"),
+                instantOrNull(rs, "available_at"),
+                rs.getObject("upload_lease_token", UUID.class),
+                instantOrNull(rs, "upload_lease_until"),
+                rs.getObject("deleted_by_user_id", UUID.class),
+                instantOrNull(rs, "deleted_at"),
+                rs.getString("delete_reason"),
+                rs.getInt("scan_generation"),
+                rs.getLong("row_version"),
+                instant(rs, "created_at"));
     }
 
     private ScanClaim mapClaim(ResultSet rs, int row) throws SQLException {
-        return new ScanClaim(rs.getObject("task_id", UUID.class), rs.getObject("lease_token", UUID.class),
-                rs.getObject("id", UUID.class), rs.getObject("company_id", UUID.class),
-                rs.getObject("quota_project_id", UUID.class), AttachmentOwnerType.valueOf(rs.getString("owner_type")),
-                rs.getObject("owner_id", UUID.class), rs.getObject("uploaded_by_user_id", UUID.class),
-                rs.getString("original_file_name"), rs.getString("declared_mime"), rs.getLong("size_bytes"),
-                rs.getString("sha256"), rs.getString("detected_mime"), rs.getString("storage_key"),
-                rs.getInt("task_generation"), rs.getInt("attempt_count"));
+        return new ScanClaim(
+                rs.getObject("task_id", UUID.class),
+                rs.getObject("lease_token", UUID.class),
+                rs.getObject("id", UUID.class),
+                rs.getObject("company_id", UUID.class),
+                rs.getObject("quota_project_id", UUID.class),
+                AttachmentOwnerType.valueOf(rs.getString("owner_type")),
+                rs.getObject("owner_id", UUID.class),
+                rs.getObject("uploaded_by_user_id", UUID.class),
+                rs.getString("original_file_name"),
+                rs.getString("declared_mime"),
+                rs.getLong("size_bytes"),
+                rs.getString("sha256"),
+                rs.getString("detected_mime"),
+                rs.getString("storage_key"),
+                rs.getInt("task_generation"),
+                rs.getInt("attempt_count"));
     }
 
     private static Instant instant(ResultSet rs, String column) throws SQLException {
         return rs.getObject(column, OffsetDateTime.class).toInstant();
     }
+
     private static Instant instantOrNull(ResultSet rs, String column) throws SQLException {
         OffsetDateTime value = rs.getObject(column, OffsetDateTime.class);
         return value == null ? null : value.toInstant();
     }
+
     private static Long nullableLong(ResultSet rs, String column) throws SQLException {
-        long value = rs.getLong(column); return rs.wasNull() ? null : value;
+        long value = rs.getLong(column);
+        return rs.wasNull() ? null : value;
     }
+
     private static <E extends Enum<E>> E enumOrNull(Class<E> type, String value) {
         return value == null ? null : Enum.valueOf(type, value);
     }
-    private static OffsetDateTime utc(Instant value) { return value.atOffset(ZoneOffset.UTC); }
+
+    private static OffsetDateTime utc(Instant value) {
+        return value.atOffset(ZoneOffset.UTC);
+    }
+
     private static ApplicationException invalid(String reason) {
         return ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION, reason);
     }
+
     private record Quota(String scopeType, long reserved, long available) {}
 }

@@ -9,6 +9,8 @@ import com.yumpoo.platform.foundation.application.idempotency.StoredCommandResul
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import java.util.Map;
+import java.util.UUID;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -22,9 +24,6 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
-import java.util.Map;
-import java.util.UUID;
-
 /**
  * 仅存在于测试 classpath 的 M0-10 HTTP 闭环，不进入生产 JAR 或 OpenAPI。
  */
@@ -33,9 +32,7 @@ public final class M010ProbeController {
 
     private static final String PROBE_PATH = "/__test/m0-10/probes";
 
-    public static final UUID FIXED_ACTOR_ID = UUID.fromString(
-            "00000000-0000-0000-0000-000000000010"
-    );
+    public static final UUID FIXED_ACTOR_ID = UUID.fromString("00000000-0000-0000-0000-000000000010");
 
     private final M010ProbeApplicationService applicationService;
     private final IdempotencyKeyParser idempotencyKeyParser;
@@ -48,8 +45,7 @@ public final class M010ProbeController {
             IdempotencyKeyParser idempotencyKeyParser,
             IdempotencyRequestHasher requestHasher,
             IfMatchParser ifMatchParser,
-            ObjectMapper objectMapper
-    ) {
+            ObjectMapper objectMapper) {
         this.applicationService = applicationService;
         this.idempotencyKeyParser = idempotencyKeyParser;
         this.requestHasher = requestHasher;
@@ -60,19 +56,14 @@ public final class M010ProbeController {
     @PostMapping(PROBE_PATH)
     ResponseEntity<String> create(
             @RequestHeader(value = IdempotencyKeyParser.HEADER_NAME, required = false) String key,
-            @Valid @RequestBody ProbeRequest request
-    ) {
+            @Valid @RequestBody ProbeRequest request) {
         UUID idempotencyKey = idempotencyKeyParser.parseRequired(key);
         IdempotencyExecutionResult execution = applicationService.create(
                 FIXED_ACTOR_ID,
                 idempotencyKey,
                 requestHasher.hash(
-                        M010ProbeApplicationService.CREATE_ROUTE_KEY,
-                        Map.of(),
-                        objectMapper.valueToTree(request)
-                ),
-                request.name()
-        );
+                        M010ProbeApplicationService.CREATE_ROUTE_KEY, Map.of(), objectMapper.valueToTree(request)),
+                request.name());
         return storedResponse(execution.result());
     }
 
@@ -80,16 +71,11 @@ public final class M010ProbeController {
     ResponseEntity<String> update(
             @PathVariable UUID probeId,
             @RequestHeader(value = IfMatchParser.HEADER_NAME, required = false) String ifMatch,
-            @Valid @RequestBody ProbeRequest request
-    ) {
+            @Valid @RequestBody ProbeRequest request) {
         boolean visible = applicationService.isVisible(FIXED_ACTOR_ID, probeId);
         long expectedVersion = ifMatchParser.parseForVisibleResource(visible, ifMatch);
-        M010ProbeApplicationService.ProbeResponse response = applicationService.update(
-                FIXED_ACTOR_ID,
-                probeId,
-                expectedVersion,
-                request.name()
-        );
+        M010ProbeApplicationService.ProbeResponse response =
+                applicationService.update(FIXED_ACTOR_ID, probeId, expectedVersion, request.name());
 
         HttpHeaders headers = jsonHeaders();
         headers.setETag(IfMatchParser.format(response.rowVersion()));
@@ -101,11 +87,7 @@ public final class M010ProbeController {
         if (result.etag() != null) {
             headers.setETag(result.etag());
         }
-        return new ResponseEntity<>(
-                result.responseJson(),
-                headers,
-                HttpStatusCode.valueOf(result.httpStatus())
-        );
+        return new ResponseEntity<>(result.responseJson(), headers, HttpStatusCode.valueOf(result.httpStatus()));
     }
 
     private static HttpHeaders jsonHeaders() {
@@ -123,9 +105,6 @@ public final class M010ProbeController {
     }
 
     record ProbeRequest(
-            @NotBlank(message = "名称不能为空")
-            @Size(max = 120, message = "名称最多 120 个字符")
-            String name
-    ) {
-    }
+            @NotBlank(message = "名称不能为空") @Size(max = 120, message = "名称最多 120 个字符")
+            String name) {}
 }

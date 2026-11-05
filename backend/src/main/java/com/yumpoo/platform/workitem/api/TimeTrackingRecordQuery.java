@@ -9,7 +9,16 @@ import java.util.UUID;
 public interface TimeTrackingRecordQuery {
     Page findVisible(CurrentActor actor, UUID workItemId, String cursor);
 
-    record Record(UUID id, UUID projectId, UUID workItemId, UUID userId,
-                  Instant startedAt, Instant stoppedAt, String source, long durationMs, long version) {}
+    record Record(
+            UUID id,
+            UUID projectId,
+            UUID workItemId,
+            UUID userId,
+            Instant startedAt,
+            Instant stoppedAt,
+            String source,
+            long durationMs,
+            long version) {}
+
     record Page(List<Record> items, String nextCursor, Instant asOf) {}
 }

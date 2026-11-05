@@ -1,27 +1,26 @@
 package com.yumpoo.platform.audit.api;
 
-import com.yumpoo.platform.audit.application.ActivityRepository;
-import com.yumpoo.platform.audit.application.ActivityStoredEvent;
-import com.yumpoo.platform.foundation.application.event.DomainEventEnvelope;
-import com.yumpoo.platform.foundation.application.event.EventActor;
-import com.yumpoo.platform.foundation.application.event.EventSubscription;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.node.ObjectNode;
-
-import java.time.Instant;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import com.yumpoo.platform.audit.application.ActivityRepository;
+import com.yumpoo.platform.audit.application.ActivityStoredEvent;
+import com.yumpoo.platform.foundation.application.event.DomainEventEnvelope;
+import com.yumpoo.platform.foundation.application.event.EventActor;
+import com.yumpoo.platform.foundation.application.event.EventSubscription;
+import java.time.Instant;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 class ActivityProjectionServiceTest {
     private static final UUID COMPANY = UUID.fromString("00000000-0000-4000-8000-000000000001");
@@ -46,8 +45,10 @@ class ActivityProjectionServiceTest {
 
     @Test
     void projectsSubscribeToV2OnlyAndKeepHistoricalTemplatesReadable() {
-        assertThat(service.subscriptions()).contains(new EventSubscription("catalog.project_created", 2))
-                .doesNotContain(new EventSubscription("catalog.project_created", 1),
+        assertThat(service.subscriptions())
+                .contains(new EventSubscription("catalog.project_created", 2))
+                .doesNotContain(
+                        new EventSubscription("catalog.project_created", 1),
                         new EventSubscription("catalog.project_activated", 1),
                         new EventSubscription("catalog.project_template_applied", 1));
         var renderer = new com.yumpoo.platform.audit.application.ActivitySummaryRenderer();
@@ -65,29 +66,32 @@ class ActivityProjectionServiceTest {
 
     @Test
     void subscribesToEveryFrozenM223WorkItemEventAtV1() {
-        assertThat(service.subscriptions()).containsAll(Set.of(
-                new EventSubscription("workitem.work_item_created", 1),
-                new EventSubscription("workitem.work_item_fields_changed", 1),
-                new EventSubscription("workitem.work_item_assigned", 1),
-                new EventSubscription("workitem.work_item_unassigned", 1),
-                new EventSubscription("workitem.work_item_status_changed", 1),
-                new EventSubscription("workitem.work_item_rank_changed", 1),
-                new EventSubscription("workitem.work_item_deleted", 1),
-                new EventSubscription("workitem.work_item_restored", 1),
-                new EventSubscription("workitem.work_item_update_published", 1),
-                new EventSubscription("workitem.work_item_update_edited", 1),
-                new EventSubscription("workitem.work_item_update_deleted", 1),
-                new EventSubscription("workitem.work_item_relation_created", 1),
-                new EventSubscription("workitem.work_item_relation_deleted", 1),
-                new EventSubscription("workitem.work_item_parent_changed", 1)));
+        assertThat(service.subscriptions())
+                .containsAll(Set.of(
+                        new EventSubscription("workitem.work_item_created", 1),
+                        new EventSubscription("workitem.work_item_fields_changed", 1),
+                        new EventSubscription("workitem.work_item_assigned", 1),
+                        new EventSubscription("workitem.work_item_unassigned", 1),
+                        new EventSubscription("workitem.work_item_status_changed", 1),
+                        new EventSubscription("workitem.work_item_rank_changed", 1),
+                        new EventSubscription("workitem.work_item_deleted", 1),
+                        new EventSubscription("workitem.work_item_restored", 1),
+                        new EventSubscription("workitem.work_item_update_published", 1),
+                        new EventSubscription("workitem.work_item_update_edited", 1),
+                        new EventSubscription("workitem.work_item_update_deleted", 1),
+                        new EventSubscription("workitem.work_item_relation_created", 1),
+                        new EventSubscription("workitem.work_item_relation_deleted", 1),
+                        new EventSubscription("workitem.work_item_parent_changed", 1)));
     }
 
     @Test
     void subscribesOnlyToCurrentProjectCreationAndContentDeletionVersions() {
         assertThat(service.subscriptions())
-                .contains(new EventSubscription("catalog.project_created", 2),
+                .contains(
+                        new EventSubscription("catalog.project_created", 2),
                         new EventSubscription("workitem.content_deleted", 2))
-                .doesNotContain(new EventSubscription("catalog.project_created", 1),
+                .doesNotContain(
+                        new EventSubscription("catalog.project_created", 1),
                         new EventSubscription("workitem.content_deleted", 1));
     }
 
@@ -114,8 +118,13 @@ class ActivityProjectionServiceTest {
     @Test
     void suppressesAssigneeOnlyFieldsChangedDuplicate() {
         ObjectNode payload = workItem();
-        payload.set("changedFields", objectMapper.createArrayNode()
-                .add("assigneeUserId").add("description").add("notes"));
+        payload.set(
+                "changedFields",
+                objectMapper
+                        .createArrayNode()
+                        .add("assigneeUserId")
+                        .add("description")
+                        .add("notes"));
         service.consume(event("workitem.work_item_fields_changed", CUTOVER.plusSeconds(1), payload));
         verify(repository, never()).append(any());
     }
@@ -140,7 +149,8 @@ class ActivityProjectionServiceTest {
             assertThat(stored.secondaryWorkItemId()).isNull();
             assertThat(stored.safeParameters().toString()).doesNotContain(rightItem.toString());
         });
-        assertThat(captor.getAllValues()).extracting(ActivityStoredEvent::scopeId)
+        assertThat(captor.getAllValues())
+                .extracting(ActivityStoredEvent::scopeId)
                 .containsExactly(PROJECT, rightProject);
     }
 
@@ -161,12 +171,12 @@ class ActivityProjectionServiceTest {
 
         ArgumentCaptor<ActivityStoredEvent> captor = ArgumentCaptor.forClass(ActivityStoredEvent.class);
         verify(repository, org.mockito.Mockito.times(2)).append(captor.capture());
-        assertThat(captor.getAllValues()).extracting(ActivityStoredEvent::scopeId)
+        assertThat(captor.getAllValues())
+                .extracting(ActivityStoredEvent::scopeId)
                 .containsExactly(PROJECT, rightProject);
         assertThat(captor.getAllValues()).allSatisfy(stored -> {
             assertThat(stored.secondaryWorkItemId()).isNull();
-            assertThat(stored.safeParameters().toString())
-                    .doesNotContain(ITEM.toString(), rightItem.toString());
+            assertThat(stored.safeParameters().toString()).doesNotContain(ITEM.toString(), rightItem.toString());
         });
     }
 
@@ -192,50 +202,72 @@ class ActivityProjectionServiceTest {
             assertThat(stored.secondaryWorkItemId()).isEqualTo(rightItem);
             assertThat(stored.safeParameters().toString()).doesNotContain("deleteReason");
         });
-        assertThat(captor.getAllValues()).extracting(ActivityStoredEvent::templateCode)
+        assertThat(captor.getAllValues())
+                .extracting(ActivityStoredEvent::templateCode)
                 .containsExactly("WORK_ITEM_RELATION_DELETED", "WORK_ITEM_PARENT_CHANGED");
     }
 
     @Test
     void consumesDiscussionV2AndPinWithoutLeakingBodies() {
-        assertThat(service.subscriptions()).contains(
-                new EventSubscription("workitem.work_item_update_published", 2),
-                new EventSubscription("workitem.work_item_update_edited", 2),
-                new EventSubscription("workitem.work_item_update_deleted", 2),
-                new EventSubscription("workitem.work_item_update_pin_changed", 1));
-        ObjectNode payload = workItem().put("updateId", UUID.randomUUID().toString()).put("pinned", true)
-                .put("bodyHtml", "不能写入动态的正文").putNull("parentUpdateId");
+        assertThat(service.subscriptions())
+                .contains(
+                        new EventSubscription("workitem.work_item_update_published", 2),
+                        new EventSubscription("workitem.work_item_update_edited", 2),
+                        new EventSubscription("workitem.work_item_update_deleted", 2),
+                        new EventSubscription("workitem.work_item_update_pin_changed", 1));
+        ObjectNode payload = workItem()
+                .put("updateId", UUID.randomUUID().toString())
+                .put("pinned", true)
+                .put("bodyHtml", "不能写入动态的正文")
+                .putNull("parentUpdateId");
         service.consume(event("workitem.work_item_update_pin_changed", CUTOVER.plusSeconds(1), payload));
         payload.putArray("mentionedUserIds");
-        service.consume(new DomainEventEnvelope(UUID.randomUUID(), "workitem.work_item_update_published", 2,
-                CUTOVER.plusSeconds(2), "WorkItemUpdate", ITEM, 1, COMPANY, EventActor.user(ACTOR),
-                "discussion-v2", "discussion-v2", null, payload));
+        service.consume(new DomainEventEnvelope(
+                UUID.randomUUID(),
+                "workitem.work_item_update_published",
+                2,
+                CUTOVER.plusSeconds(2),
+                "WorkItemUpdate",
+                ITEM,
+                1,
+                COMPANY,
+                EventActor.user(ACTOR),
+                "discussion-v2",
+                "discussion-v2",
+                null,
+                payload));
         ArgumentCaptor<ActivityStoredEvent> captor = ArgumentCaptor.forClass(ActivityStoredEvent.class);
         verify(repository, org.mockito.Mockito.times(2)).append(captor.capture());
-        assertThat(captor.getAllValues()).allSatisfy(stored -> assertThat(stored.safeParameters().toString()).doesNotContain("bodyHtml", "不能写入"));
+        assertThat(captor.getAllValues())
+                .allSatisfy(
+                        stored -> assertThat(stored.safeParameters().toString()).doesNotContain("bodyHtml", "不能写入"));
     }
 
     @Test
     void assigneeSetChangesProduceOneActivityWithMemberNameSnapshots() {
-        UUID added=UUID.randomUUID(),removed=UUID.randomUUID();
-        when(context.userDisplayName(COMPANY,added)).thenReturn(Optional.of("张三"));
-        when(context.userDisplayName(COMPANY,removed)).thenReturn(Optional.of("李四"));
-        ObjectNode payload=workItem();payload.putArray("addedUserIds").add(added.toString());
+        UUID added = UUID.randomUUID(), removed = UUID.randomUUID();
+        when(context.userDisplayName(COMPANY, added)).thenReturn(Optional.of("张三"));
+        when(context.userDisplayName(COMPANY, removed)).thenReturn(Optional.of("李四"));
+        ObjectNode payload = workItem();
+        payload.putArray("addedUserIds").add(added.toString());
         payload.putArray("removedUserIds").add(removed.toString());
-        service.consume(event("workitem.work_item_assignees_changed",CUTOVER.plusSeconds(1),payload));
-        var captor=ArgumentCaptor.forClass(ActivityStoredEvent.class);verify(repository).append(captor.capture());
-        var row=captor.getValue();
+        service.consume(event("workitem.work_item_assignees_changed", CUTOVER.plusSeconds(1), payload));
+        var captor = ArgumentCaptor.forClass(ActivityStoredEvent.class);
+        verify(repository).append(captor.capture());
+        var row = captor.getValue();
         assertThat(row.templateCode()).isEqualTo("WORK_ITEM_ASSIGNEES_CHANGED");
-        assertThat(new com.yumpoo.platform.audit.application.ActivitySummaryRenderer().render(row.templateCode(),row.safeParameters()))
+        assertThat(new com.yumpoo.platform.audit.application.ActivitySummaryRenderer()
+                        .render(row.templateCode(), row.safeParameters()))
                 .contains("添加 张三；移除 李四");
     }
 
     @Test
     void markedLegacyAssignmentAndUnassignmentDoNotProduceActivity() {
-        ObjectNode payload=workItem();payload.putArray("assigneeUserIds");
-        service.consume(event("workitem.work_item_assigned",CUTOVER.plusSeconds(1),payload));
-        service.consume(event("workitem.work_item_unassigned",CUTOVER.plusSeconds(2),payload));
-        verify(repository,never()).append(any());
+        ObjectNode payload = workItem();
+        payload.putArray("assigneeUserIds");
+        service.consume(event("workitem.work_item_assigned", CUTOVER.plusSeconds(1), payload));
+        service.consume(event("workitem.work_item_unassigned", CUTOVER.plusSeconds(2), payload));
+        verify(repository, never()).append(any());
     }
 
     private ObjectNode workItem() {
@@ -249,7 +281,19 @@ class ActivityProjectionServiceTest {
     }
 
     private DomainEventEnvelope event(String type, Instant occurredAt, ObjectNode payload) {
-        return new DomainEventEnvelope(UUID.randomUUID(), type, 1, occurredAt, "WorkItem", ITEM,
-                1, COMPANY, EventActor.user(ACTOR), "m2-20-test", "m2-20-test", null, payload);
+        return new DomainEventEnvelope(
+                UUID.randomUUID(),
+                type,
+                1,
+                occurredAt,
+                "WorkItem",
+                ITEM,
+                1,
+                COMPANY,
+                EventActor.user(ACTOR),
+                "m2-20-test",
+                "m2-20-test",
+                null,
+                payload);
     }
 }

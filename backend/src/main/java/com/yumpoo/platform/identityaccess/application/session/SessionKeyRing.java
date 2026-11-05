@@ -1,9 +1,6 @@
 package com.yumpoo.platform.identityaccess.application.session;
 
 import com.yumpoo.platform.identityaccess.domain.session.LoginSession;
-
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.MessageDigest;
@@ -14,6 +11,8 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 public final class SessionKeyRing {
 
@@ -30,10 +29,7 @@ public final class SessionKeyRing {
         }
     }
 
-    public CredentialFingerprint fingerprintCurrent(
-            CredentialPurpose purpose,
-            SessionCredential credential
-    ) {
+    public CredentialFingerprint fingerprintCurrent(CredentialPurpose purpose, SessionCredential credential) {
         return fingerprint(current, purpose, credential);
     }
 
@@ -44,17 +40,11 @@ public final class SessionKeyRing {
                 + session.id() + ":"
                 + session.sessionKeyVersion() + ":"
                 + session.sessionTokenFingerprint();
-        return new SessionCredential(
-                Base64.getUrlEncoder().withoutPadding().encodeToString(hmac(current, material))
-        );
+        return new SessionCredential(Base64.getUrlEncoder().withoutPadding().encodeToString(hmac(current, material)));
     }
 
     public Optional<CredentialFingerprint> fingerprint(
-            String keyVersion,
-            CredentialPurpose purpose,
-            SessionCredential credential,
-            Instant now
-    ) {
+            String keyVersion, CredentialPurpose purpose, SessionCredential credential, Instant now) {
         Objects.requireNonNull(now, "now must not be null");
         if (current.version().equals(keyVersion)) {
             return Optional.of(fingerprint(current, purpose, credential));
@@ -69,15 +59,10 @@ public final class SessionKeyRing {
     }
 
     public List<CredentialFingerprint> candidates(
-            CredentialPurpose purpose,
-            SessionCredential credential,
-            Instant now
-    ) {
+            CredentialPurpose purpose, SessionCredential credential, Instant now) {
         var result = new java.util.ArrayList<CredentialFingerprint>();
         result.add(fingerprint(current, purpose, credential));
-        if (previous != null
-                && previous.acceptUntil() != null
-                && now.isBefore(previous.acceptUntil())) {
+        if (previous != null && previous.acceptUntil() != null && now.isBefore(previous.acceptUntil())) {
             result.add(fingerprint(previous, purpose, credential));
         }
         return List.copyOf(result);
@@ -85,16 +70,10 @@ public final class SessionKeyRing {
 
     public static boolean matches(String left, String right) {
         return MessageDigest.isEqual(
-                left.getBytes(StandardCharsets.US_ASCII),
-                right.getBytes(StandardCharsets.US_ASCII)
-        );
+                left.getBytes(StandardCharsets.US_ASCII), right.getBytes(StandardCharsets.US_ASCII));
     }
 
-    private static CredentialFingerprint fingerprint(
-            Key key,
-            CredentialPurpose purpose,
-            SessionCredential credential
-    ) {
+    private static CredentialFingerprint fingerprint(Key key, CredentialPurpose purpose, SessionCredential credential) {
         byte[] digest = hmac(key, purpose.prefix() + credential.value());
         return new CredentialFingerprint(key.version(), HexFormat.of().formatHex(digest));
     }

@@ -5,10 +5,9 @@ import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.identityaccess.application.session.IssuedSession;
 import com.yumpoo.platform.identityaccess.application.session.SessionService;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
+import java.util.Objects;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.Objects;
 
 @Service
 public class WebLoginCompletionService {
@@ -22,8 +21,7 @@ public class WebLoginCompletionService {
             AuthenticationUserRepository userRepository,
             CompanyConfigurationQuery companyQuery,
             SessionService sessionService,
-            AuthenticationEventService eventService
-    ) {
+            AuthenticationEventService eventService) {
         this.userRepository = userRepository;
         this.companyQuery = companyQuery;
         this.sessionService = sessionService;
@@ -33,10 +31,8 @@ public class WebLoginCompletionService {
     @Transactional
     public IssuedSession complete(String externalUserId, boolean rememberMe) {
         Objects.requireNonNull(externalUserId, "externalUserId must not be null");
-        AuthenticationUser user = userRepository.lockByWeComIdentity(
-                        companyQuery.current().companyId(),
-                        externalUserId
-                )
+        AuthenticationUser user = userRepository
+                .lockByWeComIdentity(companyQuery.current().companyId(), externalUserId)
                 .filter(AuthenticationUser::loginEligible)
                 .orElseThrow(WebLoginCompletionService::authenticationRequired);
         IssuedSession issued = sessionService.issueWebSession(user.userId(), null, rememberMe);

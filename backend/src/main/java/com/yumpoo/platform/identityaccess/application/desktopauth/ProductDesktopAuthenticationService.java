@@ -12,14 +12,13 @@ import com.yumpoo.platform.identityaccess.application.oauth.WeComMemberIdentity;
 import com.yumpoo.platform.identityaccess.application.session.IssuedSession;
 import com.yumpoo.platform.identityaccess.application.session.SessionService;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
-import org.springframework.dao.DataAccessResourceFailureException;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.net.URI;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.transaction.annotation.Transactional;
 
 public class ProductDesktopAuthenticationService {
 
@@ -46,8 +45,7 @@ public class ProductDesktopAuthenticationService {
             CompanyConfigurationQuery companyQuery,
             SessionService sessionService,
             AuthenticationEventService eventService,
-            Clock clock
-    ) {
+            Clock clock) {
         this.attemptStore = Objects.requireNonNull(attemptStore);
         this.tokenGenerator = Objects.requireNonNull(tokenGenerator);
         this.tokenHasher = Objects.requireNonNull(tokenHasher);
@@ -65,17 +63,21 @@ public class ProductDesktopAuthenticationService {
             String requestId,
             String clientVersion,
             String clientProtocolVersion,
-            boolean rememberMe
-    ) {
+            boolean rememberMe) {
         Instant createdAt = clock.instant();
         Instant expiresAt = createdAt.plus(AUTHORIZE_TTL);
         URI authorizationUri;
         try {
             authorizationUri = identityProvider.buildElectronAuthorizationUri(state.value());
             attemptStore.createProduct(new ProductDesktopAuthAttempt(
-                    tokenHasher.hash(state), challenge, requestId, clientVersion,
-                    clientProtocolVersion, createdAt, expiresAt, rememberMe
-            ));
+                    tokenHasher.hash(state),
+                    challenge,
+                    requestId,
+                    clientVersion,
+                    clientProtocolVersion,
+                    createdAt,
+                    expiresAt,
+                    rememberMe));
         } catch (WeComAuthenticationFailedException | IllegalArgumentException exception) {
             throw authenticationRequired();
         } catch (WeComDependencyUnavailableException | DataAccessResourceFailureException exception) {
@@ -85,10 +87,7 @@ public class ProductDesktopAuthenticationService {
     }
 
     @Transactional
-    public DesktopHandoffAuthorization completeAuthorization(
-            String authorizationCode,
-            DesktopAuthToken state
-    ) {
+    public DesktopHandoffAuthorization completeAuthorization(String authorizationCode, DesktopAuthToken state) {
         Instant claimedAt = clock.instant();
         DesktopAuthTokenHash stateHash = tokenHasher.hash(state);
         if (!validAuthorizationCode(authorizationCode)
@@ -112,37 +111,31 @@ public class ProductDesktopAuthenticationService {
             throw authenticationRequired();
         }
 
-        AuthenticationUser user = userRepository.lockByWeComIdentity(
-                        companyQuery.current().companyId(), identity.memberId()
-                )
+        AuthenticationUser user = userRepository
+                .lockByWeComIdentity(companyQuery.current().companyId(), identity.memberId())
                 .filter(AuthenticationUser::loginEligible)
                 .orElseThrow(ProductDesktopAuthenticationService::authenticationRequired);
         DesktopAuthToken handoffCode = tokenGenerator.generate();
         Instant issuedAt = clock.instant();
         Instant expiresAt = issuedAt.plus(HANDOFF_TTL);
         if (!attemptStore.issueProductHandoff(
-                stateHash, tokenHasher.hash(handoffCode), user.userId(), issuedAt, expiresAt
-        )) {
+                stateHash, tokenHasher.hash(handoffCode), user.userId(), issuedAt, expiresAt)) {
             throw authenticationRequired();
         }
         return new DesktopHandoffAuthorization(handoffCode, state, expiresAt);
     }
 
     @Transactional
-    public IssuedSession exchange(
-            DesktopAuthToken handoffCode,
-            DesktopAuthToken state,
-            PkceVerifier verifier
-    ) {
-        ProductDesktopAuthExchange exchange = attemptStore.consumeProduct(
+    public IssuedSession exchange(DesktopAuthToken handoffCode, DesktopAuthToken state, PkceVerifier verifier) {
+        ProductDesktopAuthExchange exchange = attemptStore
+                .consumeProduct(
                         tokenHasher.hash(state), tokenHasher.hash(handoffCode),
-                        verifier.challenge(), clock.instant()
-                )
+                        verifier.challenge(), clock.instant())
                 .orElseThrow(ProductDesktopAuthenticationService::authenticationRequired);
-        IssuedSession issued = sessionService.issueElectronSession(
-                exchange.userId(), exchange.clientVersion(), exchange.rememberMe()
-        );
-        AuthenticationUser user = userRepository.findByUserId(exchange.userId())
+        IssuedSession issued =
+                sessionService.issueElectronSession(exchange.userId(), exchange.clientVersion(), exchange.rememberMe());
+        AuthenticationUser user = userRepository
+                .findByUserId(exchange.userId())
                 .orElseThrow(ProductDesktopAuthenticationService::authenticationRequired);
         eventService.loginSucceeded(user, issued);
         return issued;

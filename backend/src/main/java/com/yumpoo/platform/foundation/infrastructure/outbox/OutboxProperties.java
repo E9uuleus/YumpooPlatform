@@ -3,26 +3,30 @@ package com.yumpoo.platform.foundation.infrastructure.outbox;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
-
-import java.time.Duration;
 
 @Validated
 @ConfigurationProperties(prefix = "yumpoo.outbox")
 public class OutboxProperties {
 
     private boolean enabled = true;
+
     @NotNull
     private Duration pollDelay = Duration.ofSeconds(1);
+
     @NotNull
     private Duration initialDelay = Duration.ofSeconds(1);
+
     @Min(1)
     @Max(1000)
     private int batchSize = 50;
+
     @Min(1)
     @Max(32)
     private int concurrency = 2;
+
     @NotNull
     private Duration leaseDuration = Duration.ofMinutes(5);
 

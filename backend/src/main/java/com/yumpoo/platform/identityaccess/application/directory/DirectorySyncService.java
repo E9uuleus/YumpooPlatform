@@ -3,12 +3,11 @@ package com.yumpoo.platform.identityaccess.application.directory;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelation;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelationContext;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Service;
-
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.stereotype.Service;
 
 @Service
 @ConditionalOnProperty(prefix = "yumpoo.wecom.directory", name = "enabled", havingValue = "true")
@@ -27,16 +26,12 @@ public class DirectorySyncService implements DirectorySyncUseCase, DirectorySync
             FullDirectoryScanCollector scanCollector,
             WeComDirectoryProfileGateway profileGateway,
             DirectorySyncItemApplyService itemApplyService,
-            DirectorySyncSettings settings
-    ) {
+            DirectorySyncSettings settings) {
         this.companyQuery = Objects.requireNonNull(companyQuery, "companyQuery must not be null");
         this.repository = Objects.requireNonNull(repository, "repository must not be null");
         this.scanCollector = Objects.requireNonNull(scanCollector, "scanCollector must not be null");
         this.profileGateway = Objects.requireNonNull(profileGateway, "profileGateway must not be null");
-        this.itemApplyService = Objects.requireNonNull(
-                itemApplyService,
-                "itemApplyService must not be null"
-        );
+        this.itemApplyService = Objects.requireNonNull(itemApplyService, "itemApplyService must not be null");
         this.settings = Objects.requireNonNull(settings, "settings must not be null");
     }
 
@@ -48,9 +43,8 @@ public class DirectorySyncService implements DirectorySyncUseCase, DirectorySync
     @Override
     public DirectorySyncExecutionResult executeWithDisposition(DirectorySyncCommand command) {
         Objects.requireNonNull(command, "command must not be null");
-        try (RequestCorrelationContext.Scope ignored = RequestCorrelationContext.open(
-                RequestCorrelation.root(command.requestId())
-        )) {
+        try (RequestCorrelationContext.Scope ignored =
+                RequestCorrelationContext.open(RequestCorrelation.root(command.requestId()))) {
             UUID companyId = companyQuery.current().companyId();
             DirectorySyncClaim claim = repository.claim(companyId, command, settings.leaseDuration());
             if (!claim.executionOwner()) {
@@ -69,11 +63,8 @@ public class DirectorySyncService implements DirectorySyncUseCase, DirectorySync
                         runId,
                         leaseToken,
                         new DirectorySyncException(
-                                "DIRECTORY_SYNC_UNEXPECTED_FAILURE",
-                                "The directory synchronization failed closed"
-                        ),
-                        command
-                ));
+                                "DIRECTORY_SYNC_UNEXPECTED_FAILURE", "The directory synchronization failed closed"),
+                        command));
             }
         }
     }
@@ -82,30 +73,16 @@ public class DirectorySyncService implements DirectorySyncUseCase, DirectorySync
         return new DirectorySyncExecutionResult(snapshot, DirectorySyncClaimDisposition.NEW);
     }
 
-    private DirectorySyncRunSnapshot executeOwned(
-            DirectorySyncCommand command,
-            UUID runId,
-            UUID leaseToken
-    ) {
-        DirectoryScanResult scan = scanCollector.collect((pass, pageNumber, nextCursor, members) ->
-                repository.stageIdPage(
-                        runId,
-                        leaseToken,
-                        pass,
-                        pageNumber,
-                        nextCursor,
-                        members,
-                        settings.leaseDuration()
-                )
-        );
+    private DirectorySyncRunSnapshot executeOwned(DirectorySyncCommand command, UUID runId, UUID leaseToken) {
+        DirectoryScanResult scan =
+                scanCollector.collect((pass, pageNumber, nextCursor, members) -> repository.stageIdPage(
+                        runId, leaseToken, pass, pageNumber, nextCursor, members, settings.leaseDuration()));
         repository.confirmScan(runId, leaseToken, scan, settings.leaseDuration());
-        if (scan.externalUserIds().isEmpty() && repository.hasActiveDirectoryMembers(
-                companyQuery.current().companyId()
-        )) {
+        if (scan.externalUserIds().isEmpty()
+                && repository.hasActiveDirectoryMembers(companyQuery.current().companyId())) {
             throw new DirectorySyncException(
                     "DIRECTORY_EMPTY_SNAPSHOT_REJECTED",
-                    "An empty provider snapshot was rejected while active members exist"
-            );
+                    "An empty provider snapshot was rejected while active members exist");
         }
 
         Map<Long, String> departments;
@@ -115,9 +92,7 @@ public class DirectorySyncService implements DirectorySyncUseCase, DirectorySync
             throw exception;
         } catch (RuntimeException exception) {
             throw new DirectorySyncException(
-                    "DIRECTORY_DEPARTMENT_PROVIDER_FAILED",
-                    "The provider department dictionary could not be read"
-            );
+                    "DIRECTORY_DEPARTMENT_PROVIDER_FAILED", "The provider department dictionary could not be read");
         }
 
         for (String externalUserId : scan.externalUserIds()) {
@@ -128,8 +103,7 @@ public class DirectorySyncService implements DirectorySyncUseCase, DirectorySync
                     throw new DirectorySyncException(
                             "DIRECTORY_PROFILE_ID_MISMATCH",
                             "A provider profile did not match the requested member identifier",
-                            DirectorySyncFailureScope.ITEM_ISOLATABLE
-                    );
+                            DirectorySyncFailureScope.ITEM_ISOLATABLE);
                 }
                 profile = DirectoryProfileMapper.map(raw, departments);
             } catch (DirectorySyncException exception) {
@@ -137,12 +111,7 @@ public class DirectorySyncService implements DirectorySyncUseCase, DirectorySync
                     throw exception;
                 }
                 repository.markProfileFailed(
-                        runId,
-                        leaseToken,
-                        externalUserId,
-                        exception.errorCode(),
-                        settings.leaseDuration()
-                );
+                        runId, leaseToken, externalUserId, exception.errorCode(), settings.leaseDuration());
                 continue;
             } catch (RuntimeException exception) {
                 repository.markProfileFailed(
@@ -150,37 +119,20 @@ public class DirectorySyncService implements DirectorySyncUseCase, DirectorySync
                         leaseToken,
                         externalUserId,
                         "DIRECTORY_PROFILE_MAPPING_FAILED",
-                        settings.leaseDuration()
-                );
+                        settings.leaseDuration());
                 continue;
             }
-            repository.stageProfile(
-                    runId,
-                    leaseToken,
-                    profile,
-                    settings.leaseDuration()
-            );
+            repository.stageProfile(runId, leaseToken, profile, settings.leaseDuration());
         }
 
         repository.beginApplying(runId, leaseToken, settings.leaseDuration());
         for (WeComMemberProfile profile : repository.stagedProfiles(runId, leaseToken)) {
             try {
-                itemApplyService.apply(
-                        runId,
-                        leaseToken,
-                        profile,
-                        command.actor(),
-                        settings.leaseDuration()
-                );
+                itemApplyService.apply(runId, leaseToken, profile, command.actor(), settings.leaseDuration());
             } catch (DirectorySyncLeaseLostException exception) {
                 throw exception;
             } catch (RuntimeException exception) {
-                repository.markApplyFailed(
-                        runId,
-                        leaseToken,
-                        profile.externalUserId(),
-                        settings.leaseDuration()
-                );
+                repository.markApplyFailed(runId, leaseToken, profile.externalUserId(), settings.leaseDuration());
             }
         }
         if (repository.hasItemFailures(runId, leaseToken)) {
@@ -190,19 +142,9 @@ public class DirectorySyncService implements DirectorySyncUseCase, DirectorySync
     }
 
     private DirectorySyncRunSnapshot safeFail(
-            UUID runId,
-            UUID leaseToken,
-            DirectorySyncException failure,
-            DirectorySyncCommand command
-    ) {
+            UUID runId, UUID leaseToken, DirectorySyncException failure, DirectorySyncCommand command) {
         try {
-            return repository.fail(
-                    runId,
-                    leaseToken,
-                    failure.errorCode(),
-                    failure.safeSummary(),
-                    command.actor()
-            );
+            return repository.fail(runId, leaseToken, failure.errorCode(), failure.safeSummary(), command.actor());
         } catch (DirectorySyncLeaseLostException exception) {
             return repository.find(runId);
         }

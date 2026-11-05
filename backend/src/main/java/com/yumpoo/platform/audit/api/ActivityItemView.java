@@ -1,10 +1,9 @@
 package com.yumpoo.platform.audit.api;
 
-import tools.jackson.databind.JsonNode;
-
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import tools.jackson.databind.JsonNode;
 
 public record ActivityItemView(
         UUID id,
@@ -19,8 +18,7 @@ public record ActivityItemView(
         String templateCode,
         String summary,
         JsonNode safeParameters,
-        String requestId
-) {
+        String requestId) {
     public ActivityItemView {
         relatedWorkItemIds = List.copyOf(relatedWorkItemIds);
         safeParameters = safeParameters.deepCopy();

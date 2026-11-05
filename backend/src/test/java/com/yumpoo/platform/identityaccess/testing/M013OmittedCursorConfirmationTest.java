@@ -1,14 +1,13 @@
 package com.yumpoo.platform.identityaccess.testing;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.yumpoo.platform.identityaccess.application.directory.DirectoryMemberFingerprint;
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySnapshotFailure;
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySnapshotResult;
-import org.junit.jupiter.api.Test;
-
 import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
 
 class M013OmittedCursorConfirmationTest {
 
@@ -37,58 +36,36 @@ class M013OmittedCursorConfirmationTest {
     @Test
     void rejectsAnOmittedCursorBeforeRealPaginationWasObserved() {
         assertThatThrownBy(() -> M013OmittedCursorConfirmation.confirm(
-                candidate(1, SNAPSHOT),
-                candidate(2, SNAPSHOT),
-                candidate(1, SNAPSHOT)
-        )).isInstanceOf(IllegalStateException.class)
+                        candidate(1, SNAPSHOT), candidate(2, SNAPSHOT), candidate(1, SNAPSHOT)))
+                .isInstanceOf(IllegalStateException.class)
                 .hasMessage("M0-13 provider pagination was not observed");
     }
 
     @Test
     void rejectsAnyFailureOtherThanAnOmittedTerminalCursor() {
         DirectorySnapshotResult.Incomplete transportFailure = new DirectorySnapshotResult.Incomplete(
-                fingerprints(),
-                CORP,
-                SNAPSHOT,
-                2,
-                DirectorySnapshotFailure.TRANSPORT_ERROR
-        );
+                fingerprints(), CORP, SNAPSHOT, 2, DirectorySnapshotFailure.TRANSPORT_ERROR);
 
         assertThatThrownBy(() -> M013OmittedCursorConfirmation.confirm(
-                transportFailure,
-                candidate(2, SNAPSHOT),
-                candidate(1, SNAPSHOT)
-        )).isInstanceOf(IllegalStateException.class)
+                        transportFailure, candidate(2, SNAPSHOT), candidate(1, SNAPSHOT)))
+                .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("is not an omitted-cursor candidate");
     }
 
     @Test
     void rejectsMismatchedWideAndPaginatedSnapshots() {
         assertThatThrownBy(() -> M013OmittedCursorConfirmation.confirm(
-                candidate(2, SNAPSHOT),
-                candidate(2, SNAPSHOT),
-                candidate(1, "e".repeat(64))
-        )).isInstanceOf(IllegalStateException.class)
+                        candidate(2, SNAPSHOT), candidate(2, SNAPSHOT), candidate(1, "e".repeat(64))))
+                .isInstanceOf(IllegalStateException.class)
                 .hasMessage("M0-13 narrow and wide snapshots did not match");
     }
 
-    private static DirectorySnapshotResult.Incomplete candidate(
-            int completedPageCount,
-            String snapshotFingerprint
-    ) {
+    private static DirectorySnapshotResult.Incomplete candidate(int completedPageCount, String snapshotFingerprint) {
         return new DirectorySnapshotResult.Incomplete(
-                fingerprints(),
-                CORP,
-                snapshotFingerprint,
-                completedPageCount,
-                DirectorySnapshotFailure.MISSING_CURSOR
-        );
+                fingerprints(), CORP, snapshotFingerprint, completedPageCount, DirectorySnapshotFailure.MISSING_CURSOR);
     }
 
     private static List<DirectoryMemberFingerprint> fingerprints() {
-        return List.of(
-                new DirectoryMemberFingerprint(MEMBER_A),
-                new DirectoryMemberFingerprint(MEMBER_B)
-        );
+        return List.of(new DirectoryMemberFingerprint(MEMBER_A), new DirectoryMemberFingerprint(MEMBER_B));
     }
 }

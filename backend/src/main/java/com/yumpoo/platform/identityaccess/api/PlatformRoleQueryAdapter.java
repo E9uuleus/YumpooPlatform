@@ -1,11 +1,10 @@
 package com.yumpoo.platform.identityaccess.api;
 
 import com.yumpoo.platform.identityaccess.application.authorization.PlatformRoleQueryService;
-import org.springframework.stereotype.Component;
-
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.stereotype.Component;
 
 @Component
 public class PlatformRoleQueryAdapter implements PlatformRoleQuery {

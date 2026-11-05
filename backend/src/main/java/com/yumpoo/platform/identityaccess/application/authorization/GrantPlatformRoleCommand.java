@@ -3,7 +3,6 @@ package com.yumpoo.platform.identityaccess.application.authorization;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.FieldViolation;
 import com.yumpoo.platform.foundation.application.idempotency.RequestHash;
-
 import java.util.Objects;
 import java.util.UUID;
 
@@ -15,8 +14,7 @@ public record GrantPlatformRoleCommand(
         RoleCommandActor actor,
         UUID idempotencyKey,
         RequestHash requestHash,
-        String reasonReference
-) {
+        String reasonReference) {
     public GrantPlatformRoleCommand {
         Objects.requireNonNull(companyId, "companyId must not be null");
         Objects.requireNonNull(targetUserId, "targetUserId must not be null");
@@ -26,7 +24,8 @@ public record GrantPlatformRoleCommand(
         Objects.requireNonNull(requestHash, "requestHash must not be null");
         if (expectedTargetRowVersion < 0) {
             throw ApplicationException.validation(new FieldViolation(
-                    "expectedTargetRowVersion", "NON_NEGATIVE_REQUIRED",
+                    "expectedTargetRowVersion",
+                    "NON_NEGATIVE_REQUIRED",
                     "expectedTargetRowVersion must not be negative"));
         }
         reasonReference = validateReason(reasonReference);
@@ -34,14 +33,13 @@ public record GrantPlatformRoleCommand(
 
     static String validateReason(String reason) {
         if (reason == null || reason.isBlank()) {
-            throw ApplicationException.validation(new FieldViolation(
-                    "reasonReference", "REQUIRED", "reasonReference is required"));
+            throw ApplicationException.validation(
+                    new FieldViolation("reasonReference", "REQUIRED", "reasonReference is required"));
         }
         String normalized = reason.strip();
         if (normalized.length() > 160) {
             throw ApplicationException.validation(new FieldViolation(
-                    "reasonReference", "MAX_LENGTH",
-                    "reasonReference must contain at most 160 characters"));
+                    "reasonReference", "MAX_LENGTH", "reasonReference must contain at most 160 characters"));
         }
         return normalized;
     }

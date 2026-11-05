@@ -3,7 +3,6 @@ package com.yumpoo.platform.identityaccess.infrastructure.wecom;
 import com.yumpoo.platform.identityaccess.application.authentication.WebIdentityProvider;
 import com.yumpoo.platform.identityaccess.application.oauth.WeComDependencyUnavailableException;
 import com.yumpoo.platform.identityaccess.application.oauth.WeComMemberIdentity;
-
 import java.net.URI;
 
 final class DisabledWebIdentityProvider implements WebIdentityProvider {

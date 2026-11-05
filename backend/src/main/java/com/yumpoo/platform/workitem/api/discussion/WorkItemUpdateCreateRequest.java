@@ -1,7 +1,6 @@
 package com.yumpoo.platform.workitem.api.discussion;
 
-import java.util.UUID;
-
 import jakarta.validation.constraints.NotNull;
+import java.util.UUID;
 
 public record WorkItemUpdateCreateRequest(@NotNull String bodyHtml, UUID parentUpdateId) {}

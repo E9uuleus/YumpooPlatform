@@ -20,8 +20,7 @@ public final class WorkspaceUpdateRequest {
 
     private boolean descriptionPresent;
 
-    public WorkspaceUpdateRequest() {
-    }
+    public WorkspaceUpdateRequest() {}
 
     public String name() {
         return name;

@@ -1,24 +1,23 @@
 package com.yumpoo.platform.filestorage.infrastructure;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.yumpoo.platform.filestorage.application.AttachmentUploadPolicy;
 import com.yumpoo.platform.filestorage.application.PublishedBlob;
 import com.yumpoo.platform.filestorage.application.SealedUpload;
 import com.yumpoo.platform.filestorage.application.UploadIncompleteException;
 import com.yumpoo.platform.filestorage.application.UploadRejectedException;
 import com.yumpoo.platform.filestorage.domain.AttachmentRejectedCode;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
-import java.io.IOException;
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.OptionalLong;
 import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class LocalFileQuarantineStorageTest {
 
@@ -30,11 +29,8 @@ class LocalFileQuarantineStorageTest {
         LocalFileQuarantineStorage storage = storage();
         LazyInputStream source = new LazyInputStream(AttachmentUploadPolicy.MAX_BYTES, -1);
 
-        SealedUpload sealed = storage.receive(
-                UUID.randomUUID(),
-                source,
-                OptionalLong.of(AttachmentUploadPolicy.MAX_BYTES)
-        );
+        SealedUpload sealed =
+                storage.receive(UUID.randomUUID(), source, OptionalLong.of(AttachmentUploadPolicy.MAX_BYTES));
         PublishedBlob published = storage.publish(sealed);
 
         assertThat(sealed.sizeBytes()).isEqualTo(AttachmentUploadPolicy.MAX_BYTES);
@@ -51,15 +47,11 @@ class LocalFileQuarantineStorageTest {
         LocalFileQuarantineStorage storage = storage();
 
         assertTooLarge(() -> storage.receive(
-                UUID.randomUUID(),
-                new LazyInputStream(1, -1),
-                OptionalLong.of(AttachmentUploadPolicy.MAX_BYTES + 1)
-        ));
+                UUID.randomUUID(), new LazyInputStream(1, -1), OptionalLong.of(AttachmentUploadPolicy.MAX_BYTES + 1)));
         assertTooLarge(() -> storage.receive(
                 UUID.randomUUID(),
                 new LazyInputStream(AttachmentUploadPolicy.MAX_BYTES + 1, -1),
-                OptionalLong.empty()
-        ));
+                OptionalLong.empty()));
 
         assertThat(filesUnder(tempDirectory.resolve("quarantine"))).isZero();
     }
@@ -68,12 +60,9 @@ class LocalFileQuarantineStorageTest {
     void rejectsBytesBeyondTheIntentReservationAndLeavesNoPartialFile() throws Exception {
         LocalFileQuarantineStorage storage = storage();
 
-        assertThatThrownBy(() -> storage.receive(
-                UUID.randomUUID(),
-                new LazyInputStream(1025, -1),
-                OptionalLong.empty(),
-                1024
-        )).isInstanceOf(UploadRejectedException.class)
+        assertThatThrownBy(() ->
+                        storage.receive(UUID.randomUUID(), new LazyInputStream(1025, -1), OptionalLong.empty(), 1024))
+                .isInstanceOf(UploadRejectedException.class)
                 .extracting(exception -> ((UploadRejectedException) exception).rejectedCode())
                 .isEqualTo(AttachmentRejectedCode.QUOTA_EXCEEDED);
         assertThat(filesUnder(tempDirectory.resolve("quarantine"))).isZero();
@@ -85,17 +74,11 @@ class LocalFileQuarantineStorageTest {
         UUID uploadId = UUID.randomUUID();
 
         assertThatThrownBy(() -> storage.receive(
-                uploadId,
-                new LazyInputStream(1024 * 1024, 128 * 1024),
-                OptionalLong.of(1024 * 1024)
-        )).isInstanceOf(UploadIncompleteException.class);
+                        uploadId, new LazyInputStream(1024 * 1024, 128 * 1024), OptionalLong.of(1024 * 1024)))
+                .isInstanceOf(UploadIncompleteException.class);
         assertThat(filesUnder(tempDirectory.resolve("quarantine"))).isZero();
 
-        SealedUpload retried = storage.receive(
-                uploadId,
-                new LazyInputStream(1024, -1),
-                OptionalLong.empty()
-        );
+        SealedUpload retried = storage.receive(uploadId, new LazyInputStream(1024, -1), OptionalLong.empty());
         assertThat(retried.sizeBytes()).isEqualTo(1024);
         assertThat(Files.isRegularFile(retried.quarantinedPath())).isTrue();
     }
@@ -104,11 +87,8 @@ class LocalFileQuarantineStorageTest {
     void rejectsEmptyBody() throws Exception {
         LocalFileQuarantineStorage storage = storage();
 
-        assertThatThrownBy(() -> storage.receive(
-                UUID.randomUUID(),
-                InputStream.nullInputStream(),
-                OptionalLong.of(0)
-        )).isInstanceOf(UploadRejectedException.class)
+        assertThatThrownBy(() -> storage.receive(UUID.randomUUID(), InputStream.nullInputStream(), OptionalLong.of(0)))
+                .isInstanceOf(UploadRejectedException.class)
                 .extracting(exception -> ((UploadRejectedException) exception).rejectedCode())
                 .isEqualTo(AttachmentRejectedCode.FILE_TYPE_NOT_ALLOWED);
     }
@@ -120,7 +100,7 @@ class LocalFileQuarantineStorageTest {
         Files.writeString(tempDirectory.resolve("quarantine").resolve(id + ".part"), "partial");
         storage.purgeTemporary(id);
         storage.purgeTemporary(id);
-        SealedUpload sealed = storage.receive(id, new ByteArrayInputStream(new byte[]{1, 2, 3}), OptionalLong.of(3));
+        SealedUpload sealed = storage.receive(id, new ByteArrayInputStream(new byte[] {1, 2, 3}), OptionalLong.of(3));
         PublishedBlob blob = storage.publish(sealed);
         storage.purgePublished(blob.storageKey());
         storage.purgePublished(blob.storageKey());
@@ -139,10 +119,7 @@ class LocalFileQuarantineStorageTest {
     }
 
     private LocalFileQuarantineStorage storage() throws IOException {
-        return new LocalFileQuarantineStorage(
-                tempDirectory.resolve("quarantine"),
-                tempDirectory.resolve("published")
-        );
+        return new LocalFileQuarantineStorage(tempDirectory.resolve("quarantine"), tempDirectory.resolve("published"));
     }
 
     private static long filesUnder(Path root) throws IOException {
