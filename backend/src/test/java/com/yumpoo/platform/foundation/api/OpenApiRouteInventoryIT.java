@@ -1,5 +1,7 @@
 package com.yumpoo.platform.foundation.api;
 
+import com.yumpoo.platform.foundation.testing.M010ProbeController;
+import com.yumpoo.platform.foundation.testing.M011ProbeController;
 import com.yumpoo.platform.testing.HttpIntegrationTest;
 import com.yumpoo.platform.testing.OpenApiContract;
 import io.swagger.v3.oas.models.OpenAPI;
@@ -24,13 +26,18 @@ class OpenApiRouteInventoryIT {
     @Test
     void controllerRoutesMatchOpenApiOperations() {
         Set<String> routes = new TreeSet<>();
-        handlerMapping.getHandlerMethods().keySet().forEach(mapping -> {
+        Set<String> testRoutes = new TreeSet<>();
+        for (var entry : handlerMapping.getHandlerMethods().entrySet()) {
+            var mapping = entry.getKey();
+            Class<?> controller = entry.getValue().getBeanType();
+            Set<String> target = controller == M010ProbeController.class || controller == M011ProbeController.class
+                    ? testRoutes : routes;
             for (String path : mapping.getPatternValues()) {
                 if (path.startsWith("/api/v1/")) {
-                    mapping.getMethodsCondition().getMethods().forEach(method -> routes.add(operation(method.name(), path)));
+                    mapping.getMethodsCondition().getMethods().forEach(method -> target.add(operation(method.name(), path)));
                 }
             }
-        });
+        }
 
         OpenAPI spec = new OpenAPIV3Parser().read(OpenApiContract.specification().toUri().toString());
         String base = spec.getServers().getFirst().getUrl();
@@ -45,6 +52,10 @@ class OpenApiRouteInventoryIT {
         assertThat(routes)
                 .withFailMessage("只在代码中：%s%n只在契约中：%s", onlyInCode, onlyInContract)
                 .isEqualTo(contract);
+        assertThat(testRoutes).containsExactlyInAnyOrder(
+                "PATCH /api/v1/__test/m0-10/probes/{}",
+                "POST /api/v1/__test/m0-10/probes",
+                "POST /api/v1/__test/m0-11/probes");
     }
 
     private static String operation(String method, String path) {

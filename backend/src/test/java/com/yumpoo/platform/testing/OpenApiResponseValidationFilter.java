@@ -42,6 +42,9 @@ class OpenApiResponseValidationFilter extends OncePerRequestFilter {
         Request.Method method = Request.Method.valueOf(request.getMethod());
         ValidationReport report = OpenApiContract.VALIDATOR.validateResponse(path, method, builder.build());
         for (ValidationReport.Message message : report.getMessages()) {
+            if (cached.getStatus() == 404 && "validation.request.path.missing".equals(message.getKey())) {
+                continue;
+            }
             if (message.getLevel() == ValidationReport.Level.ERROR) {
                 OpenApiResponseRecorder.record(method + " " + path + " → " + cached.getStatus()
                         + "：" + message.getKey() + " " + message.getMessage());
