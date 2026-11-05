@@ -88,6 +88,8 @@ import WorkItemLabelPopoverContent from './WorkItemLabelPopoverContent.vue'
 import WorkItemContentPopoverContent from './WorkItemContentPopoverContent.vue'
 import WorkItemDueDateCell from './WorkItemDueDateCell.vue'
 import type { DueDateValue } from './workItemDueDate'
+import { useProjectTableScrollLayout } from './useProjectTableScrollLayout'
+import { useWorkItemPresentation } from './workItemPresentation'
 import { workItemLabelColorValue } from './workItemLabelColors'
 import WorkItemAssigneePicker from './WorkItemAssigneePicker.vue'
 import { workItemAssignees, workItemAssigneeIds } from './workItemAssignees'
@@ -252,19 +254,8 @@ const tableRef = ref<{
   toggleRowSelection: (row: ProjectWorkItemListItem, selected?: boolean) => void
 }>()
 const tableSentinel = ref<HTMLElement>()
-const horizontalPageScrollbar = ref<HTMLElement>()
-const verticalPageScrollbar = ref<HTMLElement>()
-const horizontalOverflow = ref(false)
-const horizontalScrollExtent = ref(1)
-const verticalScrollExtent = ref(1)
-const pageScrollbarLeft = ref(0)
-const pageScrollbarTop = ref(0)
 let tableDragPreview: HTMLElement | undefined
 let tableColumnDragPreview: HTMLElement | undefined
-let tableScrollElement: HTMLElement | undefined
-let pageScrollbarSyncQueued = false
-let responsiveTableLayoutFrame: number | undefined
-let projectPageResizeObserver: ResizeObserver | undefined
 let tableDragPointerOffset = { x: 0, y: 0 }
 let tableColumnDragPointerOffset = { x: 0, y: 0 }
 let tablePointerCandidate: {
@@ -317,16 +308,6 @@ const DRAWER_MIN_WIDTH = 480
 const DRAWER_VIEWPORT_GUTTER = 60
 const drawerWidth = ref(560)
 const isResizingDrawer = ref(false)
-const horizontalPageScrollbarStyle = computed<CSSProperties>(() => ({
-  left: `${pageScrollbarLeft.value}px`,
-  right: 'calc(var(--yp-work-items-drawer-inset, 0px) + 12px)',
-}))
-const verticalPageScrollbarStyle = computed<CSSProperties>(() => ({
-  top: `${pageScrollbarTop.value}px`,
-  bottom: horizontalOverflow.value ? '12px' : '0px',
-  right: 'var(--yp-work-items-drawer-inset, 0px)',
-}))
-
 function onDrawerResizePointerDown(event: PointerEvent): void {
   event.preventDefault()
   event.stopPropagation()
@@ -378,151 +359,6 @@ function tableCellClassName({
   return classes.join(' ')
 }
 
-function syncProjectPageScrollLayout(): void {
-  if (embedded.value) { scheduleResponsiveTableLayout(); return }
-  document.body.classList.toggle('yp-work-items-drawer-open', detailOpen.value)
-  if (detailOpen.value) {
-    document.body.style.setProperty('--yp-work-items-drawer-width', `${drawerWidth.value}px`)
-  }
-  document.body.style.setProperty('--yp-work-items-drawer-inset', detailOpen.value ? `${drawerWidth.value}px` : '0px')
-  scheduleResponsiveTableLayout()
-}
-
-function resolveTableScrollElement(): HTMLElement | undefined {
-  return tableRef.value?.$el?.querySelector<HTMLElement>('.el-scrollbar__wrap') ?? undefined
-}
-
-function syncPageScrollbarPositions(): void {
-  if (!tableScrollElement) return
-  const horizontal = horizontalPageScrollbar.value
-  const vertical = verticalPageScrollbar.value
-  if (horizontal && Math.abs(horizontal.scrollLeft - tableScrollElement.scrollLeft) > 0.5) {
-    horizontal.scrollLeft = tableScrollElement.scrollLeft
-  }
-  if (vertical && Math.abs(vertical.scrollTop - tableScrollElement.scrollTop) > 0.5) {
-    vertical.scrollTop = tableScrollElement.scrollTop
-  }
-}
-
-function syncTableHeaderScrollPosition(): void {
-  if (!tableScrollElement) return
-  const headerWrapper = tableRef.value?.$el?.querySelector<HTMLElement>('.el-table__header-wrapper')
-  if (headerWrapper && Math.abs(headerWrapper.scrollLeft - tableScrollElement.scrollLeft) > 0.5) {
-    headerWrapper.scrollLeft = tableScrollElement.scrollLeft
-  }
-}
-
-function onTableScroll(): void {
-  syncTableHeaderScrollPosition()
-  syncPageScrollbarPositions()
-}
-
-function bindTableScrollElement(next: HTMLElement | undefined): void {
-  if (tableScrollElement === next) return
-  tableScrollElement?.removeEventListener('scroll', onTableScroll)
-  tableScrollElement = next
-  tableScrollElement?.addEventListener('scroll', onTableScroll, { passive: true })
-}
-
-function syncPageScrollbars(): void {
-  bindTableScrollElement(resolveTableScrollElement())
-  if (embedded.value) return
-
-  const contextNavigation = document.querySelector<HTMLElement>('.app-shell--workspace .context-navigation')
-  const appMain = document.querySelector<HTMLElement>('.app-shell--workspace .app-main')
-  const contextRect = contextNavigation?.getBoundingClientRect()
-  const appMainRect = appMain?.getBoundingClientRect()
-  const contextVisible = Boolean(contextNavigation && contextRect && contextRect.width > 0
-    && getComputedStyle(contextNavigation).display !== 'none')
-  pageScrollbarLeft.value = Math.max(0, Math.round(contextVisible ? contextRect!.right : (appMainRect?.left ?? 0)))
-
-  pageScrollbarTop.value = Math.max(0, Math.round(tableScrollElement?.getBoundingClientRect().top ?? 0))
-  const horizontal = horizontalPageScrollbar.value
-  const vertical = verticalPageScrollbar.value
-  if (!tableScrollElement || !horizontal || !vertical) return
-
-  const nextHorizontalOverflow = tableScrollElement.scrollWidth - tableScrollElement.clientWidth > 1
-  const horizontalOverflowChanged = horizontalOverflow.value !== nextHorizontalOverflow
-  horizontalOverflow.value = nextHorizontalOverflow
-
-  horizontalScrollExtent.value = Math.max(
-    horizontal.clientWidth,
-    horizontal.clientWidth + tableScrollElement.scrollWidth - tableScrollElement.clientWidth,
-  )
-  verticalScrollExtent.value = Math.max(
-    vertical.clientHeight,
-    vertical.clientHeight + tableScrollElement.scrollHeight - tableScrollElement.clientHeight,
-  )
-  void nextTick(syncPageScrollbarPositions)
-  if (horizontalOverflowChanged) void nextTick(schedulePageScrollbarSync)
-}
-
-function schedulePageScrollbarSync(): void {
-  if (pageScrollbarSyncQueued) return
-  pageScrollbarSyncQueued = true
-  void nextTick(() => {
-    pageScrollbarSyncQueued = false
-    syncPageScrollbars()
-    fillTableViewport()
-  })
-}
-
-function fillTableViewport(): void {
-  if (selectedView.value !== 'table' || grouped.value || groupingSwitching.value
-    || tableLoading.value || tableSorting.value || error.value || loadingMoreError.value || !tableNextCursor.value) return
-  const root = resolveTableScrollElement()?.getBoundingClientRect()
-  const end = tableSentinel.value?.getBoundingClientRect()
-  // 首批数据可能未填满视口，标记持续可见时 IntersectionObserver 不会再次通知。
-  if (root && end && root.height > 0 && end.height > 0 && end.bottom >= root.top && end.top <= root.bottom + 320)
-    void loadTable(tableNextCursor.value, true)
-}
-
-function syncResponsiveTableLayout(): void {
-  tableRef.value?.doLayout()
-  schedulePageScrollbarSync()
-}
-
-function scheduleResponsiveTableLayout(): void {
-  if (responsiveTableLayoutFrame !== undefined) return
-  responsiveTableLayoutFrame = window.requestAnimationFrame(() => {
-    responsiveTableLayoutFrame = undefined
-    syncResponsiveTableLayout()
-  })
-}
-
-function flushResponsiveTableLayout(): void {
-  if (responsiveTableLayoutFrame !== undefined) {
-    window.cancelAnimationFrame(responsiveTableLayoutFrame)
-    responsiveTableLayoutFrame = undefined
-  }
-  syncResponsiveTableLayout()
-}
-
-function observeProjectPageResizeTargets(): void {
-  projectPageResizeObserver?.disconnect()
-  if (typeof ResizeObserver === 'undefined') return
-  projectPageResizeObserver = new ResizeObserver(scheduleResponsiveTableLayout)
-  const appMain = document.querySelector<HTMLElement>('.app-shell--workspace .app-main')
-  if (appMain) projectPageResizeObserver.observe(appMain)
-  if (tableRef.value?.$el) projectPageResizeObserver.observe(tableRef.value.$el)
-  if (horizontalPageScrollbar.value) projectPageResizeObserver.observe(horizontalPageScrollbar.value)
-  if (verticalPageScrollbar.value) projectPageResizeObserver.observe(verticalPageScrollbar.value)
-}
-
-function onHorizontalPageScroll(): void {
-  if (!tableScrollElement || !horizontalPageScrollbar.value) return
-  if (Math.abs(tableScrollElement.scrollLeft - horizontalPageScrollbar.value.scrollLeft) > 0.5) {
-    tableScrollElement.scrollLeft = horizontalPageScrollbar.value.scrollLeft
-  }
-  syncTableHeaderScrollPosition()
-}
-
-function onVerticalPageScroll(): void {
-  if (!tableScrollElement || !verticalPageScrollbar.value) return
-  if (Math.abs(tableScrollElement.scrollTop - verticalPageScrollbar.value.scrollTop) > 0.5) {
-    tableScrollElement.scrollTop = verticalPageScrollbar.value.scrollTop
-  }
-}
 const filters = reactive({
   assignees: new Set<string>(), statuses: new Set<string>(), priorities: new Set<string>(),
   contents: new Set<string>(), dueRange: [] as Date[], updatedAfter: null as Date | null,
@@ -708,6 +544,8 @@ const workflowStatuses = computed(() => [...(labelCatalog.value?.statuses ?? [])
   .map(status => ({ ...status, statusCode: status.code })))
 const priorityOptions = computed(() => [...(labelCatalog.value?.priorities ?? [])]
   .sort((left, right) => left.sortOrder - right.sortOrder))
+const { contentName, contentLabel, statusLabel, labelCellStyle, getStatusCellStyle, getPriorityCellStyle,
+  getStatusTone, getPriorityPresentation, formatDate } = useWorkItemPresentation({ contentsById, workflowStatuses, priorityOptions })
 const activeMembers = computed(() => members.value.filter(item => item.membershipStatus === ProjectMembershipStatus.Active))
 const canCreate = computed(() => Boolean(project.value
   && projectWritable(project.value)
@@ -826,6 +664,13 @@ const unfinishedStatusCodes = computed(() => !embedded.value && hideCompleted.va
   : null)
 watch(() => unfinishedStatusCodes.value?.join(','), () => void resetCurrentData())
 const groupingSwitching = ref(false)
+const { horizontalPageScrollbar, verticalPageScrollbar, horizontalOverflow, horizontalScrollExtent, verticalScrollExtent,
+  pageScrollbarLeft, horizontalPageScrollbarStyle, verticalPageScrollbarStyle, onHorizontalPageScroll, onVerticalPageScroll,
+  resolveTableScrollElement, schedulePageScrollbarSync, scheduleResponsiveTableLayout, flushResponsiveTableLayout,
+} = useProjectTableScrollLayout({
+  tableRef, tableSentinel, embedded, detailOpen, drawerWidth, selectedView, grouped, groupingSwitching,
+  tableLoading, tableSorting, error, loadingMoreError, tableNextCursor, loadTable,
+})
 const onboardingReady = computed(() => !embedded.value && Boolean(project.value) && !loading.value && !tableLoading.value && !error.value
   && (selectedView.value === 'kanban'
     ? Object.values(lanes).every(state => !state.loading && !state.error)
@@ -1230,80 +1075,6 @@ function moveSubitemColumn(source: string, target: string, placement: 'before' |
   next.splice(targetIndex + (placement === 'after' ? 1 : 0), 0, sourceKey)
   subitemMovableColumnOrder.value = next
   persistTablePrefs()
-}
-
-function contentName(contentId: string): string {
-  return contentsById.value.get(contentId)?.name ?? '未知类别'
-}
-
-function contentLabel(item: Pick<ProjectWorkItemListItem, 'contentId' | 'contentName' | 'contentColorToken'>) {
-  return contentsById.value.get(item.contentId) ?? { name: item.contentName, colorToken: item.contentColorToken }
-}
-
-function statusLabel(statusCode: string): string {
-  return workflowStatuses.value.find(item => item.statusCode === statusCode)?.displayName ?? statusCode
-}
-
-function labelCellStyle(colorToken?: string): CSSProperties {
-  return {
-    ...(colorToken ? { backgroundColor: workItemLabelColorValue(colorToken) } : {}),
-    color: 'var(--yp-text-inverse)',
-  }
-}
-
-function getStatusCellStyle(statusCode: string): CSSProperties {
-  return labelCellStyle(workflowStatuses.value.find(item => item.statusCode === statusCode)?.colorToken)
-}
-
-function getPriorityCellStyle(priority: string | null): CSSProperties {
-  return labelCellStyle(priorityOptions.value.find(item => item.code === priority)?.colorToken)
-}
-
-function getStatusTone(statusCode: string): string {
-  const option = workflowStatuses.value.find(item => item.statusCode === statusCode)
-  const colorTone: Record<string, string> = {
-    GREEN: 'green', TEAL: 'green', BLUE: 'blue', INDIGO: 'blue', PURPLE: 'blue',
-    MAGENTA: 'red', RED: 'red', ORANGE: 'yellow', AMBER: 'yellow', LIME: 'green',
-    CYAN: 'blue', GRAY: 'gray',
-  }
-  if (option?.colorToken) return colorTone[option.colorToken] ?? 'gray'
-  const category = option?.statusCategory
-  if (category === 'DONE') return 'green'
-  if (category === 'IN_PROGRESS') return 'yellow'
-  if (category === 'CANCELED') return 'gray'
-
-  const upper = statusCode.toUpperCase()
-  if (upper.includes('STUCK') || upper.includes('BLOCK') || upper.includes('DEFECT') || upper.includes('BUG')) {
-    return 'red'
-  }
-  if (upper.includes('REVIEW') || upper.includes('AUDIT') || upper.includes('TEST') || upper.includes('INSPECT')) {
-    return 'blue'
-  }
-  if (upper.includes('PLAN') || upper.includes('TODO') || upper.includes('BACKLOG')) {
-    return 'neutral'
-  }
-  return 'gray'
-}
-
-function getPriorityPresentation(priority: string | null): { label: string; tone: string } {
-  if (!priority) return { label: '-', tone: 'empty' }
-  const option = priorityOptions.value.find(item => item.code === priority)
-  const tokenTone: Record<string, string> = {
-    RED: 'urgent', MAGENTA: 'urgent', ORANGE: 'high', AMBER: 'high',
-    GREEN: 'low', LIME: 'low', TEAL: 'medium', CYAN: 'medium', BLUE: 'low',
-    INDIGO: 'medium', PURPLE: 'medium', GRAY: 'empty',
-  }
-  if (option) return { label: option.displayName, tone: tokenTone[option.colorToken] ?? 'empty' }
-  const upper = priority.toUpperCase()
-  if (upper === 'URGENT') return { label: '紧急', tone: 'urgent' }
-  if (upper === 'HIGH') return { label: '高', tone: 'high' }
-  if (upper === 'MEDIUM') return { label: '中', tone: 'medium' }
-  if (upper === 'LOW') return { label: '低', tone: 'low' }
-  return { label: priority, tone: 'empty' }
-}
-
-function formatDate(value: Date | string | null): string {
-  return value ? new Date(value).toISOString().slice(0, 10) : '—'
 }
 
 function queryValues(name: string): string[] {
@@ -3003,12 +2774,7 @@ watch([() => route.query.workItemId, () => route.query.tab], ([value, tab], [pre
   }
 }, { immediate: true })
 watch(assigneeSearch, scheduleMemberSearch)
-watch(detailOpen, syncProjectPageScrollLayout, { flush: 'post' })
 watch(isResizingDrawer, value => { if (!embedded.value) document.body.classList.toggle('yp-work-items-drawer-resizing', value) }, { flush: 'sync' })
-watch(tableRef, () => {
-  observeProjectPageResizeTargets()
-  scheduleResponsiveTableLayout()
-}, { flush: 'post' })
 watch([displayTableItems, () => [...grouping.collapsed.value].join('|'), groupCountsReady], () => {
   schedulePageScrollbarSync()
   void nextTick(loadVisibleGroups)
@@ -3045,10 +2811,6 @@ watch([
 ], schedulePageScrollbarSync, { flush: 'post' })
 
 onMounted(() => {
-  if (!embedded.value) document.body.classList.add('yp-project-overview-scroll')
-  syncProjectPageScrollLayout()
-  observeProjectPageResizeTargets()
-  window.addEventListener('resize', scheduleResponsiveTableLayout)
   loadTablePrefs()
   document.addEventListener('pointerdown', onDocumentPointerDown)
   tableObserver = new IntersectionObserver(entries => {
@@ -3076,17 +2838,8 @@ onBeforeUnmount(() => {
   activeController?.abort(); if (searchTimer) window.clearTimeout(searchTimer)
   if (memberSearchTimer) window.clearTimeout(memberSearchTimer)
   if (suppressTableClickTimer) window.clearTimeout(suppressTableClickTimer)
-  if (responsiveTableLayoutFrame !== undefined) window.cancelAnimationFrame(responsiveTableLayoutFrame)
-  projectPageResizeObserver?.disconnect()
   tableObserver?.disconnect(); kanbanObserver?.disconnect()
   document.removeEventListener('pointerdown', onDocumentPointerDown)
-  window.removeEventListener('resize', scheduleResponsiveTableLayout)
-  bindTableScrollElement(undefined)
-  if (!embedded.value) {
-    document.body.classList.remove('yp-project-overview-scroll', 'yp-work-items-drawer-open', 'yp-work-items-drawer-resizing')
-    document.body.style.removeProperty('--yp-work-items-drawer-width')
-    document.body.style.removeProperty('--yp-work-items-drawer-inset')
-  }
   clearTablePointerTracking()
   clearTableColumnPointerTracking()
   clearTableColumnResizeTracking()
