@@ -2,10 +2,6 @@ package com.yumpoo.platform.identityaccess.application.desktopauth;
 
 import org.junit.jupiter.api.Test;
 
-import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneOffset;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -40,19 +36,4 @@ class DesktopAuthValueObjectsTest {
         assertThat(token.toString()).doesNotContain(token.value());
     }
 
-    @Test
-    void receiptContainsOnlyFingerprintsAndHasAVerifiableSignature() {
-        M015VerificationReceiptSigner signer = new M015VerificationReceiptSigner(
-                "m015-test-key-0123456789-abcdef-!@#",
-                Clock.fixed(Instant.parse("2026-08-11T01:00:00Z"), ZoneOffset.UTC)
-        );
-        DesktopIdentityFingerprint fingerprint = signer.fingerprint("raw-corp", "raw-member");
-
-        M015VerificationReceipt receipt = signer.sign(fingerprint, "m015.request-1");
-
-        assertThat(receipt.corpFingerprint()).hasSize(64).doesNotContain("raw-corp");
-        assertThat(receipt.memberFingerprint()).hasSize(64).doesNotContain("raw-member");
-        assertThat(receipt.verifiedAt()).isEqualTo("2026-08-11T01:00:00Z");
-        assertThat(signer.verifies(receipt)).isTrue();
-    }
 }

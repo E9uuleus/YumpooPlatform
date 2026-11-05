@@ -61,7 +61,6 @@ export const postureNames: Record<string, string> = {
   LOCAL_AUTH_ENABLED: '本地登录入口',
   CONTROLLED_AUTH_ENABLED: '受控验收登录',
   M113_FIXTURE_ENABLED: '验收数据开关',
-  WECOM_PROBE_ENABLED: '企微验收探针',
   SERVER_NOT_LOOPBACK: '服务监听地址',
   DEFAULT_CHARSET_NOT_UTF8: '默认字符集',
   LOG_FILE_NOT_CONFIGURED: '文件日志',

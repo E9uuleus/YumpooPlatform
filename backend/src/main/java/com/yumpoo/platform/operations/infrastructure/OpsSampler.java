@@ -591,12 +591,6 @@ public class OpsSampler implements OperationsRuntime, SmartLifecycle {
         );
         check(
             checks,
-            "WECOM_PROBE_ENABLED",
-            "WARNING",
-            flag("yumpoo.m012.wecom.enabled") || flag("yumpoo.m015.wecom.enabled")
-        );
-        check(
-            checks,
             "SERVER_NOT_LOOPBACK",
             "WARNING",
             !Set.of("127.0.0.1", "::1", "localhost").contains(environment.getProperty("server.address", ""))

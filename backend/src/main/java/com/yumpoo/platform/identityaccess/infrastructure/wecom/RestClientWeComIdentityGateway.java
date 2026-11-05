@@ -40,14 +40,6 @@ final class RestClientWeComIdentityGateway implements WeComIdentityGateway {
 
     RestClientWeComIdentityGateway(
             RestClient.Builder restClientBuilder,
-            M012WeComProperties properties,
-            Clock clock
-    ) {
-        this(restClientBuilder, WeComOAuthClientSettings.from(properties), clock);
-    }
-
-    RestClientWeComIdentityGateway(
-            RestClient.Builder restClientBuilder,
             WeComOAuthClientSettings settings,
             Clock clock
     ) {
