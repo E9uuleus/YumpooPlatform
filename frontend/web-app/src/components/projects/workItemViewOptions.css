@@ -1,0 +1,46 @@
+.work-item-view-options-scroll {
+  max-height: min(600px, calc(100dvh - 96px));
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+}
+
+.work-item-view-option:is(.el-checkbox, .el-radio) {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 32px;
+  height: auto;
+  margin: 0;
+  padding: 5px 10px;
+  border-radius: var(--yp-radius-sm);
+  background: var(--yp-bg-sunken);
+  color: var(--yp-text-primary);
+  white-space: normal;
+  transition: background-color var(--yp-motion-fast) var(--yp-ease-standard);
+}
+
+.work-item-view-option:not(.is-disabled):hover,
+.work-item-view-option:has(:focus-visible) {
+  background: var(--yp-bg-selected);
+}
+
+.work-item-view-option:has(:focus-visible) {
+  outline: 2px solid var(--yp-focus-ring);
+  outline-offset: -2px;
+}
+
+.work-item-view-option .el-checkbox__label {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+
+.work-items-popover .filter-swatch {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--yp-text-primary) 12%, transparent);
+}

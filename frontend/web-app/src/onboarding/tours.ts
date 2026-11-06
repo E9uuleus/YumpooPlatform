@@ -45,7 +45,7 @@ export const TOURS: Record<TourId, TourDefinition> = {
       { target: at('project-title'), placement: 'bottom-start', title: '项目信息', description: '点击项目名查看负责人和创建时间。' },
       { target: at('project-sections'), placement: 'bottom-end', title: '项目菜单', description: '在工作项、统计、成员、动态和设置之间切换，设置本项目的通知提醒；负责人和公司管理员可以结束或归档项目，成员可以退出项目。', since: 5 },
       { target: at('work-item-views'), placement: 'bottom-start', title: '表格与看板', description: '表格适合批量编辑；在看板中拖动卡片即可推进状态，点击卡片上的标签直接修改字段，列头的 + 可在该状态下新建。' },
-      { target: at('work-item-toolbar'), placement: 'bottom-start', title: '工具栏', description: '「新增工作项」在表格顶部创建一条并直接改名，右侧的 ▾ 可从 Excel/CSV 导入，提交前可预览重复处理和父项关系，提交失败保留映射和预览并提供诊断信息；搜索、按处理人或条件筛选（子工作项也会匹配，命中时自动展开父项）、排序、隐藏列和分组，打开“隐藏已完成”可置灰或不显示已完成的工作项（看板中隐藏已完成状态的列），这些视图设置只影响你自己；「已归档」列出本项目归档的工作项，可以恢复。', since: 3 },
+      { target: at('work-item-toolbar'), placement: 'bottom-start', title: '工具栏', description: '「新增工作项」在表格顶部创建一条并直接改名，右侧 ▾ 可导入 Excel/CSV。导入前可预览重复处理和父项关系，提交失败会保留映射、预览和诊断信息。搜索和筛选也会匹配子工作项并展开父项。用「隐藏」勾选要显示的列，用「隐藏已完成」右侧 ▾ 按名称和色点选择哪些状态算已完成。表格可置灰或隐藏这些工作项，看板会隐藏对应列。这些视图设置只影响你自己。这里也可以排序、分组或恢复已归档的工作项。', since: 3 },
       { target: at('work-item-table'), placement: 'top', title: '直接在表格里编辑', description: '点击状态、处理人、截止日期等单元格即可修改；勾选多行后，底部会出现批量操作栏。表格会自动补齐首屏内容，向下滚动可继续加载工作项。' },
       {
         target: at('work-item-row-drag'),
@@ -57,7 +57,7 @@ export const TOURS: Record<TourId, TourDefinition> = {
       },
       { target: at('work-item-quick-add'), placement: 'top-start', title: '快速添加', description: '输入名称按 Enter 创建，Shift+Enter 创建后继续添加下一条；分组时每组底部都可以添加。', since: 2 },
       { target: at('work-item-discussion'), placement: 'right', title: '讨论与详情', description: '打开工作项详情：编写描述、讨论并 @同事、上传附件、查看活动记录。' },
-      { target: at('work-item-timer'), placement: 'left', title: '时长追踪', description: '这一列汇总每个工作项的计时；开启计时器时点击即可开始或停止，可同时计时多项，时长按项数平均计入。', since: 2 },
+      { target: at('work-item-timer'), placement: 'left', title: '时长追踪', description: '点击时长打开计时日志，选择「手动添加时长记录」可补记。所选时段有记录时会列出明细。开启计时器后也可用播放按钮计时，多项同时计时会均分时长。', since: 2 },
       { target: at('work-item-column-header'), placement: 'bottom', title: '列头菜单', description: '列头菜单可排序、隐藏列；表头最右侧的“+”可添加跨项目连接列。' },
       {
         target: at('work-item-column-drag'),
