@@ -43,3 +43,5 @@ pnpm generate:api-client
 - CI 对比基线契约检查破坏性变更（删除字段、收紧约束等），违反即失败。
 - 确需破坏性变更时，在 [breaking-change-exceptions.json](../../../../../../tools/openapi/breaking-change-exceptions.json) 登记精确例外，并在 Agent Note 记录理由。
 - 新增字段默认可选，前端对未知枚举值要有兜底展示。
+
+后端 HTTP 集成测试会按 OpenAPI 校验每个响应，Controller 路由与契约操作必须一一对应。规则见 [HTTP 集成测试按 OpenAPI 校验响应](../../../../../../.agents/notes/implemented/testing/2026-11-04-http-contract-validation.md)。

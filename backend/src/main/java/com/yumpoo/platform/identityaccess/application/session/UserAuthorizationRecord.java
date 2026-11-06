@@ -2,7 +2,6 @@ package com.yumpoo.platform.identityaccess.application.session;
 
 import com.yumpoo.platform.identityaccess.domain.identity.AccountStatus;
 import com.yumpoo.platform.identityaccess.domain.identity.EmploymentStatus;
-
 import java.util.Objects;
 import java.util.UUID;
 
@@ -12,8 +11,7 @@ public record UserAuthorizationRecord(
         EmploymentStatus employmentStatus,
         AccountStatus accountStatus,
         long authorizationVersion,
-        long rowVersion
-) {
+        long rowVersion) {
 
     public UserAuthorizationRecord {
         Objects.requireNonNull(userId, "userId must not be null");
@@ -26,8 +24,7 @@ public record UserAuthorizationRecord(
     }
 
     public boolean activeAndEnabled() {
-        return employmentStatus == EmploymentStatus.ACTIVE
-                && accountStatus == AccountStatus.ENABLED;
+        return employmentStatus == EmploymentStatus.ACTIVE && accountStatus == AccountStatus.ENABLED;
     }
 
     public boolean employmentActive() {

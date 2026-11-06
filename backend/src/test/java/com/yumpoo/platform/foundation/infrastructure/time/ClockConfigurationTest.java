@@ -8,6 +8,7 @@ class ClockConfigurationTest {
 
     @Test
     void applicationClockUsesPostgresMicrosecondPrecision() {
-        assertThat(new ClockConfiguration().systemUtcClock().instant().getNano() % 1_000).isZero();
+        assertThat(new ClockConfiguration().systemUtcClock().instant().getNano() % 1_000)
+                .isZero();
     }
 }

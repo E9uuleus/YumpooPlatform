@@ -2,9 +2,9 @@ package com.yumpoo.platform.identityaccess.api;
 
 import com.yumpoo.platform.foundation.api.error.ApiErrorWriter;
 import com.yumpoo.platform.foundation.api.web.HttpAccessLog;
-import com.yumpoo.platform.foundation.application.logging.StructuredLoggingContext;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
+import com.yumpoo.platform.foundation.application.logging.StructuredLoggingContext;
 import com.yumpoo.platform.foundation.application.request.RequestIdContext;
 import com.yumpoo.platform.identityaccess.application.session.AuthenticatedSession;
 import com.yumpoo.platform.identityaccess.application.session.IssuedSession;
@@ -14,16 +14,15 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.time.Clock;
+import java.time.Duration;
+import java.util.Optional;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
-
-import java.io.IOException;
-import java.time.Clock;
-import java.time.Duration;
-import java.util.Optional;
 
 final class SessionAuthenticationFilter extends OncePerRequestFilter {
 
@@ -38,8 +37,7 @@ final class SessionAuthenticationFilter extends OncePerRequestFilter {
             PlatformRoleQuery platformRoleQuery,
             ApiErrorWriter errorWriter,
             LocalSessionIssuer localSessionIssuer,
-            Clock clock
-    ) {
+            Clock clock) {
         this.sessionService = sessionService;
         this.platformRoleQuery = platformRoleQuery;
         this.errorWriter = errorWriter;
@@ -53,17 +51,11 @@ final class SessionAuthenticationFilter extends OncePerRequestFilter {
     }
 
     @Override
-    protected void doFilterInternal(
-            HttpServletRequest request,
-            HttpServletResponse response,
-            FilterChain filterChain
-    ) throws ServletException, IOException {
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+            throws ServletException, IOException {
         SecurityContext previous = SecurityContextHolder.getContext();
         try {
-            Optional<String> raw = SessionHttpCookies.single(
-                    request,
-                    SessionHttpCookies.SESSION_COOKIE
-            );
+            Optional<String> raw = SessionHttpCookies.single(request, SessionHttpCookies.SESSION_COOKIE);
             boolean issuedLocally = raw.isEmpty();
             SessionCredential credential = issuedLocally
                     ? issueLocalSession(response)
@@ -74,8 +66,7 @@ final class SessionAuthenticationFilter extends OncePerRequestFilter {
             try {
                 authenticated = authenticate(request, credential);
             } catch (ApplicationException exception) {
-                if (issuedLocally
-                        || exception.errorCode() != StandardErrorCode.AUTHENTICATION_REQUIRED) {
+                if (issuedLocally || exception.errorCode() != StandardErrorCode.AUTHENTICATION_REQUIRED) {
                     throw exception;
                 }
                 credential = issueLocalSession(response)
@@ -91,9 +82,7 @@ final class SessionAuthenticationFilter extends OncePerRequestFilter {
                     authenticated.user().authorizationVersion(),
                     platformRoleQuery.findActiveRoleCodes(
                             authenticated.user().companyId(),
-                            authenticated.user().userId()
-                    )
-            )));
+                            authenticated.user().userId()))));
             SecurityContextHolder.setContext(context);
             request.setAttribute(HttpAccessLog.USER_ID, authenticated.user().userId());
             request.setAttribute(HttpAccessLog.CLIENT_TYPE, authenticated.clientTypeCode());
@@ -121,10 +110,7 @@ final class SessionAuthenticationFilter extends OncePerRequestFilter {
         }
     }
 
-    private AuthenticatedSession authenticate(
-            HttpServletRequest request,
-            SessionCredential credential
-    ) {
+    private AuthenticatedSession authenticate(HttpServletRequest request, SessionCredential credential) {
         return isLogout(request)
                 ? sessionService.authenticateForLogout(credential)
                 : sessionService.authenticate(credential);
@@ -133,36 +119,25 @@ final class SessionAuthenticationFilter extends OncePerRequestFilter {
     private Optional<IssuedSession> issueLocalSession(HttpServletResponse response) {
         Optional<IssuedSession> issued = localSessionIssuer.issue();
         issued.ifPresent(session -> {
-            Duration remaining = SessionHttpCookies.maxAge(
-                    session.rememberMe(),
-                    session.absoluteExpiresAt(),
-                    clock.instant()
-            );
+            Duration remaining =
+                    SessionHttpCookies.maxAge(session.rememberMe(), session.absoluteExpiresAt(), clock.instant());
             response.addHeader(
                     HttpHeaders.SET_COOKIE,
-                    SessionHttpCookies.session(
-                            session.sessionCredential().value(),
-                            remaining
-                    ).toString()
-            );
+                    SessionHttpCookies.session(session.sessionCredential().value(), remaining)
+                            .toString());
         });
         return issued;
     }
 
     private static boolean isLogout(HttpServletRequest request) {
-        return "POST".equals(request.getMethod())
-                && WebAuthenticationPaths.LOGOUT.equals(request.getRequestURI());
+        return "POST".equals(request.getMethod()) && WebAuthenticationPaths.LOGOUT.equals(request.getRequestURI());
     }
 
     private static ApplicationException authenticationRequired() {
         return new ApplicationException(StandardErrorCode.AUTHENTICATION_REQUIRED);
     }
 
-    private void reject(
-            HttpServletRequest request,
-            HttpServletResponse response,
-            ApplicationException exception
-    )
+    private void reject(HttpServletRequest request, HttpServletResponse response, ApplicationException exception)
             throws IOException {
         if (response.isCommitted()) {
             return;
@@ -170,15 +145,13 @@ final class SessionAuthenticationFilter extends OncePerRequestFilter {
         response.resetBuffer();
         HttpAccessLog.applicationError(request, exception);
         Object requestId = request.getAttribute(RequestIdContext.ATTRIBUTE_NAME);
-        errorWriter.write(
-                response,
-                exception,
-                requestId == null ? "missing-request-id" : requestId.toString()
-        );
+        errorWriter.write(response, exception, requestId == null ? "missing-request-id" : requestId.toString());
     }
 
     private static void clearSecurityCookies(HttpServletResponse response) {
-        response.addHeader(HttpHeaders.SET_COOKIE, SessionHttpCookies.clearSession().toString());
-        response.addHeader(HttpHeaders.SET_COOKIE, SessionHttpCookies.clearCsrf().toString());
+        response.addHeader(
+                HttpHeaders.SET_COOKIE, SessionHttpCookies.clearSession().toString());
+        response.addHeader(
+                HttpHeaders.SET_COOKIE, SessionHttpCookies.clearCsrf().toString());
     }
 }

@@ -58,6 +58,7 @@ export function plan(stage, baseRef = 'origin/dev') {
       ...contractSteps(baseRef), ...nodeSteps, ...assetSteps,
     ]
     case 'backend': return [
+      mvn('java-format', 'spotless:check'),
       mvn('backend-regression', 'clean', 'verify'),
       mvn('bounded-heap', '-q', '-Dtest=M014BoundedHeapVerification', '-DargLine=-Xmx96m', 'test'),
     ]
@@ -66,6 +67,7 @@ export function plan(stage, baseRef = 'origin/dev') {
       node('backup-restore-output', 'tools/verification/verify-backup-restore-output.mjs', '$BACKEND_STARTED'),
       node('packaged-http', 'tools/verification/smoke-packaged-http.mjs'),
       node('packaged-http-report', 'tools/verification/verify-packaged-http-report.mjs'),
+      node('browser-smoke', 'tools/e2e/run-e2e.mjs', '--skip-web-build'),
       node('create-handoff', 'tools/verification/create-portable-handoff.mjs'),
       node('verify-handoff', 'tools/verification/verify-portable-handoff.mjs'),
     ]

@@ -25,11 +25,15 @@ export const test = base.extend({
 
 export async function skipOnboarding(page: Page) {
   const skip = page.getByRole('button', { name: '跳过', exact: true })
-  if (await skip.isVisible()) await skip.click()
-  await page.addLocatorHandler(skip, async () => { await skip.click() })
   const closeTour = page.locator('.el-tour').getByRole('button', { name: '关闭此对话框', exact: true })
-  if (await closeTour.isVisible()) await closeTour.click()
-  await page.addLocatorHandler(closeTour, async () => { await closeTour.click() })
+  for (const button of [skip, closeTour]) {
+    // 关闭动画期间按钮仍算可见；等它消失再注册处理器，否则处理器会点击正在消失的按钮并一直等到用例超时。
+    if (await button.isVisible()) {
+      await button.click()
+      await button.waitFor({ state: 'hidden' })
+    }
+    await page.addLocatorHandler(button, async () => { await button.click() })
+  }
 }
 
 export { expect }

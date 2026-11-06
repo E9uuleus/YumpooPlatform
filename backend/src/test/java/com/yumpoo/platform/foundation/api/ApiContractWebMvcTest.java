@@ -1,6 +1,14 @@
 package com.yumpoo.platform.foundation.api;
 
-import com.yumpoo.platform.foundation.api.error.ApiErrorResponse;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import com.yumpoo.platform.foundation.api.error.ApiErrorWriter;
 import com.yumpoo.platform.foundation.api.error.ApiExceptionHandler;
 import com.yumpoo.platform.foundation.api.http.IdempotencyKeyParser;
@@ -12,8 +20,8 @@ import com.yumpoo.platform.foundation.api.web.ApiV1Controller;
 import com.yumpoo.platform.foundation.api.web.RequestIdFilter;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.FieldViolation;
-import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.foundation.application.error.SafeBlocker;
+import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.foundation.application.logging.StructuredLoggingContext;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelation;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelationContext;
@@ -25,6 +33,15 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -38,10 +55,10 @@ import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -56,34 +73,15 @@ import org.springframework.web.bind.annotation.RequestParam;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Stream;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-
 @WebMvcTest(controllers = ApiContractWebMvcTest.ContractProbeController.class)
 @ExtendWith(OutputCaptureExtension.class)
 @Import({
-        ApiExceptionHandler.class,
-        ApiErrorWriter.class,
-        RequestIdFilter.class,
-        IfMatchParser.class,
-        IdempotencyKeyParser.class,
-        ApiContractWebMvcTest.ContractProbeController.class
+    ApiExceptionHandler.class,
+    ApiErrorWriter.class,
+    RequestIdFilter.class,
+    IfMatchParser.class,
+    IdempotencyKeyParser.class,
+    ApiContractWebMvcTest.ContractProbeController.class
 })
 class ApiContractWebMvcTest {
 
@@ -119,8 +117,7 @@ class ApiContractWebMvcTest {
                 new ErrorCase(StandardErrorCode.VALIDATION_FAILED, 422, "422-validation-failed.json"),
                 new ErrorCase(StandardErrorCode.CLIENT_UPGRADE_REQUIRED, 426, "426-client-upgrade-required.json"),
                 new ErrorCase(StandardErrorCode.PRECONDITION_REQUIRED, 428, "428-precondition-required.json"),
-                new ErrorCase(StandardErrorCode.DEPENDENCY_UNAVAILABLE, 503, "503-dependency-unavailable.json")
-        );
+                new ErrorCase(StandardErrorCode.DEPENDENCY_UNAVAILABLE, 503, "503-dependency-unavailable.json"));
     }
 
     @ParameterizedTest
@@ -129,8 +126,8 @@ class ApiContractWebMvcTest {
         JsonNode expected = goldenError(errorCase.fileName());
         String requestId = expected.get("requestId").asString();
 
-        MvcResult result = mockMvc.perform(get(API + "/errors/{code}", errorCase.code())
-                        .header(RequestIdContext.HEADER_NAME, requestId))
+        MvcResult result = mockMvc.perform(
+                        get(API + "/errors/{code}", errorCase.code()).header(RequestIdContext.HEADER_NAME, requestId))
                 .andExpect(status().is(errorCase.httpStatus()))
                 .andExpect(header().string(RequestIdContext.HEADER_NAME, requestId))
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
@@ -145,11 +142,7 @@ class ApiContractWebMvcTest {
         String requestId = expected.get("requestId").asString();
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        apiErrorWriter.write(
-                response,
-                new ApplicationException(StandardErrorCode.VERSION_CONFLICT),
-                requestId
-        );
+        apiErrorWriter.write(response, new ApplicationException(StandardErrorCode.VERSION_CONFLICT), requestId);
 
         assertThat(response.getStatus()).isEqualTo(412);
         assertThat(response.getHeader(RequestIdContext.HEADER_NAME)).isEqualTo(requestId);
@@ -163,11 +156,7 @@ class ApiContractWebMvcTest {
         String requestId = expected.get("requestId").asString();
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        apiErrorWriter.write(
-                response,
-                new ApplicationException(StandardErrorCode.REQUEST_IN_PROGRESS),
-                requestId
-        );
+        apiErrorWriter.write(response, new ApplicationException(StandardErrorCode.REQUEST_IN_PROGRESS), requestId);
 
         assertThat(response.getStatus()).isEqualTo(409);
         assertThat(response.getHeader(HttpHeaders.RETRY_AFTER)).isEqualTo("1");
@@ -192,8 +181,7 @@ class ApiContractWebMvcTest {
                 .andExpect(jsonPath("$.details.reason").value("PROJECT_ARCHIVE_BLOCKED"))
                 .andExpect(jsonPath("$.details.blockers[0].code").value("OPEN_WORK_ITEMS"))
                 .andExpect(jsonPath("$.details.blockers[0].count").value(3))
-                .andExpect(jsonPath("$.details.blockers[1].code")
-                        .value("PENDING_WORKLOG_APPROVALS"))
+                .andExpect(jsonPath("$.details.blockers[1].code").value("PENDING_WORKLOG_APPROVALS"))
                 .andExpect(jsonPath("$.details.blockers[1].count").value(2))
                 .andExpect(jsonPath("$.details.blockers[0].id").doesNotExist());
     }
@@ -204,29 +192,33 @@ class ApiContractWebMvcTest {
         var values = new java.util.LinkedHashMap<String, Object>();
         values.put("resourceId", resourceId);
         values.put("count", 3L);
-        var error = ApplicationException.withSafeDetails(StandardErrorCode.INVALID_STATE_TRANSITION,
-                "RESOURCE_IN_USE", values);
+        var error = ApplicationException.withSafeDetails(
+                StandardErrorCode.INVALID_STATE_TRANSITION, "RESOURCE_IN_USE", values);
         values.put("internalObject", Map.of("secret", "must not appear"));
         var response = new MockHttpServletResponse();
         apiErrorWriter.write(response, error, "safe-details-test");
         var actual = objectMapper.readTree(response.getContentAsString());
         assertThat(response.getStatus()).isEqualTo(409);
-        assertThat(actual.propertyNames()).containsExactlyInAnyOrder("code", "message", "requestId", "retryable", "fieldErrors", "details");
+        assertThat(actual.propertyNames())
+                .containsExactlyInAnyOrder("code", "message", "requestId", "retryable", "fieldErrors", "details");
         assertThat(actual.path("details").propertyNames()).containsExactlyInAnyOrder("reason", "resourceId", "count");
         assertThat(actual.path("details").path("resourceId").asText()).isEqualTo(resourceId.toString());
         assertThat(actual.path("details").path("count").asLong()).isEqualTo(3);
-        assertThatThrownBy(() -> error.safeDetails().put("another", "value")).isInstanceOf(UnsupportedOperationException.class);
+        assertThatThrownBy(() -> error.safeDetails().put("another", "value"))
+                .isInstanceOf(UnsupportedOperationException.class);
     }
 
     @Test
     void safeAdditionalDetailsRejectReservedKeysAndStructuredValues() {
         for (String key : List.of("reason", "blockers", "")) {
-            assertThatThrownBy(() -> ApplicationException.withSafeDetails(StandardErrorCode.INVALID_STATE_TRANSITION,
-                    "RESOURCE_IN_USE", Map.of(key, "unsafe"))).isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> ApplicationException.withSafeDetails(
+                            StandardErrorCode.INVALID_STATE_TRANSITION, "RESOURCE_IN_USE", Map.of(key, "unsafe")))
+                    .isInstanceOf(IllegalArgumentException.class);
         }
         for (Object value : List.of(Map.of("secret", "hidden"), List.of("hidden"), new Object())) {
-            assertThatThrownBy(() -> ApplicationException.withSafeDetails(StandardErrorCode.INVALID_STATE_TRANSITION,
-                    "RESOURCE_IN_USE", Map.of("value", value))).isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> ApplicationException.withSafeDetails(
+                            StandardErrorCode.INVALID_STATE_TRANSITION, "RESOURCE_IN_USE", Map.of("value", value)))
+                    .isInstanceOf(IllegalArgumentException.class);
         }
     }
 
@@ -234,8 +226,7 @@ class ApiContractWebMvcTest {
     void trustedLoopbackRequestIdIsPreservedOnSuccessfulResponses() throws Exception {
         String trustedRequestId = "proxy.request-123:abc";
 
-        mockMvc.perform(get(API + "/request-id")
-                        .header(RequestIdContext.HEADER_NAME, trustedRequestId))
+        mockMvc.perform(get(API + "/request-id").header(RequestIdContext.HEADER_NAME, trustedRequestId))
                 .andExpect(status().isOk())
                 .andExpect(header().string(RequestIdContext.HEADER_NAME, trustedRequestId))
                 .andExpect(jsonPath("$.requestId").value(trustedRequestId));
@@ -260,8 +251,8 @@ class ApiContractWebMvcTest {
 
     @Test
     void unsafeLoopbackRequestIdIsReplacedWithAServerUuid() throws Exception {
-        MvcResult result = mockMvc.perform(get(API + "/request-id")
-                        .header(RequestIdContext.HEADER_NAME, "unsafe request id"))
+        MvcResult result = mockMvc.perform(
+                        get(API + "/request-id").header(RequestIdContext.HEADER_NAME, "unsafe request id"))
                 .andExpect(status().isOk())
                 .andReturn();
 
@@ -301,9 +292,8 @@ class ApiContractWebMvcTest {
 
     @Test
     void defaultOffsetPageAndEmptyCursorPageMatchGoldenExamples() throws Exception {
-        MvcResult page = mockMvc.perform(get(API + "/page"))
-                .andExpect(status().isOk())
-                .andReturn();
+        MvcResult page =
+                mockMvc.perform(get(API + "/page")).andExpect(status().isOk()).andReturn();
         MvcResult cursorPage = mockMvc.perform(get(API + "/cursor-page"))
                 .andExpect(status().isOk())
                 .andReturn();
@@ -334,16 +324,14 @@ class ApiContractWebMvcTest {
                 .isEqualTo(new OffsetPageRequest(0, 1));
         assertThatThrownBy(() -> new OffsetPageRequest(-1, OffsetPageRequest.DEFAULT_SIZE))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new OffsetPageRequest(0, 0))
-                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new OffsetPageRequest(0, 0)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new OffsetPageRequest(0, OffsetPageRequest.MAX_SIZE + 1))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void invisibleResourceAlwaysReturns404BeforeIfMatchValidation() throws Exception {
-        mockMvc.perform(get(API + "/if-match")
-                        .queryParam("visible", "false"))
+        mockMvc.perform(get(API + "/if-match").queryParam("visible", "false"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
 
@@ -356,8 +344,7 @@ class ApiContractWebMvcTest {
 
     @Test
     void visibleResourceValidatesRequiredAndStrongIfMatch() throws Exception {
-        mockMvc.perform(get(API + "/if-match")
-                        .queryParam("visible", "true"))
+        mockMvc.perform(get(API + "/if-match").queryParam("visible", "true"))
                 .andExpect(status().isPreconditionRequired())
                 .andExpect(jsonPath("$.code").value("PRECONDITION_REQUIRED"));
 
@@ -378,15 +365,7 @@ class ApiContractWebMvcTest {
 
     @Test
     void visibleResourceTreatsEveryPresentButInvalidIfMatchAsMalformed() throws Exception {
-        for (String invalid : List.of(
-                "",
-                " ",
-                "*",
-                "W/\"9\"",
-                "\"1\", \"2\"",
-                "9",
-                "\"9223372036854775808\""
-        )) {
+        for (String invalid : List.of("", " ", "*", "W/\"9\"", "\"1\", \"2\"", "9", "\"9223372036854775808\"")) {
             mockMvc.perform(get(API + "/if-match")
                             .queryParam("visible", "true")
                             .header(IfMatchParser.HEADER_NAME, invalid))
@@ -422,11 +401,7 @@ class ApiContractWebMvcTest {
             observedMdc.set(MDC.getCopyOfContextMap());
         };
 
-        requestIdFilter.doFilter(
-                request,
-                response,
-                new MockFilterChain(new HttpServlet() { }, observingFilter)
-        );
+        requestIdFilter.doFilter(request, response, new MockFilterChain(new HttpServlet() {}, observingFilter));
 
         assertThat(observed.get()).isEqualTo(RequestCorrelation.root(requestId));
         assertThat(observedMdc.get())
@@ -437,12 +412,9 @@ class ApiContractWebMvcTest {
     }
 
     @Test
-    void consoleIsReadableAndFileHasControlledJsonWithoutSensitiveExceptionContent(
-            CapturedOutput output
-    ) throws Exception {
-        IllegalStateException failure = new IllegalStateException(
-                "payload=secret-do-not-log database-password=hidden"
-        );
+    void consoleIsReadableAndFileHasControlledJsonWithoutSensitiveExceptionContent(CapturedOutput output)
+            throws Exception {
+        IllegalStateException failure = new IllegalStateException("payload=secret-do-not-log database-password=hidden");
         try (StructuredLoggingContext.Scope ignored = StructuredLoggingContext.open(Map.of(
                 StructuredLoggingContext.REQUEST_ID, "m011-log-request",
                 StructuredLoggingContext.CORRELATION_ID, "m011-log-request",
@@ -450,34 +422,37 @@ class ApiContractWebMvcTest {
                 StructuredLoggingContext.CONSUMER_NAME, "audit.m011_probe_projection",
                 StructuredLoggingContext.ATTEMPT, 2,
                 StructuredLoggingContext.OUTCOME, "RETRY",
-                StructuredLoggingContext.ERROR_CODE, "M011_RETRYABLE_FAILURE"
-        ))) {
-            LOGGER.atWarn().setMessage("m011 structured logging probe").setCause(failure)
-                    .addKeyValue("event", "logging.contract.probe").addKeyValue("attempt", 2).log();
+                StructuredLoggingContext.ERROR_CODE, "M011_RETRYABLE_FAILURE"))) {
+            LOGGER.atWarn()
+                    .setMessage("m011 structured logging probe")
+                    .setCause(failure)
+                    .addKeyValue("event", "logging.contract.probe")
+                    .addKeyValue("attempt", 2)
+                    .log();
         }
 
-        String logLine = output.getOut().lines()
+        String logLine = output.getOut()
+                .lines()
                 .filter(line -> line.contains("m011 structured logging probe"))
                 .reduce((first, second) -> second)
                 .orElseThrow();
         assertThat(logLine).contains("WARN", "req=m011-log").doesNotStartWith("{");
         String jsonLine;
         try (var lines = java.nio.file.Files.lines(java.nio.file.Path.of("out/logs/yumpoo-server.log"))) {
-            jsonLine = lines.filter(line -> line.contains("logging.contract.probe")).reduce((a, b) -> b).orElseThrow();
+            jsonLine = lines.filter(line -> line.contains("logging.contract.probe"))
+                    .reduce((a, b) -> b)
+                    .orElseThrow();
         }
         JsonNode log = objectMapper.readTree(jsonLine);
         assertThat(log.path("schema").asString()).isEqualTo("yumpoo-log/1");
         assertThat(log.get("requestId").asString()).isEqualTo("m011-log-request");
         assertThat(log.has("correlationId")).isFalse();
-        assertThat(log.get("consumerName").asString())
-                .isEqualTo("audit.m011_probe_projection");
+        assertThat(log.get("consumerName").asString()).isEqualTo("audit.m011_probe_projection");
         assertThat(log.get("attempt").isNumber()).isTrue();
         assertThat(log.get("attempt").asInt()).isEqualTo(2);
         assertThat(log.get("outcome").asString()).isEqualTo("RETRY");
         assertThat(log.get("errorCode").asString()).isEqualTo("M011_RETRYABLE_FAILURE");
-        assertThat(jsonLine)
-                .doesNotContain("secret-do-not-log")
-                .doesNotContain("database-password=hidden");
+        assertThat(jsonLine).doesNotContain("secret-do-not-log").doesNotContain("database-password=hidden");
         assertThat(MDC.getCopyOfContextMap()).isNullOrEmpty();
     }
 
@@ -490,11 +465,7 @@ class ApiContractWebMvcTest {
             throw new ApplicationException(StandardErrorCode.REQUEST_IN_PROGRESS);
         };
 
-        requestIdFilter.doFilter(
-                request,
-                response,
-                new MockFilterChain(new HttpServlet() { }, failingFilter)
-        );
+        requestIdFilter.doFilter(request, response, new MockFilterChain(new HttpServlet() {}, failingFilter));
 
         JsonNode body = objectMapper.readTree(response.getContentAsString());
         assertThat(response.getStatus()).isEqualTo(409);
@@ -516,11 +487,7 @@ class ApiContractWebMvcTest {
             throw new IllegalStateException("database-password=do-not-leak");
         };
 
-        requestIdFilter.doFilter(
-                request,
-                response,
-                new MockFilterChain(new HttpServlet() { }, failingFilter)
-        );
+        requestIdFilter.doFilter(request, response, new MockFilterChain(new HttpServlet() {}, failingFilter));
 
         JsonNode body = objectMapper.readTree(response.getContentAsString());
         assertThat(response.getStatus()).isEqualTo(500);
@@ -545,7 +512,7 @@ class ApiContractWebMvcTest {
             filterResponse.flushBuffer();
             throw failure;
         };
-        MockFilterChain chain = new MockFilterChain(new HttpServlet() { }, failingFilter);
+        MockFilterChain chain = new MockFilterChain(new HttpServlet() {}, failingFilter);
 
         assertThatThrownBy(() -> requestIdFilter.doFilter(request, response, chain))
                 .isSameAs(failure);
@@ -573,11 +540,14 @@ class ApiContractWebMvcTest {
             throw new IllegalStateException("unavailable dependency");
         };
 
-        requestIdFilter.doFilter(request, response, new MockFilterChain(new HttpServlet() { }, failingFilter));
+        requestIdFilter.doFilter(request, response, new MockFilterChain(new HttpServlet() {}, failingFilter));
 
         assertThat(response.getStatus()).isEqualTo(applicationFailure ? 503 : 500);
         assertThat(response.getHeader(HttpHeaders.CACHE_CONTROL)).isEqualTo("no-store");
-        assertThat(objectMapper.readTree(response.getContentAsString()).get("code").asString())
+        assertThat(objectMapper
+                        .readTree(response.getContentAsString())
+                        .get("code")
+                        .asString())
                 .isEqualTo(applicationFailure ? "DEPENDENCY_UNAVAILABLE" : "INTERNAL_ERROR");
     }
 
@@ -585,13 +555,11 @@ class ApiContractWebMvcTest {
     void idempotencyKeyMustBeACanonicalUuid() throws Exception {
         String key = "75A6C9A7-4166-46EA-A249-F817929D137D";
 
-        mockMvc.perform(get(API + "/idempotency-key")
-                        .header(IdempotencyKeyParser.HEADER_NAME, key))
+        mockMvc.perform(get(API + "/idempotency-key").header(IdempotencyKeyParser.HEADER_NAME, key))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.idempotencyKey").value(key.toLowerCase()));
 
-        mockMvc.perform(get(API + "/idempotency-key")
-                        .header(IdempotencyKeyParser.HEADER_NAME, "not-a-uuid"))
+        mockMvc.perform(get(API + "/idempotency-key").header(IdempotencyKeyParser.HEADER_NAME, "not-a-uuid"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("MALFORMED_REQUEST"));
     }
@@ -601,8 +569,7 @@ class ApiContractWebMvcTest {
         JsonNode expected = goldenError("404-resource-not-found.json");
         String requestId = expected.get("requestId").asString();
 
-        MvcResult result = mockMvc.perform(get(API + "/does-not-exist")
-                        .header(RequestIdContext.HEADER_NAME, requestId))
+        MvcResult result = mockMvc.perform(get(API + "/does-not-exist").header(RequestIdContext.HEADER_NAME, requestId))
                 .andExpect(status().isNotFound())
                 .andReturn();
 
@@ -627,17 +594,13 @@ class ApiContractWebMvcTest {
     }
 
     private JsonNode goldenError(String fileName) throws IOException {
-        return objectMapper.readTree(Files.readString(
-                contractPath("examples", "errors", fileName),
-                StandardCharsets.UTF_8
-        ));
+        return objectMapper.readTree(
+                Files.readString(contractPath("examples", "errors", fileName), StandardCharsets.UTF_8));
     }
 
     private JsonNode goldenPagination(String fileName) throws IOException {
-        return objectMapper.readTree(Files.readString(
-                contractPath("examples", "pagination", fileName),
-                StandardCharsets.UTF_8
-        ));
+        return objectMapper.readTree(
+                Files.readString(contractPath("examples", "pagination", fileName), StandardCharsets.UTF_8));
     }
 
     private static Path contractPath(String... segments) {
@@ -663,11 +626,9 @@ class ApiContractWebMvcTest {
         return request;
     }
 
-    private record ErrorCase(StandardErrorCode code, int httpStatus, String fileName) {
-    }
+    private record ErrorCase(StandardErrorCode code, int httpStatus, String fileName) {}
 
-    private record ProbeBody(@NotBlank(message = "名称不能为空") String name) {
-    }
+    private record ProbeBody(@NotBlank(message = "名称不能为空") String name) {}
 
     @ApiV1Controller
     static final class ContractProbeController {
@@ -675,10 +636,7 @@ class ApiContractWebMvcTest {
         private final IfMatchParser ifMatchParser;
         private final IdempotencyKeyParser idempotencyKeyParser;
 
-        ContractProbeController(
-                IfMatchParser ifMatchParser,
-                IdempotencyKeyParser idempotencyKeyParser
-        ) {
+        ContractProbeController(IfMatchParser ifMatchParser, IdempotencyKeyParser idempotencyKeyParser) {
             this.ifMatchParser = ifMatchParser;
             this.idempotencyKeyParser = idempotencyKeyParser;
         }
@@ -689,30 +647,22 @@ class ApiContractWebMvcTest {
                 throw new ApplicationException(
                         code,
                         code.defaultMessage(),
-                        List.of(new FieldViolation(
-                                "to",
-                                "DATE_RANGE_TOO_LARGE",
-                                "日期范围最多包含 366 个自然日"
-                        ))
-                );
+                        List.of(new FieldViolation("to", "DATE_RANGE_TOO_LARGE", "日期范围最多包含 366 个自然日")));
             }
             throw new ApplicationException(code);
         }
 
         @GetMapping("/contract/request-id")
         Map<String, String> requestId(HttpServletRequest request) {
-            return Map.of(
-                    "requestId",
-                    (String) request.getAttribute(RequestIdContext.ATTRIBUTE_NAME)
-            );
+            return Map.of("requestId", (String) request.getAttribute(RequestIdContext.ATTRIBUTE_NAME));
         }
 
         @GetMapping("/contract/blocker-error")
         void blockerError() {
-            throw ApplicationException.withBlockers(StandardErrorCode.INVALID_STATE_TRANSITION,
-                    "PROJECT_ARCHIVE_BLOCKED", List.of(
-                            new SafeBlocker("PENDING_WORKLOG_APPROVALS", 2),
-                            new SafeBlocker("OPEN_WORK_ITEMS", 3)));
+            throw ApplicationException.withBlockers(
+                    StandardErrorCode.INVALID_STATE_TRANSITION,
+                    "PROJECT_ARCHIVE_BLOCKED",
+                    List.of(new SafeBlocker("PENDING_WORKLOG_APPROVALS", 2), new SafeBlocker("OPEN_WORK_ITEMS", 3)));
         }
 
         @PostMapping("/contract/body")
@@ -722,9 +672,7 @@ class ApiContractWebMvcTest {
 
         @GetMapping("/contract/page")
         OffsetPageResponse<Object> page(
-                @RequestParam(required = false) Integer page,
-                @RequestParam(required = false) Integer size
-        ) {
+                @RequestParam(required = false) Integer page, @RequestParam(required = false) Integer size) {
             OffsetPageRequest request = OffsetPageRequest.of(page, size);
             return OffsetPageResponse.of(List.of(), request, 0);
         }
@@ -737,30 +685,25 @@ class ApiContractWebMvcTest {
         @GetMapping("/contract/if-match")
         Map<String, Long> ifMatch(
                 @RequestParam boolean visible,
-                @RequestHeader(value = IfMatchParser.HEADER_NAME, required = false) String ifMatch
-        ) {
+                @RequestHeader(value = IfMatchParser.HEADER_NAME, required = false) String ifMatch) {
             return Map.of("rowVersion", ifMatchParser.parseForVisibleResource(visible, ifMatch));
         }
 
         @GetMapping("/contract/if-match-required")
-        Map<String, Long> ifMatchRequired(
-                @RequestHeader(IfMatchParser.HEADER_NAME) String ifMatch
-        ) {
+        Map<String, Long> ifMatchRequired(@RequestHeader(IfMatchParser.HEADER_NAME) String ifMatch) {
             return Map.of("rowVersion", ifMatchParser.parseForVisibleResource(true, ifMatch));
         }
 
         @GetMapping("/contract/idempotency-key")
         Map<String, String> idempotencyKey(
-                @RequestHeader(value = IdempotencyKeyParser.HEADER_NAME, required = false) String key
-        ) {
-            return Map.of("idempotencyKey", idempotencyKeyParser.parseRequired(key).toString());
+                @RequestHeader(value = IdempotencyKeyParser.HEADER_NAME, required = false) String key) {
+            return Map.of(
+                    "idempotencyKey", idempotencyKeyParser.parseRequired(key).toString());
         }
 
         @GetMapping("/contract/unexpected-failure")
         void unexpectedFailure() {
-            throw new IllegalStateException(
-                    "database-password=do-not-leak at C:\\secret\\internal.sql"
-            );
+            throw new IllegalStateException("database-password=do-not-leak at C:\\secret\\internal.sql");
         }
     }
 }

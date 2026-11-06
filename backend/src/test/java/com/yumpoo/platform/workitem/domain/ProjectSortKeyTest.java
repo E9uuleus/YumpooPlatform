@@ -1,11 +1,10 @@
 package com.yumpoo.platform.workitem.domain;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.ArrayList;
 import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 class ProjectSortKeyTest {
 
@@ -25,8 +24,8 @@ class ProjectSortKeyTest {
         String outsideUpper = ProjectSortKey.evenlySpaced(3, 4);
         List<String> keys = new ArrayList<>();
         for (int index = 1; index <= 100; index++) {
-            keys.add(ProjectSortKey.evenlySpacedBetween(
-                    outsideLower, outsideUpper, index, 100).orElseThrow());
+            keys.add(ProjectSortKey.evenlySpacedBetween(outsideLower, outsideUpper, index, 100)
+                    .orElseThrow());
         }
 
         assertThat(keys).isSorted().doesNotHaveDuplicates();

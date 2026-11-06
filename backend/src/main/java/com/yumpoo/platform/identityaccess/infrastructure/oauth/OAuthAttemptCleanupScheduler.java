@@ -10,33 +10,28 @@ import org.springframework.stereotype.Component;
 @Component
 public class OAuthAttemptCleanupScheduler {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(
-            OAuthAttemptCleanupScheduler.class
-    );
+    private static final Logger LOGGER = LoggerFactory.getLogger(OAuthAttemptCleanupScheduler.class);
 
     private final WebAuthenticationService authenticationService;
     private final WebOAuthProperties properties;
 
-    public OAuthAttemptCleanupScheduler(
-            WebAuthenticationService authenticationService,
-            WebOAuthProperties properties
-    ) {
+    public OAuthAttemptCleanupScheduler(WebAuthenticationService authenticationService, WebOAuthProperties properties) {
         this.authenticationService = authenticationService;
         this.properties = properties;
     }
 
     @Scheduled(
             fixedDelayString = "${yumpoo.wecom.oauth.cleanup-delay:1h}",
-            initialDelayString = "${yumpoo.wecom.oauth.cleanup-delay:1h}"
-    )
+            initialDelayString = "${yumpoo.wecom.oauth.cleanup-delay:1h}")
     public void purgeExpiredAttempts() {
         int deleted = authenticationService.purgeExpiredAttempts(
-                properties.getPurgeBatchSize(),
-                properties.getPurgeMaxBatches()
-        );
+                properties.getPurgeBatchSize(), properties.getPurgeMaxBatches());
         if (deleted > 0) {
-            LOGGER.atInfo().setMessage("expired OAuth attempts purged").addKeyValue("event", "oauth.cleanup.completed")
-                    .addKeyValue("deletedCount", deleted).log();
+            LOGGER.atInfo()
+                    .setMessage("expired OAuth attempts purged")
+                    .addKeyValue("event", "oauth.cleanup.completed")
+                    .addKeyValue("deletedCount", deleted)
+                    .log();
         }
     }
 }

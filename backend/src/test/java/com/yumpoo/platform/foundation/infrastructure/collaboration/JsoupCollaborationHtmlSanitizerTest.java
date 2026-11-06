@@ -1,12 +1,11 @@
 package com.yumpoo.platform.foundation.infrastructure.collaboration;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.Map;
 import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
 
 class JsoupCollaborationHtmlSanitizerTest {
     private static final UUID USER_ID = UUID.fromString("35000000-0000-4000-8000-000000000007");
@@ -22,7 +21,8 @@ class JsoupCollaborationHtmlSanitizerTest {
                 """);
         var result = sanitizer.canonicalize(parsed, Map.of());
 
-        assertThat(result.bodyHtml()).doesNotContain("script", "onclick", "style", "img", "h1")
+        assertThat(result.bodyHtml())
+                .doesNotContain("script", "onclick", "style", "img", "h1")
                 .contains("标题", "正文", "表格文字");
         assertThat(result.bodyText()).contains("标题", "正文", "表格文字");
     }
@@ -40,9 +40,22 @@ class JsoupCollaborationHtmlSanitizerTest {
         var first = sanitizer.canonicalize(sanitizer.parse(html), Map.of());
         var second = sanitizer.canonicalize(sanitizer.parse(first.bodyHtml()), Map.of());
         assertThat(second).isEqualTo(first);
-        assertThat(first.bodyHtml()).contains("<h2", "dir=\"rtl\"", "text-align: center", "color: #ff0000",
-                "background-color: rgb(0, 255, 16)", "font-size: 24px", "<u><s>", "<pre><code>", "<hr>",
-                "<table>", "colspan=\"2\"", "start=\"3\"", "data-checked=\"true\"", "data-checked=\"false\"");
+        assertThat(first.bodyHtml())
+                .contains(
+                        "<h2",
+                        "dir=\"rtl\"",
+                        "text-align: center",
+                        "color: #ff0000",
+                        "background-color: rgb(0, 255, 16)",
+                        "font-size: 24px",
+                        "<u><s>",
+                        "<pre><code>",
+                        "<hr>",
+                        "<table>",
+                        "colspan=\"2\"",
+                        "start=\"3\"",
+                        "data-checked=\"true\"",
+                        "data-checked=\"false\"");
     }
 
     @Test
@@ -55,10 +68,25 @@ class JsoupCollaborationHtmlSanitizerTest {
                 <ul data-type="taskList"><li data-type="taskItem" data-checked="evil">未勾选</li></ul>
                 <table><tr><td colspan="99999" rowspan="-1" style="position:fixed">表格</td></tr></table>
                 """), Map.of());
-        assertThat(result.bodyHtml()).doesNotContain("onclick", "class=", "position", "url(", "expression", "256", "999", "opacity", "input", "dir=", "rowspan", "colspan", "data-checked=\"true\"")
+        assertThat(result.bodyHtml())
+                .doesNotContain(
+                        "onclick",
+                        "class=",
+                        "position",
+                        "url(",
+                        "expression",
+                        "256",
+                        "999",
+                        "opacity",
+                        "input",
+                        "dir=",
+                        "rowspan",
+                        "colspan",
+                        "data-checked=\"true\"")
                 .contains("text-align: center", "color: #fff; font-size: 18px", "data-checked=\"false\"");
-        assertThatThrownBy(() -> sanitizer.canonicalize(sanitizer.parse(
-                "<span data-type=mention data-mention-user-id='" + USER_ID + "'>伪造</span>"), Map.of()))
+        assertThatThrownBy(() -> sanitizer.canonicalize(
+                        sanitizer.parse("<span data-type=mention data-mention-user-id='" + USER_ID + "'>伪造</span>"),
+                        Map.of()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -72,8 +100,11 @@ class JsoupCollaborationHtmlSanitizerTest {
                 """);
         var result = sanitizer.canonicalize(parsed, Map.of());
 
-        assertThat(result.bodyHtml()).contains("href=\"https://example.com/a\"",
-                        "href=\"mailto:owner@example.com\"", "target=\"_blank\"",
+        assertThat(result.bodyHtml())
+                .contains(
+                        "href=\"https://example.com/a\"",
+                        "href=\"mailto:owner@example.com\"",
+                        "target=\"_blank\"",
                         "rel=\"nofollow noopener noreferrer\"")
                 .doesNotContain("/relative", "javascript");
     }
@@ -93,13 +124,12 @@ class JsoupCollaborationHtmlSanitizerTest {
 
     @Test
     void rejectsMalformedMentionAndEmptyOrOversizedCleanText() {
-        assertThatThrownBy(() -> sanitizer.parse(
-                "<span data-type=\"mention\" data-mention-user-id=\"not-a-uuid\">x</span>"))
+        assertThatThrownBy(() ->
+                        sanitizer.parse("<span data-type=\"mention\" data-mention-user-id=\"not-a-uuid\">x</span>"))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> sanitizer.canonicalize(sanitizer.parse("<script>x</script>"), Map.of()))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> sanitizer.canonicalize(
-                sanitizer.parse("<p>" + "字".repeat(16_385) + "</p>"), Map.of()))
+        assertThatThrownBy(() -> sanitizer.canonicalize(sanitizer.parse("<p>" + "字".repeat(16_385) + "</p>"), Map.of()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -110,11 +140,10 @@ class JsoupCollaborationHtmlSanitizerTest {
         assertThat(result.bodyText()).hasSize(16_384);
         assertThat(result.bodyHtml()).startsWith("<p>").endsWith("</p>");
 
-        var nearHtmlLimit = sanitizer.canonicalize(
-                sanitizer.parse("<p>x" + "<br>".repeat(16_382) + "</p>"), Map.of());
+        var nearHtmlLimit = sanitizer.canonicalize(sanitizer.parse("<p>x" + "<br>".repeat(16_382) + "</p>"), Map.of());
         assertThat(nearHtmlLimit.bodyHtml()).hasSize(65_536);
-        assertThatThrownBy(() -> sanitizer.canonicalize(
-                sanitizer.parse("<p>x" + "<br>".repeat(16_383) + "</p>"), Map.of()))
+        assertThatThrownBy(() ->
+                        sanitizer.canonicalize(sanitizer.parse("<p>x" + "<br>".repeat(16_383) + "</p>"), Map.of()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -133,13 +162,14 @@ class JsoupCollaborationHtmlSanitizerTest {
 
     @Test
     void descriptionDowngradesMentionsAndClearsEmptyContent() {
-        String html = sanitizer.sanitizeDescription("<p>请 <span data-type=\"mention\" data-mention-user-id=\""
-                + USER_ID + "\">@同事</span> 查看<script>x</script></p>");
+        String html = sanitizer.sanitizeDescription("<p>请 <span data-type=\"mention\" data-mention-user-id=\"" + USER_ID
+                + "\">@同事</span> 查看<script>x</script></p>");
         assertThat(html).isEqualTo("<p>请 @同事 查看</p>");
         assertThat(sanitizer.sanitizeDescription(null)).isNull();
-        assertThat(sanitizer.sanitizeDescription("  <p> </p><script>x</script>")).isNull();
+        assertThat(sanitizer.sanitizeDescription("  <p> </p><script>x</script>"))
+                .isNull();
         assertThat(sanitizer.sanitizeDescription(
-                "<img src=\"/api/v1/attachments/35000000-0000-4000-8000-000000000009/content\">"))
+                        "<img src=\"/api/v1/attachments/35000000-0000-4000-8000-000000000009/content\">"))
                 .isEqualTo("<img src=\"/api/v1/attachments/35000000-0000-4000-8000-000000000009/content\">");
     }
 
@@ -151,7 +181,8 @@ class JsoupCollaborationHtmlSanitizerTest {
                 <p>&lt;b&gt;转义&amp;保留&lt;/b&gt;</p>
                 """);
         assertThat(sanitizer.sanitizeDescription(html)).isEqualTo(html);
-        assertThat(html).contains("text-align: center", "color: #ff0000", "data-checked=\"true\"", "&lt;b&gt;转义&amp;保留");
+        assertThat(html)
+                .contains("text-align: center", "color: #ff0000", "data-checked=\"true\"", "&lt;b&gt;转义&amp;保留");
         assertThatThrownBy(() -> sanitizer.sanitizeDescription("<p>" + "字".repeat(16_385) + "</p>"))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> sanitizer.sanitizeDescription("<p>x" + "<br>".repeat(16_383) + "</p>"))
@@ -168,7 +199,8 @@ class JsoupCollaborationHtmlSanitizerTest {
         assertThat(result.bodyHtml()).isEqualTo("<img src=\"" + ATTACHMENT + "\" alt=\"" + "字".repeat(255) + "\">");
         assertThat(result.bodyText()).isEqualTo("[图片]");
         assertThat(sanitizer.sanitizeDescription(source)).isEqualTo(result.bodyHtml());
-        assertThat(sanitizer.canonicalize(sanitizer.parse(result.bodyHtml()), Map.of())).isEqualTo(result);
+        assertThat(sanitizer.canonicalize(sanitizer.parse(result.bodyHtml()), Map.of()))
+                .isEqualTo(result);
     }
 
     @Test
@@ -176,14 +208,20 @@ class JsoupCollaborationHtmlSanitizerTest {
         String source = "<a data-type=attachment href=\"" + ATTACHMENT
                 + "\" data-size=00012345 target=_blank rel=evil onclick=evil()>方案.pdf</a>";
         var result = sanitizer.canonicalize(sanitizer.parse(source), Map.of());
-        assertThat(result.bodyHtml()).contains("data-type=\"attachment\"", "href=\"" + ATTACHMENT + "\"", "data-size=\"12345\"")
+        assertThat(result.bodyHtml())
+                .contains("data-type=\"attachment\"", "href=\"" + ATTACHMENT + "\"", "data-size=\"12345\"")
                 .doesNotContain("target", "rel=", "onclick");
         assertThat(result.bodyText()).isEqualTo("方案.pdf");
         assertThat(sanitizer.sanitizeDescription(source)).isEqualTo(result.bodyHtml());
-        assertThat(sanitizer.canonicalize(sanitizer.parse(result.bodyHtml()), Map.of())).isEqualTo(result);
+        assertThat(sanitizer.canonicalize(sanitizer.parse(result.bodyHtml()), Map.of()))
+                .isEqualTo(result);
 
-        for (String href : java.util.List.of("/relative", ATTACHMENT + "?x=1", "//evil.example" + ATTACHMENT,
-                "javascript:evil()", "/api/v1/attachments/not-uuid/content")) {
+        for (String href : java.util.List.of(
+                "/relative",
+                ATTACHMENT + "?x=1",
+                "//evil.example" + ATTACHMENT,
+                "javascript:evil()",
+                "/api/v1/attachments/not-uuid/content")) {
             String unsafe = "<a data-type=attachment data-size=1 href=\"" + href + "\">文件.pdf</a>";
             assertThat(sanitizer.canonicalize(sanitizer.parse(unsafe), Map.of()).bodyHtml())
                     .isEqualTo("<a>文件.pdf</a>");
@@ -191,8 +229,11 @@ class JsoupCollaborationHtmlSanitizerTest {
         }
         String absolute = "<a data-type=attachment data-size=1 href=\"https://example.com/file\">普通链接</a>";
         assertThat(sanitizer.canonicalize(sanitizer.parse(absolute), Map.of()).bodyHtml())
-                .contains("target=\"_blank\"", "rel=\"nofollow noopener noreferrer\"").doesNotContain("data-type", "data-size");
-        assertThat(sanitizer.canonicalize(sanitizer.parse("<a href=\"" + ATTACHMENT + "\">无标记</a>"), Map.of()).bodyHtml())
+                .contains("target=\"_blank\"", "rel=\"nofollow noopener noreferrer\"")
+                .doesNotContain("data-type", "data-size");
+        assertThat(sanitizer
+                        .canonicalize(sanitizer.parse("<a href=\"" + ATTACHMENT + "\">无标记</a>"), Map.of())
+                        .bodyHtml())
                 .isEqualTo("<a>无标记</a>");
     }
 
@@ -200,14 +241,20 @@ class JsoupCollaborationHtmlSanitizerTest {
     void attachmentCardSizeBoundariesAndUploadPlaceholdersCannotBecomeContent() {
         for (String size : java.util.List.of("1", "104857600")) {
             String html = "<a data-type=attachment href=\"" + ATTACHMENT + "\" data-size=\"" + size + "\">文件.zip</a>";
-            assertThat(sanitizer.canonicalize(sanitizer.parse(html), Map.of()).bodyHtml()).contains("data-size=\"" + size + "\"");
+            assertThat(sanitizer.canonicalize(sanitizer.parse(html), Map.of()).bodyHtml())
+                    .contains("data-size=\"" + size + "\"");
         }
-        for (String size : java.util.List.of("0", "-1", "104857601", "1.5", "+1", "1e3", "1;evil", "9999999999999999999999", "")) {
+        for (String size :
+                java.util.List.of("0", "-1", "104857601", "1.5", "+1", "1e3", "1;evil", "9999999999999999999999", "")) {
             String html = "<a data-type=attachment href=\"" + ATTACHMENT + "\" data-size=\"" + size + "\">文件.zip</a>";
-            assertThat(sanitizer.canonicalize(sanitizer.parse(html), Map.of()).bodyHtml()).doesNotContain("data-size");
+            assertThat(sanitizer.canonicalize(sanitizer.parse(html), Map.of()).bodyHtml())
+                    .doesNotContain("data-size");
             assertThat(sanitizer.sanitizeDescription(html)).doesNotContain("data-size");
         }
-        for (String empty : java.util.List.of("<p> </p>", "<div data-image-upload=upload></div>", "<img src=/evil>",
+        for (String empty : java.util.List.of(
+                "<p> </p>",
+                "<div data-image-upload=upload></div>",
+                "<img src=/evil>",
                 "<a data-type=attachment href=\"" + ATTACHMENT + "\"></a>")) {
             assertThatThrownBy(() -> sanitizer.canonicalize(sanitizer.parse(empty), Map.of()))
                     .isInstanceOf(IllegalArgumentException.class);

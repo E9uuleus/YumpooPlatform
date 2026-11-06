@@ -8,9 +8,6 @@ import com.yumpoo.platform.foundation.application.idempotency.IdempotencyScope;
 import com.yumpoo.platform.foundation.application.idempotency.IdempotencyState;
 import com.yumpoo.platform.foundation.application.idempotency.RequestHash;
 import com.yumpoo.platform.foundation.application.idempotency.StoredCommandResult;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Repository;
-
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
@@ -18,6 +15,8 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Repository;
 
 @Repository
 public class JdbcIdempotencyRecordRepository implements IdempotencyRecordPort {
@@ -97,14 +96,10 @@ public class JdbcIdempotencyRecordRepository implements IdempotencyRecordPort {
 
     @Override
     public IdempotencyClaim claim(
-            UUID recordId,
-            IdempotencyCommand command,
-            Instant createdAt,
-            Instant leaseUntil,
-            Instant expiresAt
-    ) {
+            UUID recordId, IdempotencyCommand command, Instant createdAt, Instant leaseUntil, Instant expiresAt) {
         IdempotencyScope scope = command.scope();
-        Optional<UUID> insertedId = jdbcClient.sql(INSERT_PROCESSING)
+        Optional<UUID> insertedId = jdbcClient
+                .sql(INSERT_PROCESSING)
                 .param("id", recordId)
                 .param("actorUserId", scope.actorUserId())
                 .param("httpMethod", scope.httpMethod())
@@ -121,7 +116,8 @@ public class JdbcIdempotencyRecordRepository implements IdempotencyRecordPort {
             return new IdempotencyClaim.Acquired(insertedId.get());
         }
 
-        IdempotencyRecord existing = jdbcClient.sql(SELECT_BY_SCOPE)
+        IdempotencyRecord existing = jdbcClient
+                .sql(SELECT_BY_SCOPE)
                 .param("actorUserId", scope.actorUserId())
                 .param("httpMethod", scope.httpMethod())
                 .param("routeKey", scope.routeKey())
@@ -129,19 +125,14 @@ public class JdbcIdempotencyRecordRepository implements IdempotencyRecordPort {
                 .query(JdbcIdempotencyRecordRepository::mapRecord)
                 .optional()
                 .orElseThrow(() -> new IllegalStateException(
-                        "idempotency scope conflicted but the existing record is unavailable"
-                ));
+                        "idempotency scope conflicted but the existing record is unavailable"));
         return new IdempotencyClaim.Existing(existing);
     }
 
     @Override
-    public void complete(
-            UUID recordId,
-            StoredCommandResult result,
-            Instant completedAt,
-            Instant expiresAt
-    ) {
-        int updatedRows = jdbcClient.sql(COMPLETE_PROCESSING)
+    public void complete(UUID recordId, StoredCommandResult result, Instant completedAt, Instant expiresAt) {
+        int updatedRows = jdbcClient
+                .sql(COMPLETE_PROCESSING)
                 .param("id", recordId)
                 .param("httpStatus", result.httpStatus())
                 .param("responseJson", result.responseJson())
@@ -163,15 +154,13 @@ public class JdbcIdempotencyRecordRepository implements IdempotencyRecordPort {
                     resultSet.getInt("http_status"),
                     resultSet.getString("response_json"),
                     resultSet.getObject("resource_id", UUID.class),
-                    resultSet.getString("response_etag")
-            );
+                    resultSet.getString("response_etag"));
         }
         IdempotencyScope scope = new IdempotencyScope(
                 resultSet.getObject("actor_user_id", UUID.class),
                 resultSet.getString("http_method"),
                 resultSet.getString("route_key"),
-                resultSet.getObject("idempotency_key", UUID.class)
-        );
+                resultSet.getObject("idempotency_key", UUID.class));
         return new IdempotencyRecord(
                 resultSet.getObject("id", UUID.class),
                 new IdempotencyCommand(scope, new RequestHash(resultSet.getString("request_hash"))),
@@ -180,8 +169,7 @@ public class JdbcIdempotencyRecordRepository implements IdempotencyRecordPort {
                 instantOrNull(resultSet, "lease_until"),
                 requiredInstant(resultSet, "created_at"),
                 instantOrNull(resultSet, "completed_at"),
-                requiredInstant(resultSet, "expires_at")
-        );
+                requiredInstant(resultSet, "expires_at"));
     }
 
     private static OffsetDateTime utc(Instant instant) {

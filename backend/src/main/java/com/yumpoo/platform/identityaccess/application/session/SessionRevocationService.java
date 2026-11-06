@@ -3,18 +3,17 @@ package com.yumpoo.platform.identityaccess.application.session;
 import com.yumpoo.platform.foundation.application.event.EventActor;
 import com.yumpoo.platform.foundation.application.event.EventDraft;
 import com.yumpoo.platform.foundation.application.event.TransactionalEventPort;
-import com.yumpoo.platform.identityaccess.domain.session.SessionRevocationReason;
 import com.yumpoo.platform.identityaccess.application.audit.IdentitySecurityAuditRecorder;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
-import tools.jackson.databind.ObjectMapper;
-
+import com.yumpoo.platform.identityaccess.domain.session.SessionRevocationReason;
 import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.ObjectMapper;
 
 @Service
 public class SessionRevocationService {
@@ -32,8 +31,7 @@ public class SessionRevocationService {
             TransactionalEventPort eventPort,
             ObjectMapper objectMapper,
             Clock clock,
-            IdentitySecurityAuditRecorder auditRecorder
-    ) {
+            IdentitySecurityAuditRecorder auditRecorder) {
         this.repository = Objects.requireNonNull(repository, "repository must not be null");
         this.eventPort = Objects.requireNonNull(eventPort, "eventPort must not be null");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
@@ -42,19 +40,11 @@ public class SessionRevocationService {
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
-    public int revokeActive(
-            SessionRevocationTarget target,
-            SessionRevocationReason reason,
-            EventActor actor
-    ) {
+    public int revokeActive(SessionRevocationTarget target, SessionRevocationReason reason, EventActor actor) {
         Objects.requireNonNull(target, "target must not be null");
         Objects.requireNonNull(actor, "actor must not be null");
         requireBulkReason(reason);
-        int revokedCount = repository.terminateActiveForUser(
-                target.userId(),
-                reason,
-                clock.instant()
-        );
+        int revokedCount = repository.terminateActiveForUser(target.userId(), reason, clock.instant());
         if (revokedCount == 0) {
             return 0;
         }
@@ -72,16 +62,27 @@ public class SessionRevocationService {
                 target.aggregateVersion(),
                 target.companyId(),
                 actor,
-                objectMapper.valueToTree(payload)
-        ));
+                objectMapper.valueToTree(payload)));
         auditRecorder.succeeded(
                 target.companyId(),
                 "session-revocation:" + target.userId() + ":" + reason + ":" + target.aggregateVersion(),
-                "SESSIONS_REVOKED", actor, Set.of(), "USER", target.userId(),
-                actor.reasonReference(), null,
-                Map.of("reasonCode", reason.name(), "revokedCount", revokedCount,
-                        "authorizationVersion", target.authorizationVersion()),
-                null, null, null);
+                "SESSIONS_REVOKED",
+                actor,
+                Set.of(),
+                "USER",
+                target.userId(),
+                actor.reasonReference(),
+                null,
+                Map.of(
+                        "reasonCode",
+                        reason.name(),
+                        "revokedCount",
+                        revokedCount,
+                        "authorizationVersion",
+                        target.authorizationVersion()),
+                null,
+                null,
+                null);
         return revokedCount;
     }
 

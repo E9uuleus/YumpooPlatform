@@ -28,10 +28,6 @@ import com.yumpoo.platform.identityaccess.api.ActiveUserSnapshotQuery;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.PlatformRoleCode;
 import com.yumpoo.platform.workitem.api.ProjectTimerStopPort;
-import org.springframework.stereotype.Service;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.ObjectMapper;
-
 import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -39,6 +35,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.stereotype.Service;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 @Service
 public final class ProjectLifecycleGovernanceService {
@@ -52,71 +51,118 @@ public final class ProjectLifecycleGovernanceService {
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
-    public ProjectLifecycleGovernanceService(ProjectLifecycleCommandPort projects,
-            ProjectArchiveBlockerCollector blockers, ProjectTimerStopPort timers, ActiveUserSnapshotQuery users,
+    public ProjectLifecycleGovernanceService(
+            ProjectLifecycleCommandPort projects,
+            ProjectArchiveBlockerCollector blockers,
+            ProjectTimerStopPort timers,
+            ActiveUserSnapshotQuery users,
             IdempotentCommandExecutor idempotency,
-            TransactionalEventPort events, SecurityAuditAppendPort audits,
-            ObjectMapper objectMapper, Clock clock) {
-        this.projects = projects; this.blockers = blockers; this.timers = timers; this.users = users;
-        this.idempotency = idempotency; this.events = events;
-        this.audits = audits; this.objectMapper = objectMapper; this.clock = clock;
+            TransactionalEventPort events,
+            SecurityAuditAppendPort audits,
+            ObjectMapper objectMapper,
+            Clock clock) {
+        this.projects = projects;
+        this.blockers = blockers;
+        this.timers = timers;
+        this.users = users;
+        this.idempotency = idempotency;
+        this.events = events;
+        this.audits = audits;
+        this.objectMapper = objectMapper;
+        this.clock = clock;
     }
 
     public IdempotencyExecutionResult archive(ProjectArchiveOperationCommand command) {
-        return idempotency.execute(key(command.actor(), "archiveProject", command.idempotencyKey(),
-                command.requestHash()), () -> {
-            ProjectArchiveMutation mutation = new ProjectArchiveMutation(command.actor().companyId(),
-                    command.projectId(), command.expectedRowVersion(), command.actor().userId(),
-                    !command.actor().hasRole(PlatformRoleCode.COMPANY_ADMIN));
-            ProjectSnapshot before = projects.lockForArchive(mutation);
-            ProjectSnapshot after = projects.archive(mutation);
-            timers.stopRunningTimers(command.actor(), after.projectId());
-            appendArchive(before, after, command.actor(), "NORMAL", List.of(), command.idempotencyKey(), null);
-            return stored(after);
-        });
+        return idempotency.execute(
+                key(command.actor(), "archiveProject", command.idempotencyKey(), command.requestHash()), () -> {
+                    ProjectArchiveMutation mutation = new ProjectArchiveMutation(
+                            command.actor().companyId(),
+                            command.projectId(),
+                            command.expectedRowVersion(),
+                            command.actor().userId(),
+                            !command.actor().hasRole(PlatformRoleCode.COMPANY_ADMIN));
+                    ProjectSnapshot before = projects.lockForArchive(mutation);
+                    ProjectSnapshot after = projects.archive(mutation);
+                    timers.stopRunningTimers(command.actor(), after.projectId());
+                    appendArchive(before, after, command.actor(), "NORMAL", List.of(), command.idempotencyKey(), null);
+                    return stored(after);
+                });
     }
 
     public IdempotencyExecutionResult restore(ProjectRestoreOperationCommand command) {
-        return idempotency.execute(key(command.actor(), "restoreProject", command.idempotencyKey(),
-                command.requestHash()), () -> {
-            ProjectRestoreMutation mutation = new ProjectRestoreMutation(command.actor().companyId(),
-                    command.projectId(), command.expectedRowVersion(), command.actor().userId());
-            ProjectRestoreSnapshot locked = projects.lockForRestore(mutation);
-            if (!command.actor().hasRole(PlatformRoleCode.COMPANY_ADMIN)
-                    && !locked.project().ownerUserId().equals(command.actor().userId())) {
-                throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
-            }
-            requireRestoreReady(locked);
-            ProjectSnapshot before = locked.project();
-            ProjectSnapshot after = projects.reopen(mutation);
-            appendLifecycle("PROJECT_REOPENED", "catalog.project_reopened", before, after,
-                    command.actor(), command.idempotencyKey(), null);
-            return stored(after);
-        });
+        return idempotency.execute(
+                key(command.actor(), "restoreProject", command.idempotencyKey(), command.requestHash()), () -> {
+                    ProjectRestoreMutation mutation = new ProjectRestoreMutation(
+                            command.actor().companyId(),
+                            command.projectId(),
+                            command.expectedRowVersion(),
+                            command.actor().userId());
+                    ProjectRestoreSnapshot locked = projects.lockForRestore(mutation);
+                    if (!command.actor().hasRole(PlatformRoleCode.COMPANY_ADMIN)
+                            && !locked.project()
+                                    .ownerUserId()
+                                    .equals(command.actor().userId())) {
+                        throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
+                    }
+                    requireRestoreReady(locked);
+                    ProjectSnapshot before = locked.project();
+                    ProjectSnapshot after = projects.reopen(mutation);
+                    appendLifecycle(
+                            "PROJECT_REOPENED",
+                            "catalog.project_reopened",
+                            before,
+                            after,
+                            command.actor(),
+                            command.idempotencyKey(),
+                            null);
+                    return stored(after);
+                });
     }
 
     public IdempotencyExecutionResult changeEnded(ProjectEndOperationCommand command) {
-        return idempotency.execute(key(command.actor(), command.ended() ? "endProject" : "resumeProject",
-                command.idempotencyKey(), command.requestHash()), () -> {
-            ProjectEndMutation mutation = new ProjectEndMutation(command.actor().companyId(), command.projectId(),
-                    command.expectedRowVersion(), command.actor().userId(),
-                    command.actor().hasRole(PlatformRoleCode.COMPANY_ADMIN), command.ended());
-            ProjectSnapshot before = projects.lockForEnded(mutation);
-            ProjectSnapshot after = projects.changeEnded(mutation);
-            if (command.ended()) timers.stopRunningTimers(command.actor(), after.projectId());
-            Map<String, Object> payload = new LinkedHashMap<>();
-            payload.put("projectId", after.projectId()); payload.put("code", after.code()); payload.put("rowVersion", after.rowVersion());
-            append(command.ended() ? "PROJECT_ENDED" : "PROJECT_RESUMED",
-                    command.ended() ? "catalog.project_ended" : "catalog.project_resumed",
-                    before, after, command.actor(), command.idempotencyKey(), null, payload);
-            return stored(after);
-        });
+        return idempotency.execute(
+                key(
+                        command.actor(),
+                        command.ended() ? "endProject" : "resumeProject",
+                        command.idempotencyKey(),
+                        command.requestHash()),
+                () -> {
+                    ProjectEndMutation mutation = new ProjectEndMutation(
+                            command.actor().companyId(),
+                            command.projectId(),
+                            command.expectedRowVersion(),
+                            command.actor().userId(),
+                            command.actor().hasRole(PlatformRoleCode.COMPANY_ADMIN),
+                            command.ended());
+                    ProjectSnapshot before = projects.lockForEnded(mutation);
+                    ProjectSnapshot after = projects.changeEnded(mutation);
+                    if (command.ended()) timers.stopRunningTimers(command.actor(), after.projectId());
+                    Map<String, Object> payload = new LinkedHashMap<>();
+                    payload.put("projectId", after.projectId());
+                    payload.put("code", after.code());
+                    payload.put("rowVersion", after.rowVersion());
+                    append(
+                            command.ended() ? "PROJECT_ENDED" : "PROJECT_RESUMED",
+                            command.ended() ? "catalog.project_ended" : "catalog.project_resumed",
+                            before,
+                            after,
+                            command.actor(),
+                            command.idempotencyKey(),
+                            null,
+                            payload);
+                    return stored(after);
+                });
     }
 
-    ProjectSnapshot archiveOverride(CurrentActor actor, UUID projectId, long version,
-            UUID idempotencyKey, String reason, List<SafeBlocker> found) {
-        ProjectArchiveMutation mutation = new ProjectArchiveMutation(actor.companyId(), projectId,
-                version, actor.userId(), false);
+    ProjectSnapshot archiveOverride(
+            CurrentActor actor,
+            UUID projectId,
+            long version,
+            UUID idempotencyKey,
+            String reason,
+            List<SafeBlocker> found) {
+        ProjectArchiveMutation mutation =
+                new ProjectArchiveMutation(actor.companyId(), projectId, version, actor.userId(), false);
         ProjectSnapshot before = projects.lockForArchive(mutation);
         ProjectSnapshot after = projects.archive(mutation);
         timers.stopRunningTimers(actor, after.projectId());
@@ -125,8 +171,8 @@ public final class ProjectLifecycleGovernanceService {
     }
 
     ProjectSnapshot lockForOverride(CurrentActor actor, UUID projectId, long version) {
-        return projects.lockForArchive(new ProjectArchiveMutation(actor.companyId(), projectId,
-                version, actor.userId(), false));
+        return projects.lockForArchive(
+                new ProjectArchiveMutation(actor.companyId(), projectId, version, actor.userId(), false));
     }
 
     List<SafeBlocker> blockers(ProjectSnapshot project) {
@@ -135,8 +181,11 @@ public final class ProjectLifecycleGovernanceService {
 
     StoredCommandResult stored(ProjectSnapshot project) {
         try {
-            return new StoredCommandResult(200, objectMapper.writeValueAsString(response(project)),
-                    project.projectId(), StrongEtag.format(project.rowVersion()));
+            return new StoredCommandResult(
+                    200,
+                    objectMapper.writeValueAsString(response(project)),
+                    project.projectId(),
+                    StrongEtag.format(project.rowVersion()));
         } catch (JacksonException exception) {
             throw new IllegalStateException("project lifecycle response serialization failed", exception);
         }
@@ -145,64 +194,129 @@ public final class ProjectLifecycleGovernanceService {
     private void requireRestoreReady(ProjectRestoreSnapshot locked) {
         ProjectSnapshot project = locked.project();
         ActiveUserSnapshot owner = users.findByUserId(project.ownerUserId()).orElse(null);
-        if (owner == null || !owner.companyId().equals(project.companyId())
-                || !owner.activeAndEnabled() || !locked.ownerMembershipActive()) {
-            throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION,
-                    "OWNER_MISSING");
+        if (owner == null
+                || !owner.companyId().equals(project.companyId())
+                || !owner.activeAndEnabled()
+                || !locked.ownerMembershipActive()) {
+            throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION, "OWNER_MISSING");
         }
     }
 
-    private void appendArchive(ProjectSnapshot before, ProjectSnapshot after, CurrentActor actor,
-            String mode, List<SafeBlocker> blockers, UUID commandId, String reason) {
+    private void appendArchive(
+            ProjectSnapshot before,
+            ProjectSnapshot after,
+            CurrentActor actor,
+            String mode,
+            List<SafeBlocker> blockers,
+            UUID commandId,
+            String reason) {
         Map<String, Object> payload = lifecycleSummary(before, after);
         payload.put("mode", mode);
-        payload.put("blockers", blockers.stream().map(value -> Map.of(
-                "code", value.code(), "count", value.count())).toList());
-        append("GOVERNANCE_OVERRIDE".equals(mode) ? "PROJECT_ARCHIVE_OVERRIDE" : "PROJECT_ARCHIVED",
-                "catalog.project_archived", before, after, actor,
-                commandId, reason, payload);
+        payload.put(
+                "blockers",
+                blockers.stream()
+                        .map(value -> Map.of("code", value.code(), "count", value.count()))
+                        .toList());
+        append(
+                "GOVERNANCE_OVERRIDE".equals(mode) ? "PROJECT_ARCHIVE_OVERRIDE" : "PROJECT_ARCHIVED",
+                "catalog.project_archived",
+                before,
+                after,
+                actor,
+                commandId,
+                reason,
+                payload);
     }
 
-    private void appendLifecycle(String auditAction, String eventType, ProjectSnapshot before,
-            ProjectSnapshot after, CurrentActor actor, UUID commandId, String reason) {
-        append(auditAction, eventType, before, after, actor, commandId, reason,
-                lifecycleSummary(before, after));
+    private void appendLifecycle(
+            String auditAction,
+            String eventType,
+            ProjectSnapshot before,
+            ProjectSnapshot after,
+            CurrentActor actor,
+            UUID commandId,
+            String reason) {
+        append(auditAction, eventType, before, after, actor, commandId, reason, lifecycleSummary(before, after));
     }
 
-    private void append(String auditAction, String eventType, ProjectSnapshot before,
-            ProjectSnapshot after, CurrentActor actor, UUID commandId, String reason,
+    private void append(
+            String auditAction,
+            String eventType,
+            ProjectSnapshot before,
+            ProjectSnapshot after,
+            CurrentActor actor,
+            UUID commandId,
+            String reason,
             Map<String, Object> payload) {
-        audits.append(new SecurityAuditDraft(after.companyId(), auditAction.toLowerCase() + ":" + commandId,
-                auditAction, SecurityAuditOutcome.SUCCEEDED,
-                SecurityAuditActor.user(actor.userId(), roleNames(actor)), "PROJECT",
-                after.projectId().toString(), reason, objectMapper.valueToTree(safeSnapshot(before)),
-                objectMapper.valueToTree(safeSnapshot(after)), null, commandId, null, null, clock.instant()));
-        events.append(new EventDraft(eventType, 1, "Project", after.projectId(), after.rowVersion(),
-                after.companyId(), EventActor.user(actor.userId()), objectMapper.valueToTree(payload)));
+        audits.append(new SecurityAuditDraft(
+                after.companyId(),
+                auditAction.toLowerCase() + ":" + commandId,
+                auditAction,
+                SecurityAuditOutcome.SUCCEEDED,
+                SecurityAuditActor.user(actor.userId(), roleNames(actor)),
+                "PROJECT",
+                after.projectId().toString(),
+                reason,
+                objectMapper.valueToTree(safeSnapshot(before)),
+                objectMapper.valueToTree(safeSnapshot(after)),
+                null,
+                commandId,
+                null,
+                null,
+                clock.instant()));
+        events.append(new EventDraft(
+                eventType,
+                1,
+                "Project",
+                after.projectId(),
+                after.rowVersion(),
+                after.companyId(),
+                EventActor.user(actor.userId()),
+                objectMapper.valueToTree(payload)));
     }
 
     private static Map<String, Object> lifecycleSummary(ProjectSnapshot before, ProjectSnapshot after) {
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("projectId", after.projectId()); result.put("code", after.code());
-        result.put("fromLifecycle", before.lifecycle()); result.put("toLifecycle", after.lifecycle());
-        result.put("rowVersion", after.rowVersion()); return result;
+        result.put("projectId", after.projectId());
+        result.put("code", after.code());
+        result.put("fromLifecycle", before.lifecycle());
+        result.put("toLifecycle", after.lifecycle());
+        result.put("rowVersion", after.rowVersion());
+        return result;
     }
 
     static Map<String, Object> safeSnapshot(ProjectSnapshot project) {
-        return Map.of("projectId", project.projectId(), "workspaceId", project.workspaceId(),
-                "lifecycle", project.lifecycle(), "rowVersion", project.rowVersion(), "ended", project.endedAt() != null);
+        return Map.of(
+                "projectId",
+                project.projectId(),
+                "workspaceId",
+                project.workspaceId(),
+                "lifecycle",
+                project.lifecycle(),
+                "rowVersion",
+                project.rowVersion(),
+                "ended",
+                project.endedAt() != null);
     }
 
     private static Map<String, Object> response(ProjectSnapshot p) {
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("id", p.projectId()); result.put("workspaceId", p.workspaceId());
-        result.put("code", p.code()); result.put("name", p.name()); result.put("description", p.description());
+        result.put("id", p.projectId());
+        result.put("workspaceId", p.workspaceId());
+        result.put("code", p.code());
+        result.put("name", p.name());
+        result.put("description", p.description());
         result.put("lifecycle", p.lifecycle());
         result.put("endedAt", p.endedAt());
-        result.put("ownerUserId", p.ownerUserId()); result.put("rowVersion", p.rowVersion()); return result;
+        result.put("ownerUserId", p.ownerUserId());
+        result.put("rowVersion", p.rowVersion());
+        return result;
     }
 
-    private static IdempotencyCommand key(CurrentActor actor, String route, UUID id,
+    private static IdempotencyCommand key(
+            CurrentActor actor,
+            String route,
+            UUID id,
             com.yumpoo.platform.foundation.application.idempotency.RequestHash hash) {
         return new IdempotencyCommand(new IdempotencyScope(actor.userId(), "POST", route, id), hash);
     }
@@ -210,8 +324,7 @@ public final class ProjectLifecycleGovernanceService {
     static String validateReason(String reason) {
         String normalized = reason == null ? "" : reason.strip();
         if (normalized.length() < 10 || normalized.length() > 500) {
-            throw ApplicationException.validation(new FieldViolation("reason", "SIZE",
-                    "理由长度必须为 10–500 个字符"));
+            throw ApplicationException.validation(new FieldViolation("reason", "SIZE", "理由长度必须为 10–500 个字符"));
         }
         return normalized;
     }

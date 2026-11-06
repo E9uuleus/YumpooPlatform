@@ -12,15 +12,14 @@ import com.yumpoo.platform.identityaccess.application.oauth.WeComAuthenticationF
 import com.yumpoo.platform.identityaccess.application.oauth.WeComDependencyUnavailableException;
 import com.yumpoo.platform.identityaccess.application.oauth.WeComMemberIdentity;
 import com.yumpoo.platform.identityaccess.application.session.IssuedSession;
-import org.springframework.dao.DataAccessResourceFailureException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.net.URI;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessResourceFailureException;
 
 public final class WebAuthenticationService {
 
@@ -44,22 +43,12 @@ public final class WebAuthenticationService {
             OAuthAttemptHasher attemptHasher,
             WebLoginCompletionService completionService,
             AuthenticationEventService eventService,
-            Clock clock
-    ) {
+            Clock clock) {
         this.attemptStore = Objects.requireNonNull(attemptStore, "attemptStore must not be null");
-        this.identityProvider = Objects.requireNonNull(
-                identityProvider,
-                "identityProvider must not be null"
-        );
-        this.tokenGenerator = Objects.requireNonNull(
-                tokenGenerator,
-                "tokenGenerator must not be null"
-        );
+        this.identityProvider = Objects.requireNonNull(identityProvider, "identityProvider must not be null");
+        this.tokenGenerator = Objects.requireNonNull(tokenGenerator, "tokenGenerator must not be null");
         this.attemptHasher = Objects.requireNonNull(attemptHasher, "attemptHasher must not be null");
-        this.completionService = Objects.requireNonNull(
-                completionService,
-                "completionService must not be null"
-        );
+        this.completionService = Objects.requireNonNull(completionService, "completionService must not be null");
         this.eventService = Objects.requireNonNull(eventService, "eventService must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
     }
@@ -76,9 +65,7 @@ public final class WebAuthenticationService {
         URI authorizationUri;
         try {
             authorizationUri = Objects.requireNonNull(
-                    identityProvider.buildAuthorizationUri(state.value()),
-                    "authorization URI must not be null"
-            );
+                    identityProvider.buildAuthorizationUri(state.value()), "authorization URI must not be null");
         } catch (WeComAuthenticationFailedException exception) {
             ApplicationException mapped = authenticationRequired();
             recordRejected("AUTHORIZE", mapped);
@@ -96,13 +83,7 @@ public final class WebAuthenticationService {
         Instant createdAt = clock.instant();
         Instant expiresAt = createdAt.plus(ATTEMPT_TTL);
         try {
-            attemptStore.create(new OAuthAttempt(
-                    stateHash,
-                    nonceHash,
-                    requestId,
-                    createdAt,
-                    expiresAt
-            ));
+            attemptStore.create(new OAuthAttempt(stateHash, nonceHash, requestId, createdAt, expiresAt));
         } catch (DataAccessResourceFailureException exception) {
             ApplicationException mapped = dependencyUnavailable();
             recordRejected("AUTHORIZE", mapped);
@@ -126,10 +107,7 @@ public final class WebAuthenticationService {
         try {
             consumed = validAuthorizationCode(authorizationCode)
                     && attemptStore.consume(
-                            attemptHasher.hash(stateToken),
-                            attemptHasher.hash(nonceToken),
-                            clock.instant()
-                    );
+                            attemptHasher.hash(stateToken), attemptHasher.hash(nonceToken), clock.instant());
         } catch (DataAccessResourceFailureException exception) {
             ApplicationException mapped = dependencyUnavailable();
             recordRejected("CALLBACK", mapped);
@@ -144,9 +122,7 @@ public final class WebAuthenticationService {
         WeComMemberIdentity identity;
         try {
             identity = Objects.requireNonNull(
-                    identityProvider.exchangeCode(authorizationCode),
-                    "provider identity must not be null"
-            );
+                    identityProvider.exchangeCode(authorizationCode), "provider identity must not be null");
         } catch (WeComAuthenticationFailedException exception) {
             ApplicationException mapped = authenticationRequired();
             recordRejected("CALLBACK", mapped);
@@ -198,9 +174,12 @@ public final class WebAuthenticationService {
         try {
             eventService.loginRejected(stage, exception.errorCode().name());
         } catch (RuntimeException auditFailure) {
-            LOGGER.atError().setMessage("login rejection audit failed").addKeyValue("event", "identity.login.audit.failed")
+            LOGGER.atError()
+                    .setMessage("login rejection audit failed")
+                    .addKeyValue("event", "identity.login.audit.failed")
                     .addKeyValue("stage", stage)
-                    .addKeyValue("exceptionType", auditFailure.getClass().getSimpleName()).log();
+                    .addKeyValue("exceptionType", auditFailure.getClass().getSimpleName())
+                    .log();
             // 登录拒绝追踪是尽力记录；不得用记录失败覆盖原始 401/503。
         }
     }

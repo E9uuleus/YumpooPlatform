@@ -19,8 +19,13 @@ public enum WorkItemRelationRole {
         this.leftSide = leftSide;
     }
 
-    public WorkItemRelationType relationType() { return relationType; }
-    public boolean leftSide() { return leftSide; }
+    public WorkItemRelationType relationType() {
+        return relationType;
+    }
+
+    public boolean leftSide() {
+        return leftSide;
+    }
 
     public WorkItemRelationRole counterpart() {
         return switch (this) {

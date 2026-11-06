@@ -16,8 +16,8 @@ public record CursorPageRequest(String cursor, int limit) {
     public static CursorPageRequest of(String cursor, Integer limit) {
         int resolved = limit == null ? DEFAULT_LIMIT : limit;
         if (resolved < 1 || resolved > MAX_LIMIT)
-            throw ApplicationException.validation(new FieldViolation(
-                    "limit", "PAGE_SIZE_OUT_OF_RANGE", "分页大小必须在 1 到 100 之间"));
+            throw ApplicationException.validation(
+                    new FieldViolation("limit", "PAGE_SIZE_OUT_OF_RANGE", "分页大小必须在 1 到 100 之间"));
         return new CursorPageRequest(cursor, resolved);
     }
 }

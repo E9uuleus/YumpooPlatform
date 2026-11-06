@@ -1,7 +1,7 @@
 package com.yumpoo.platform.catalog.api;
 
-import java.util.UUID;
 import java.time.Instant;
+import java.util.UUID;
 
 public record ProjectSnapshot(
         UUID projectId,
@@ -13,6 +13,4 @@ public record ProjectSnapshot(
         String lifecycle,
         UUID ownerUserId,
         long rowVersion,
-        Instant endedAt
-) {
-}
+        Instant endedAt) {}

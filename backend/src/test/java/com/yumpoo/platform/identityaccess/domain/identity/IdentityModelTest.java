@@ -1,14 +1,13 @@
 package com.yumpoo.platform.identityaccess.domain.identity;
 
-import com.yumpoo.platform.identityaccess.application.directory.WeComMemberProfile;
-import com.yumpoo.platform.identityaccess.application.directory.DirectoryOptionalField;
-import org.junit.jupiter.api.Test;
-
-import java.time.Instant;
-import java.util.UUID;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import com.yumpoo.platform.identityaccess.application.directory.DirectoryOptionalField;
+import com.yumpoo.platform.identityaccess.application.directory.WeComMemberProfile;
+import java.time.Instant;
+import java.util.UUID;
+import org.junit.jupiter.api.Test;
 
 class IdentityModelTest {
 
@@ -23,8 +22,7 @@ class IdentityModelTest {
                 DirectoryOptionalField.present(" alice@example.test "),
                 DirectoryOptionalField.present(" 13800000000 "),
                 " Engineering ",
-                new ProfileHash(HASH)
-        );
+                new ProfileHash(HASH));
 
         assertThat(profile.externalUserId()).isEqualTo("Member-A");
         assertThat(profile.displayName()).isEqualTo("Alice");
@@ -35,24 +33,23 @@ class IdentityModelTest {
 
     @Test
     void rejectsInvalidProfileBoundariesAndHashFormats() {
-        assertThatThrownBy(() -> new ProfileHash("A".repeat(64)))
+        assertThatThrownBy(() -> new ProfileHash("A".repeat(64))).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new WeComMemberProfile(
+                        "x".repeat(257),
+                        "Alice",
+                        DirectoryOptionalField.clear(),
+                        DirectoryOptionalField.clear(),
+                        null,
+                        new ProfileHash(HASH)))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new WeComMemberProfile(
-                "x".repeat(257),
-                "Alice",
-                DirectoryOptionalField.clear(),
-                DirectoryOptionalField.clear(),
-                null,
-                new ProfileHash(HASH)
-        )).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new WeComMemberProfile(
-                "member-a",
-                " ",
-                DirectoryOptionalField.clear(),
-                DirectoryOptionalField.clear(),
-                null,
-                new ProfileHash(HASH)
-        )).isInstanceOf(IllegalArgumentException.class);
+                        "member-a",
+                        " ",
+                        DirectoryOptionalField.clear(),
+                        DirectoryOptionalField.clear(),
+                        null,
+                        new ProfileHash(HASH)))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -70,25 +67,20 @@ class IdentityModelTest {
                 new ProfileHash(HASH),
                 NOW,
                 NOW,
-                NOW
-        );
+                NOW);
         WeComMemberProfile profile = new WeComMemberProfile(
                 "secret-member-id",
                 "Sensitive Name",
                 DirectoryOptionalField.present("sensitive@example.test"),
                 DirectoryOptionalField.present("13800000000"),
                 "Sensitive Department",
-                new ProfileHash(HASH)
-        );
+                new ProfileHash(HASH));
 
         assertThat(user.toString())
                 .contains("personalData=REDACTED")
                 .doesNotContain("Sensitive Name", "sensitive@example.test");
-        assertThat(identity.toString())
-                .contains("identityData=REDACTED")
-                .doesNotContain("secret-member-id", HASH);
-        assertThat(profile.toString())
-                .isEqualTo("WeComMemberProfile[REDACTED]");
+        assertThat(identity.toString()).contains("identityData=REDACTED").doesNotContain("secret-member-id", HASH);
+        assertThat(profile.toString()).isEqualTo("WeComMemberProfile[REDACTED]");
         assertThat(profile.rawProfileHash().toString()).isEqualTo("ProfileHash[REDACTED]");
     }
 
@@ -98,62 +90,94 @@ class IdentityModelTest {
         UUID companyId = UUID.randomUUID();
 
         assertThatThrownBy(() -> new User(
-                userId,
-                companyId,
-                EmploymentStatus.LEFT,
-                AccountStatus.ENABLED,
-                "Alice",
-                null,
-                null,
-                null,
-                NOW,
-                null,
-                null,
-                null,
-                null,
-                null,
-                0,
-                0,
-                NOW,
-                NOW
-        )).isInstanceOf(IllegalArgumentException.class)
+                        userId,
+                        companyId,
+                        EmploymentStatus.LEFT,
+                        AccountStatus.ENABLED,
+                        "Alice",
+                        null,
+                        null,
+                        null,
+                        NOW,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        0,
+                        0,
+                        NOW,
+                        NOW))
+                .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("LEFT user");
 
         assertThatThrownBy(() -> new User(
-                userId,
-                companyId,
-                EmploymentStatus.ACTIVE,
-                AccountStatus.DISABLED,
-                "Alice",
-                null,
-                null,
-                null,
-                NOW,
-                null,
-                null,
-                null,
-                null,
-                null,
-                0,
-                0,
-                NOW,
-                NOW
-        )).isInstanceOf(IllegalArgumentException.class)
+                        userId,
+                        companyId,
+                        EmploymentStatus.ACTIVE,
+                        AccountStatus.DISABLED,
+                        "Alice",
+                        null,
+                        null,
+                        null,
+                        NOW,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        0,
+                        0,
+                        NOW,
+                        NOW))
+                .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("DISABLED user");
     }
 
     @Test
     void directoryDisableAllowsSystemActorButManualDisableStillRequiresAnActor() {
         for (String reason : java.util.List.of("DIRECTORY_ACCOUNT_DISABLED", "DIRECTORY_SNAPSHOT_MISSING")) {
-            User disabled = new User(UUID.randomUUID(), UUID.randomUUID(), EmploymentStatus.ACTIVE,
-                    AccountStatus.DISABLED, "Alice", null, null, null, NOW, null, null,
-                    NOW, null, reason, 1, 1, NOW, NOW);
+            User disabled = new User(
+                    UUID.randomUUID(),
+                    UUID.randomUUID(),
+                    EmploymentStatus.ACTIVE,
+                    AccountStatus.DISABLED,
+                    "Alice",
+                    null,
+                    null,
+                    null,
+                    NOW,
+                    null,
+                    null,
+                    NOW,
+                    null,
+                    reason,
+                    1,
+                    1,
+                    NOW,
+                    NOW);
             assertThat(disabled.accountDisabledByUserId()).isNull();
             assertThat(disabled.accountStatus()).isEqualTo(AccountStatus.DISABLED);
         }
-        assertThatThrownBy(() -> new User(UUID.randomUUID(), UUID.randomUUID(), EmploymentStatus.ACTIVE,
-                AccountStatus.DISABLED, "Alice", null, null, null, NOW, null, null,
-                NOW, null, "Manual security review", 1, 1, NOW, NOW))
+        assertThatThrownBy(() -> new User(
+                        UUID.randomUUID(),
+                        UUID.randomUUID(),
+                        EmploymentStatus.ACTIVE,
+                        AccountStatus.DISABLED,
+                        "Alice",
+                        null,
+                        null,
+                        null,
+                        NOW,
+                        null,
+                        null,
+                        NOW,
+                        null,
+                        "Manual security review",
+                        1,
+                        1,
+                        NOW,
+                        NOW))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("account-disabled facts");
     }
@@ -177,7 +201,6 @@ class IdentityModelTest {
                 0,
                 0,
                 NOW,
-                NOW
-        );
+                NOW);
     }
 }

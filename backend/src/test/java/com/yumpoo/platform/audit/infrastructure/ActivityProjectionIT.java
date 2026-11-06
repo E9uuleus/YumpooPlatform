@@ -1,5 +1,8 @@
 package com.yumpoo.platform.audit.infrastructure;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.yumpoo.platform.audit.api.ActivityProjectionService;
 import com.yumpoo.platform.audit.application.ActivityRepository;
 import com.yumpoo.platform.audit.application.ActivityStoredEvent;
@@ -8,6 +11,12 @@ import com.yumpoo.platform.audit.application.WorkItemCellActivityStoredEvent;
 import com.yumpoo.platform.foundation.application.event.DomainEventEnvelope;
 import com.yumpoo.platform.foundation.application.event.EventActor;
 import com.yumpoo.platform.testing.JdbcIntegrationTest;
+import java.time.Instant;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,34 +25,37 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
-import java.time.Instant;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 @JdbcIntegrationTest
 class ActivityProjectionIT {
     private static final UUID COMPANY = UUID.fromString("00000000-0000-4000-8000-000000000001");
     private static final UUID PROJECT = UUID.fromString("44000000-0000-4000-8000-000000000101");
 
-    @Autowired private ActivityProjectionService projection;
-    @Autowired private com.yumpoo.platform.audit.api.WorkItemCellActivityProjectionService cellProjection;
-    @Autowired private ActivityRepository repository;
-    @Autowired private WorkItemCellActivityRepository cellRepository;
-    @Autowired private JdbcClient jdbc;
-    @Autowired private ObjectMapper objectMapper;
+    @Autowired
+    private ActivityProjectionService projection;
+
+    @Autowired
+    private com.yumpoo.platform.audit.api.WorkItemCellActivityProjectionService cellProjection;
+
+    @Autowired
+    private ActivityRepository repository;
+
+    @Autowired
+    private WorkItemCellActivityRepository cellRepository;
+
+    @Autowired
+    private JdbcClient jdbc;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @AfterEach
     void cleanUp() {
         jdbc.sql("DELETE FROM yumpoo.activity_event WHERE company_id = :company")
-                .param("company", COMPANY).update();
+                .param("company", COMPANY)
+                .update();
         jdbc.sql("DELETE FROM yumpoo.work_item_cell_activity WHERE company_id = :company")
-                .param("company", COMPANY).update();
+                .param("company", COMPANY)
+                .update();
     }
 
     @Test
@@ -57,17 +69,36 @@ class ActivityProjectionIT {
         payload.put("startedAt", "2026-09-01T01:00:00Z");
         payload.put("stoppedAt", "2026-09-01T02:00:00Z");
         Instant occurredAt = Instant.now();
-        var event = new DomainEventEnvelope(UUID.randomUUID(), "workitem.time_tracking_deleted", 2,
-                occurredAt, "TimeTrackingSession", sessionId, 1, COMPANY, EventActor.user(actorId),
-                "timer-delete-test", "timer-delete-test", null, payload);
+        var event = new DomainEventEnvelope(
+                UUID.randomUUID(),
+                "workitem.time_tracking_deleted",
+                2,
+                occurredAt,
+                "TimeTrackingSession",
+                sessionId,
+                1,
+                COMPANY,
+                EventActor.user(actorId),
+                "timer-delete-test",
+                "timer-delete-test",
+                null,
+                payload);
         projection.consume(event);
         projection.consume(event);
         cellProjection.consume(event);
         cellProjection.consume(event);
         assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.activity_event WHERE event_id=:event")
-                .param("event", event.eventId()).query(Long.class).single()).isOne();
-        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_cell_activity WHERE event_id=:event AND column_code='TIME_TRACKING' AND change_type='REMOVED' AND actor_user_id=:actor")
-                .param("event", event.eventId()).param("actor", actorId).query(Long.class).single()).isOne();
+                        .param("event", event.eventId())
+                        .query(Long.class)
+                        .single())
+                .isOne();
+        assertThat(jdbc.sql(
+                                "SELECT count(*) FROM yumpoo.work_item_cell_activity WHERE event_id=:event AND column_code='TIME_TRACKING' AND change_type='REMOVED' AND actor_user_id=:actor")
+                        .param("event", event.eventId())
+                        .param("actor", actorId)
+                        .query(Long.class)
+                        .single())
+                .isOne();
     }
 
     @Test
@@ -78,9 +109,14 @@ class ActivityProjectionIT {
         projection.consume(projectCreated(UUID.randomUUID(), cutover.plusMillis(1), "AFTER"));
 
         assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.activity_projection_state WHERE projection_code='ACTIVITY_V1'")
-                .query(Long.class).single()).isOne();
-        assertThat(jdbc.sql("SELECT projection_code || ':' || scope_type FROM yumpoo.activity_event WHERE company_id=:company")
-                .param("company", COMPANY).query(String.class).single())
+                        .query(Long.class)
+                        .single())
+                .isOne();
+        assertThat(jdbc.sql(
+                                "SELECT projection_code || ':' || scope_type FROM yumpoo.activity_event WHERE company_id=:company")
+                        .param("company", COMPANY)
+                        .query(String.class)
+                        .single())
                 .isEqualTo("ACTIVITY_V1:PROJECT");
     }
 
@@ -92,17 +128,28 @@ class ActivityProjectionIT {
         CountDownLatch start = new CountDownLatch(1);
 
         try (var executor = Executors.newFixedThreadPool(2)) {
-            var left = executor.submit(() -> { await(start); repository.append(first); });
-            var right = executor.submit(() -> { await(start); repository.append(second); });
+            var left = executor.submit(() -> {
+                await(start);
+                repository.append(first);
+            });
+            var right = executor.submit(() -> {
+                await(start);
+                repository.append(second);
+            });
             start.countDown();
             left.get(10, TimeUnit.SECONDS);
             right.get(10, TimeUnit.SECONDS);
         }
 
         assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.activity_event WHERE event_id=:event")
-                .param("event", eventId).query(Long.class).single()).isOne();
+                        .param("event", eventId)
+                        .query(Long.class)
+                        .single())
+                .isOne();
         assertThat(jdbc.sql("SELECT indexname FROM pg_indexes WHERE schemaname='yumpoo' AND tablename='activity_event'")
-                .query(String.class).list()).contains(
+                        .query(String.class)
+                        .list())
+                .contains(
                         "idx_activity_event_scope_cursor",
                         "idx_activity_event_primary_work_item_cursor",
                         "idx_activity_event_secondary_work_item_cursor");
@@ -122,9 +169,14 @@ class ActivityProjectionIT {
                             '系统',transaction_timestamp(),'PROJECT_CREATED','{}'::jsonb,
                             0,'m2-20-invalid','m2-20-invalid'
                         )
-                        """).param("id", UUID.randomUUID()).param("event", UUID.randomUUID())
-                .param("company", COMPANY).param("scope", PROJECT).param("entity", PROJECT)
-                .update()).isInstanceOf(DataIntegrityViolationException.class);
+                        """)
+                        .param("id", UUID.randomUUID())
+                        .param("event", UUID.randomUUID())
+                        .param("company", COMPANY)
+                        .param("scope", PROJECT)
+                        .param("entity", PROJECT)
+                        .update())
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test
@@ -133,43 +185,87 @@ class ActivityProjectionIT {
         UUID itemId = UUID.randomUUID();
         UUID contentId = UUID.randomUUID();
         Instant occurredAt = cellRepository.acceptedFrom().plusMillis(1);
-        WorkItemCellActivityStoredEvent name = cellStored(UUID.randomUUID(), eventId, itemId,
-                contentId, occurredAt, "WORK_ITEM_NAME");
-        WorkItemCellActivityStoredEvent priority = cellStored(UUID.randomUUID(), eventId, itemId,
-                contentId, occurredAt, "PRIORITY");
+        WorkItemCellActivityStoredEvent name =
+                cellStored(UUID.randomUUID(), eventId, itemId, contentId, occurredAt, "WORK_ITEM_NAME");
+        WorkItemCellActivityStoredEvent priority =
+                cellStored(UUID.randomUUID(), eventId, itemId, contentId, occurredAt, "PRIORITY");
 
         cellRepository.append(name);
         cellRepository.append(priority);
-        cellRepository.append(cellStored(UUID.randomUUID(), eventId, itemId, contentId,
-                occurredAt, "PRIORITY"));
+        cellRepository.append(cellStored(UUID.randomUUID(), eventId, itemId, contentId, occurredAt, "PRIORITY"));
 
         assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_cell_activity WHERE event_id=:event")
-                .param("event", eventId).query(Long.class).single()).isEqualTo(2);
-        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.activity_projection_state WHERE projection_code='WORK_ITEM_CELL_ACTIVITY_V1'")
-                .query(Long.class).single()).isOne();
+                        .param("event", eventId)
+                        .query(Long.class)
+                        .single())
+                .isEqualTo(2);
+        assertThat(jdbc.sql(
+                                "SELECT count(*) FROM yumpoo.activity_projection_state WHERE projection_code='WORK_ITEM_CELL_ACTIVITY_V1'")
+                        .query(Long.class)
+                        .single())
+                .isOne();
     }
 
     @Test
     void companyQuerySpansProjectsAndFiltersByProjectAndActor() {
         Instant from = Instant.parse("2099-01-01T00:00:00Z");
         UUID projectB = UUID.randomUUID(), user = UUID.randomUUID();
-        ActivityStoredEvent first = new ActivityStoredEvent(UUID.randomUUID(), UUID.randomUUID(),
-                "PROJECT", COMPANY, PROJECT, "PROJECT", PROJECT, "A", "catalog.project_created",
-                "SYSTEM", null, "COMPANY_ACTIVITY_TEST", "系统", from, "PROJECT_CREATED",
-                objectMapper.createObjectNode(), 0, "company-activity-a", "company-activity-a", null, null);
-        ActivityStoredEvent second = new ActivityStoredEvent(UUID.randomUUID(), UUID.randomUUID(),
-                "PROJECT", COMPANY, projectB, "PROJECT", projectB, "B", "catalog.project_created",
-                "USER", user, null, "操作人", from.plusSeconds(1), "PROJECT_CREATED",
-                objectMapper.createObjectNode(), 0, "company-activity-b", "company-activity-b", null, null);
+        ActivityStoredEvent first = new ActivityStoredEvent(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                "PROJECT",
+                COMPANY,
+                PROJECT,
+                "PROJECT",
+                PROJECT,
+                "A",
+                "catalog.project_created",
+                "SYSTEM",
+                null,
+                "COMPANY_ACTIVITY_TEST",
+                "系统",
+                from,
+                "PROJECT_CREATED",
+                objectMapper.createObjectNode(),
+                0,
+                "company-activity-a",
+                "company-activity-a",
+                null,
+                null);
+        ActivityStoredEvent second = new ActivityStoredEvent(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                "PROJECT",
+                COMPANY,
+                projectB,
+                "PROJECT",
+                projectB,
+                "B",
+                "catalog.project_created",
+                "USER",
+                user,
+                null,
+                "操作人",
+                from.plusSeconds(1),
+                "PROJECT_CREATED",
+                objectMapper.createObjectNode(),
+                0,
+                "company-activity-b",
+                "company-activity-b",
+                null,
+                null);
         repository.append(first);
         repository.append(second);
 
         assertThat(repository.findCompany(COMPANY, Set.of(), Set.of(), Set.of(), from, null, null, 10))
-                .extracting(ActivityStoredEvent::scopeId).containsExactly(projectB, PROJECT);
+                .extracting(ActivityStoredEvent::scopeId)
+                .containsExactly(projectB, PROJECT);
         assertThat(repository.findCompany(COMPANY, Set.of(PROJECT), Set.of(), Set.of(), from, null, null, 10))
-                .extracting(ActivityStoredEvent::scopeId).containsExactly(PROJECT);
+                .extracting(ActivityStoredEvent::scopeId)
+                .containsExactly(PROJECT);
         assertThat(repository.findCompany(COMPANY, Set.of(), Set.of(user), Set.of(), from, null, null, 10))
-                .extracting(ActivityStoredEvent::scopeId).containsExactly(projectB);
+                .extracting(ActivityStoredEvent::scopeId)
+                .containsExactly(projectB);
     }
 
     private DomainEventEnvelope projectCreated(UUID eventId, Instant occurredAt, String code) {
@@ -181,27 +277,72 @@ class ActivityProjectionIT {
         payload.put("lifecycle", "ACTIVE");
         payload.put("ownerUserId", UUID.randomUUID().toString());
         payload.put("initializedContentCount", 1);
-        return new DomainEventEnvelope(eventId, "catalog.project_created", 2, occurredAt,
-                "Project", PROJECT, 0, COMPANY, EventActor.system("M2_20_TEST"),
-                "m2-20-cutover", "m2-20-cutover", null, payload);
+        return new DomainEventEnvelope(
+                eventId,
+                "catalog.project_created",
+                2,
+                occurredAt,
+                "Project",
+                PROJECT,
+                0,
+                COMPANY,
+                EventActor.system("M2_20_TEST"),
+                "m2-20-cutover",
+                "m2-20-cutover",
+                null,
+                payload);
     }
 
     private ActivityStoredEvent stored(UUID id, UUID eventId) {
-        return new ActivityStoredEvent(id, eventId, "PROJECT", COMPANY, PROJECT, "PROJECT",
-                PROJECT, "M2-20 Activity", "catalog.project_created", "SYSTEM", null,
-                "M2_20_TEST", "系统", repository.acceptedFrom().plusSeconds(1),
-                "PROJECT_CREATED", objectMapper.createObjectNode(), 0,
-                "m2-20-concurrent", "m2-20-concurrent", null, null);
+        return new ActivityStoredEvent(
+                id,
+                eventId,
+                "PROJECT",
+                COMPANY,
+                PROJECT,
+                "PROJECT",
+                PROJECT,
+                "M2-20 Activity",
+                "catalog.project_created",
+                "SYSTEM",
+                null,
+                "M2_20_TEST",
+                "系统",
+                repository.acceptedFrom().plusSeconds(1),
+                "PROJECT_CREATED",
+                objectMapper.createObjectNode(),
+                0,
+                "m2-20-concurrent",
+                "m2-20-concurrent",
+                null,
+                null);
     }
 
-    private WorkItemCellActivityStoredEvent cellStored(UUID id, UUID eventId, UUID itemId,
-            UUID contentId, Instant occurredAt, String column) {
+    private WorkItemCellActivityStoredEvent cellStored(
+            UUID id, UUID eventId, UUID itemId, UUID contentId, Instant occurredAt, String column) {
         ObjectNode value = objectMapper.createObjectNode();
-        value.put("type", "TEXT"); value.put("displayName", "投影值");
-        return new WorkItemCellActivityStoredEvent(id, eventId, COMPANY, PROJECT, itemId,
-                contentId, "需求", "workitem.work_item_fields_changed", column, "ADDED", null,
-                value, "SYSTEM", null, "M2_20_TEST", "系统", occurredAt,
-                "cell-it", "cell-it");
+        value.put("type", "TEXT");
+        value.put("displayName", "投影值");
+        return new WorkItemCellActivityStoredEvent(
+                id,
+                eventId,
+                COMPANY,
+                PROJECT,
+                itemId,
+                contentId,
+                "需求",
+                "workitem.work_item_fields_changed",
+                column,
+                "ADDED",
+                null,
+                value,
+                "SYSTEM",
+                null,
+                "M2_20_TEST",
+                "系统",
+                occurredAt,
+                "cell-it",
+                "cell-it");
     }
 
     private static void await(CountDownLatch latch) {

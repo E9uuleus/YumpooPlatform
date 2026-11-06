@@ -1,7 +1,5 @@
 package com.yumpoo.platform.identityaccess.application.directory;
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
@@ -12,6 +10,8 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 /** 拉取完整企微成员 ID 页集，并在离开受信任边界前转换为 HMAC 指纹。 */
 public final class DirectorySnapshotCollector {
@@ -24,25 +24,15 @@ public final class DirectorySnapshotCollector {
     private static final int MINIMUM_KEY_BYTES = 32;
     private static final int MINIMUM_DISTINCT_CODE_POINTS = 8;
     private static final HexFormat HEX = HexFormat.of();
-    private static final Set<String> INSECURE_KEY_MARKERS = Set.of(
-            "change-me",
-            "changeme",
-            "placeholder",
-            "password",
-            "secret-key"
-    );
+    private static final Set<String> INSECURE_KEY_MARKERS =
+            Set.of("change-me", "changeme", "placeholder", "password", "secret-key");
 
     private final WeComDirectoryGateway gateway;
     private final String corpId;
     private final byte[] hmacKey;
     private final int pageSize;
 
-    public DirectorySnapshotCollector(
-            WeComDirectoryGateway gateway,
-            String corpId,
-            String hmacKey,
-            int pageSize
-    ) {
+    public DirectorySnapshotCollector(WeComDirectoryGateway gateway, String corpId, String hmacKey, int pageSize) {
         this.gateway = Objects.requireNonNull(gateway, "gateway must not be null");
         this.corpId = requireIdentifier(corpId, "corpId");
         this.hmacKey = requireStrongKey(hmacKey);
@@ -66,11 +56,7 @@ public final class DirectorySnapshotCollector {
                 return incomplete(fingerprints, completedPageCount, exception.failure());
             }
             if (page == null) {
-                return incomplete(
-                        fingerprints,
-                        completedPageCount,
-                        DirectorySnapshotFailure.MALFORMED_RESPONSE
-                );
+                return incomplete(fingerprints, completedPageCount, DirectorySnapshotFailure.MALFORMED_RESPONSE);
             }
 
             completedPageCount++;
@@ -82,55 +68,31 @@ public final class DirectorySnapshotCollector {
                 return complete(fingerprints, completedPageCount);
             }
             if (page.hasOmittedCursor()) {
-                return incomplete(
-                        fingerprints,
-                        completedPageCount,
-                        DirectorySnapshotFailure.MISSING_CURSOR
-                );
+                return incomplete(fingerprints, completedPageCount, DirectorySnapshotFailure.MISSING_CURSOR);
             }
             if (!observedCursors.add(page.nextCursor())) {
-                return incomplete(
-                        fingerprints,
-                        completedPageCount,
-                        DirectorySnapshotFailure.CURSOR_LOOP
-                );
+                return incomplete(fingerprints, completedPageCount, DirectorySnapshotFailure.CURSOR_LOOP);
             }
             cursor = page.nextCursor();
         }
 
-        return incomplete(
-                fingerprints,
-                completedPageCount,
-                DirectorySnapshotFailure.PAGE_LIMIT_EXCEEDED
-        );
+        return incomplete(fingerprints, completedPageCount, DirectorySnapshotFailure.PAGE_LIMIT_EXCEEDED);
     }
 
     private DirectorySnapshotResult.Complete complete(
-            TreeSet<DirectoryMemberFingerprint> fingerprints,
-            int completedPageCount
-    ) {
+            TreeSet<DirectoryMemberFingerprint> fingerprints, int completedPageCount) {
         List<DirectoryMemberFingerprint> members = List.copyOf(fingerprints);
         return new DirectorySnapshotResult.Complete(
-                members,
-                corpFingerprint(),
-                fingerprintSet(members),
-                completedPageCount
-        );
+                members, corpFingerprint(), fingerprintSet(members), completedPageCount);
     }
 
     private DirectorySnapshotResult.Incomplete incomplete(
             TreeSet<DirectoryMemberFingerprint> fingerprints,
             int completedPageCount,
-            DirectorySnapshotFailure failure
-    ) {
+            DirectorySnapshotFailure failure) {
         List<DirectoryMemberFingerprint> members = List.copyOf(fingerprints);
         return new DirectorySnapshotResult.Incomplete(
-                members,
-                corpFingerprint(),
-                fingerprintSet(members),
-                completedPageCount,
-                failure
-        );
+                members, corpFingerprint(), fingerprintSet(members), completedPageCount, failure);
     }
 
     private String corpFingerprint() {
@@ -138,9 +100,7 @@ public final class DirectorySnapshotCollector {
     }
 
     private DirectoryMemberFingerprint fingerprintMember(String memberId) {
-        return new DirectoryMemberFingerprint(
-                hmacHex("member\0" + corpId + "\0" + memberId)
-        );
+        return new DirectoryMemberFingerprint(hmacHex("member\0" + corpId + "\0" + memberId));
     }
 
     private String fingerprintSet(List<DirectoryMemberFingerprint> fingerprints) {
@@ -178,12 +138,8 @@ public final class DirectorySnapshotCollector {
                 .distinct()
                 .limit(MINIMUM_DISTINCT_CODE_POINTS)
                 .count();
-        if (encoded.length < MINIMUM_KEY_BYTES
-                || distinctCodePoints < MINIMUM_DISTINCT_CODE_POINTS
-                || insecureMarker) {
-            throw new IllegalArgumentException(
-                    "directory evidence HMAC key does not meet the strength policy"
-            );
+        if (encoded.length < MINIMUM_KEY_BYTES || distinctCodePoints < MINIMUM_DISTINCT_CODE_POINTS || insecureMarker) {
+            throw new IllegalArgumentException("directory evidence HMAC key does not meet the strength policy");
         }
         return encoded;
     }

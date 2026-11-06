@@ -6,14 +6,13 @@ import com.yumpoo.platform.audit.api.SecurityAuditDraft;
 import com.yumpoo.platform.audit.api.SecurityAuditOutcome;
 import com.yumpoo.platform.foundation.application.event.EventActor;
 import com.yumpoo.platform.foundation.application.event.EventActorType;
-import org.springframework.stereotype.Service;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
-
 import java.time.Clock;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.stereotype.Service;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 @Service
 public class IdentitySecurityAuditRecorder {
@@ -22,11 +21,7 @@ public class IdentitySecurityAuditRecorder {
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
-    public IdentitySecurityAuditRecorder(
-            SecurityAuditAppendPort auditPort,
-            ObjectMapper objectMapper,
-            Clock clock
-    ) {
+    public IdentitySecurityAuditRecorder(SecurityAuditAppendPort auditPort, ObjectMapper objectMapper, Clock clock) {
         this.auditPort = auditPort;
         this.objectMapper = objectMapper;
         this.clock = clock;
@@ -45,12 +40,22 @@ public class IdentitySecurityAuditRecorder {
             Map<String, ?> after,
             UUID commandId,
             String clientType,
-            String clientVersion
-    ) {
+            String clientVersion) {
         return auditPort.append(draft(
-                companyId, factKey, action, SecurityAuditOutcome.SUCCEEDED,
-                actor(actor, roleSnapshot), targetType, targetId, reasonReference,
-                before, after, null, commandId, clientType, clientVersion));
+                companyId,
+                factKey,
+                action,
+                SecurityAuditOutcome.SUCCEEDED,
+                actor(actor, roleSnapshot),
+                targetType,
+                targetId,
+                reasonReference,
+                before,
+                after,
+                null,
+                commandId,
+                clientType,
+                clientVersion));
     }
 
     public UUID outcome(
@@ -67,12 +72,22 @@ public class IdentitySecurityAuditRecorder {
             Map<String, ?> after,
             String errorCode,
             String clientType,
-            String clientVersion
-    ) {
+            String clientVersion) {
         return auditPort.append(draft(
-                companyId, factKey, action, outcome, actor(actor, roleSnapshot),
-                targetType, targetId, reasonReference, before, after, errorCode,
-                null, clientType, clientVersion));
+                companyId,
+                factKey,
+                action,
+                outcome,
+                actor(actor, roleSnapshot),
+                targetType,
+                targetId,
+                reasonReference,
+                before,
+                after,
+                errorCode,
+                null,
+                clientType,
+                clientVersion));
     }
 
     public UUID failedIndependent(
@@ -85,12 +100,22 @@ public class IdentitySecurityAuditRecorder {
             String reasonReference,
             String errorCode,
             String clientType,
-            String clientVersion
-    ) {
+            String clientVersion) {
         return auditPort.appendIndependent(draft(
-                companyId, factKey, action, SecurityAuditOutcome.FAILED, actor,
-                targetType, targetId, reasonReference, null, null, errorCode,
-                null, clientType, clientVersion));
+                companyId,
+                factKey,
+                action,
+                SecurityAuditOutcome.FAILED,
+                actor,
+                targetType,
+                targetId,
+                reasonReference,
+                null,
+                null,
+                errorCode,
+                null,
+                clientType,
+                clientVersion));
     }
 
     public SecurityAuditActor actor(EventActor actor, Set<String> roleSnapshot) {
@@ -114,12 +139,23 @@ public class IdentitySecurityAuditRecorder {
             String errorCode,
             UUID commandId,
             String clientType,
-            String clientVersion
-    ) {
+            String clientVersion) {
         return new SecurityAuditDraft(
-                companyId, factKey, action, outcome, actor, targetType,
-                String.valueOf(targetId), reasonReference, json(before), json(after),
-                errorCode, commandId, clientType, clientVersion, clock.instant());
+                companyId,
+                factKey,
+                action,
+                outcome,
+                actor,
+                targetType,
+                String.valueOf(targetId),
+                reasonReference,
+                json(before),
+                json(after),
+                errorCode,
+                commandId,
+                clientType,
+                clientVersion,
+                clock.instant());
     }
 
     private JsonNode json(Map<String, ?> value) {

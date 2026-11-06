@@ -1,8 +1,7 @@
 package com.yumpoo.platform.identityaccess.infrastructure.session;
 
-import org.springframework.boot.context.properties.ConfigurationProperties;
-
 import java.time.Duration;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "yumpoo.session")
 public class SessionProperties {

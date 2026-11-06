@@ -1,5 +1,10 @@
 package com.yumpoo.platform.identityaccess.infrastructure.event;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
 import com.yumpoo.platform.foundation.application.outbox.OutboxStorePort;
 import com.yumpoo.platform.identityaccess.application.authorization.PlatformRoleMaintenanceUseCase;
 import com.yumpoo.platform.identityaccess.application.authorization.PlatformRoleMutationResult;
@@ -8,6 +13,13 @@ import com.yumpoo.platform.identityaccess.infrastructure.authorization.Maintenan
 import com.yumpoo.platform.identityaccess.infrastructure.authorization.MaintenanceRoleRunnerProperties;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
 import com.yumpoo.platform.organization.api.CompanyConfigurationSnapshot;
+import java.time.Clock;
+import java.time.DayOfWeek;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.Banner;
 import org.springframework.boot.SpringApplication;
@@ -16,19 +28,6 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-
-import java.time.Clock;
-import java.time.DayOfWeek;
-import java.time.ZoneOffset;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
-import java.util.concurrent.atomic.AtomicReference;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 class IdentityOutboxRecoveryRunnerTest {
 
@@ -50,8 +49,9 @@ class IdentityOutboxRecoveryRunnerTest {
             return mock(PlatformRoleMutationResult.class);
         });
         CompanyConfigurationQuery company = mock(CompanyConfigurationQuery.class);
-        when(company.current()).thenReturn(new CompanyConfigurationSnapshot(
-                UUID.randomUUID(), "Outbox startup test", ZoneOffset.UTC, DayOfWeek.MONDAY, 480, 0));
+        when(company.current())
+                .thenReturn(new CompanyConfigurationSnapshot(
+                        UUID.randomUUID(), "Outbox startup test", ZoneOffset.UTC, DayOfWeek.MONDAY, 480, 0));
 
         SpringApplication application = new SpringApplication(MaintenanceStartup.class);
         application.setWebApplicationType(WebApplicationType.NONE);
@@ -65,8 +65,8 @@ class IdentityOutboxRecoveryRunnerTest {
             context.getBeanFactory().registerSingleton("companyQuery", company);
         });
 
-        try (ConfigurableApplicationContext context = application.run(
-                "--yumpoo.maintenance.app-manager.enabled=true")) {
+        try (ConfigurableApplicationContext context =
+                application.run("--yumpoo.maintenance.app-manager.enabled=true")) {
             assertThat(context.isActive()).isFalse();
         }
 

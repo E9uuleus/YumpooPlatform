@@ -1,10 +1,9 @@
 package com.yumpoo.platform.audit.api;
 
-import tools.jackson.databind.JsonNode;
-
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
+import tools.jackson.databind.JsonNode;
 
 public record SecurityAuditDraft(
         UUID companyId,
@@ -21,8 +20,7 @@ public record SecurityAuditDraft(
         UUID commandId,
         String clientType,
         String clientVersion,
-        Instant occurredAt
-) {
+        Instant occurredAt) {
     public SecurityAuditDraft {
         Objects.requireNonNull(companyId, "companyId must not be null");
         factKey = requireText(factKey, "factKey", 200);

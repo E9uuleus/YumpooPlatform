@@ -5,11 +5,6 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Configuration;
 
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnProperty(
-        prefix = "yumpoo.maintenance.initial-identity",
-        name = "enabled",
-        havingValue = "true"
-)
+@ConditionalOnProperty(prefix = "yumpoo.maintenance.initial-identity", name = "enabled", havingValue = "true")
 @EnableConfigurationProperties(InitialIdentityBootstrapRunnerProperties.class)
-public class InitialIdentityBootstrapRunnerConfiguration {
-}
+public class InitialIdentityBootstrapRunnerConfiguration {}

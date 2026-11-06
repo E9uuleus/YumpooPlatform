@@ -2,7 +2,6 @@ package com.yumpoo.platform.filestorage.application;
 
 import com.yumpoo.platform.filestorage.domain.AttachmentFileType;
 import com.yumpoo.platform.filestorage.domain.AttachmentRejectedCode;
-
 import java.util.Locale;
 import java.util.Set;
 
@@ -11,12 +10,10 @@ public final class AttachmentFileNamePolicy {
 
     private static final int MAX_DISPLAY_NAME_CODE_POINTS = 255;
     private static final Set<String> DANGEROUS_EXTENSIONS = Set.of(
-            "exe", "dll", "msi", "bat", "cmd", "ps1", "js", "jar", "lnk",
-            "html", "htm", "svg", "docm", "xlsm", "pptm", "com", "scr", "vbs"
-    );
+            "exe", "dll", "msi", "bat", "cmd", "ps1", "js", "jar", "lnk", "html", "htm", "svg", "docm", "xlsm", "pptm",
+            "com", "scr", "vbs");
 
-    private AttachmentFileNamePolicy() {
-    }
+    private AttachmentFileNamePolicy() {}
 
     public static AttachmentFileName normalize(String original) {
         if (original == null || original.isBlank()) {
@@ -24,8 +21,7 @@ public final class AttachmentFileNamePolicy {
         }
         StringBuilder sanitized = new StringBuilder();
         original.codePoints().forEach(codePoint -> {
-            if (Character.isISOControl(codePoint)
-                    || Character.getType(codePoint) == Character.FORMAT) {
+            if (Character.isISOControl(codePoint) || Character.getType(codePoint) == Character.FORMAT) {
                 return;
             }
             if (codePoint == '/' || codePoint == '\\' || codePoint == ':') {
@@ -56,8 +52,8 @@ public final class AttachmentFileNamePolicy {
         if (baseName.isBlank()) {
             throw typeRejected();
         }
-        AttachmentFileType type = AttachmentFileType.fromExtension(extension)
-                .orElseThrow(AttachmentFileNamePolicy::typeRejected);
+        AttachmentFileType type =
+                AttachmentFileType.fromExtension(extension).orElseThrow(AttachmentFileNamePolicy::typeRejected);
         for (int index = 1; index < segments.length - 1; index++) {
             if (DANGEROUS_EXTENSIONS.contains(segments[index])) {
                 throw typeRejected();

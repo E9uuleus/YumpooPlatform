@@ -1,17 +1,16 @@
 package com.yumpoo.platform.foundation.application.concurrency;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.stream.Stream;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ConditionalUpdateGuardTest {
 
@@ -30,12 +29,11 @@ class ConditionalUpdateGuardTest {
     @ParameterizedTest
     @MethodSource("failureMappings")
     void mapsZeroUpdatedRowsToAStableApplicationError(
-            ConditionalUpdateFailure failure,
-            StandardErrorCode expectedErrorCode
-    ) {
+            ConditionalUpdateFailure failure, StandardErrorCode expectedErrorCode) {
         assertThatThrownBy(() -> ConditionalUpdateGuard.requireSingleRowUpdated(0, () -> failure))
-                .isInstanceOfSatisfying(ApplicationException.class, exception ->
-                        assertThat(exception.errorCode()).isEqualTo(expectedErrorCode));
+                .isInstanceOfSatisfying(
+                        ApplicationException.class,
+                        exception -> assertThat(exception.errorCode()).isEqualTo(expectedErrorCode));
     }
 
     @ParameterizedTest
@@ -44,9 +42,9 @@ class ConditionalUpdateGuardTest {
         AtomicBoolean invoked = new AtomicBoolean();
 
         assertThatThrownBy(() -> ConditionalUpdateGuard.requireSingleRowUpdated(updatedRows, () -> {
-            invoked.set(true);
-            return ConditionalUpdateFailure.INVALID_STATE;
-        }))
+                    invoked.set(true);
+                    return ConditionalUpdateFailure.INVALID_STATE;
+                }))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("must affect zero or one row");
         assertThat(invoked).isFalse();
@@ -61,19 +59,9 @@ class ConditionalUpdateGuardTest {
 
     private static Stream<Arguments> failureMappings() {
         return Stream.of(
-                Arguments.of(
-                        ConditionalUpdateFailure.RESOURCE_NOT_VISIBLE,
-                        StandardErrorCode.RESOURCE_NOT_FOUND
-                ),
-                Arguments.of(
-                        ConditionalUpdateFailure.VERSION_CONFLICT,
-                        StandardErrorCode.VERSION_CONFLICT
-                ),
-                Arguments.of(
-                        ConditionalUpdateFailure.INVALID_STATE,
-                        StandardErrorCode.INVALID_STATE_TRANSITION
-                )
-        );
+                Arguments.of(ConditionalUpdateFailure.RESOURCE_NOT_VISIBLE, StandardErrorCode.RESOURCE_NOT_FOUND),
+                Arguments.of(ConditionalUpdateFailure.VERSION_CONFLICT, StandardErrorCode.VERSION_CONFLICT),
+                Arguments.of(ConditionalUpdateFailure.INVALID_STATE, StandardErrorCode.INVALID_STATE_TRANSITION));
     }
 
     private static Stream<Integer> illegalRowCounts() {

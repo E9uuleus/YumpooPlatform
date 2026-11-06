@@ -13,10 +13,7 @@ import org.springframework.core.env.Environment;
 class DeploymentConfiguration {
 
     @Bean
-    DeploymentPaths deploymentPaths(
-            DeploymentProperties properties,
-            Environment environment
-    ) {
+    DeploymentPaths deploymentPaths(DeploymentProperties properties, Environment environment) {
         return new DeploymentPreflight(properties, environment).validate();
     }
 

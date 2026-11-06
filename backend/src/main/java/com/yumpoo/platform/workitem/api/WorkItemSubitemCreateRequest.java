@@ -1,15 +1,13 @@
 package com.yumpoo.platform.workitem.api;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import tools.jackson.databind.JsonNode;
-
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-
 import java.time.LocalDate;
-import java.util.UUID;
 import java.util.List;
+import java.util.UUID;
+import tools.jackson.databind.JsonNode;
 
 public record WorkItemSubitemCreateRequest(
         @NotNull UUID contentId,
@@ -22,5 +20,4 @@ public record WorkItemSubitemCreateRequest(
         LocalDate timelineEndDate,
         LocalDate dueDate,
         @JsonInclude(JsonInclude.Include.NON_NULL) JsonNode dueTime,
-        @JsonInclude(JsonInclude.Include.NON_NULL) List<UUID> assigneeUserIds
-) {}
+        @JsonInclude(JsonInclude.Include.NON_NULL) List<UUID> assigneeUserIds) {}

@@ -1,10 +1,9 @@
 package com.yumpoo.platform.identityaccess.api;
 
-import org.springframework.security.authentication.AbstractAuthenticationToken;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-
 import java.util.ArrayList;
 import java.util.List;
+import org.springframework.security.authentication.AbstractAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
 final class SessionAuthenticationToken extends AbstractAuthenticationToken {
 

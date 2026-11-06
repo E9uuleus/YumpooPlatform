@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useMinuteClock } from '../../composables/useMinuteClock'
 import YpSkeleton from '../yp/YpSkeleton.vue'
 import { usePageLoad } from '../../brand/page-progress'
 
@@ -22,10 +23,10 @@ const props = defineProps<{ actorAccesses?: ProjectActorAccess[] }>()
 const router = useRouter(), session = useSession()
 const result = ref<ProjectPage>(), error = ref<ApiProblem>(), query = ref(''), page = ref(0)
 const loading = ref(false), busyProjectId = ref(''), size = 20
-const now = ref(Date.now())
+const minute = useMinuteClock()
+const now = computed(() => minute.value.getTime())
 const timezone = computed(() => session.authentication.value?.company.timezone ?? 'UTC')
 let searchTimer: ReturnType<typeof setTimeout> | undefined, request = 0
-let countdownTimer: ReturnType<typeof setInterval> | undefined
 
 async function load(): Promise<void> {
   const sequence = ++request
@@ -83,12 +84,10 @@ async function restore(project: ProjectSummary): Promise<void> {
 }
 onMounted(() => {
   void pageLoad.track(() => load())
-  countdownTimer = setInterval(() => { now.value = Date.now() }, 60_000)
 })
 onBeforeUnmount(() => {
   request++
   if (searchTimer) clearTimeout(searchTimer)
-  if (countdownTimer) clearInterval(countdownTimer)
 })
 </script>
 

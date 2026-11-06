@@ -1,13 +1,12 @@
 package com.yumpoo.platform.identityaccess.application.directory;
 
 import com.yumpoo.platform.foundation.application.event.EventActor;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.Duration;
 import java.util.Objects;
 import java.util.UUID;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class DirectorySyncItemApplyService {
@@ -16,24 +15,14 @@ public class DirectorySyncItemApplyService {
     private final DirectorySyncRepository repository;
 
     public DirectorySyncItemApplyService(
-            DirectoryMemberProvisioningService provisioningService,
-            DirectorySyncRepository repository
-    ) {
-        this.provisioningService = Objects.requireNonNull(
-                provisioningService,
-                "provisioningService must not be null"
-        );
+            DirectoryMemberProvisioningService provisioningService, DirectorySyncRepository repository) {
+        this.provisioningService = Objects.requireNonNull(provisioningService, "provisioningService must not be null");
         this.repository = Objects.requireNonNull(repository, "repository must not be null");
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void apply(
-            UUID runId,
-            UUID leaseToken,
-            WeComMemberProfile profile,
-            EventActor actor,
-            Duration leaseDuration
-    ) {
+            UUID runId, UUID leaseToken, WeComMemberProfile profile, EventActor actor, Duration leaseDuration) {
         DirectoryMemberProvisioningResult result = provisioningService.provisionOrRefresh(profile, actor);
         repository.markApplied(runId, leaseToken, profile, result, actor, leaseDuration);
     }

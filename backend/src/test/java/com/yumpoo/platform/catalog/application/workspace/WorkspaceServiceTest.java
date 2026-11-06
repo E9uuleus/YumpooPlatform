@@ -1,5 +1,14 @@
 package com.yumpoo.platform.catalog.application.workspace;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 import com.yumpoo.platform.catalog.application.project.ProjectRepository;
 import com.yumpoo.platform.catalog.domain.workspace.Workspace;
 import com.yumpoo.platform.catalog.domain.workspace.WorkspaceStatus;
@@ -9,11 +18,6 @@ import com.yumpoo.platform.foundation.application.event.EventDraft;
 import com.yumpoo.platform.foundation.application.event.TransactionalEventPort;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.PlatformRoleCode;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import tools.jackson.databind.ObjectMapper;
-
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -21,15 +25,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import tools.jackson.databind.ObjectMapper;
 
 class WorkspaceServiceTest {
 
@@ -49,8 +48,8 @@ class WorkspaceServiceTest {
         projects = mock(ProjectRepository.class);
         events = mock(TransactionalEventPort.class);
         when(projects.countVisibleCurrentByWorkspace(any(), any())).thenReturn(Map.of());
-        service = new WorkspaceService(repository, projects, events, new ObjectMapper(),
-                Clock.fixed(NOW, ZoneOffset.UTC));
+        service = new WorkspaceService(
+                repository, projects, events, new ObjectMapper(), Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -74,8 +73,8 @@ class WorkspaceServiceTest {
         when(repository.findById(COMPANY_ID, WORKSPACE_ID)).thenReturn(Optional.of(before));
         when(repository.updateDetails(any(), eq(0L))).thenReturn(Optional.of(after));
 
-        WorkspaceView result = service.update(new WorkspaceUpdateCommand(
-                admin(), WORKSPACE_ID, 0, " 研发主空间 ", "统一项目归属"));
+        WorkspaceView result =
+                service.update(new WorkspaceUpdateCommand(admin(), WORKSPACE_ID, 0, " 研发主空间 ", "统一项目归属"));
 
         assertThat(result.code()).isEqualTo("MAIN");
         assertThat(result.sortOrder()).isZero();
@@ -92,8 +91,7 @@ class WorkspaceServiceTest {
         Workspace before = mainWorkspace();
         when(repository.findById(COMPANY_ID, WORKSPACE_ID)).thenReturn(Optional.of(before));
 
-        WorkspaceView result = service.update(new WorkspaceUpdateCommand(
-                admin(), WORKSPACE_ID, 0, " 主工作空间 ", " "));
+        WorkspaceView result = service.update(new WorkspaceUpdateCommand(admin(), WORKSPACE_ID, 0, " 主工作空间 ", " "));
 
         assertThat(result.rowVersion()).isZero();
         verify(repository, never()).updateDetails(any(), any(Long.class));
@@ -102,15 +100,26 @@ class WorkspaceServiceTest {
 
     @Test
     void memberCannotPatchMainWorkspace() {
-        assertThatThrownBy(() -> service.update(new WorkspaceUpdateCommand(
-                member(), WORKSPACE_ID, 0, "无权限", null)))
-                .isInstanceOfSatisfying(ApplicationException.class,
+        assertThatThrownBy(() -> service.update(new WorkspaceUpdateCommand(member(), WORKSPACE_ID, 0, "无权限", null)))
+                .isInstanceOfSatisfying(
+                        ApplicationException.class,
                         error -> assertThat(error.errorCode()).isEqualTo(StandardErrorCode.ACCESS_DENIED));
     }
 
     private static Workspace mainWorkspace() {
-        return new Workspace(WORKSPACE_ID, COMPANY_ID, "MAIN", "主工作空间", null, 0,
-                WorkspaceStatus.ACTIVE, 0, NOW.minusSeconds(60), null, NOW.minusSeconds(60), null);
+        return new Workspace(
+                WORKSPACE_ID,
+                COMPANY_ID,
+                "MAIN",
+                "主工作空间",
+                null,
+                0,
+                WorkspaceStatus.ACTIVE,
+                0,
+                NOW.minusSeconds(60),
+                null,
+                NOW.minusSeconds(60),
+                null);
     }
 
     private static CurrentActor admin() {

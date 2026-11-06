@@ -12,15 +12,8 @@ public final class WeComOAuthAuthorization {
     private final Instant expiresAt;
 
     public WeComOAuthAuthorization(
-            URI authorizationUri,
-            OAuthAttemptToken state,
-            OAuthAttemptToken nonce,
-            Instant expiresAt
-    ) {
-        this.authorizationUri = Objects.requireNonNull(
-                authorizationUri,
-                "authorizationUri must not be null"
-        );
+            URI authorizationUri, OAuthAttemptToken state, OAuthAttemptToken nonce, Instant expiresAt) {
+        this.authorizationUri = Objects.requireNonNull(authorizationUri, "authorizationUri must not be null");
         this.state = Objects.requireNonNull(state, "state must not be null");
         this.nonce = Objects.requireNonNull(nonce, "nonce must not be null");
         this.expiresAt = Objects.requireNonNull(expiresAt, "expiresAt must not be null");

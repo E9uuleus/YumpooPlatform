@@ -18,8 +18,7 @@ public record DirectorySyncRunSnapshot(
         String requestId,
         long rowVersion,
         Instant startedAt,
-        Instant finishedAt
-) {
+        Instant finishedAt) {
     public DirectorySyncRunSnapshot {
         Objects.requireNonNull(runId, "runId must not be null");
         Objects.requireNonNull(companyId, "companyId must not be null");
@@ -31,28 +30,25 @@ public record DirectorySyncRunSnapshot(
         if (pageCount < 0 || rowVersion < 0) {
             throw new IllegalArgumentException("pageCount and rowVersion must not be negative");
         }
-        if (requestId == null
-                || !requestId.matches("^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")) {
+        if (requestId == null || !requestId.matches("^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")) {
             throw new IllegalArgumentException("requestId is invalid");
         }
         if (scanComplete != (cursorTerminationMode != null)) {
             throw new IllegalArgumentException("confirmed scans require a termination mode");
         }
         boolean running = status == DirectorySyncRunStatus.RUNNING;
-        if (running != (finishedAt == null)
-                || running == (phase == DirectorySyncRunPhase.COMPLETED)) {
+        if (running != (finishedAt == null) || running == (phase == DirectorySyncRunPhase.COMPLETED)) {
             throw new IllegalArgumentException("directory sync lifecycle is inconsistent");
         }
-        if (status == DirectorySyncRunStatus.SUCCEEDED
-                && (!scanComplete || errorCode != null)) {
+        if (status == DirectorySyncRunStatus.SUCCEEDED && (!scanComplete || errorCode != null)) {
             throw new IllegalArgumentException("successful sync snapshot is inconsistent");
         }
         if (status == DirectorySyncRunStatus.PARTIALLY_SUCCEEDED
                 && (!scanComplete
-                || counts.failed() == 0
-                || counts.notApplied() != 0
-                || errorCode == null
-                || !errorCode.matches("^[A-Z][A-Z0-9_]{0,79}$"))) {
+                        || counts.failed() == 0
+                        || counts.notApplied() != 0
+                        || errorCode == null
+                        || !errorCode.matches("^[A-Z][A-Z0-9_]{0,79}$"))) {
             throw new IllegalArgumentException("partial sync snapshot is inconsistent");
         }
         if (status == DirectorySyncRunStatus.FAILED

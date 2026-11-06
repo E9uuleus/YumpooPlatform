@@ -7,31 +7,30 @@ import com.yumpoo.platform.foundation.api.web.ApiV1Controller;
 import com.yumpoo.platform.foundation.application.idempotency.StoredCommandResult;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.CurrentActorProvider;
-import com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateCommands.Publish;
-import com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateCommands.Edit;
 import com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateCommands.Delete;
+import com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateCommands.Edit;
+import com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateCommands.Publish;
 import com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateModels.WorkItemUpdatePage;
 import com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateModels.WorkItemUpdateView;
 import com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateService;
 import jakarta.validation.Valid;
+import java.net.URI;
+import java.util.Map;
+import java.util.UUID;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import tools.jackson.databind.ObjectMapper;
-
-import java.net.URI;
-import java.util.Map;
-import java.util.UUID;
 
 @ApiV1Controller
 public final class WorkItemUpdateController {
@@ -42,8 +41,12 @@ public final class WorkItemUpdateController {
     private final IfMatchParser ifMatch;
     private final ObjectMapper objectMapper;
 
-    public WorkItemUpdateController(CurrentActorProvider actors, WorkItemUpdateService service,
-            IdempotencyKeyParser keys, IdempotencyRequestHasher hasher, IfMatchParser ifMatch,
+    public WorkItemUpdateController(
+            CurrentActorProvider actors,
+            WorkItemUpdateService service,
+            IdempotencyKeyParser keys,
+            IdempotencyRequestHasher hasher,
+            IfMatchParser ifMatch,
             ObjectMapper objectMapper) {
         this.actors = actors;
         this.service = service;
@@ -56,28 +59,40 @@ public final class WorkItemUpdateController {
     @GetMapping("/work-item-updates/{updateId}")
     ResponseEntity<WorkItemUpdateView> find(@PathVariable UUID updateId) {
         WorkItemUpdateView view = service.find(actors.requiredActive(), updateId);
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .eTag(Long.toString(view.rowVersion())).body(view);
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .eTag(Long.toString(view.rowVersion()))
+                .body(view);
     }
 
     @GetMapping("/work-items/{workItemId}/updates")
-    ResponseEntity<WorkItemUpdatePage> list(@PathVariable UUID workItemId,
+    ResponseEntity<WorkItemUpdatePage> list(
+            @PathVariable UUID workItemId,
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false) Integer size) {
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
                 .body(service.list(actors.requiredActive(), workItemId, cursor, size));
     }
 
     @PostMapping("/work-items/{workItemId}/updates")
-    ResponseEntity<String> publish(@PathVariable UUID workItemId,
+    ResponseEntity<String> publish(
+            @PathVariable UUID workItemId,
             @Valid @RequestBody WorkItemUpdateCreateRequest body,
-            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false)
-            String idempotencyHeader) {
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String idempotencyHeader) {
         CurrentActor actor = actors.requiredActive();
         UUID key = keys.parseRequired(idempotencyHeader);
-        StoredCommandResult stored = service.publish(new Publish(actor, workItemId, body.bodyHtml(), body.parentUpdateId(), key,
-                hasher.hash("publishWorkItemUpdate", Map.of("workItemId", workItemId.toString()),
-                        objectMapper.valueToTree(body)))).result();
+        StoredCommandResult stored = service.publish(new Publish(
+                        actor,
+                        workItemId,
+                        body.bodyHtml(),
+                        body.parentUpdateId(),
+                        key,
+                        hasher.hash(
+                                "publishWorkItemUpdate",
+                                Map.of("workItemId", workItemId.toString()),
+                                objectMapper.valueToTree(body))))
+                .result();
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setCacheControl(CacheControl.noStore());
@@ -87,50 +102,61 @@ public final class WorkItemUpdateController {
     }
 
     @PatchMapping("/work-item-updates/{updateId}")
-    ResponseEntity<WorkItemUpdateView> edit(@PathVariable UUID updateId,
+    ResponseEntity<WorkItemUpdateView> edit(
+            @PathVariable UUID updateId,
             @Valid @RequestBody WorkItemUpdateEditRequest body,
-            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false)
-            String ifMatchHeader) {
+            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader) {
         CurrentActor actor = actors.requiredActive();
         service.find(actor, updateId);
         long expectedVersion = ifMatch.parseForVisibleResource(true, ifMatchHeader);
         WorkItemUpdateView view = service.edit(new Edit(actor, updateId, expectedVersion, body.bodyHtml()));
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .eTag(Long.toString(view.rowVersion())).body(view);
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .eTag(Long.toString(view.rowVersion()))
+                .body(view);
     }
 
     @GetMapping("/work-item-updates/{updateId}/replies")
-    ResponseEntity<WorkItemUpdatePage> replies(@PathVariable UUID updateId,
-            @RequestParam(required = false) String cursor, @RequestParam(required = false) Integer size) {
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+    ResponseEntity<WorkItemUpdatePage> replies(
+            @PathVariable UUID updateId,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(required = false) Integer size) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
                 .body(service.replies(actors.requiredActive(), updateId, cursor, size));
     }
 
     @PatchMapping("/work-item-updates/{updateId}/pin")
-    ResponseEntity<WorkItemUpdateView> pin(@PathVariable UUID updateId,
+    ResponseEntity<WorkItemUpdateView> pin(
+            @PathVariable UUID updateId,
             @Valid @RequestBody WorkItemUpdatePinRequest body,
             @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader) {
         CurrentActor actor = actors.requiredActive();
         service.find(actor, updateId);
         long expectedVersion = ifMatch.parseForVisibleResource(true, ifMatchHeader);
-        WorkItemUpdateView view = service.pin(new com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateCommands.Pin(
-                actor, updateId, expectedVersion, body.pinned()));
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).eTag(Long.toString(view.rowVersion())).body(view);
+        WorkItemUpdateView view =
+                service.pin(new com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateCommands.Pin(
+                        actor, updateId, expectedVersion, body.pinned()));
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .eTag(Long.toString(view.rowVersion()))
+                .body(view);
     }
 
     @DeleteMapping("/work-item-updates/{updateId}")
-    ResponseEntity<WorkItemUpdateView> delete(@PathVariable UUID updateId,
+    ResponseEntity<WorkItemUpdateView> delete(
+            @PathVariable UUID updateId,
             @Valid @RequestBody WorkItemUpdateDeleteRequest body,
-            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false)
-            String ifMatchHeader) {
+            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader) {
         CurrentActor actor = actors.requiredActive();
         try {
             service.find(actor, updateId);
             long expectedVersion = ifMatch.parseForVisibleResource(true, ifMatchHeader);
-            WorkItemUpdateView view = service.delete(new Delete(actor, updateId,
-                    expectedVersion));
-            return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                    .eTag(Long.toString(view.rowVersion())).body(view);
+            WorkItemUpdateView view = service.delete(new Delete(actor, updateId, expectedVersion));
+            return ResponseEntity.ok()
+                    .cacheControl(CacheControl.noStore())
+                    .eTag(Long.toString(view.rowVersion()))
+                    .body(view);
         } catch (RuntimeException failure) {
             service.recordDeleteFailure(actor, updateId, failure);
             throw failure;

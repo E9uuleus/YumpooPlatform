@@ -20,21 +20,35 @@ public final class WorkHoursAlertController {
     private final CurrentActorProvider actors;
     private final WorkHoursAlertService service;
     private final IfMatchParser ifMatchParser;
-    public WorkHoursAlertController(CurrentActorProvider actors, WorkHoursAlertService service, IfMatchParser ifMatchParser) {
-        this.actors = actors; this.service = service; this.ifMatchParser = ifMatchParser;
+
+    public WorkHoursAlertController(
+            CurrentActorProvider actors, WorkHoursAlertService service, IfMatchParser ifMatchParser) {
+        this.actors = actors;
+        this.service = service;
+        this.ifMatchParser = ifMatchParser;
     }
 
     @GetMapping("/admin/work-hours-alert")
-    ResponseEntity<WorkHoursAlertService.View> get() { return respond(service.get(actors.requiredActive())); }
+    ResponseEntity<WorkHoursAlertService.View> get() {
+        return respond(service.get(actors.requiredActive()));
+    }
 
     @PutMapping("/admin/work-hours-alert")
-    ResponseEntity<WorkHoursAlertService.View> update(@Valid @RequestBody UpdateRequest request,
+    ResponseEntity<WorkHoursAlertService.View> update(
+            @Valid @RequestBody UpdateRequest request,
             @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatch) {
-        return respond(service.update(actors.requiredActive(), request.dailyThresholdMinutes(), ifMatchParser.parseForVisibleResource(true, ifMatch)));
+        return respond(service.update(
+                actors.requiredActive(),
+                request.dailyThresholdMinutes(),
+                ifMatchParser.parseForVisibleResource(true, ifMatch)));
     }
 
     private static ResponseEntity<WorkHoursAlertService.View> respond(WorkHoursAlertService.View view) {
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).eTag(view.etag()).body(view);
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .eTag(view.etag())
+                .body(view);
     }
+
     record UpdateRequest(@NotNull @Min(60) @Max(1440) Integer dailyThresholdMinutes) {}
 }

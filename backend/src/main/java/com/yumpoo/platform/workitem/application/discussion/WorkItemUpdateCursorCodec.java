@@ -1,22 +1,20 @@
 package com.yumpoo.platform.workitem.application.discussion;
 
+import static com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateModels.UpdateCursor;
+
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.FieldViolation;
-
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.UUID;
-
-import static com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateModels.UpdateCursor;
 
 final class WorkItemUpdateCursorCodec {
     private static final int MAX_CURSOR_LENGTH = 256;
 
     String encode(UpdateCursor cursor) {
         String value = "v1\n" + cursor.createdAt() + "\n" + cursor.id();
-        return Base64.getUrlEncoder().withoutPadding()
-                .encodeToString(value.getBytes(StandardCharsets.UTF_8));
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(value.getBytes(StandardCharsets.UTF_8));
     }
 
     UpdateCursor decode(String value) {
@@ -28,8 +26,7 @@ final class WorkItemUpdateCursorCodec {
             if (parts.length != 3 || !"v1".equals(parts[0])) throw new IllegalArgumentException();
             return new UpdateCursor(Instant.parse(parts[1]), UUID.fromString(parts[2]));
         } catch (RuntimeException exception) {
-            throw ApplicationException.validation(new FieldViolation(
-                    "cursor", "INVALID_CURSOR", "讨论游标无效"));
+            throw ApplicationException.validation(new FieldViolation("cursor", "INVALID_CURSOR", "讨论游标无效"));
         }
     }
 }

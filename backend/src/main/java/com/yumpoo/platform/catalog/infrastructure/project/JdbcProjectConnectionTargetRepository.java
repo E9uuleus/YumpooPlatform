@@ -2,14 +2,13 @@ package com.yumpoo.platform.catalog.infrastructure.project;
 
 import com.yumpoo.platform.catalog.application.project.ProjectConnectionTargetRepository;
 import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Repository;
-
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Repository;
 
 @Repository
 public class JdbcProjectConnectionTargetRepository implements ProjectConnectionTargetRepository {
@@ -19,19 +18,28 @@ public class JdbcProjectConnectionTargetRepository implements ProjectConnectionT
             """;
     private final JdbcClient jdbc;
 
-    public JdbcProjectConnectionTargetRepository(JdbcClient jdbc) { this.jdbc = jdbc; }
+    public JdbcProjectConnectionTargetRepository(JdbcClient jdbc) {
+        this.jdbc = jdbc;
+    }
 
     @Override
     public List<Target> searchActive(UUID companyId, String query, OffsetPageRequest page) {
-        return search("SELECT id, project_code, name, lifecycle, purge_started_at, ended_at " + ACTIVE
-                        + " ORDER BY name, project_code, id LIMIT :size OFFSET :offset", companyId, query)
-                .param("size", page.size()).param("offset", (long) page.page() * page.size())
-                .query(JdbcProjectConnectionTargetRepository::map).list();
+        return search(
+                        "SELECT id, project_code, name, lifecycle, purge_started_at, ended_at " + ACTIVE
+                                + " ORDER BY name, project_code, id LIMIT :size OFFSET :offset",
+                        companyId,
+                        query)
+                .param("size", page.size())
+                .param("offset", (long) page.page() * page.size())
+                .query(JdbcProjectConnectionTargetRepository::map)
+                .list();
     }
 
     @Override
     public long countActive(UUID companyId, String query) {
-        return search("SELECT count(*) " + ACTIVE, companyId, query).query(Long.class).single();
+        return search("SELECT count(*) " + ACTIVE, companyId, query)
+                .query(Long.class)
+                .single();
     }
 
     @Override
@@ -40,17 +48,28 @@ public class JdbcProjectConnectionTargetRepository implements ProjectConnectionT
         return jdbc.sql("""
                 SELECT id, project_code, name, lifecycle, purge_started_at, ended_at FROM yumpoo.project
                 WHERE company_id=:companyId AND id IN (:ids)
-                """).param("companyId", companyId).param("ids", ids)
-                .query(JdbcProjectConnectionTargetRepository::map).list();
+                """)
+                .param("companyId", companyId)
+                .param("ids", ids)
+                .query(JdbcProjectConnectionTargetRepository::map)
+                .list();
     }
 
     private JdbcClient.StatementSpec search(String sql, UUID companyId, String query) {
-        return jdbc.sql(sql).param("companyId", companyId).param("query",
-                "%" + query.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%");
+        return jdbc.sql(sql)
+                .param("companyId", companyId)
+                .param(
+                        "query",
+                        "%" + query.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%");
     }
 
     private static Target map(ResultSet row, int number) throws SQLException {
-        return new Target(row.getObject("id", UUID.class), row.getString("project_code"),
-                row.getString("name"), row.getString("lifecycle"),row.getTimestamp("purge_started_at")!=null,row.getTimestamp("ended_at")!=null);
+        return new Target(
+                row.getObject("id", UUID.class),
+                row.getString("project_code"),
+                row.getString("name"),
+                row.getString("lifecycle"),
+                row.getTimestamp("purge_started_at") != null,
+                row.getTimestamp("ended_at") != null);
     }
 }

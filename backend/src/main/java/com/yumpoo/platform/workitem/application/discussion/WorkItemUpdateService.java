@@ -1,7 +1,20 @@
 package com.yumpoo.platform.workitem.application.discussion;
 
-import com.yumpoo.platform.workitem.application.WorkItemRepository;
-import com.yumpoo.platform.workitem.application.content.ContentRepository;
+import static com.yumpoo.platform.workitem.application.WorkItemModels.WorkItemLocator;
+import static com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateCommands.Delete;
+import static com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateCommands.Edit;
+import static com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateCommands.Pin;
+import static com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateCommands.Publish;
+import static com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateModels.UpdateCursor;
+import static com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateModels.UpdateLocator;
+import static com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateModels.WorkItemUpdateCapabilities;
+import static com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateModels.WorkItemUpdatePage;
+import static com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateModels.WorkItemUpdateView;
+
+import com.yumpoo.platform.audit.api.SecurityAuditActor;
+import com.yumpoo.platform.audit.api.SecurityAuditAppendPort;
+import com.yumpoo.platform.audit.api.SecurityAuditDraft;
+import com.yumpoo.platform.audit.api.SecurityAuditOutcome;
 import com.yumpoo.platform.catalog.api.ProjectAccessSnapshot;
 import com.yumpoo.platform.catalog.api.ProjectAccessSnapshotQuery;
 import com.yumpoo.platform.catalog.api.ProjectActiveMembershipQuery;
@@ -9,10 +22,6 @@ import com.yumpoo.platform.catalog.api.ProjectFactWriteGuard;
 import com.yumpoo.platform.catalog.api.ProjectFactWriteSnapshot;
 import com.yumpoo.platform.catalog.api.ProjectModerationGuard;
 import com.yumpoo.platform.catalog.api.ProjectModerationSnapshot;
-import com.yumpoo.platform.audit.api.SecurityAuditActor;
-import com.yumpoo.platform.audit.api.SecurityAuditAppendPort;
-import com.yumpoo.platform.audit.api.SecurityAuditDraft;
-import com.yumpoo.platform.audit.api.SecurityAuditOutcome;
 import com.yumpoo.platform.foundation.application.collaboration.CollaborationHtmlSanitizer;
 import com.yumpoo.platform.foundation.application.collaboration.CollaborationHtmlSanitizer.ParsedHtml;
 import com.yumpoo.platform.foundation.application.collaboration.CollaborationHtmlSanitizer.SanitizedHtml;
@@ -32,16 +41,12 @@ import com.yumpoo.platform.foundation.application.request.RequestCorrelationCont
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.MinimalUserSnapshot;
 import com.yumpoo.platform.identityaccess.api.MinimalUserSnapshotQuery;
+import com.yumpoo.platform.workitem.application.WorkItemRepository;
+import com.yumpoo.platform.workitem.application.content.ContentRepository;
 import com.yumpoo.platform.workitem.domain.Content;
 import com.yumpoo.platform.workitem.domain.WorkItem;
 import com.yumpoo.platform.workitem.domain.WorkItemUpdate;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.ObjectMapper;
-
 import java.time.Clock;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -50,17 +55,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-
-import static com.yumpoo.platform.workitem.application.WorkItemModels.WorkItemLocator;
-import static com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateCommands.Publish;
-import static com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateCommands.Edit;
-import static com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateCommands.Delete;
-import static com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateCommands.Pin;
-import static com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateModels.UpdateCursor;
-import static com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateModels.UpdateLocator;
-import static com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateModels.WorkItemUpdateCapabilities;
-import static com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateModels.WorkItemUpdatePage;
-import static com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateModels.WorkItemUpdateView;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 @Service
 public class WorkItemUpdateService {
@@ -86,13 +84,21 @@ public class WorkItemUpdateService {
     private final Clock clock;
     private final WorkItemUpdateCursorCodec cursors = new WorkItemUpdateCursorCodec();
 
-    public WorkItemUpdateService(WorkItemRepository workItems, WorkItemUpdateRepository updates,
-            ContentRepository contents, ProjectAccessSnapshotQuery access,
-            ProjectFactWriteGuard writeGuard, ProjectModerationGuard moderationGuard,
+    public WorkItemUpdateService(
+            WorkItemRepository workItems,
+            WorkItemUpdateRepository updates,
+            ContentRepository contents,
+            ProjectAccessSnapshotQuery access,
+            ProjectFactWriteGuard writeGuard,
+            ProjectModerationGuard moderationGuard,
             ProjectActiveMembershipQuery memberships,
-            MinimalUserSnapshotQuery users, CollaborationHtmlSanitizer sanitizer,
-            IdempotentCommandExecutor idempotency, TransactionalEventPort events,
-            SecurityAuditAppendPort audits, ObjectMapper objectMapper, Clock clock) {
+            MinimalUserSnapshotQuery users,
+            CollaborationHtmlSanitizer sanitizer,
+            IdempotentCommandExecutor idempotency,
+            TransactionalEventPort events,
+            SecurityAuditAppendPort audits,
+            ObjectMapper objectMapper,
+            Clock clock) {
         this.workItems = workItems;
         this.updates = updates;
         this.contents = contents;
@@ -115,26 +121,32 @@ public class WorkItemUpdateService {
         ProjectAccessSnapshot project = visible(actor, locator.projectId());
         Content content = contents.find(project.companyId(), project.projectId(), locator.contentId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-        WorkItem item = workItems.find(project.companyId(), project.projectId(), locator.contentId(), workItemId)
+        WorkItem item = workItems
+                .find(project.companyId(), project.projectId(), locator.contentId(), workItemId)
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
         int pageSize = pageSize(size);
         UpdateCursor before = cursors.decode(cursor);
-        List<WorkItemUpdate> rows = updates.findOlderWindow(project.companyId(), workItemId,
-                before, pageSize + 1);
+        List<WorkItemUpdate> rows = updates.findOlderWindow(project.companyId(), workItemId, before, pageSize + 1);
         boolean hasMore = rows.size() > pageSize;
         if (hasMore) rows = new ArrayList<>(rows.subList(0, pageSize));
         rows.sort(Comparator.comparing(WorkItemUpdate::createdAt).thenComparing(WorkItemUpdate::id));
         String nextCursor = hasMore && !rows.isEmpty()
-                ? cursors.encode(new UpdateCursor(rows.getFirst().createdAt(), rows.getFirst().id()))
+                ? cursors.encode(new UpdateCursor(
+                        rows.getFirst().createdAt(), rows.getFirst().id()))
                 : null;
-        boolean writable = !item.archived() && project.contentWritable()
+        boolean writable = !item.archived()
+                && project.contentWritable()
                 && project.actorAccess() != ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY;
-        boolean owner = project.actorAccess() == ProjectAccessSnapshot.ActorProjectAccess.OWNER
-                && project.contentWritable();
-        return new WorkItemUpdatePage(rows.stream()
-                .map(row -> view(row, actor, writable, owner)).toList(), nextCursor,
-                before == null ? updates.findPinned(project.companyId(), workItemId).stream()
-                    .map(row -> view(row, actor, writable, owner)).toList() : List.of());
+        boolean owner =
+                project.actorAccess() == ProjectAccessSnapshot.ActorProjectAccess.OWNER && project.contentWritable();
+        return new WorkItemUpdatePage(
+                rows.stream().map(row -> view(row, actor, writable, owner)).toList(),
+                nextCursor,
+                before == null
+                        ? updates.findPinned(project.companyId(), workItemId).stream()
+                                .map(row -> view(row, actor, writable, owner))
+                                .toList()
+                        : List.of());
     }
 
     @Transactional(readOnly = true)
@@ -142,9 +154,13 @@ public class WorkItemUpdateService {
         ReadContext context = visibleUpdate(actor, updateId);
         WorkItemUpdate update = updates.find(context.project().companyId(), updateId)
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-        boolean writable = !context.item().archived() && context.project().contentWritable()
+        boolean writable = !context.item().archived()
+                && context.project().contentWritable()
                 && context.project().actorAccess() != ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY;
-        return view(update, actor, writable,
+        return view(
+                update,
+                actor,
+                writable,
                 context.project().actorAccess() == ProjectAccessSnapshot.ActorProjectAccess.OWNER
                         && context.project().contentWritable());
     }
@@ -156,8 +172,8 @@ public class WorkItemUpdateService {
         requireWritable(project.actorAccess());
         Content content = contents.lockForShare(project.companyId(), project.projectId(), locator.contentId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-        WorkItem item = workItems.lock(project.companyId(), project.projectId(), locator.contentId(),
-                        locator.workItemId())
+        WorkItem item = workItems
+                .lock(project.companyId(), project.projectId(), locator.contentId(), locator.workItemId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
         WorkItemUpdate before = lockedUpdate(project.companyId(), locator);
         requireVersion(before, command.expectedVersion());
@@ -170,12 +186,16 @@ public class WorkItemUpdateService {
         SanitizedHtml body = canonicalize(parsed, names);
         WorkItemUpdate after;
         try {
-            after = before.edit(body.bodyHtml(), body.bodyText(), command.actor().userId(), clock.instant());
+            after = before.edit(
+                    body.bodyHtml(), body.bodyText(), command.actor().userId(), clock.instant());
         } catch (IllegalStateException exception) {
             throw invalidState(exception.getMessage());
         }
         if (after == before) {
-            return view(before, command.actor(), true,
+            return view(
+                    before,
+                    command.actor(),
+                    true,
                     project.actorAccess() == ProjectFactWriteSnapshot.ActorProjectAccess.OWNER);
         }
         Map<UUID, String> previousMentions = updates.findMentionedDisplayNames(project.companyId(), before.id());
@@ -183,7 +203,10 @@ public class WorkItemUpdateService {
             throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
         }
         appendEdited(before, after, item, previousMentions.keySet(), names.keySet(), command.actor());
-        return view(after, command.actor(), true,
+        return view(
+                after,
+                command.actor(),
+                true,
                 project.actorAccess() == ProjectFactWriteSnapshot.ActorProjectAccess.OWNER);
     }
 
@@ -200,15 +223,20 @@ public class WorkItemUpdateService {
         }
         contents.lockForShare(project.companyId(), project.projectId(), locator.contentId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-        WorkItem item = workItems.lock(project.companyId(), project.projectId(), locator.contentId(), locator.workItemId())
+        WorkItem item = workItems
+                .lock(project.companyId(), project.projectId(), locator.contentId(), locator.workItemId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
         WorkItemUpdate before = lockedUpdate(project.companyId(), locator);
         requireVersion(before, command.expectedVersion());
         if (!owner && !before.authorUserId().equals(command.actor().userId())) {
             throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
         }
-        WorkItemUpdate after = deleteOne(before, item, command.actor(),
-                before.authorUserId().equals(command.actor().userId()) ? "SELF" : "ADMIN", owner);
+        WorkItemUpdate after = deleteOne(
+                before,
+                item,
+                command.actor(),
+                before.authorUserId().equals(command.actor().userId()) ? "SELF" : "ADMIN",
+                owner);
         if (before.parentUpdateId() == null) {
             List<WorkItemUpdate> children;
             do {
@@ -219,13 +247,18 @@ public class WorkItemUpdateService {
         return view(after, command.actor(), false, false);
     }
 
-    private WorkItemUpdate deleteOne(WorkItemUpdate before, WorkItem item, CurrentActor actor,
-            String mode, boolean owner) {
+    private WorkItemUpdate deleteOne(
+            WorkItemUpdate before, WorkItem item, CurrentActor actor, String mode, boolean owner) {
         WorkItemUpdate after;
-        try { after = before.delete(actor.userId(), clock.instant()); }
-        catch (IllegalStateException failure) { throw invalidState(failure.getMessage()); }
-        Set<UUID> mentions = updates.findMentionedDisplayNames(before.companyId(), before.id()).keySet();
-        if (!updates.delete(after, before.rowVersion())) throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
+        try {
+            after = before.delete(actor.userId(), clock.instant());
+        } catch (IllegalStateException failure) {
+            throw invalidState(failure.getMessage());
+        }
+        Set<UUID> mentions = updates.findMentionedDisplayNames(before.companyId(), before.id())
+                .keySet();
+        if (!updates.delete(after, before.rowVersion()))
+            throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
         appendDeleteAudit(before, after, actor, mode, mentions, owner);
         appendDeleted(before, after, item, mode, actor);
         return after;
@@ -233,12 +266,25 @@ public class WorkItemUpdateService {
 
     public void recordDeleteFailure(CurrentActor actor, UUID updateId, RuntimeException failure) {
         String code = failure instanceof ApplicationException application
-                ? application.errorCode().name() : StandardErrorCode.INTERNAL_ERROR.name();
-        audits.appendIndependent(new SecurityAuditDraft(actor.companyId(),
-                "work-item-update-delete-failed:" + RequestCorrelationContext.required().requestId(),
-                "WORK_ITEM_UPDATE_DELETE_FAILED", SecurityAuditOutcome.FAILED,
-                SecurityAuditActor.user(actor.userId(), roleNames(actor, false)), "WORK_ITEM_UPDATE",
-                updateId.toString(), null, null, null, code, null, null, null, clock.instant()));
+                ? application.errorCode().name()
+                : StandardErrorCode.INTERNAL_ERROR.name();
+        audits.appendIndependent(new SecurityAuditDraft(
+                actor.companyId(),
+                "work-item-update-delete-failed:"
+                        + RequestCorrelationContext.required().requestId(),
+                "WORK_ITEM_UPDATE_DELETE_FAILED",
+                SecurityAuditOutcome.FAILED,
+                SecurityAuditActor.user(actor.userId(), roleNames(actor, false)),
+                "WORK_ITEM_UPDATE",
+                updateId.toString(),
+                null,
+                null,
+                null,
+                code,
+                null,
+                null,
+                null,
+                clock.instant()));
     }
 
     @Transactional
@@ -248,23 +294,39 @@ public class WorkItemUpdateService {
         requireWritable(project.actorAccess());
         contents.lockForShare(project.companyId(), project.projectId(), locator.contentId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-        WorkItem item = workItems.lock(project.companyId(), project.projectId(), locator.contentId(), locator.workItemId())
+        WorkItem item = workItems
+                .lock(project.companyId(), project.projectId(), locator.contentId(), locator.workItemId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
         WorkItemUpdate before = lockedUpdate(project.companyId(), locator);
         requireVersion(before, command.expectedVersion());
         WorkItemUpdate after;
-        try { after = before.pin(command.pinned(), command.actor().userId(), clock.instant()); }
-        catch (IllegalStateException failure) { throw invalidState(failure.getMessage()); }
+        try {
+            after = before.pin(command.pinned(), command.actor().userId(), clock.instant());
+        } catch (IllegalStateException failure) {
+            throw invalidState(failure.getMessage());
+        }
         if (after != before) {
-            if (!updates.pin(after, command.expectedVersion())) throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
+            if (!updates.pin(after, command.expectedVersion()))
+                throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
             Map<String, Object> payload = updateReferences(after, item);
             payload.put("pinned", command.pinned());
             payload.put("pinnedByUserId", after.pinnedByUserId());
             payload.put("rowVersion", after.rowVersion());
-            events.append(new EventDraft("workitem.work_item_update_pin_changed", 1, "WorkItemUpdate", after.id(),
-                    after.rowVersion(), after.companyId(), EventActor.user(command.actor().userId()), objectMapper.valueToTree(payload)));
+            events.append(new EventDraft(
+                    "workitem.work_item_update_pin_changed",
+                    1,
+                    "WorkItemUpdate",
+                    after.id(),
+                    after.rowVersion(),
+                    after.companyId(),
+                    EventActor.user(command.actor().userId()),
+                    objectMapper.valueToTree(payload)));
         }
-        return view(after, command.actor(), true, project.actorAccess() == ProjectFactWriteSnapshot.ActorProjectAccess.OWNER);
+        return view(
+                after,
+                command.actor(),
+                true,
+                project.actorAccess() == ProjectFactWriteSnapshot.ActorProjectAccess.OWNER);
     }
 
     @Transactional(readOnly = true)
@@ -273,26 +335,39 @@ public class WorkItemUpdateService {
         WorkItemUpdate parent = updates.find(context.project().companyId(), updateId)
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
         requireReplyParent(parent, parent.workItemId());
-        boolean writable = !context.item().archived() && context.project().contentWritable()
+        boolean writable = !context.item().archived()
+                && context.project().contentWritable()
                 && context.project().actorAccess() != ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY;
-        return replyPage(parent, actor, writable,
+        return replyPage(
+                parent,
+                actor,
+                writable,
                 context.project().actorAccess() == ProjectAccessSnapshot.ActorProjectAccess.OWNER
-                        && context.project().contentWritable(), cursor, pageSize(size));
+                        && context.project().contentWritable(),
+                cursor,
+                pageSize(size));
     }
 
-    private WorkItemUpdatePage replyPage(WorkItemUpdate parent, CurrentActor actor, boolean writable,
-            boolean owner, String cursor, int size) {
-        List<WorkItemUpdate> rows = updates.findReplies(parent.companyId(), parent.id(), cursors.decode(cursor), size + 1);
+    private WorkItemUpdatePage replyPage(
+            WorkItemUpdate parent, CurrentActor actor, boolean writable, boolean owner, String cursor, int size) {
+        List<WorkItemUpdate> rows =
+                updates.findReplies(parent.companyId(), parent.id(), cursors.decode(cursor), size + 1);
         boolean more = rows.size() > size;
         if (more) rows = rows.subList(0, size);
-        String next = more ? cursors.encode(new UpdateCursor(rows.getLast().createdAt(), rows.getLast().id())) : null;
-        return new WorkItemUpdatePage(rows.stream().map(row -> view(row, actor, writable, owner)).toList(), next, List.of());
+        String next = more
+                ? cursors.encode(new UpdateCursor(
+                        rows.getLast().createdAt(), rows.getLast().id()))
+                : null;
+        return new WorkItemUpdatePage(
+                rows.stream().map(row -> view(row, actor, writable, owner)).toList(), next, List.of());
     }
 
     private void requireReplyParent(WorkItemUpdate parent, UUID workItemId) {
-        if (!parent.workItemId().equals(workItemId)) throw validation("parentUpdateId", "INVALID_PARENT", "父评论不属于当前工作项");
+        if (!parent.workItemId().equals(workItemId))
+            throw validation("parentUpdateId", "INVALID_PARENT", "父评论不属于当前工作项");
         if (parent.parentUpdateId() != null) throw validation("parentUpdateId", "REPLY_DEPTH_EXCEEDED", "只能回复主评论");
-        if (parent.status() == com.yumpoo.platform.workitem.domain.WorkItemUpdateStatus.DELETED) throw invalidState("UPDATE_ALREADY_DELETED");
+        if (parent.status() == com.yumpoo.platform.workitem.domain.WorkItemUpdateStatus.DELETED)
+            throw invalidState("UPDATE_ALREADY_DELETED");
     }
 
     public IdempotencyExecutionResult publish(Publish command) {
@@ -300,19 +375,21 @@ public class WorkItemUpdateService {
         ProjectAccessSnapshot visible = visible(command.actor(), locator.projectId());
         requireWritable(visible.actorAccess());
         ParsedHtml parsed = parse(command.bodyHtml());
-        return idempotency.execute(new IdempotencyCommand(new IdempotencyScope(
-                command.actor().userId(), "POST", "publishWorkItemUpdate", command.idempotencyKey()),
-                command.requestHash()), () -> publishLocked(command, locator, parsed));
+        return idempotency.execute(
+                new IdempotencyCommand(
+                        new IdempotencyScope(
+                                command.actor().userId(), "POST", "publishWorkItemUpdate", command.idempotencyKey()),
+                        command.requestHash()),
+                () -> publishLocked(command, locator, parsed));
     }
 
-    private StoredCommandResult publishLocked(Publish command, WorkItemLocator locator,
-            ParsedHtml parsed) {
+    private StoredCommandResult publishLocked(Publish command, WorkItemLocator locator, ParsedHtml parsed) {
         ProjectFactWriteSnapshot project = writeGuard.lockForFactWrite(command.actor(), locator.projectId());
         requireWritable(project.actorAccess());
         Content content = contents.lockForShare(project.companyId(), project.projectId(), locator.contentId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-        WorkItem workItem = workItems.lock(project.companyId(), project.projectId(),
-                        locator.contentId(), command.workItemId())
+        WorkItem workItem = workItems
+                .lock(project.companyId(), project.projectId(), locator.contentId(), command.workItemId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
 
         if (command.parentUpdateId() != null) {
@@ -321,27 +398,40 @@ public class WorkItemUpdateService {
             requireReplyParent(parent, command.workItemId());
         }
 
-        Set<UUID> activeIds = memberships.findActiveMemberIds(project.companyId(), project.projectId(),
-                parsed.mentionedUserIds());
+        Set<UUID> activeIds =
+                memberships.findActiveMemberIds(project.companyId(), project.projectId(), parsed.mentionedUserIds());
         if (activeIds.size() != parsed.mentionedUserIds().size()) {
-            throw validation("bodyHtml", "MENTION_NOT_ACTIVE_PROJECT_MEMBER",
-                    "提及目标必须是当前 Project 的 ACTIVE 成员");
+            throw validation("bodyHtml", "MENTION_NOT_ACTIVE_PROJECT_MEMBER", "提及目标必须是当前 Project 的 ACTIVE 成员");
         }
         Map<UUID, MinimalUserSnapshot> mentionedUsers = users.findByUserIds(project.companyId(), activeIds);
         if (mentionedUsers.size() != activeIds.size()) {
             throw validation("bodyHtml", "MENTION_IDENTITY_UNAVAILABLE", "提及目标身份不可用");
         }
         LinkedHashMap<UUID, String> names = new LinkedHashMap<>();
-        parsed.mentionedUserIds().forEach(id -> names.put(id, mentionedUsers.get(id).displayName()));
+        parsed.mentionedUserIds()
+                .forEach(id -> names.put(id, mentionedUsers.get(id).displayName()));
         SanitizedHtml body = canonicalize(parsed, names);
-        MinimalUserSnapshot author = users.findByUserId(project.companyId(), command.actor().userId())
+        MinimalUserSnapshot author = users.findByUserId(
+                        project.companyId(), command.actor().userId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.AUTHENTICATION_REQUIRED));
-        WorkItemUpdate update = WorkItemUpdate.published(UUID.randomUUID(), project.companyId(),
-                project.projectId(), content.id(), workItem.id(), command.actor().userId(),
-                author.displayName(), body.bodyHtml(), body.bodyText(), clock.instant(), command.parentUpdateId());
+        WorkItemUpdate update = WorkItemUpdate.published(
+                UUID.randomUUID(),
+                project.companyId(),
+                project.projectId(),
+                content.id(),
+                workItem.id(),
+                command.actor().userId(),
+                author.displayName(),
+                body.bodyHtml(),
+                body.bodyText(),
+                clock.instant(),
+                command.parentUpdateId());
         if (!updates.insert(update, names)) throw new IllegalStateException("work item update insert failed");
         appendPublished(update, workItem, body.mentionedUserIds(), command.actor());
-        return stored(view(update, command.actor(), true,
+        return stored(view(
+                update,
+                command.actor(),
+                true,
                 project.actorAccess() == ProjectFactWriteSnapshot.ActorProjectAccess.OWNER));
     }
 
@@ -350,8 +440,8 @@ public class WorkItemUpdateService {
         ProjectAccessSnapshot project = visible(actor, locator.projectId());
         Content content = contents.find(project.companyId(), project.projectId(), locator.contentId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-        WorkItem item = workItems.find(project.companyId(), project.projectId(), locator.contentId(),
-                        locator.workItemId())
+        WorkItem item = workItems
+                .find(project.companyId(), project.projectId(), locator.contentId(), locator.workItemId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
         return new ReadContext(locator, project, content, item);
     }
@@ -374,23 +464,27 @@ public class WorkItemUpdateService {
     }
 
     private Map<UUID, String> mentionedNames(UUID companyId, UUID projectId, ParsedHtml parsed) {
-        Set<UUID> activeIds = memberships.findActiveMemberIds(companyId, projectId,
-                parsed.mentionedUserIds());
+        Set<UUID> activeIds = memberships.findActiveMemberIds(companyId, projectId, parsed.mentionedUserIds());
         if (activeIds.size() != parsed.mentionedUserIds().size()) {
-            throw validation("bodyHtml", "MENTION_NOT_ACTIVE_PROJECT_MEMBER",
-                    "提及目标必须是当前 Project 的 ACTIVE 成员");
+            throw validation("bodyHtml", "MENTION_NOT_ACTIVE_PROJECT_MEMBER", "提及目标必须是当前 Project 的 ACTIVE 成员");
         }
         Map<UUID, MinimalUserSnapshot> mentionedUsers = users.findByUserIds(companyId, activeIds);
         if (mentionedUsers.size() != activeIds.size()) {
             throw validation("bodyHtml", "MENTION_IDENTITY_UNAVAILABLE", "提及目标身份不可用");
         }
         LinkedHashMap<UUID, String> names = new LinkedHashMap<>();
-        parsed.mentionedUserIds().forEach(id -> names.put(id, mentionedUsers.get(id).displayName()));
+        parsed.mentionedUserIds()
+                .forEach(id -> names.put(id, mentionedUsers.get(id).displayName()));
         return Map.copyOf(names);
     }
 
-    private void appendEdited(WorkItemUpdate before, WorkItemUpdate after, WorkItem item,
-            Set<UUID> previousMentions, Set<UUID> currentMentions, CurrentActor actor) {
+    private void appendEdited(
+            WorkItemUpdate before,
+            WorkItemUpdate after,
+            WorkItem item,
+            Set<UUID> previousMentions,
+            Set<UUID> currentMentions,
+            CurrentActor actor) {
         Set<UUID> added = new HashSet<>(currentMentions);
         added.removeAll(previousMentions);
         Set<UUID> removed = new HashSet<>(previousMentions);
@@ -407,12 +501,19 @@ public class WorkItemUpdateService {
         payload.put("mentionedUserIds", currentMentions.stream().sorted().toList());
         payload.put("addedMentionedUserIds", added.stream().sorted().toList());
         payload.put("removedMentionedUserIds", removed.stream().sorted().toList());
-        events.append(new EventDraft(EDITED, 2, "WorkItemUpdate", after.id(), after.rowVersion(),
-                after.companyId(), EventActor.user(actor.userId()), objectMapper.valueToTree(payload)));
+        events.append(new EventDraft(
+                EDITED,
+                2,
+                "WorkItemUpdate",
+                after.id(),
+                after.rowVersion(),
+                after.companyId(),
+                EventActor.user(actor.userId()),
+                objectMapper.valueToTree(payload)));
     }
 
-    private void appendDeleted(WorkItemUpdate before, WorkItemUpdate after, WorkItem item,
-            String mode, CurrentActor actor) {
+    private void appendDeleted(
+            WorkItemUpdate before, WorkItemUpdate after, WorkItem item, String mode, CurrentActor actor) {
         Map<String, Object> payload = updateReferences(after, item);
         payload.put("authorUserId", after.authorUserId());
         payload.put("deletedByUserId", actor.userId());
@@ -421,21 +522,40 @@ public class WorkItemUpdateService {
         payload.put("previousStatus", before.status().name());
         payload.put("previousRowVersion", before.rowVersion());
         payload.put("rowVersion", after.rowVersion());
-        events.append(new EventDraft(DELETED, 2, "WorkItemUpdate", after.id(), after.rowVersion(),
-                after.companyId(), EventActor.user(actor.userId()), objectMapper.valueToTree(payload)));
+        events.append(new EventDraft(
+                DELETED,
+                2,
+                "WorkItemUpdate",
+                after.id(),
+                after.rowVersion(),
+                after.companyId(),
+                EventActor.user(actor.userId()),
+                objectMapper.valueToTree(payload)));
     }
 
-    private void appendDeleteAudit(WorkItemUpdate before, WorkItemUpdate after, CurrentActor actor,
-            String mode, Set<UUID> mentions, boolean projectOwner) {
-        audits.append(new SecurityAuditDraft(after.companyId(),
+    private void appendDeleteAudit(
+            WorkItemUpdate before,
+            WorkItemUpdate after,
+            CurrentActor actor,
+            String mode,
+            Set<UUID> mentions,
+            boolean projectOwner) {
+        audits.append(new SecurityAuditDraft(
+                after.companyId(),
                 "work-item-update-deleted:" + after.id() + ":" + after.rowVersion(),
                 "WORK_ITEM_UPDATE_DELETED",
                 SecurityAuditOutcome.SUCCEEDED,
                 SecurityAuditActor.user(actor.userId(), roleNames(actor, projectOwner)),
-                "WORK_ITEM_UPDATE", after.id().toString(), mode,
+                "WORK_ITEM_UPDATE",
+                after.id().toString(),
+                mode,
                 objectMapper.valueToTree(safeSummary(before, mentions)),
-                objectMapper.valueToTree(safeSummary(after, mentions)), null, null,
-                null, null, after.deletedAt()));
+                objectMapper.valueToTree(safeSummary(after, mentions)),
+                null,
+                null,
+                null,
+                null,
+                after.deletedAt()));
     }
 
     private static Map<String, Object> safeSummary(WorkItemUpdate update, Set<UUID> mentions) {
@@ -444,7 +564,9 @@ public class WorkItemUpdateService {
         summary.put("workItemId", update.workItemId());
         summary.put("status", update.status().name());
         summary.put("rowVersion", update.rowVersion());
-        summary.put("bodyTextLength", update.bodyText() == null ? 0 : update.bodyText().length());
+        summary.put(
+                "bodyTextLength",
+                update.bodyText() == null ? 0 : update.bodyText().length());
         summary.put("mentionedUserIds", mentions.stream().sorted().toList());
         return summary;
     }
@@ -461,8 +583,7 @@ public class WorkItemUpdateService {
         return payload;
     }
 
-    private void appendPublished(WorkItemUpdate update, WorkItem item, List<UUID> mentions,
-            CurrentActor actor) {
+    private void appendPublished(WorkItemUpdate update, WorkItem item, List<UUID> mentions, CurrentActor actor) {
         List<UUID> sortedMentions = mentions.stream().sorted().toList();
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("updateId", update.id());
@@ -475,14 +596,21 @@ public class WorkItemUpdateService {
         payload.put("authorUserId", update.authorUserId());
         payload.put("mentionedUserIds", sortedMentions);
         payload.put("rowVersion", update.rowVersion());
-        events.append(new EventDraft(PUBLISHED, 2, "WorkItemUpdate", update.id(),
-                update.rowVersion(), update.companyId(), EventActor.user(actor.userId()),
+        events.append(new EventDraft(
+                PUBLISHED,
+                2,
+                "WorkItemUpdate",
+                update.id(),
+                update.rowVersion(),
+                update.companyId(),
+                EventActor.user(actor.userId()),
                 objectMapper.valueToTree(payload)));
     }
 
     private WorkItemLocator visibleLocator(CurrentActor actor, UUID workItemId) {
         if (actor == null) throw new ApplicationException(StandardErrorCode.AUTHENTICATION_REQUIRED);
-        return workItems.findLocator(actor.companyId(), workItemId)
+        return workItems
+                .findLocator(actor.companyId(), workItemId)
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
     }
 
@@ -509,32 +637,48 @@ public class WorkItemUpdateService {
 
     private StoredCommandResult stored(WorkItemUpdateView view) {
         try {
-            return new StoredCommandResult(201, objectMapper.writeValueAsString(view),
-                    view.id(), view.etag());
+            return new StoredCommandResult(201, objectMapper.writeValueAsString(view), view.id(), view.etag());
         } catch (JacksonException exception) {
             throw new IllegalStateException("work item update response serialization failed", exception);
         }
     }
 
-    private WorkItemUpdateView view(WorkItemUpdate update, CurrentActor actor,
-            boolean parentWritable, boolean projectOwner) {
+    private WorkItemUpdateView view(
+            WorkItemUpdate update, CurrentActor actor, boolean parentWritable, boolean projectOwner) {
         boolean active = update.status() != com.yumpoo.platform.workitem.domain.WorkItemUpdateStatus.DELETED;
         boolean author = update.authorUserId().equals(actor.userId());
         boolean root = update.parentUpdateId() == null;
         WorkItemUpdatePage children = active && root
                 ? replyPage(update, actor, parentWritable, projectOwner, null, DEFAULT_PAGE_SIZE)
                 : new WorkItemUpdatePage(List.of(), null, List.of());
-        return new WorkItemUpdateView(update.id(), update.projectId(), update.contentId(),
-                update.workItemId(), update.authorUserId(), update.authorDisplayName(),
-                update.bodyHtml(), update.bodyText(), update.status().name(),
-                update.rowVersion(), StrongEtag.format(update.rowVersion()), update.createdAt(),
-                update.editedAt(), update.editedByUserId(), update.deletedAt(), update.deletedByUserId(),
-                update.parentUpdateId(), update.pinnedAt(), update.pinnedByUserId(),
+        return new WorkItemUpdateView(
+                update.id(),
+                update.projectId(),
+                update.contentId(),
+                update.workItemId(),
+                update.authorUserId(),
+                update.authorDisplayName(),
+                update.bodyHtml(),
+                update.bodyText(),
+                update.status().name(),
+                update.rowVersion(),
+                StrongEtag.format(update.rowVersion()),
+                update.createdAt(),
+                update.editedAt(),
+                update.editedByUserId(),
+                update.deletedAt(),
+                update.deletedByUserId(),
+                update.parentUpdateId(),
+                update.pinnedAt(),
+                update.pinnedByUserId(),
                 active && root ? updates.countReplies(update.companyId(), update.id()) : 0,
-                children.items(), children.nextCursor(),
-                new WorkItemUpdateCapabilities(active && parentWritable && author,
+                children.items(),
+                children.nextCursor(),
+                new WorkItemUpdateCapabilities(
+                        active && parentWritable && author,
                         active && (projectOwner || (parentWritable && author)),
-                        active && parentWritable && root, active && parentWritable && root));
+                        active && parentWritable && root,
+                        active && parentWritable && root));
     }
 
     private static int pageSize(Integer value) {
@@ -564,7 +708,8 @@ public class WorkItemUpdateService {
     }
 
     private static ApplicationException invalidState(String reason) {
-        return ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION,
+        return ApplicationException.withReason(
+                StandardErrorCode.INVALID_STATE_TRANSITION,
                 reason == null || reason.isBlank() ? "WORK_ITEM_UPDATE_INVALID_STATE" : reason);
     }
 
@@ -579,6 +724,5 @@ public class WorkItemUpdateService {
         return ApplicationException.validation(new FieldViolation(field, code, message));
     }
 
-    private record ReadContext(UpdateLocator locator, ProjectAccessSnapshot project,
-            Content content, WorkItem item) {}
+    private record ReadContext(UpdateLocator locator, ProjectAccessSnapshot project, Content content, WorkItem item) {}
 }

@@ -3,12 +3,7 @@ package com.yumpoo.platform.identityaccess.application.session;
 import java.util.Objects;
 import java.util.UUID;
 
-public record SessionRevocationTarget(
-        UUID userId,
-        UUID companyId,
-        long authorizationVersion,
-        long aggregateVersion
-) {
+public record SessionRevocationTarget(UUID userId, UUID companyId, long authorizationVersion, long aggregateVersion) {
 
     public SessionRevocationTarget {
         Objects.requireNonNull(userId, "userId must not be null");

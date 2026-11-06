@@ -3,8 +3,8 @@ import { ElButton, ElDatePicker, ElPopover, ElTimePicker, ElTooltip } from 'elem
 import { computed, ref } from 'vue'
 import { useSession } from '../../composables/useSession'
 import { companyDate, dueDateKey, presentDueDate, type DueDateValue, type WorkItemDueDateFacts } from './workItemDueDate'
-import { useWorkItemDueClock } from './useWorkItemDueClock'
 import WorkItemFieldGlyph from './WorkItemFieldGlyph.vue'
+import { useMinuteClock } from '../../composables/useMinuteClock'
 
 const props = defineProps<{
   item: WorkItemDueDateFacts; canEdit: boolean; busy?: boolean; clearLabel?: string | undefined
@@ -16,7 +16,7 @@ const props = defineProps<{
 const emit = defineEmits<{ select: []; change: [value: DueDateValue] }>()
 const session = useSession()
 const timezone = computed(() => session.authentication.value?.company.timezone ?? 'Asia/Shanghai')
-const now = useWorkItemDueClock()
+const now = useMinuteClock()
 const presentation = computed(() => presentDueDate(props.item, timezone.value, now.value))
 const date = computed(() => dueDateKey(props.item.dueDate))
 const disabled = computed(() => !props.canEdit || Boolean(props.busy))

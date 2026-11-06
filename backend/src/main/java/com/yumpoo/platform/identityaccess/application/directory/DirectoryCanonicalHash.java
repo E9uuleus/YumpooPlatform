@@ -1,7 +1,6 @@
 package com.yumpoo.platform.identityaccess.application.directory;
 
 import com.yumpoo.platform.identityaccess.domain.identity.ProfileHash;
-
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -14,8 +13,7 @@ public final class DirectoryCanonicalHash {
 
     private static final HexFormat HEX = HexFormat.of();
 
-    private DirectoryCanonicalHash() {
-    }
+    private DirectoryCanonicalHash() {}
 
     public static String strings(String domain, List<String> values) {
         try {
@@ -31,16 +29,17 @@ public final class DirectoryCanonicalHash {
     }
 
     public static ProfileHash profile(WeComRawMemberProfile raw, String departmentSummary) {
-        return new ProfileHash(strings("wecom-profile-v2", List.of(
-                raw.externalUserId(),
-                raw.displayName(),
-                raw.email().state().name(),
-                raw.email().value() == null ? "" : raw.email().value(),
-                raw.mobile().state().name(),
-                raw.mobile().value() == null ? "" : raw.mobile().value(),
-                departmentSummary == null ? "" : departmentSummary,
-                Boolean.toString(raw.accountDisabled())
-        )));
+        return new ProfileHash(strings(
+                "wecom-profile-v2",
+                List.of(
+                        raw.externalUserId(),
+                        raw.displayName(),
+                        raw.email().state().name(),
+                        raw.email().value() == null ? "" : raw.email().value(),
+                        raw.mobile().state().name(),
+                        raw.mobile().value() == null ? "" : raw.mobile().value(),
+                        departmentSummary == null ? "" : departmentSummary,
+                        Boolean.toString(raw.accountDisabled()))));
     }
 
     private static void add(MessageDigest digest, String value) {

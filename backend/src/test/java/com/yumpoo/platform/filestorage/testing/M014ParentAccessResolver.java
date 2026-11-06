@@ -18,11 +18,13 @@ public final class M014ParentAccessResolver {
     }
 
     public void grantRead(UUID ownerId, UUID actorId) {
-        readers.computeIfAbsent(ownerId, ignored -> ConcurrentHashMap.newKeySet()).add(actorId);
+        readers.computeIfAbsent(ownerId, ignored -> ConcurrentHashMap.newKeySet())
+                .add(actorId);
     }
 
     public void grantWrite(UUID ownerId, UUID actorId) {
-        writers.computeIfAbsent(ownerId, ignored -> ConcurrentHashMap.newKeySet()).add(actorId);
+        writers.computeIfAbsent(ownerId, ignored -> ConcurrentHashMap.newKeySet())
+                .add(actorId);
     }
 
     public void revokeRead(UUID ownerId, UUID actorId) {
@@ -46,11 +48,7 @@ public final class M014ParentAccessResolver {
         writers.clear();
     }
 
-    private static void remove(
-            ConcurrentHashMap<UUID, Set<UUID>> access,
-            UUID ownerId,
-            UUID actorId
-    ) {
+    private static void remove(ConcurrentHashMap<UUID, Set<UUID>> access, UUID ownerId, UUID actorId) {
         Set<UUID> actors = access.get(ownerId);
         if (actors != null) {
             actors.remove(actorId);

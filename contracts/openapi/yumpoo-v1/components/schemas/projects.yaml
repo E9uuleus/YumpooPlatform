@@ -335,62 +335,94 @@ components:
           format: int32
           minimum: 0
     ProjectDetail:
-      allOf:
-        - $ref: "#/components/schemas/Project"
-        - type: object
-          additionalProperties: false
-          required:
-            - workspaceCode
-            - workspaceName
-            - ownerDisplayName
-            - actorAccess
-            - capabilities
-            - etag
-            - createdAt
-            - updatedAt
-            - archivedAt
-          properties:
-            endedAt:
-              type: string
-              format: date-time
-              nullable: true
-              readOnly: true
-              description: 项目结束时间；为 null 时项目未结束。已结束项目 lifecycle 仍为 ACTIVE。
-            workspaceCode:
-              type: string
-              minLength: 2
-              maxLength: 32
-            workspaceName:
-              type: string
-              minLength: 1
-              maxLength: 80
-            ownerDisplayName:
-              type: string
-              minLength: 1
-              maxLength: 200
-            actorAccess:
-              $ref: "#/components/schemas/ProjectActorAccess"
-            capabilities:
-              $ref: "#/components/schemas/ProjectCapabilities"
-            etag:
-              type: string
-              pattern: ^"[0-9]+"$
-              readOnly: true
-            createdAt:
-              type: string
-              format: date-time
-              readOnly: true
-            updatedAt:
-              type: string
-              format: date-time
-              readOnly: true
-            archivedAt:
-              type: string
-              format: date-time
-              nullable: true
-              readOnly: true
-            deletion:
-              $ref: "#/components/schemas/ProjectDeletion"
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - workspaceId
+        - code
+        - name
+        - description
+        - lifecycle
+        - ownerUserId
+        - rowVersion
+        - workspaceCode
+        - workspaceName
+        - ownerDisplayName
+        - actorAccess
+        - capabilities
+        - etag
+        - createdAt
+        - updatedAt
+        - archivedAt
+      properties:
+        endedAt:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+          description: 项目结束时间；为 null 时项目未结束。已结束项目 lifecycle 仍为 ACTIVE。
+        id:
+          $ref: "#/components/schemas/Uuid"
+        workspaceId:
+          $ref: "#/components/schemas/Uuid"
+        code:
+          type: string
+          minLength: 2
+          maxLength: 32
+          pattern: ^[A-Z][A-Z0-9_]{1,31}$
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        description:
+          type: string
+          maxLength: 500
+          nullable: true
+        lifecycle:
+          $ref: "#/components/schemas/ProjectLifecycle"
+        ownerUserId:
+          $ref: "#/components/schemas/Uuid"
+        rowVersion:
+          type: integer
+          format: int64
+          minimum: 0
+          readOnly: true
+        workspaceCode:
+          type: string
+          minLength: 2
+          maxLength: 32
+        workspaceName:
+          type: string
+          minLength: 1
+          maxLength: 80
+        ownerDisplayName:
+          type: string
+          minLength: 1
+          maxLength: 200
+        actorAccess:
+          $ref: "#/components/schemas/ProjectActorAccess"
+        capabilities:
+          $ref: "#/components/schemas/ProjectCapabilities"
+        etag:
+          type: string
+          pattern: ^"[0-9]+"$
+          readOnly: true
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+        archivedAt:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+        deletion:
+          $ref: "#/components/schemas/ProjectDeletion"
     ProjectUpdateRequest:
       type: object
       additionalProperties: false

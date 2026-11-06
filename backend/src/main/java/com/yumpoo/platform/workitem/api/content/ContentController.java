@@ -14,6 +14,9 @@ import com.yumpoo.platform.workitem.application.content.ContentModels.ContentVie
 import com.yumpoo.platform.workitem.application.content.ContentModels.ProjectContentCatalog;
 import com.yumpoo.platform.workitem.application.content.ContentService;
 import jakarta.validation.Valid;
+import java.net.URI;
+import java.util.Map;
+import java.util.UUID;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -28,10 +31,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import tools.jackson.databind.ObjectMapper;
 
-import java.net.URI;
-import java.util.Map;
-import java.util.UUID;
-
 @ApiV1Controller
 public final class ContentController {
     private final CurrentActorProvider actors;
@@ -41,8 +40,13 @@ public final class ContentController {
     private final IdempotencyRequestHasher hasher;
     private final ObjectMapper objectMapper;
 
-    public ContentController(CurrentActorProvider actors, ContentService service, IfMatchParser ifMatch,
-            IdempotencyKeyParser keys, IdempotencyRequestHasher hasher, ObjectMapper objectMapper) {
+    public ContentController(
+            CurrentActorProvider actors,
+            ContentService service,
+            IfMatchParser ifMatch,
+            IdempotencyKeyParser keys,
+            IdempotencyRequestHasher hasher,
+            ObjectMapper objectMapper) {
         this.actors = actors;
         this.service = service;
         this.ifMatch = ifMatch;
@@ -54,36 +58,60 @@ public final class ContentController {
     @GetMapping("/projects/{projectId}/contents")
     ResponseEntity<ProjectContentCatalog> list(@PathVariable UUID projectId) {
         ProjectContentCatalog catalog = service.catalog(actors.requiredActive(), projectId);
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .eTag(Long.toString(catalog.rowVersion())).body(catalog);
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .eTag(Long.toString(catalog.rowVersion()))
+                .body(catalog);
     }
 
     @PostMapping("/projects/{projectId}/contents")
-    ResponseEntity<String> create(@PathVariable UUID projectId,
+    ResponseEntity<String> create(
+            @PathVariable UUID projectId,
             @Valid @RequestBody ContentCreateRequest body,
             @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String keyHeader) {
         CurrentActor actor = actors.requiredActive();
         UUID key = keys.parseRequired(keyHeader);
-        StoredCommandResult result = service.create(new Create(actor, projectId, body.name(),
-                body.colorToken(), key, hasher.hash("createContent",
-                Map.of("projectId", projectId.toString()), objectMapper.valueToTree(body)))).result();
+        StoredCommandResult result = service.create(new Create(
+                        actor,
+                        projectId,
+                        body.name(),
+                        body.colorToken(),
+                        key,
+                        hasher.hash(
+                                "createContent",
+                                Map.of("projectId", projectId.toString()),
+                                objectMapper.valueToTree(body))))
+                .result();
         return stored(result, projectId);
     }
 
     @PatchMapping("/projects/{projectId}/contents/{contentId}")
-    ResponseEntity<ContentView> update(@PathVariable UUID projectId, @PathVariable UUID contentId,
+    ResponseEntity<ContentView> update(
+            @PathVariable UUID projectId,
+            @PathVariable UUID contentId,
             @Valid @RequestBody ContentUpdateRequest body,
             @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader) {
         long version = ifMatch.parseForVisibleResource(true, ifMatchHeader);
-        ContentView content = service.update(new Update(actors.requiredActive(), projectId, contentId,
-                version, body.name(), body.colorToken(), body.active(), body.sortOrder()));
+        ContentView content = service.update(new Update(
+                actors.requiredActive(),
+                projectId,
+                contentId,
+                version,
+                body.name(),
+                body.colorToken(),
+                body.active(),
+                body.sortOrder()));
         ProjectContentCatalog catalog = service.catalog(actors.requiredActive(), projectId);
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .eTag(Long.toString(catalog.rowVersion())).body(content);
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .eTag(Long.toString(catalog.rowVersion()))
+                .body(content);
     }
 
     @DeleteMapping("/projects/{projectId}/contents/{contentId}")
-    ResponseEntity<Void> delete(@PathVariable UUID projectId, @PathVariable UUID contentId,
+    ResponseEntity<Void> delete(
+            @PathVariable UUID projectId,
+            @PathVariable UUID contentId,
             @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader) {
         long version = ifMatch.parseForVisibleResource(true, ifMatchHeader);
         service.delete(new Delete(actors.requiredActive(), projectId, contentId, version));

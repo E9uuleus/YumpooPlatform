@@ -7,14 +7,13 @@ import com.yumpoo.platform.identityaccess.application.account.AccountStatusRepos
 import com.yumpoo.platform.identityaccess.application.account.AccountStatusSnapshot;
 import com.yumpoo.platform.identityaccess.domain.identity.AccountStatus;
 import com.yumpoo.platform.identityaccess.domain.identity.EmploymentStatus;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Repository;
-
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Repository;
 
 @Repository
 public class JdbcAccountStatusRepository implements AccountStatusRepository {
@@ -32,20 +31,17 @@ public class JdbcAccountStatusRepository implements AccountStatusRepository {
 
     @Override
     public AccountStatusSnapshot change(AccountStatusChangeCommand command) {
-        List<AccountStatusSnapshot> changed = command.desiredStatus() == AccountStatus.DISABLED
-                ? disable(command)
-                : enable(command);
-        ConditionalUpdateGuard.requireSingleRowUpdated(
-                changed.size(),
-                () -> classifyFailure(command)
-        );
+        List<AccountStatusSnapshot> changed =
+                command.desiredStatus() == AccountStatus.DISABLED ? disable(command) : enable(command);
+        ConditionalUpdateGuard.requireSingleRowUpdated(changed.size(), () -> classifyFailure(command));
         return changed.getFirst();
     }
 
     @Override
     public Optional<AccountStatusSnapshot> disableFromDirectory(
             java.util.UUID companyId, java.util.UUID userId, String reason, java.time.Instant now) {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                         UPDATE yumpoo.identity_user
                         SET account_status = 'DISABLED',
                             account_disabled_at = :now,
@@ -67,7 +63,8 @@ public class JdbcAccountStatusRepository implements AccountStatusRepository {
     }
 
     private List<AccountStatusSnapshot> disable(AccountStatusChangeCommand command) {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                         UPDATE yumpoo.identity_user target
                         SET account_status = 'DISABLED',
                             account_disabled_at = transaction_timestamp(),
@@ -98,7 +95,8 @@ public class JdbcAccountStatusRepository implements AccountStatusRepository {
     }
 
     private List<AccountStatusSnapshot> enable(AccountStatusChangeCommand command) {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                         UPDATE yumpoo.identity_user target
                         SET account_status = 'ENABLED',
                             authorization_version = authorization_version + 1,
@@ -125,7 +123,8 @@ public class JdbcAccountStatusRepository implements AccountStatusRepository {
     }
 
     private ConditionalUpdateFailure classifyFailure(AccountStatusChangeCommand command) {
-        Optional<AccountState> visible = jdbcClient.sql("""
+        Optional<AccountState> visible = jdbcClient
+                .sql("""
                         SELECT target.row_version, target.account_status
                         FROM yumpoo.identity_user target
                         WHERE target.id = :targetUserId
@@ -141,9 +140,7 @@ public class JdbcAccountStatusRepository implements AccountStatusRepository {
                 .param("companyId", command.companyId())
                 .param("actorUserId", command.actor().userId())
                 .query((resultSet, rowNumber) -> new AccountState(
-                        resultSet.getLong("row_version"),
-                        AccountStatus.valueOf(resultSet.getString("account_status"))
-                ))
+                        resultSet.getLong("row_version"), AccountStatus.valueOf(resultSet.getString("account_status"))))
                 .optional();
         if (visible.isEmpty()) {
             return ConditionalUpdateFailure.RESOURCE_NOT_VISIBLE;
@@ -154,18 +151,15 @@ public class JdbcAccountStatusRepository implements AccountStatusRepository {
         return ConditionalUpdateFailure.INVALID_STATE;
     }
 
-    private static AccountStatusSnapshot mapSnapshot(ResultSet resultSet, int rowNumber)
-            throws SQLException {
+    private static AccountStatusSnapshot mapSnapshot(ResultSet resultSet, int rowNumber) throws SQLException {
         return new AccountStatusSnapshot(
                 resultSet.getObject("id", java.util.UUID.class),
                 resultSet.getObject("company_id", java.util.UUID.class),
                 EmploymentStatus.valueOf(resultSet.getString("employment_status")),
                 AccountStatus.valueOf(resultSet.getString("account_status")),
                 resultSet.getLong("authorization_version"),
-                resultSet.getLong("row_version")
-        );
+                resultSet.getLong("row_version"));
     }
 
-    private record AccountState(long rowVersion, AccountStatus status) {
-    }
+    private record AccountState(long rowVersion, AccountStatus status) {}
 }

@@ -73,24 +73,22 @@ class OpsSamplerTest {
         when(logs.countsSince(any())).thenReturn(Map.of());
         when(alerts.cached()).thenReturn(List.of());
         var result = new OpsSampler(
-            new SimpleMeterRegistry(),
-            source,
-            outbox,
-            sessions,
-            disks,
-            logs,
-            repository,
-            alerts,
-            new MockEnvironment(),
-            mock(ObjectProvider.class),
-            mock(ObjectProvider.class),
-            clock
-        );
+                new SimpleMeterRegistry(),
+                source,
+                outbox,
+                sessions,
+                disks,
+                logs,
+                repository,
+                alerts,
+                new MockEnvironment(),
+                mock(ObjectProvider.class),
+                mock(ObjectProvider.class),
+                clock);
         if (fakeJdbc) {
             when(jdbc.queryForObject("SELECT 1", Integer.class)).thenReturn(1);
-            when(jdbc.execute(any(org.springframework.jdbc.core.ConnectionCallback.class))).thenReturn(
-                "PostgreSQL 17.10"
-            );
+            when(jdbc.execute(any(org.springframework.jdbc.core.ConnectionCallback.class)))
+                    .thenReturn("PostgreSQL 17.10");
             ReflectionTestUtils.setField(result, "jdbc", jdbc);
             ExecutorService worker = mock(ExecutorService.class);
             when(worker.submit(any(Runnable.class))).thenReturn(new CompletableFuture<>());
@@ -101,8 +99,7 @@ class OpsSamplerTest {
 
     @Test
     void blockedDatabaseWorkerDoesNotBlockLocalSamplingAndShutdownInterruptsIt() throws Exception {
-        CountDownLatch entered = new CountDownLatch(1),
-            release = new CountDownLatch(1);
+        CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
         when(source.getConnection()).thenAnswer(call -> {
             entered.countDown();
             release.await(5, TimeUnit.SECONDS);
@@ -116,9 +113,8 @@ class OpsSamplerTest {
             sampler.sample();
             assertThat(sampler.recent()).hasSize(2);
             assertThat(sampler.snapshot().metrics().get("heap.used")).isPositive();
-            assertThat(sampler.snapshot().components()).anyMatch(
-                c -> c.code().equals("database") && c.status().equals("UNKNOWN")
-            );
+            assertThat(sampler.snapshot().components())
+                    .anyMatch(c -> c.code().equals("database") && c.status().equals("UNKNOWN"));
             verify(source, times(1)).getConnection();
         } finally {
             sampler.stop();
@@ -140,9 +136,8 @@ class OpsSamplerTest {
         clock.advance(46);
         sampler.sample();
         assertThat(sampler.snapshot().metrics()).containsEntry("outbox.backlog", null);
-        assertThat(sampler.snapshot().components()).anyMatch(
-            c -> c.code().equals("database") && c.status().equals("UNKNOWN")
-        );
+        assertThat(sampler.snapshot().components())
+                .anyMatch(c -> c.code().equals("database") && c.status().equals("UNKNOWN"));
         for (int i = 0; i < 250; i++) {
             clock.advance(60);
             sampler.sample();
@@ -164,9 +159,8 @@ class OpsSamplerTest {
     @Test
     void twoProbeFailuresAreRecordedOnceAfterRecoveryAndMinutesRetryIdempotently() {
         var sampler = sampler(true);
-        when(jdbc.queryForObject("SELECT 1", Integer.class)).thenThrow(
-            new org.springframework.dao.DataAccessResourceFailureException("offline")
-        );
+        when(jdbc.queryForObject("SELECT 1", Integer.class))
+                .thenThrow(new org.springframework.dao.DataAccessResourceFailureException("offline"));
         sampler.sample();
         sampler.collectIo(clock.instant(), new HashMap<>(), List.of());
         clock.advance(15);
@@ -178,28 +172,20 @@ class OpsSamplerTest {
         doReturn(1).when(jdbc).queryForObject("SELECT 1", Integer.class);
         clock.advance(60);
         doThrow(new org.springframework.dao.DataAccessResourceFailureException("write failed"))
-            .doNothing()
-            .when(repository)
-            .saveMinute(any(), any(), any(), anyMap(), anyInt());
+                .doNothing()
+                .when(repository)
+                .saveMinute(any(), any(), any(), anyMap(), anyInt());
         sampler.collectIo(clock.instant(), new HashMap<>(), List.of());
         clock.advance(15);
         sampler.collectIo(clock.instant(), new HashMap<>(), List.of());
         verify(alerts, times(1)).recordDatabaseOutage(outage, 2);
-        verify(repository, times(2)).saveMinute(
-            any(),
-            any(),
-            eq(outage.truncatedTo(java.time.temporal.ChronoUnit.MINUTES)),
-            anyMap(),
-            eq(2)
-        );
+        verify(repository, times(2))
+                .saveMinute(
+                        any(), any(), eq(outage.truncatedTo(java.time.temporal.ChronoUnit.MINUTES)), anyMap(), eq(2));
         var evaluatedAt = org.mockito.ArgumentCaptor.forClass(Instant.class);
         verify(alerts, times(4)).evaluate(anyMap(), anyList(), evaluatedAt.capture());
-        assertThat(evaluatedAt.getAllValues()).containsExactly(
-            outage.minusSeconds(15),
-            outage,
-            outage.plusSeconds(60),
-            outage.plusSeconds(75)
-        );
+        assertThat(evaluatedAt.getAllValues())
+                .containsExactly(outage.minusSeconds(15), outage, outage.plusSeconds(60), outage.plusSeconds(75));
     }
 
     @Test
@@ -216,12 +202,12 @@ class OpsSamplerTest {
         var registry = new SimpleMeterRegistry();
         ReflectionTestUtils.setField(sampler, "registry", registry);
         var requests = io.micrometer.core.instrument.Timer.builder("http.server.requests")
-            .tags("uri", "/api/v1/probe", "status", "500")
-            .publishPercentiles(.95)
-            .register(registry);
+                .tags("uri", "/api/v1/probe", "status", "500")
+                .publishPercentiles(.95)
+                .register(registry);
         var business = io.micrometer.core.instrument.Timer.builder("yumpoo.http.business")
-            .publishPercentiles(.95)
-            .register(registry);
+                .publishPercentiles(.95)
+                .register(registry);
         var recorded = captureAlerts(sampler, List.of("DB_POOL_SATURATED", "HTTP_ERROR_RATE", "HTTP_LATENCY_P95"));
         Instant began = clock.instant();
         for (int i = 0; i < 45; i++) {
@@ -244,16 +230,14 @@ class OpsSamplerTest {
         sampler.sample();
         sampler.collectIo(clock.instant(), new HashMap<>(), List.of());
         assertThat(recorded)
-            .extracting(OperationsModels.Alert::ruleCode)
-            .contains("DB_POOL_SATURATED", "HTTP_ERROR_RATE", "HTTP_LATENCY_P95");
-        assertThat(
-            recorded
-                .stream()
-                .filter(a -> a.ruleCode().equals("DB_POOL_SATURATED"))
-                .findFirst()
-                .orElseThrow()
-                .startedAt()
-        ).isEqualTo(began.plusSeconds(120));
+                .extracting(OperationsModels.Alert::ruleCode)
+                .contains("DB_POOL_SATURATED", "HTTP_ERROR_RATE", "HTTP_LATENCY_P95");
+        assertThat(recorded.stream()
+                        .filter(a -> a.ruleCode().equals("DB_POOL_SATURATED"))
+                        .findFirst()
+                        .orElseThrow()
+                        .startedAt())
+                .isEqualTo(began.plusSeconds(120));
     }
 
     @Test
@@ -268,13 +252,11 @@ class OpsSamplerTest {
         }
         assertThat(recorded).isEmpty();
         sampler.collectIo(clock.instant(), new HashMap<>(), List.of());
-        assertThat(recorded)
-            .singleElement()
-            .satisfies(alert -> {
-                assertThat(alert.ruleCode()).isEqualTo("DB_SLOW");
-                assertThat(alert.startedAt()).isEqualTo(began.plusSeconds(315));
-                assertThat(alert.peakValue()).isGreaterThanOrEqualTo(315000);
-            });
+        assertThat(recorded).singleElement().satisfies(alert -> {
+            assertThat(alert.ruleCode()).isEqualTo("DB_SLOW");
+            assertThat(alert.startedAt()).isEqualTo(began.plusSeconds(315));
+            assertThat(alert.peakValue()).isGreaterThanOrEqualTo(315000);
+        });
     }
 
     @Test
@@ -283,16 +265,16 @@ class OpsSamplerTest {
         var registry = new SimpleMeterRegistry();
         ReflectionTestUtils.setField(sampler, "registry", registry);
         var fast = io.micrometer.core.instrument.Timer.builder("http.server.requests")
-            .tags("uri", "/api/v1/fast", "status", "200")
-            .publishPercentiles(.95)
-            .register(registry);
+                .tags("uri", "/api/v1/fast", "status", "200")
+                .publishPercentiles(.95)
+                .register(registry);
         var slow = io.micrometer.core.instrument.Timer.builder("http.server.requests")
-            .tags("uri", "/api/v1/upload", "status", "200")
-            .publishPercentiles(.95)
-            .register(registry);
+                .tags("uri", "/api/v1/upload", "status", "200")
+                .publishPercentiles(.95)
+                .register(registry);
         var business = io.micrometer.core.instrument.Timer.builder("yumpoo.http.business")
-            .publishPercentiles(.95)
-            .register(registry);
+                .publishPercentiles(.95)
+                .register(registry);
         sampler.sample();
         for (int i = 0; i < 99; i++) {
             fast.record(100, TimeUnit.MILLISECONDS);
@@ -307,63 +289,54 @@ class OpsSamplerTest {
 
     private List<OperationsModels.Alert> captureAlerts(OpsSampler sampler, List<String> codes) {
         var recorded = new ArrayList<OperationsModels.Alert>();
-        var rules = codes
-            .stream()
-            .map(code -> {
-                var type = com.yumpoo.platform.operations.domain.AlertRuleType.valueOf(code);
-                return new OperationsModels.Rule(
-                    code,
-                    true,
-                    type.warning,
-                    type.critical,
-                    type.duration,
-                    1,
-                    "\"1\"",
-                    type.below ? "LTE" : "GTE",
-                    type.unit
-                );
-            })
-            .toList();
+        var rules = codes.stream()
+                .map(code -> {
+                    var type = com.yumpoo.platform.operations.domain.AlertRuleType.valueOf(code);
+                    return new OperationsModels.Rule(
+                            code,
+                            true,
+                            type.warning,
+                            type.critical,
+                            type.duration,
+                            1,
+                            "\"1\"",
+                            type.below ? "LTE" : "GTE",
+                            type.unit);
+                })
+                .toList();
         when(repository.rules()).thenReturn(rules);
-        when(repository.lockRule(anyString())).thenAnswer(call ->
-            rules
-                .stream()
-                .filter(rule -> rule.code().equals(call.getArgument(0)))
-                .findFirst()
-                .orElseThrow()
-        );
-        when(repository.firing()).thenAnswer(call ->
-            recorded
-                .stream()
-                .filter(alert -> alert.status().equals("FIRING"))
-                .toList()
-        );
-        when(repository.findAlert(any(), anyBoolean())).thenAnswer(call ->
-            recorded
-                .stream()
-                .filter(alert -> alert.id().equals(call.getArgument(0)))
-                .findFirst()
-        );
+        when(repository.lockRule(anyString()))
+                .thenAnswer(call -> rules.stream()
+                        .filter(rule -> rule.code().equals(call.getArgument(0)))
+                        .findFirst()
+                        .orElseThrow());
+        when(repository.firing())
+                .thenAnswer(call -> recorded.stream()
+                        .filter(alert -> alert.status().equals("FIRING"))
+                        .toList());
+        when(repository.findAlert(any(), anyBoolean()))
+                .thenAnswer(call -> recorded.stream()
+                        .filter(alert -> alert.id().equals(call.getArgument(0)))
+                        .findFirst());
         doAnswer(call -> {
-            recorded.add(call.getArgument(0));
-            return null;
-        })
-            .when(repository)
-            .createAlert(any());
+                    recorded.add(call.getArgument(0));
+                    return null;
+                })
+                .when(repository)
+                .createAlert(any());
         doAnswer(call -> {
-            OperationsModels.Alert updated = call.getArgument(0);
-            recorded.removeIf(alert -> alert.id().equals(updated.id()));
-            recorded.add(updated);
-            return null;
-        })
-            .when(repository)
-            .updateAlert(any());
+                    OperationsModels.Alert updated = call.getArgument(0);
+                    recorded.removeIf(alert -> alert.id().equals(updated.id()));
+                    recorded.add(updated);
+                    return null;
+                })
+                .when(repository)
+                .updateAlert(any());
         var service = new OperationsAlertService(
-            repository,
-            mock(com.yumpoo.platform.audit.api.SecurityAuditAppendPort.class),
-            tools.jackson.databind.json.JsonMapper.builder().build(),
-            clock
-        );
+                repository,
+                mock(com.yumpoo.platform.audit.api.SecurityAuditAppendPort.class),
+                tools.jackson.databind.json.JsonMapper.builder().build(),
+                clock);
         ReflectionTestUtils.setField(sampler, "alerts", service);
         return recorded;
     }

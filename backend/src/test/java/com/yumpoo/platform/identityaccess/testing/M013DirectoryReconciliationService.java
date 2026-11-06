@@ -22,19 +22,11 @@ public class M013DirectoryReconciliationService {
     }
 
     public M013DirectoryProbeRepository.RunRow synchronize(
-            Set<String> discoveredFingerprints,
-            boolean scanComplete,
-            Set<String> failedFingerprints
-    ) {
-        Set<String> discovered = validatedFingerprints(
-                discoveredFingerprints,
-                "discoveredFingerprints"
-        );
+            Set<String> discoveredFingerprints, boolean scanComplete, Set<String> failedFingerprints) {
+        Set<String> discovered = validatedFingerprints(discoveredFingerprints, "discoveredFingerprints");
         Set<String> failed = validatedFingerprints(failedFingerprints, "failedFingerprints");
         if (!discovered.containsAll(failed)) {
-            throw new IllegalArgumentException(
-                    "failedFingerprints must be a subset of discoveredFingerprints"
-            );
+            throw new IllegalArgumentException("failedFingerprints must be a subset of discoveredFingerprints");
         }
 
         UUID runId = repository.startRun();

@@ -5,7 +5,6 @@ import com.yumpoo.platform.workitem.application.WorkItemImportModels.Field;
 import com.yumpoo.platform.workitem.application.WorkItemImportModels.Issue;
 import com.yumpoo.platform.workitem.application.WorkItemImportModels.Outcome;
 import com.yumpoo.platform.workitem.application.WorkItemImportModels.Row;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -23,8 +22,14 @@ public final class WorkItemImportPlanner {
 
     private WorkItemImportPlanner() {}
 
-    public record Existing(UUID id, UUID contentId, String itemNo, String title,
-            String statusCode, String priority, List<UUID> assigneeUserIds) {
+    public record Existing(
+            UUID id,
+            UUID contentId,
+            String itemNo,
+            String title,
+            String statusCode,
+            String priority,
+            List<UUID> assigneeUserIds) {
         public Existing {
             assigneeUserIds = assigneeUserIds == null ? List.of() : List.copyOf(assigneeUserIds);
         }
@@ -33,23 +38,44 @@ public final class WorkItemImportPlanner {
     public record ParentLink(UUID parentId, UUID childId) {}
 
     /** Values a row may legitimately carry: active categories, statuses, priorities and members. */
-    public record Catalog(Set<UUID> contentIds, Set<String> statusCodes,
-            Set<String> priorityCodes, Set<UUID> assigneeIds) {}
+    public record Catalog(
+            Set<UUID> contentIds, Set<String> statusCodes, Set<String> priorityCodes, Set<UUID> assigneeIds) {}
 
-    public record Input(DuplicateMode mode, Set<Field> fields, List<Row> rows,
-            List<Existing> existing, List<ParentLink> links, Catalog catalog) {}
+    public record Input(
+            DuplicateMode mode,
+            Set<Field> fields,
+            List<Row> rows,
+            List<Existing> existing,
+            List<ParentLink> links,
+            Catalog catalog) {}
 
     /** A work item the plan refers to: an existing one, or the item a CREATE row will make. */
     public record Ref(UUID existingId, int rowIndex) {
-        static Ref existing(UUID id) { return new Ref(id, -1); }
-        static Ref row(int index) { return new Ref(null, index); }
+        static Ref existing(UUID id) {
+            return new Ref(id, -1);
+        }
+
+        static Ref row(int index) {
+            return new Ref(null, index);
+        }
     }
 
     /** KEEP leaves the relation alone, SET attaches {@code parent}, CLEAR detaches the current parent. */
-    public enum ParentMode { KEEP, SET, CLEAR }
+    public enum ParentMode {
+        KEEP,
+        SET,
+        CLEAR
+    }
 
-    public record PlannedRow(int index, Row row, String title, Outcome outcome, Existing target,
-            List<Issue> issues, ParentMode parentMode, Ref parent) {}
+    public record PlannedRow(
+            int index,
+            Row row,
+            String title,
+            Outcome outcome,
+            Existing target,
+            List<Issue> issues,
+            ParentMode parentMode,
+            Ref parent) {}
 
     public record Plan(List<PlannedRow> rows) {
         public long count(Outcome outcome) {
@@ -95,7 +121,8 @@ public final class WorkItemImportPlanner {
             for (int i = 0; i < size; i++) issues.add(new ArrayList<>());
             for (Existing existing : in.existing()) {
                 availableExistingIds.add(existing.id());
-                existingByTitle.computeIfAbsent(existing.title().strip(), key -> new ArrayList<>())
+                existingByTitle
+                        .computeIfAbsent(existing.title().strip(), key -> new ArrayList<>())
                         .add(existing);
             }
             for (ParentLink link : in.links()) {
@@ -109,15 +136,24 @@ public final class WorkItemImportPlanner {
             resolveParents();
             List<PlannedRow> planned = new ArrayList<>(size);
             for (int i = 0; i < size; i++)
-                planned.add(new PlannedRow(i, in.rows().get(i), titles[i], outcome[i], target[i],
-                        List.copyOf(issues.get(i)), mode[i], parent[i]));
+                planned.add(new PlannedRow(
+                        i,
+                        in.rows().get(i),
+                        titles[i],
+                        outcome[i],
+                        target[i],
+                        List.copyOf(issues.get(i)),
+                        mode[i],
+                        parent[i]));
             return new Plan(List.copyOf(planned));
         }
 
         private void classify() {
             Map<String, Integer> fileCounts = new HashMap<>();
             for (int i = 0; i < size; i++) {
-                String title = in.rows().get(i).title() == null ? "" : in.rows().get(i).title().strip();
+                String title = in.rows().get(i).title() == null
+                        ? ""
+                        : in.rows().get(i).title().strip();
                 titles[i] = title;
                 mode[i] = ParentMode.KEEP;
                 if (validTitle(title)) fileCounts.merge(title, 1, Integer::sum);
@@ -135,16 +171,19 @@ public final class WorkItemImportPlanner {
                         else {
                             outcome[i] = Outcome.SKIP;
                             if (matches.size() == 1) target[i] = matches.getFirst();
-                            issues.get(i).add(new Issue("DUPLICATE_EXISTS", matches.stream()
-                                    .map(Existing::itemNo).collect(Collectors.joining(","))));
+                            issues.get(i)
+                                    .add(new Issue(
+                                            "DUPLICATE_EXISTS",
+                                            matches.stream()
+                                                    .map(Existing::itemNo)
+                                                    .collect(Collectors.joining(","))));
                         }
                     }
                     case UPDATE -> {
                         if (matches.isEmpty()) outcome[i] = Outcome.CREATE;
-                        else if (fileCounts.get(titles[i]) > 1) error(i, "DUPLICATE_IN_FILE",
-                                String.valueOf(fileCounts.get(titles[i])));
-                        else if (matches.size() > 1) error(i, "MATCH_AMBIGUOUS",
-                                String.valueOf(matches.size()));
+                        else if (fileCounts.get(titles[i]) > 1)
+                            error(i, "DUPLICATE_IN_FILE", String.valueOf(fileCounts.get(titles[i])));
+                        else if (matches.size() > 1) error(i, "MATCH_AMBIGUOUS", String.valueOf(matches.size()));
                         else {
                             outcome[i] = Outcome.UPDATE;
                             target[i] = matches.getFirst();
@@ -162,9 +201,13 @@ public final class WorkItemImportPlanner {
             boolean all = existing == null;
             Catalog catalog = in.catalog();
             if (all || in.fields().contains(Field.CONTENT)) {
-                if (row.contentId() == null || !(catalog.contentIds().contains(row.contentId())
-                        || (existing != null && row.contentId().equals(existing.contentId()))))
-                    issue(i, "CONTENT_INVALID", row.contentId() == null ? null : row.contentId().toString());
+                if (row.contentId() == null
+                        || !(catalog.contentIds().contains(row.contentId())
+                                || (existing != null && row.contentId().equals(existing.contentId()))))
+                    issue(
+                            i,
+                            "CONTENT_INVALID",
+                            row.contentId() == null ? null : row.contentId().toString());
             }
             if (all || in.fields().contains(Field.STATUS)) {
                 String status = row.statusCode() == null ? "" : row.statusCode().strip();
@@ -174,16 +217,22 @@ public final class WorkItemImportPlanner {
             }
             if (all || in.fields().contains(Field.PRIORITY)) {
                 String priority = normalizePriority(row.priority());
-                if (priority != null && !(catalog.priorityCodes().contains(priority)
-                        || (existing != null && priority.equals(existing.priority()))))
+                if (priority != null
+                        && !(catalog.priorityCodes().contains(priority)
+                                || (existing != null && priority.equals(existing.priority()))))
                     issue(i, "PRIORITY_INVALID", priority);
             }
             if (all || in.fields().contains(Field.ASSIGNEES)) {
-                List<UUID> unknown = row.assigneeUserIds().stream().filter(id ->
-                        !(catalog.assigneeIds().contains(id)
-                                || (existing != null && existing.assigneeUserIds().contains(id)))).toList();
-                if (!unknown.isEmpty()) issue(i, "ASSIGNEE_INVALID", unknown.stream()
-                        .map(UUID::toString).collect(Collectors.joining(",")));
+                List<UUID> unknown = row.assigneeUserIds().stream()
+                        .filter(id -> !(catalog.assigneeIds().contains(id)
+                                || (existing != null
+                                        && existing.assigneeUserIds().contains(id))))
+                        .toList();
+                if (!unknown.isEmpty())
+                    issue(
+                            i,
+                            "ASSIGNEE_INVALID",
+                            unknown.stream().map(UUID::toString).collect(Collectors.joining(",")));
             }
             if (!issues.get(i).isEmpty()) outcome[i] = Outcome.ERROR;
         }
@@ -193,27 +242,31 @@ public final class WorkItemImportPlanner {
             Map<String, Set<Ref>> fileRefs = new LinkedHashMap<>();
             for (int i = 0; i < size; i++) {
                 switch (outcome[i]) {
-                    case CREATE -> fileRefs.computeIfAbsent(titles[i], key -> new LinkedHashSet<>())
-                            .add(Ref.row(i));
-                    case UPDATE -> fileRefs.computeIfAbsent(titles[i], key -> new LinkedHashSet<>())
-                            .add(Ref.existing(target[i].id()));
+                    case CREATE ->
+                        fileRefs.computeIfAbsent(titles[i], key -> new LinkedHashSet<>())
+                                .add(Ref.row(i));
+                    case UPDATE ->
+                        fileRefs.computeIfAbsent(titles[i], key -> new LinkedHashSet<>())
+                                .add(Ref.existing(target[i].id()));
                     case SKIP -> {
                         for (Existing existing : existingByTitle.getOrDefault(titles[i], List.of()))
                             fileRefs.computeIfAbsent(titles[i], key -> new LinkedHashSet<>())
                                     .add(Ref.existing(existing.id()));
                     }
-                    case ERROR -> { }
+                    case ERROR -> {}
                 }
             }
             for (int i = 0; i < size; i++) {
                 if (!processed(i)) continue;
-                String parentTitle = in.rows().get(i).parentTitle() == null ? ""
+                String parentTitle = in.rows().get(i).parentTitle() == null
+                        ? ""
                         : in.rows().get(i).parentTitle().strip();
                 if (parentTitle.isEmpty()) {
                     mode[i] = outcome[i] == Outcome.UPDATE ? ParentMode.CLEAR : ParentMode.KEEP;
                     continue;
                 }
-                Set<Ref> candidates = fileRefs.containsKey(parentTitle) ? fileRefs.get(parentTitle)
+                Set<Ref> candidates = fileRefs.containsKey(parentTitle)
+                        ? fileRefs.get(parentTitle)
                         : existingByTitle.getOrDefault(parentTitle, List.of()).stream()
                                 .map(existing -> Ref.existing(existing.id()))
                                 .collect(Collectors.toCollection(LinkedHashSet::new));
@@ -229,13 +282,17 @@ public final class WorkItemImportPlanner {
                 }
             }
             for (int i = 0; i < size; i++) {
-                if (processed(i) && mode[i] == ParentMode.SET && selfRef(i).equals(parent[i]))
-                    detachForCycle(i);
+                if (processed(i) && mode[i] == ParentMode.SET && selfRef(i).equals(parent[i])) detachForCycle(i);
             }
             for (int i = 0; i < size; i++) {
-                if (processed(i) && mode[i] == ParentMode.SET && outcome[i] == Outcome.UPDATE
+                if (processed(i)
+                        && mode[i] == ParentMode.SET
+                        && outcome[i] == Outcome.UPDATE
                         && dbParents.contains(target[i].id())) {
-                    issue(i, "PARENT_HAS_CHILDREN", in.rows().get(i).parentTitle().strip());
+                    issue(
+                            i,
+                            "PARENT_HAS_CHILDREN",
+                            in.rows().get(i).parentTitle().strip());
                     mode[i] = ParentMode.KEEP;
                     parent[i] = null;
                 }
@@ -269,7 +326,8 @@ public final class WorkItemImportPlanner {
                 for (Ref node : path) {
                     inCycle |= node.equals(current);
                     if (!inCycle) continue;
-                    int row = node.existingId() == null ? node.rowIndex()
+                    int row = node.existingId() == null
+                            ? node.rowIndex()
                             : updateRowByExisting.getOrDefault(node.existingId(), -1);
                     if (row >= 0 && processed(row) && mode[row] == ParentMode.SET) detachForCycle(row);
                 }
@@ -283,8 +341,7 @@ public final class WorkItemImportPlanner {
         }
 
         private Ref parentOf(Ref ref) {
-            if (ref.existingId() == null)
-                return mode[ref.rowIndex()] == ParentMode.SET ? parent[ref.rowIndex()] : null;
+            if (ref.existingId() == null) return mode[ref.rowIndex()] == ParentMode.SET ? parent[ref.rowIndex()] : null;
             Integer row = updateRowByExisting.get(ref.existingId());
             if (row != null && processed(row)) {
                 return switch (mode[row]) {

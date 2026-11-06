@@ -1,16 +1,15 @@
 package com.yumpoo.platform.filestorage.testing;
 
 import com.yumpoo.platform.filestorage.application.AttachmentSafetyProcessor;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Primary;
-
 import java.io.IOException;
 import java.time.Clock;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 
 @TestConfiguration(proxyBeanMethods = false)
 public class M014AttachmentProbeConfiguration {
@@ -33,13 +32,8 @@ public class M014AttachmentProbeConfiguration {
 
     @Bean
     AttachmentSafetyProcessor m014AttachmentSafetyProcessor(
-            M014StorageFixture storageFixture,
-            M014ControllableContentDetector detector
-    ) {
-        return new AttachmentSafetyProcessor(
-                storageFixture.storage(),
-                detector
-        );
+            M014StorageFixture storageFixture, M014ControllableContentDetector detector) {
+        return new AttachmentSafetyProcessor(storageFixture.storage(), detector);
     }
 
     @Bean(destroyMethod = "shutdownNow")
@@ -51,15 +45,12 @@ public class M014AttachmentProbeConfiguration {
                 TimeUnit.MILLISECONDS,
                 new ArrayBlockingQueue<>(8),
                 Thread.ofPlatform().name("m014-scan-", 0).factory(),
-                new ThreadPoolExecutor.AbortPolicy()
-        );
+                new ThreadPoolExecutor.AbortPolicy());
     }
 
     @Bean
     M014AttachmentProbeRepository m014AttachmentProbeRepository(
-            org.springframework.jdbc.core.simple.JdbcClient jdbcClient,
-            Clock clock
-    ) {
+            org.springframework.jdbc.core.simple.JdbcClient jdbcClient, Clock clock) {
         return new M014AttachmentProbeRepository(jdbcClient, clock);
     }
 
@@ -69,14 +60,8 @@ public class M014AttachmentProbeConfiguration {
             M014ParentAccessResolver accessResolver,
             M014StorageFixture storageFixture,
             AttachmentSafetyProcessor safetyProcessor,
-            ExecutorService m014ScanExecutor
-    ) {
+            ExecutorService m014ScanExecutor) {
         return new M014AttachmentProbeService(
-                repository,
-                accessResolver,
-                storageFixture.storage(),
-                safetyProcessor,
-                m014ScanExecutor
-        );
+                repository, accessResolver, storageFixture.storage(), safetyProcessor, m014ScanExecutor);
     }
 }

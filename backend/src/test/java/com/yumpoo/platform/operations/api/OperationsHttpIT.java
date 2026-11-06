@@ -40,9 +40,8 @@ import tools.jackson.databind.ObjectMapper;
 
 @ActiveProfiles("test")
 @SpringBootTest(
-    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-    properties = { "yumpoo.outbox.enabled=false", "yumpoo.operations.sampling-enabled=false" }
-)
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = {"yumpoo.outbox.enabled=false", "yumpoo.operations.sampling-enabled=false"})
 @DirtiesContext
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class OperationsHttpIT {
@@ -54,9 +53,9 @@ class OperationsHttpIT {
         String url = System.getProperty("yumpoo.test.operations.jdbc-url");
         if (url == null) {
             postgres = new PostgreSQLContainer("postgres:17.10-alpine")
-                .withDatabaseName("yumpoo_test")
-                .withUsername("yumpoo_test")
-                .withPassword("yumpoo_test");
+                    .withDatabaseName("yumpoo_test")
+                    .withUsername("yumpoo_test")
+                    .withPassword("yumpoo_test");
             postgres.start();
             url = postgres.getJdbcUrl();
         }
@@ -108,9 +107,8 @@ class OperationsHttpIT {
 
     @BeforeAll
     void fixtures() {
-        try (
-            var scope = RequestCorrelationContext.open(RequestCorrelation.root("operations-it-" + UUID.randomUUID()))
-        ) {
+        try (var scope =
+                RequestCorrelationContext.open(RequestCorrelation.root("operations-it-" + UUID.randomUUID()))) {
             manager = actor("APP_MANAGER");
             admin = actor("COMPANY_ADMIN");
             member = actor(null);
@@ -121,145 +119,126 @@ class OperationsHttpIT {
     void resetAlerts() {
         jdbc.update("DELETE FROM yumpoo.ops_alert");
         jdbc.update(
-            "UPDATE yumpoo.ops_alert_rule SET enabled=true,warning_threshold=1,critical_threshold=10,for_seconds=0,row_version=row_version+1 WHERE code='OUTBOX_DEAD'"
-        );
+                "UPDATE yumpoo.ops_alert_rule SET enabled=true,warning_threshold=1,critical_threshold=10,for_seconds=0,row_version=row_version+1 WHERE code='OUTBOX_DEAD'");
     }
 
     IssuedSession actor(String role) {
         UUID id = provisioner.provision("ops-" + UUID.randomUUID(), "运维测试成员").userId();
-        if (role != null) jdbc.update(
-            """
+        if (role != null)
+            jdbc.update(
+                    """
             INSERT INTO yumpoo.platform_role_assignment(id,company_id,user_id,role_code,scope_type,scope_id,status,granted_by_actor_type,granted_by_system_code,grant_reason,granted_at)
             VALUES(?,?,?,?,?,?,'ACTIVE','SYSTEM','OPS_TEST','operations integration test',transaction_timestamp())
             """,
-            UUID.randomUUID(),
-            COMPANY,
-            id,
-            role,
-            role.equals("APP_MANAGER") ? "PLATFORM" : "COMPANY",
-            COMPANY
-        );
+                    UUID.randomUUID(),
+                    COMPANY,
+                    id,
+                    role,
+                    role.equals("APP_MANAGER") ? "PLATFORM" : "COMPANY",
+                    COMPANY);
         return sessions.issueWebSession(id, "operations-test");
     }
 
     @Test
     void managerOnlyReadsNoStoreSessionsMetricsAndHttpObservation() throws Exception {
         for (String path : List.of(
-            "/overview",
-            "/host",
-            "/metrics?range=1h",
-            "/sessions",
-            "/sessions/summary",
-            "/logs?modules=&q=",
-            "/logs/tail?modules=",
-            "/alerts",
-            "/alerts/summary",
-            "/alert-rules"
-        )) {
+                "/overview",
+                "/host",
+                "/metrics?range=1h",
+                "/sessions",
+                "/sessions/summary",
+                "/logs?modules=&q=",
+                "/logs/tail?modules=",
+                "/alerts",
+                "/alerts/summary",
+                "/alert-rules")) {
             var allowed = request("GET", path, manager, null, null, true);
-            assertThat(allowed.statusCode())
-                .as(path + " " + allowed.body())
-                .isEqualTo(200);
+            assertThat(allowed.statusCode()).as(path + " " + allowed.body()).isEqualTo(200);
             assertThat(allowed.headers().firstValue("cache-control")).contains("no-store");
             assertThat(request("GET", path, admin, null, null, true).statusCode())
-                .as(path)
-                .isEqualTo(403);
+                    .as(path)
+                    .isEqualTo(403);
             assertThat(request("GET", path, member, null, null, true).statusCode())
-                .as(path)
-                .isEqualTo(403);
+                    .as(path)
+                    .isEqualTo(403);
         }
-        assertThat(request("GET", "/overview", null, null, null, true).statusCode()).isEqualTo(401);
-        var counts = json.readTree(request("GET", "/sessions/summary", manager, null, null, true).body());
+        assertThat(request("GET", "/overview", null, null, null, true).statusCode())
+                .isEqualTo(401);
+        var counts = json.readTree(
+                request("GET", "/sessions/summary", manager, null, null, true).body());
         assertThat(counts.path("activeSessions").asLong()).isGreaterThanOrEqualTo(3);
-        assertThat(request("GET", "/sessions", manager, null, null, true).body()).doesNotContain(
-            manager.sessionCredential().value(),
-            manager.csrfCredential().value(),
-            "credentialHash"
-        );
+        assertThat(request("GET", "/sessions", manager, null, null, true).body())
+                .doesNotContain(
+                        manager.sessionCredential().value(),
+                        manager.csrfCredential().value(),
+                        "credentialHash");
         assertThat(registry.find("http.server.requests").timers()).isNotEmpty();
-        assertThat(
-            registry
-                .find("http.server.requests")
-                .timers()
-                .stream()
-                .anyMatch(t -> t.takeSnapshot().percentileValues().length > 0)
-        ).isTrue();
+        assertThat(registry.find("http.server.requests").timers().stream()
+                        .anyMatch(t -> t.takeSnapshot().percentileValues().length > 0))
+                .isTrue();
     }
 
     @Test
     void rulesRequireCsrfAndEtagAndConcurrentEditsHaveOneWinner() throws Exception {
         Rule rule = alerts.rule("HOST_CPU_HIGH");
         String body = "{\"enabled\":true,\"warningThreshold\":0.8,\"criticalThreshold\":0.95,\"forSeconds\":30}";
-        assertThat(
-            request("PUT", "/alert-rules/HOST_CPU_HIGH", manager, body, rule.etag(), false).statusCode()
-        ).isEqualTo(403);
-        assertThat(request("PUT", "/alert-rules/HOST_CPU_HIGH", manager, body, null, true).statusCode()).isEqualTo(428);
+        assertThat(request("PUT", "/alert-rules/HOST_CPU_HIGH", manager, body, rule.etag(), false)
+                        .statusCode())
+                .isEqualTo(403);
+        assertThat(request("PUT", "/alert-rules/HOST_CPU_HIGH", manager, body, null, true)
+                        .statusCode())
+                .isEqualTo(428);
         try (var pool = Executors.newFixedThreadPool(2)) {
-            var first = pool.submit(() ->
-                request("PUT", "/alert-rules/HOST_CPU_HIGH", manager, body, rule.etag(), true).statusCode()
-            );
-            var second = pool.submit(() ->
-                request("PUT", "/alert-rules/HOST_CPU_HIGH", manager, body, rule.etag(), true).statusCode()
-            );
+            var first = pool.submit(() -> request("PUT", "/alert-rules/HOST_CPU_HIGH", manager, body, rule.etag(), true)
+                    .statusCode());
+            var second =
+                    pool.submit(() -> request("PUT", "/alert-rules/HOST_CPU_HIGH", manager, body, rule.etag(), true)
+                            .statusCode());
             assertThat(List.of(first.get(), second.get())).containsExactlyInAnyOrder(200, 412);
         }
-        assertThat(
-            jdbc.queryForObject(
-                "SELECT count(*) FROM yumpoo.security_audit_event WHERE action='OPS_ALERT_RULE_UPDATED'",
-                Long.class
-            )
-        ).isGreaterThanOrEqualTo(1);
+        assertThat(jdbc.queryForObject(
+                        "SELECT count(*) FROM yumpoo.security_audit_event WHERE action='OPS_ALERT_RULE_UPDATED'",
+                        Long.class))
+                .isGreaterThanOrEqualTo(1);
     }
 
     @Test
     void acknowledgeIsIdempotentEscalationReopensAttentionAndRecoveryPersistsHistory() throws Exception {
         Instant start = Instant.now().minusSeconds(300);
         alerts.evaluate(Map.of("outbox.dead", 2d), List.of(), start);
-        Alert firing = repository
-            .firing()
-            .stream()
-            .filter(a -> a.ruleCode().equals("OUTBOX_DEAD"))
-            .findFirst()
-            .orElseThrow();
-        assertThat(
-            request(
-                "POST",
-                "/alerts/" + firing.id() + "/acknowledge",
-                manager,
-                "{\"note\":\"正在处理\"}",
-                null,
-                true
-            ).statusCode()
-        ).isEqualTo(200);
-        assertThat(
-            request(
-                "POST",
-                "/alerts/" + firing.id() + "/acknowledge",
-                manager,
-                "{\"note\":\"重复\"}",
-                null,
-                true
-            ).statusCode()
-        ).isEqualTo(200);
-        assertThat(
-            repository
-                .events(firing.id())
-                .stream()
-                .filter(e -> e.eventType().equals("ACKNOWLEDGED"))
-        ).hasSize(1);
+        Alert firing = repository.firing().stream()
+                .filter(a -> a.ruleCode().equals("OUTBOX_DEAD"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(request(
+                                "POST",
+                                "/alerts/" + firing.id() + "/acknowledge",
+                                manager,
+                                "{\"note\":\"正在处理\"}",
+                                null,
+                                true)
+                        .statusCode())
+                .isEqualTo(200);
+        assertThat(request("POST", "/alerts/" + firing.id() + "/acknowledge", manager, "{\"note\":\"重复\"}", null, true)
+                        .statusCode())
+                .isEqualTo(200);
+        assertThat(repository.events(firing.id()).stream()
+                        .filter(e -> e.eventType().equals("ACKNOWLEDGED")))
+                .hasSize(1);
         assertThat(alerts.summary().warning()).isZero();
         alerts.evaluate(Map.of("outbox.dead", 12d), List.of(), start.plusSeconds(15));
-        assertThat(repository.findAlert(firing.id(), false).orElseThrow().acknowledgedAt()).isNull();
+        assertThat(repository.findAlert(firing.id(), false).orElseThrow().acknowledgedAt())
+                .isNull();
         assertThat(alerts.summary().critical()).isOne();
         for (int t = 30; t <= 90; t += 15) alerts.evaluate(Map.of("outbox.dead", 0d), List.of(), start.plusSeconds(t));
-        assertThat(repository.findAlert(firing.id(), false).orElseThrow().status()).isEqualTo("RESOLVED");
+        assertThat(repository.findAlert(firing.id(), false).orElseThrow().status())
+                .isEqualTo("RESOLVED");
         assertThat(alerts.summary().critical()).isZero();
-        assertThat(
-            json
-                .readTree(request("GET", "/alerts/" + firing.id(), manager, null, null, true).body())
-                .path("events")
-                .size()
-        ).isEqualTo(4);
+        assertThat(json.readTree(request("GET", "/alerts/" + firing.id(), manager, null, null, true)
+                                .body())
+                        .path("events")
+                        .size())
+                .isEqualTo(4);
     }
 
     @Test
@@ -269,21 +248,18 @@ class OperationsHttpIT {
         repository.saveMinute(boot, minute, minute, Map.of("cpu.system", .5, "http.requests", 12d), 4);
         repository.saveMinute(boot, minute, minute, Map.of("cpu.system", .6, "http.requests", 15d), 4);
         assertThat(repository.metrics(minute, minute.plusSeconds(60))).hasSize(1);
-        assertThat(
-            repository.metrics(minute, minute.plusSeconds(60)).getFirst().values().get("http.requests")
-        ).isEqualTo(15d);
+        assertThat(repository
+                        .metrics(minute, minute.plusSeconds(60))
+                        .getFirst()
+                        .values()
+                        .get("http.requests"))
+                .isEqualTo(15d);
         var result = json.readTree(
-            request("GET", "/metrics?range=1h&keys=cpu.system,http.requests", manager, null, null, true).body()
-        );
+                request("GET", "/metrics?range=1h&keys=cpu.system,http.requests", manager, null, null, true)
+                        .body());
         assertThat(result.path("restarts").size()).isGreaterThanOrEqualTo(1);
-        assertThat(
-            result
-                .path("series")
-                .get(0)
-                .path("values")
-                .valueStream()
-                .anyMatch(v -> v.isNull())
-        ).isTrue();
+        assertThat(result.path("series").get(0).path("values").valueStream().anyMatch(v -> v.isNull()))
+                .isTrue();
     }
 
     @Test
@@ -301,8 +277,7 @@ class OperationsHttpIT {
     @Test
     void failedAlertCommitDoesNotConsumeThePendingWindow() {
         jdbc.update(
-            "UPDATE yumpoo.ops_alert_rule SET for_seconds=30,row_version=row_version+1 WHERE code='OUTBOX_DEAD'"
-        );
+                "UPDATE yumpoo.ops_alert_rule SET for_seconds=30,row_version=row_version+1 WHERE code='OUTBOX_DEAD'");
         Instant start = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MILLIS);
         alerts.evaluate(Map.of("outbox.dead", 2d), List.of(), start);
         alerts.evaluate(Map.of("outbox.dead", 2d), List.of(), start.plusSeconds(15));
@@ -314,8 +289,8 @@ class OperationsHttpIT {
         assertThat(repository.firing()).isEmpty();
         alerts.evaluate(Map.of("outbox.dead", 2d), List.of(), start.plusSeconds(30));
         assertThat(repository.firing())
-            .singleElement()
-            .satisfies(alert -> assertThat(alert.startedAt()).isEqualTo(start.plusSeconds(30)));
+                .singleElement()
+                .satisfies(alert -> assertThat(alert.startedAt()).isEqualTo(start.plusSeconds(30)));
     }
 
     @Test
@@ -323,59 +298,50 @@ class OperationsHttpIT {
         alerts.evaluate(Map.of("outbox.dead", 2d), List.of(), Instant.now());
         Rule rule = alerts.rule("OUTBOX_DEAD");
         String body = "{\"enabled\":false,\"warningThreshold\":1,\"criticalThreshold\":10,\"forSeconds\":0}";
-        assertThat(request("PUT", "/alert-rules/OUTBOX_DEAD", admin, body, rule.etag(), true).statusCode()).isEqualTo(
-            403
-        );
-        assertThat(request("PUT", "/alert-rules/OUTBOX_DEAD", manager, body, rule.etag(), true).statusCode()).isEqualTo(
-            200
-        );
+        assertThat(request("PUT", "/alert-rules/OUTBOX_DEAD", admin, body, rule.etag(), true)
+                        .statusCode())
+                .isEqualTo(403);
+        assertThat(request("PUT", "/alert-rules/OUTBOX_DEAD", manager, body, rule.etag(), true)
+                        .statusCode())
+                .isEqualTo(200);
         assertThat(repository.firing()).isEmpty();
         assertThat(alerts.cached()).isEmpty();
-        assertThat(repository.alerts("RESOLVED", null, 0, 20).items()).anyMatch(a ->
-            a.resolution().equals("RULE_DISABLED")
-        );
+        assertThat(repository.alerts("RESOLVED", null, 0, 20).items())
+                .anyMatch(a -> a.resolution().equals("RULE_DISABLED"));
     }
 
     @Test
     void sessionDetailsAreScopedInTheRepositoryWhileSamplingOnlyCounts() {
         assertThat(activeSessions.findActive(UUID.randomUUID(), Instant.now())).isEmpty();
         assertThat(activeSessions.findActive(COMPANY, Instant.now()))
-            .isNotEmpty()
-            .allMatch(session -> session.companyId().equals(COMPANY));
+                .isNotEmpty()
+                .allMatch(session -> session.companyId().equals(COMPANY));
         assertThat(activeSessions.countActive(Instant.now()).online()).isGreaterThanOrEqualTo(3);
     }
 
     HttpResponse<String> request(
-        String method,
-        String suffix,
-        IssuedSession actor,
-        String body,
-        String etag,
-        boolean csrf
-    ) throws Exception {
+            String method, String suffix, IssuedSession actor, String body, String etag, boolean csrf)
+            throws Exception {
         var builder = HttpRequest.newBuilder(
-            URI.create("http://127.0.0.1:" + port + "/api/v1/admin/operations" + suffix)
-        ).timeout(Duration.ofSeconds(20));
+                        URI.create("http://127.0.0.1:" + port + "/api/v1/admin/operations" + suffix))
+                .timeout(Duration.ofSeconds(20));
         if (actor != null) {
             builder.header(
-                "Cookie",
-                "__Host-yumpoo-session=" +
-                    actor.sessionCredential().value() +
-                    "; __Host-yumpoo-csrf=" +
-                    actor.csrfCredential().value()
-            );
+                    "Cookie",
+                    "__Host-yumpoo-session=" + actor.sessionCredential().value()
+                            + "; __Host-yumpoo-csrf="
+                            + actor.csrfCredential().value());
             if (csrf) builder.header("X-XSRF-TOKEN", actor.csrfCredential().value());
         }
         if (etag != null) builder.header("If-Match", etag);
         if (body != null) builder.header("Content-Type", "application/json");
         return client.send(
-            builder
-                .method(
-                    method,
-                    body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(body)
-                )
-                .build(),
-            HttpResponse.BodyHandlers.ofString()
-        );
+                builder.method(
+                                method,
+                                body == null
+                                        ? HttpRequest.BodyPublishers.noBody()
+                                        : HttpRequest.BodyPublishers.ofString(body))
+                        .build(),
+                HttpResponse.BodyHandlers.ofString());
     }
 }

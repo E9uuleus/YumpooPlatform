@@ -1,5 +1,7 @@
 package com.yumpoo.platform.identityaccess.infrastructure.desktopauth;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.yumpoo.platform.identityaccess.application.desktopauth.DesktopAuthAttempt;
 import com.yumpoo.platform.identityaccess.application.desktopauth.DesktopAuthAttemptStore;
 import com.yumpoo.platform.identityaccess.application.desktopauth.DesktopAuthExchange;
@@ -7,18 +9,10 @@ import com.yumpoo.platform.identityaccess.application.desktopauth.DesktopAuthTok
 import com.yumpoo.platform.identityaccess.application.desktopauth.DesktopAuthTokenHash;
 import com.yumpoo.platform.identityaccess.application.desktopauth.DesktopAuthTokenHasher;
 import com.yumpoo.platform.identityaccess.application.desktopauth.DesktopIdentityFingerprint;
-import com.yumpoo.platform.identityaccess.application.desktopauth.PkceS256Challenge;
 import com.yumpoo.platform.identityaccess.application.desktopauth.PkceVerifier;
 import com.yumpoo.platform.identityaccess.application.desktopauth.ProductDesktopAuthAttempt;
 import com.yumpoo.platform.identityaccess.application.desktopauth.ProductDesktopAuthExchange;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.simple.JdbcClient;
-
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -29,8 +23,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
 
 @Import(PostgreSqlTestContainerConfiguration.class)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
@@ -43,10 +41,8 @@ class JdbcDesktopAuthAttemptRepositoryIT {
     private static final DesktopAuthToken WRONG_TOKEN = token('W');
     private static final PkceVerifier VERIFIER = PkceVerifier.of("V".repeat(43));
     private static final PkceVerifier WRONG_VERIFIER = PkceVerifier.of("X".repeat(43));
-    private static final DesktopIdentityFingerprint FINGERPRINT = new DesktopIdentityFingerprint(
-            "a".repeat(64),
-            "b".repeat(64)
-    );
+    private static final DesktopIdentityFingerprint FINGERPRINT =
+            new DesktopIdentityFingerprint("a".repeat(64), "b".repeat(64));
     private static final DesktopAuthTokenHasher HASHER = new DesktopAuthTokenHasher();
     private static final UUID USER_ID = UUID.fromString("70000000-0000-4000-8000-000000000114");
     private static final UUID COMPANY_ID = UUID.fromString("00000000-0000-4000-8000-000000000001");
@@ -60,10 +56,12 @@ class JdbcDesktopAuthAttemptRepositoryIT {
     @BeforeEach
     void resetAttempts() {
         jdbcClient.sql("TRUNCATE TABLE yumpoo.desktop_auth_attempt").update();
-        jdbcClient.sql("DELETE FROM yumpoo.identity_user WHERE id = :userId")
+        jdbcClient
+                .sql("DELETE FROM yumpoo.identity_user WHERE id = :userId")
                 .param("userId", USER_ID)
                 .update();
-        jdbcClient.sql("""
+        jdbcClient
+                .sql("""
                         INSERT INTO yumpoo.identity_user (
                             id, company_id, employment_status, account_status,
                             display_name, directory_synced_at,
@@ -84,22 +82,16 @@ class JdbcDesktopAuthAttemptRepositoryIT {
         createAndIssue();
         Instant exchangeAt = CREATED_AT.plusSeconds(2);
 
+        assertThat(attemptStore.consume(hash(WRONG_TOKEN), hash(HANDOFF_CODE), VERIFIER.challenge(), exchangeAt))
+                .isEmpty();
+        assertThat(attemptStore.consume(hash(DESKTOP_STATE), hash(WRONG_TOKEN), VERIFIER.challenge(), exchangeAt))
+                .isEmpty();
         assertThat(attemptStore.consume(
-                hash(WRONG_TOKEN), hash(HANDOFF_CODE), VERIFIER.challenge(), exchangeAt
-        )).isEmpty();
-        assertThat(attemptStore.consume(
-                hash(DESKTOP_STATE), hash(WRONG_TOKEN), VERIFIER.challenge(), exchangeAt
-        )).isEmpty();
-        assertThat(attemptStore.consume(
-                hash(DESKTOP_STATE), hash(HANDOFF_CODE), WRONG_VERIFIER.challenge(), exchangeAt
-        )).isEmpty();
+                        hash(DESKTOP_STATE), hash(HANDOFF_CODE), WRONG_VERIFIER.challenge(), exchangeAt))
+                .isEmpty();
 
-        Optional<DesktopAuthExchange> success = attemptStore.consume(
-                hash(DESKTOP_STATE),
-                hash(HANDOFF_CODE),
-                VERIFIER.challenge(),
-                exchangeAt
-        );
+        Optional<DesktopAuthExchange> success =
+                attemptStore.consume(hash(DESKTOP_STATE), hash(HANDOFF_CODE), VERIFIER.challenge(), exchangeAt);
 
         assertThat(success).hasValueSatisfying(exchange -> {
             assertThat(exchange.identityFingerprint()).isEqualTo(FINGERPRINT);
@@ -107,8 +99,8 @@ class JdbcDesktopAuthAttemptRepositoryIT {
             assertThat(exchange.consumedAt()).isEqualTo(exchangeAt);
         });
         assertThat(attemptStore.consume(
-                hash(DESKTOP_STATE), hash(HANDOFF_CODE), VERIFIER.challenge(), exchangeAt.plusSeconds(1)
-        )).isEmpty();
+                        hash(DESKTOP_STATE), hash(HANDOFF_CODE), VERIFIER.challenge(), exchangeAt.plusSeconds(1)))
+                .isEmpty();
     }
 
     @Test
@@ -116,21 +108,18 @@ class JdbcDesktopAuthAttemptRepositoryIT {
         attemptStore.create(attempt());
 
         assertThat(attemptStore.issueHandoff(
-                hash(OAUTH_STATE),
-                hash(DESKTOP_STATE),
-                hash(HANDOFF_CODE),
-                FINGERPRINT,
-                CREATED_AT.plusSeconds(300),
-                CREATED_AT.plusSeconds(360)
-        )).isFalse();
+                        hash(OAUTH_STATE),
+                        hash(DESKTOP_STATE),
+                        hash(HANDOFF_CODE),
+                        FINGERPRINT,
+                        CREATED_AT.plusSeconds(300),
+                        CREATED_AT.plusSeconds(360)))
+                .isFalse();
 
         createAndIssueAfterReset();
         assertThat(attemptStore.consume(
-                hash(DESKTOP_STATE),
-                hash(HANDOFF_CODE),
-                VERIFIER.challenge(),
-                CREATED_AT.plusSeconds(61)
-        )).isEmpty();
+                        hash(DESKTOP_STATE), hash(HANDOFF_CODE), VERIFIER.challenge(), CREATED_AT.plusSeconds(61)))
+                .isEmpty();
         assertThat(consumedAt()).isNull();
     }
 
@@ -150,11 +139,7 @@ class JdbcDesktopAuthAttemptRepositoryIT {
                         throw new IllegalStateException("concurrent exchange start timed out");
                     }
                     return attemptStore.consume(
-                            hash(DESKTOP_STATE),
-                            hash(HANDOFF_CODE),
-                            VERIFIER.challenge(),
-                            CREATED_AT.plusSeconds(2)
-                    );
+                            hash(DESKTOP_STATE), hash(HANDOFF_CODE), VERIFIER.challenge(), CREATED_AT.plusSeconds(2));
                 }));
             }
             assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
@@ -177,29 +162,32 @@ class JdbcDesktopAuthAttemptRepositoryIT {
     @Test
     void productAttemptClaimsOnceAndConsumesPkceHandoffOnce() {
         attemptStore.createProduct(new ProductDesktopAuthAttempt(
-                hash(DESKTOP_STATE), VERIFIER.challenge(), "m114.persistence-1",
-                "0.1.0", "1", CREATED_AT, CREATED_AT.plusSeconds(300), false
-        ));
+                hash(DESKTOP_STATE),
+                VERIFIER.challenge(),
+                "m114.persistence-1",
+                "0.1.0",
+                "1",
+                CREATED_AT,
+                CREATED_AT.plusSeconds(300),
+                false));
 
-        assertThat(attemptStore.claimProductAuthorization(
-                hash(DESKTOP_STATE), CREATED_AT.plusSeconds(1)
-        )).isTrue();
-        assertThat(attemptStore.claimProductAuthorization(
-                hash(DESKTOP_STATE), CREATED_AT.plusSeconds(1)
-        )).isFalse();
+        assertThat(attemptStore.claimProductAuthorization(hash(DESKTOP_STATE), CREATED_AT.plusSeconds(1)))
+                .isTrue();
+        assertThat(attemptStore.claimProductAuthorization(hash(DESKTOP_STATE), CREATED_AT.plusSeconds(1)))
+                .isFalse();
         assertThat(attemptStore.issueProductHandoff(
-                hash(DESKTOP_STATE), hash(HANDOFF_CODE), USER_ID,
-                CREATED_AT.plusSeconds(2), CREATED_AT.plusSeconds(62)
-        )).isTrue();
+                        hash(DESKTOP_STATE),
+                        hash(HANDOFF_CODE),
+                        USER_ID,
+                        CREATED_AT.plusSeconds(2),
+                        CREATED_AT.plusSeconds(62)))
+                .isTrue();
         assertThat(attemptStore.consumeProduct(
-                hash(DESKTOP_STATE), hash(HANDOFF_CODE), WRONG_VERIFIER.challenge(),
-                CREATED_AT.plusSeconds(3)
-        )).isEmpty();
+                        hash(DESKTOP_STATE), hash(HANDOFF_CODE), WRONG_VERIFIER.challenge(), CREATED_AT.plusSeconds(3)))
+                .isEmpty();
 
         Optional<ProductDesktopAuthExchange> exchange = attemptStore.consumeProduct(
-                hash(DESKTOP_STATE), hash(HANDOFF_CODE), VERIFIER.challenge(),
-                CREATED_AT.plusSeconds(3)
-        );
+                hash(DESKTOP_STATE), hash(HANDOFF_CODE), VERIFIER.challenge(), CREATED_AT.plusSeconds(3));
 
         assertThat(exchange).hasValueSatisfying(value -> {
             assertThat(value.userId()).isEqualTo(USER_ID);
@@ -208,9 +196,8 @@ class JdbcDesktopAuthAttemptRepositoryIT {
             assertThat(value.rememberMe()).isFalse();
         });
         assertThat(attemptStore.consumeProduct(
-                hash(DESKTOP_STATE), hash(HANDOFF_CODE), VERIFIER.challenge(),
-                CREATED_AT.plusSeconds(4)
-        )).isEmpty();
+                        hash(DESKTOP_STATE), hash(HANDOFF_CODE), VERIFIER.challenge(), CREATED_AT.plusSeconds(4)))
+                .isEmpty();
     }
 
     @Test
@@ -223,10 +210,9 @@ class JdbcDesktopAuthAttemptRepositoryIT {
                         WHERE table_schema = 'yumpoo'
                           AND table_name = 'desktop_auth_attempt'
                         ORDER BY ordinal_position
-                        """)
-                .query(String.class)
-                .list();
-        StoredValues stored = jdbcClient.sql("""
+                        """).query(String.class).list();
+        StoredValues stored = jdbcClient
+                .sql("""
                         SELECT desktop_state_hash,
                                oauth_state_hash,
                                handoff_code_hash,
@@ -239,36 +225,34 @@ class JdbcDesktopAuthAttemptRepositoryIT {
                         resultSet.getString("oauth_state_hash"),
                         resultSet.getString("handoff_code_hash"),
                         resultSet.getString("corp_fingerprint"),
-                        resultSet.getString("member_fingerprint")
-                ))
+                        resultSet.getString("member_fingerprint")))
                 .single();
 
-        assertThat(columns).containsExactly(
-                "desktop_state_hash",
-                "oauth_state_hash",
-                "pkce_s256_challenge",
-                "request_id",
-                "created_at",
-                "authorize_expires_at",
-                "handoff_code_hash",
-                "corp_fingerprint",
-                "member_fingerprint",
-                "handoff_issued_at",
-                "handoff_expires_at",
-                "consumed_at",
-                "authorization_claimed_at",
-                "authenticated_user_id",
-                "client_version",
-                "client_protocol_version",
-                "remember_me"
-        );
+        assertThat(columns)
+                .containsExactly(
+                        "desktop_state_hash",
+                        "oauth_state_hash",
+                        "pkce_s256_challenge",
+                        "request_id",
+                        "created_at",
+                        "authorize_expires_at",
+                        "handoff_code_hash",
+                        "corp_fingerprint",
+                        "member_fingerprint",
+                        "handoff_issued_at",
+                        "handoff_expires_at",
+                        "consumed_at",
+                        "authorization_claimed_at",
+                        "authenticated_user_id",
+                        "client_version",
+                        "client_protocol_version",
+                        "remember_me");
         assertThat(stored.desktopStateHash()).isEqualTo(hash(DESKTOP_STATE).value());
         assertThat(stored.oauthStateHash()).isEqualTo(hash(OAUTH_STATE).value());
         assertThat(stored.handoffCodeHash()).isEqualTo(hash(HANDOFF_CODE).value());
         assertThat(stored.corpFingerprint()).isEqualTo(FINGERPRINT.corpFingerprint());
         assertThat(stored.memberFingerprint()).isEqualTo(FINGERPRINT.memberFingerprint());
-        assertThat(stored.toString())
-                .doesNotContain(DESKTOP_STATE.value(), OAUTH_STATE.value(), HANDOFF_CODE.value());
+        assertThat(stored.toString()).doesNotContain(DESKTOP_STATE.value(), OAUTH_STATE.value(), HANDOFF_CODE.value());
     }
 
     private void createAndIssueAfterReset() {
@@ -279,13 +263,13 @@ class JdbcDesktopAuthAttemptRepositoryIT {
     private void createAndIssue() {
         attemptStore.create(attempt());
         assertThat(attemptStore.issueHandoff(
-                hash(OAUTH_STATE),
-                hash(DESKTOP_STATE),
-                hash(HANDOFF_CODE),
-                FINGERPRINT,
-                CREATED_AT.plusSeconds(1),
-                CREATED_AT.plusSeconds(61)
-        )).isTrue();
+                        hash(OAUTH_STATE),
+                        hash(DESKTOP_STATE),
+                        hash(HANDOFF_CODE),
+                        FINGERPRINT,
+                        CREATED_AT.plusSeconds(1),
+                        CREATED_AT.plusSeconds(61)))
+                .isTrue();
     }
 
     private static DesktopAuthAttempt attempt() {
@@ -295,12 +279,12 @@ class JdbcDesktopAuthAttemptRepositoryIT {
                 VERIFIER.challenge(),
                 "m015.persistence-1",
                 CREATED_AT,
-                CREATED_AT.plusSeconds(300)
-        );
+                CREATED_AT.plusSeconds(300));
     }
 
     private Instant consumedAt() {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                         SELECT consumed_at
                         FROM yumpoo.desktop_auth_attempt
                         WHERE desktop_state_hash = :desktopStateHash
@@ -324,7 +308,5 @@ class JdbcDesktopAuthAttemptRepositoryIT {
             String oauthStateHash,
             String handoffCodeHash,
             String corpFingerprint,
-            String memberFingerprint
-    ) {
-    }
+            String memberFingerprint) {}
 }

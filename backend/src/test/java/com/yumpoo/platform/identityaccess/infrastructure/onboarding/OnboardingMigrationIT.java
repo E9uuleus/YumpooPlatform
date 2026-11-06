@@ -1,5 +1,9 @@
 package com.yumpoo.platform.identityaccess.infrastructure.onboarding;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.util.List;
+import java.util.UUID;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -8,22 +12,18 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
-import java.util.List;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-
 @Testcontainers
 class OnboardingMigrationIT {
     @Container
     static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:17.10-alpine");
+
     private static final UUID COMPANY = UUID.fromString("00000000-0000-4000-8000-000000000001");
 
     @Test
     void backfillsOnlyPreviouslyLoggedInMembersAndLeavesFirstLoginsEligible() {
         migrate("69");
-        JdbcClient jdbc = JdbcClient.create(new DriverManagerDataSource(
-                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword()));
+        JdbcClient jdbc = JdbcClient.create(
+                new DriverManagerDataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword()));
         UUID active = insertUser(jdbc);
         UUID expired = insertUser(jdbc);
         UUID audited = insertUser(jdbc);
@@ -41,17 +41,27 @@ class OnboardingMigrationIT {
             assertThat(jdbc.sql("""
                     SELECT tour_id FROM yumpoo.user_onboarding_tour
                     WHERE company_id=:company AND user_id=:user AND version=1 AND completed_at IS NOT NULL
-                    """).param("company", COMPANY).param("user", user).query(String.class).list())
-                    .containsExactlyInAnyOrder("welcome", "project-work-items", "workspace", "dashboards", "inbox", "company");
+                    """)
+                            .param("company", COMPANY)
+                            .param("user", user)
+                            .query(String.class)
+                            .list())
+                    .containsExactlyInAnyOrder(
+                            "welcome", "project-work-items", "workspace", "dashboards", "inbox", "company");
         }
         assertThat(recordCount(jdbc, syncedOnly)).isZero();
         assertThat(recordCount(jdbc, insertUser(jdbc))).isZero();
-        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.user_onboarding_tour").query(Integer.class).single()).isEqualTo(18);
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.user_onboarding_tour")
+                        .query(Integer.class)
+                        .single())
+                .isEqualTo(18);
     }
 
     private static int recordCount(JdbcClient jdbc, UUID user) {
         return jdbc.sql("SELECT count(*) FROM yumpoo.user_onboarding_tour WHERE user_id=:user")
-                .param("user", user).query(Integer.class).single();
+                .param("user", user)
+                .query(Integer.class)
+                .single();
     }
 
     private static UUID insertUser(JdbcClient jdbc) {
@@ -77,9 +87,14 @@ class OnboardingMigrationIT {
                     transaction_timestamp(),
                     CASE WHEN :expired THEN transaction_timestamp() - interval '1 day' ELSE NULL END,
                     CASE WHEN :expired THEN 'ABSOLUTE_EXPIRED' ELSE NULL END)
-                """).param("id", id).param("company", COMPANY).param("user", user)
-                .param("status", expired ? "EXPIRED" : "ACTIVE").param("expired", expired)
-                .param("fingerprint", id.toString().replace("-", "").repeat(2)).update();
+                """)
+                .param("id", id)
+                .param("company", COMPANY)
+                .param("user", user)
+                .param("status", expired ? "EXPIRED" : "ACTIVE")
+                .param("expired", expired)
+                .param("fingerprint", id.toString().replace("-", "").repeat(2))
+                .update();
     }
 
     private static void insertAudit(JdbcClient jdbc, UUID user, String action, String outcome) {
@@ -89,14 +104,26 @@ class OnboardingMigrationIT {
                     actor_type, actor_user_id, target_type, target_id, request_id, correlation_id, error_code, occurred_at)
                 VALUES (:id, :company, :fact, :action, :outcome, 'USER', :user, 'LOGIN_SESSION', :fact,
                     'onboarding-migration', 'onboarding-migration', :error, transaction_timestamp())
-                """).param("id", id).param("company", COMPANY).param("fact", id.toString())
-                .param("action", action).param("outcome", outcome).param("user", user)
-                .param("error", outcome.equals("SUCCEEDED") ? null : "LOGIN_REJECTED").update();
+                """)
+                .param("id", id)
+                .param("company", COMPANY)
+                .param("fact", id.toString())
+                .param("action", action)
+                .param("outcome", outcome)
+                .param("user", user)
+                .param("error", outcome.equals("SUCCEEDED") ? null : "LOGIN_REJECTED")
+                .update();
     }
 
     private static void migrate(String target) {
-        Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
-                .locations("classpath:db/migration").schemas("yumpoo").defaultSchema("yumpoo")
-                .createSchemas(true).target(target).load().migrate();
+        Flyway.configure()
+                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .locations("classpath:db/migration")
+                .schemas("yumpoo")
+                .defaultSchema("yumpoo")
+                .createSchemas(true)
+                .target(target)
+                .load()
+                .migrate();
     }
 }

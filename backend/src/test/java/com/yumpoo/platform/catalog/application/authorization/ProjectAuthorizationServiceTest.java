@@ -1,18 +1,17 @@
 package com.yumpoo.platform.catalog.application.authorization;
 
+import static com.yumpoo.platform.catalog.application.authorization.ProjectAuthorizationService.Action.ORDINARY_WRITE;
+import static com.yumpoo.platform.catalog.application.authorization.ProjectAuthorizationService.Action.READ;
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.yumpoo.platform.catalog.domain.authorization.ProjectAccessFacts;
 import com.yumpoo.platform.foundation.domain.authorization.AuthorizationDecision;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.PlatformRoleCode;
-import org.junit.jupiter.api.Test;
-
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-
-import static com.yumpoo.platform.catalog.application.authorization.ProjectAuthorizationService.Action.ORDINARY_WRITE;
-import static com.yumpoo.platform.catalog.application.authorization.ProjectAuthorizationService.Action.READ;
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 class ProjectAuthorizationServiceTest {
 
@@ -38,8 +37,7 @@ class ProjectAuthorizationServiceTest {
             CurrentActor actor = actor(roles);
             ProjectAccessFacts facts = new ProjectAccessFacts(COMPANY, false, false);
             assertThat(decide(actor, facts, READ)).isEqualTo(AuthorizationDecision.ALLOW);
-            assertThat(decide(actor, facts, ORDINARY_WRITE))
-                    .isEqualTo(AuthorizationDecision.DENY_VISIBLE);
+            assertThat(decide(actor, facts, ORDINARY_WRITE)).isEqualTo(AuthorizationDecision.DENY_VISIBLE);
         }
     }
 
@@ -48,24 +46,19 @@ class ProjectAuthorizationServiceTest {
         ProjectAccessFacts facts = new ProjectAccessFacts(COMPANY, false, false);
         assertThat(decide(actor(Set.of(PlatformRoleCode.APP_MANAGER)), facts, READ))
                 .isEqualTo(AuthorizationDecision.ALLOW);
-        assertThat(decide(actor(Set.of()), facts, ORDINARY_WRITE))
-                .isEqualTo(AuthorizationDecision.DENY_HIDDEN);
+        assertThat(decide(actor(Set.of()), facts, ORDINARY_WRITE)).isEqualTo(AuthorizationDecision.DENY_HIDDEN);
     }
 
     @Test
     void missingAndCrossCompanyResourcesAreHiddenEvenFromAdmin() {
         CurrentActor admin = actor(Set.of(PlatformRoleCode.COMPANY_ADMIN));
-        assertThat(service.decide(admin, Optional.empty(), READ))
-                .isEqualTo(AuthorizationDecision.DENY_HIDDEN);
+        assertThat(service.decide(admin, Optional.empty(), READ)).isEqualTo(AuthorizationDecision.DENY_HIDDEN);
         assertThat(decide(admin, new ProjectAccessFacts(OTHER_COMPANY, true, true), READ))
                 .isEqualTo(AuthorizationDecision.DENY_HIDDEN);
     }
 
     private AuthorizationDecision decide(
-            CurrentActor actor,
-            ProjectAccessFacts facts,
-            ProjectAuthorizationService.Action action
-    ) {
+            CurrentActor actor, ProjectAccessFacts facts, ProjectAuthorizationService.Action action) {
         return service.decide(actor, Optional.of(facts), action);
     }
 
@@ -78,19 +71,16 @@ class ProjectAuthorizationServiceTest {
                 Set.of(),
                 Set.of(PlatformRoleCode.COMPANY_ADMIN),
                 Set.of(PlatformRoleCode.APP_MANAGER),
-                Set.of(PlatformRoleCode.COMPANY_ADMIN, PlatformRoleCode.APP_MANAGER)
-        );
+                Set.of(PlatformRoleCode.COMPANY_ADMIN, PlatformRoleCode.APP_MANAGER));
     }
 
     private static final class ListSets {
-        private ListSets() {
-        }
+        private ListSets() {}
 
         static java.util.List<Set<PlatformRoleCode>> adminSets() {
             return java.util.List.of(
                     Set.of(PlatformRoleCode.COMPANY_ADMIN),
-                    Set.of(PlatformRoleCode.COMPANY_ADMIN, PlatformRoleCode.APP_MANAGER)
-            );
+                    Set.of(PlatformRoleCode.COMPANY_ADMIN, PlatformRoleCode.APP_MANAGER));
         }
     }
 }

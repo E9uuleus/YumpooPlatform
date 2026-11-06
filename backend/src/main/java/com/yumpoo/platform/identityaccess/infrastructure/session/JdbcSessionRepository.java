@@ -9,9 +9,6 @@ import com.yumpoo.platform.identityaccess.domain.session.LoginSession;
 import com.yumpoo.platform.identityaccess.domain.session.SessionClientType;
 import com.yumpoo.platform.identityaccess.domain.session.SessionRevocationReason;
 import com.yumpoo.platform.identityaccess.domain.session.SessionStatus;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Repository;
-
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
@@ -21,6 +18,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Repository;
 
 @Repository
 public class JdbcSessionRepository implements SessionRepository {
@@ -65,7 +64,8 @@ public class JdbcSessionRepository implements SessionRepository {
 
     @Override
     public UserAuthorizationRecord incrementAuthorizationVersion(UUID userId) {
-        List<UserAuthorizationRecord> users = jdbcClient.sql("""
+        List<UserAuthorizationRecord> users = jdbcClient
+                .sql("""
                         UPDATE yumpoo.identity_user
                         SET authorization_version = authorization_version + 1,
                             row_version = row_version + 1,
@@ -84,7 +84,8 @@ public class JdbcSessionRepository implements SessionRepository {
 
     @Override
     public void insert(LoginSession session) {
-        int inserted = jdbcClient.sql("""
+        int inserted = jdbcClient
+                .sql("""
                         INSERT INTO yumpoo.login_session (
                             id, company_id, user_id, status,
                             session_token_fingerprint, session_key_version,
@@ -117,8 +118,11 @@ public class JdbcSessionRepository implements SessionRepository {
                 .param("idleExpiresAt", utc(session.idleExpiresAt()))
                 .param("absoluteExpiresAt", utc(session.absoluteExpiresAt()))
                 .param("revokedAt", nullableUtc(session.revokedAt()))
-                .param("revokeReason", session.revokeReason() == null
-                        ? null : session.revokeReason().name())
+                .param(
+                        "revokeReason",
+                        session.revokeReason() == null
+                                ? null
+                                : session.revokeReason().name())
                 .param("purgeAfter", utc(session.purgeAfter()))
                 .param("rememberMe", session.rememberMe())
                 .update();
@@ -126,11 +130,9 @@ public class JdbcSessionRepository implements SessionRepository {
     }
 
     @Override
-    public Optional<LoginSession> findByTokenFingerprint(
-            String keyVersion,
-            String fingerprint
-    ) {
-        return singleSession(jdbcClient.sql("""
+    public Optional<LoginSession> findByTokenFingerprint(String keyVersion, String fingerprint) {
+        return singleSession(jdbcClient
+                .sql("""
                         SELECT %s
                         FROM yumpoo.login_session
                         WHERE session_key_version = :keyVersion
@@ -144,7 +146,8 @@ public class JdbcSessionRepository implements SessionRepository {
 
     @Override
     public Optional<LoginSession> lockById(UUID sessionId) {
-        return singleSession(jdbcClient.sql("""
+        return singleSession(jdbcClient
+                .sql("""
                         SELECT %s
                         FROM yumpoo.login_session
                         WHERE id = :sessionId
@@ -157,15 +160,12 @@ public class JdbcSessionRepository implements SessionRepository {
 
     @Override
     public boolean terminateIfActive(
-            UUID sessionId,
-            SessionStatus status,
-            SessionRevocationReason reason,
-            Instant now
-    ) {
+            UUID sessionId, SessionStatus status, SessionRevocationReason reason, Instant now) {
         if (status == SessionStatus.ACTIVE) {
             throw new IllegalArgumentException("terminal status is required");
         }
-        return jdbcClient.sql("""
+        return jdbcClient
+                        .sql("""
                         UPDATE yumpoo.login_session
                         SET status = :status,
                             revoked_at = :now,
@@ -173,20 +173,18 @@ public class JdbcSessionRepository implements SessionRepository {
                         WHERE id = :sessionId
                           AND status = 'ACTIVE'
                         """)
-                .param("status", status.name())
-                .param("now", utc(now))
-                .param("reason", reason.name())
-                .param("sessionId", sessionId)
-                .update() == 1;
+                        .param("status", status.name())
+                        .param("now", utc(now))
+                        .param("reason", reason.name())
+                        .param("sessionId", sessionId)
+                        .update()
+                == 1;
     }
 
     @Override
-    public int terminateActiveForUser(
-            UUID userId,
-            SessionRevocationReason reason,
-            Instant now
-    ) {
-        return jdbcClient.sql("""
+    public int terminateActiveForUser(UUID userId, SessionRevocationReason reason, Instant now) {
+        return jdbcClient
+                .sql("""
                         UPDATE yumpoo.login_session
                         SET status = 'REVOKED',
                             revoked_at = :now,
@@ -204,12 +202,9 @@ public class JdbcSessionRepository implements SessionRepository {
 
     @Override
     public boolean convergeCsrf(
-            UUID sessionId,
-            String expectedKeyVersion,
-            String expectedFingerprint,
-            CredentialFingerprint replacement
-    ) {
-        return jdbcClient.sql("""
+            UUID sessionId, String expectedKeyVersion, String expectedFingerprint, CredentialFingerprint replacement) {
+        return jdbcClient
+                        .sql("""
                         UPDATE yumpoo.login_session
                         SET csrf_key_version = :replacementKeyVersion,
                             csrf_token_fingerprint = :replacementFingerprint
@@ -226,22 +221,20 @@ public class JdbcSessionRepository implements SessionRepository {
                               )
                           )
                         """)
-                .param("replacementKeyVersion", replacement.keyVersion())
-                .param("replacementFingerprint", replacement.value())
-                .param("sessionId", sessionId)
-                .param("expectedKeyVersion", expectedKeyVersion)
-                .param("expectedFingerprint", expectedFingerprint)
-                .update() == 1;
+                        .param("replacementKeyVersion", replacement.keyVersion())
+                        .param("replacementFingerprint", replacement.value())
+                        .param("sessionId", sessionId)
+                        .param("expectedKeyVersion", expectedKeyVersion)
+                        .param("expectedFingerprint", expectedFingerprint)
+                        .update()
+                == 1;
     }
 
     @Override
     public boolean touchIfActive(
-            UUID sessionId,
-            long issuedAuthorizationVersion,
-            Instant lastSeenAt,
-            Instant idleExpiresAt
-    ) {
-        return jdbcClient.sql("""
+            UUID sessionId, long issuedAuthorizationVersion, Instant lastSeenAt, Instant idleExpiresAt) {
+        return jdbcClient
+                        .sql("""
                         UPDATE yumpoo.login_session
                         SET last_seen_at = :lastSeenAt,
                             idle_expires_at = :idleExpiresAt
@@ -250,11 +243,12 @@ public class JdbcSessionRepository implements SessionRepository {
                           AND issued_authorization_version = :authorizationVersion
                           AND absolute_expires_at > :lastSeenAt
                         """)
-                .param("lastSeenAt", utc(lastSeenAt))
-                .param("idleExpiresAt", utc(idleExpiresAt))
-                .param("sessionId", sessionId)
-                .param("authorizationVersion", issuedAuthorizationVersion)
-                .update() == 1;
+                        .param("lastSeenAt", utc(lastSeenAt))
+                        .param("idleExpiresAt", utc(idleExpiresAt))
+                        .param("sessionId", sessionId)
+                        .param("authorizationVersion", issuedAuthorizationVersion)
+                        .update()
+                == 1;
     }
 
     @Override
@@ -271,14 +265,12 @@ public class JdbcSessionRepository implements SessionRepository {
                         DELETE FROM yumpoo.login_session session
                         USING purgeable
                         WHERE session.id = purgeable.id
-                        """)
-                .param("now", utc(now))
-                .param("limit", limit)
-                .update();
+                        """).param("now", utc(now)).param("limit", limit).update();
     }
 
     private Optional<UserAuthorizationRecord> singleUser(String sql, UUID userId) {
-        List<UserAuthorizationRecord> users = jdbcClient.sql(sql)
+        List<UserAuthorizationRecord> users = jdbcClient
+                .sql(sql)
                 .param("userId", userId)
                 .query(JdbcSessionRepository::mapUser)
                 .list();
@@ -295,20 +287,17 @@ public class JdbcSessionRepository implements SessionRepository {
         return sessions.stream().findFirst();
     }
 
-    private static UserAuthorizationRecord mapUser(ResultSet resultSet, int rowNumber)
-            throws SQLException {
+    private static UserAuthorizationRecord mapUser(ResultSet resultSet, int rowNumber) throws SQLException {
         return new UserAuthorizationRecord(
                 resultSet.getObject("id", UUID.class),
                 resultSet.getObject("company_id", UUID.class),
                 EmploymentStatus.valueOf(resultSet.getString("employment_status")),
                 AccountStatus.valueOf(resultSet.getString("account_status")),
                 resultSet.getLong("authorization_version"),
-                resultSet.getLong("row_version")
-        );
+                resultSet.getLong("row_version"));
     }
 
-    private static LoginSession mapSession(ResultSet resultSet, int rowNumber)
-            throws SQLException {
+    private static LoginSession mapSession(ResultSet resultSet, int rowNumber) throws SQLException {
         String revokeReason = resultSet.getString("revoke_reason");
         return new LoginSession(
                 resultSet.getObject("id", UUID.class),
@@ -329,8 +318,7 @@ public class JdbcSessionRepository implements SessionRepository {
                 nullableInstant(resultSet, "revoked_at"),
                 revokeReason == null ? null : SessionRevocationReason.valueOf(revokeReason),
                 instant(resultSet, "purge_after"),
-                resultSet.getBoolean("remember_me")
-        );
+                resultSet.getBoolean("remember_me"));
     }
 
     private static OffsetDateTime utc(Instant instant) {

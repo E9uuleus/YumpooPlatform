@@ -8,19 +8,18 @@ import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.CurrentActorProvider;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
 import com.yumpoo.platform.organization.api.CompanyConfigurationSnapshot;
-import org.springframework.http.CacheControl;
-import org.springframework.http.ResponseEntity;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import java.time.DayOfWeek;
+import java.time.ZoneId;
+import java.util.UUID;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
-
-import java.time.DayOfWeek;
-import java.time.ZoneId;
-import java.util.UUID;
 
 @ApiV1Controller
 public final class CompanyController {
@@ -34,8 +33,7 @@ public final class CompanyController {
             CurrentActorProvider currentActorProvider,
             CompanyConfigurationQuery companyQuery,
             CompanyAdministrationService administration,
-            IfMatchParser ifMatchParser
-    ) {
+            IfMatchParser ifMatchParser) {
         this.currentActorProvider = currentActorProvider;
         this.companyQuery = companyQuery;
         this.administration = administration;
@@ -49,7 +47,8 @@ public final class CompanyController {
     }
 
     @PatchMapping("/company")
-    ResponseEntity<CompanyResponse> update(@Valid @RequestBody UpdateRequest request,
+    ResponseEntity<CompanyResponse> update(
+            @Valid @RequestBody UpdateRequest request,
             @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatch) {
         CurrentActor actor = currentActorProvider.requiredActive();
         long expected = ifMatchParser.parseForVisibleResource(true, ifMatch);
@@ -71,12 +70,15 @@ public final class CompanyController {
             ZoneId timezone,
             DayOfWeek weekStartDay,
             int defaultWorkdayMinutes,
-            long rowVersion
-    ) {
+            long rowVersion) {
         static CompanyResponse from(CompanyConfigurationSnapshot source) {
             return new CompanyResponse(
-                    source.companyId(), source.displayName(), source.timezone(),
-                    source.weekStartDay(), source.defaultWorkdayMinutes(), source.rowVersion());
+                    source.companyId(),
+                    source.displayName(),
+                    source.timezone(),
+                    source.weekStartDay(),
+                    source.defaultWorkdayMinutes(),
+                    source.rowVersion());
         }
     }
 }

@@ -4,9 +4,6 @@ import com.yumpoo.platform.catalog.application.workspace.WorkspaceListStatus;
 import com.yumpoo.platform.catalog.application.workspace.WorkspaceRepository;
 import com.yumpoo.platform.catalog.domain.workspace.Workspace;
 import com.yumpoo.platform.catalog.domain.workspace.WorkspaceStatus;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Repository;
-
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
@@ -15,6 +12,8 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Repository;
 
 @Repository
 public class JdbcWorkspaceRepository implements WorkspaceRepository {
@@ -87,7 +86,8 @@ public class JdbcWorkspaceRepository implements WorkspaceRepository {
 
     @Override
     public List<Workspace> findAll(UUID companyId, WorkspaceListStatus status) {
-        return jdbcClient.sql(FIND_ALL)
+        return jdbcClient
+                .sql(FIND_ALL)
                 .param("companyId", companyId)
                 .param("includeActive", status.includeActive())
                 .param("includeArchived", status.includeArchived())
@@ -107,7 +107,8 @@ public class JdbcWorkspaceRepository implements WorkspaceRepository {
 
     @Override
     public Optional<Workspace> findMainForShare(UUID companyId) {
-        return jdbcClient.sql(FIND_MAIN_FOR_SHARE)
+        return jdbcClient
+                .sql(FIND_MAIN_FOR_SHARE)
                 .param("companyId", companyId)
                 .query(JdbcWorkspaceRepository::map)
                 .optional();
@@ -115,13 +116,17 @@ public class JdbcWorkspaceRepository implements WorkspaceRepository {
 
     @Override
     public Optional<Workspace> findMainForUpdate(UUID companyId) {
-        return jdbcClient.sql(FIND_MAIN_FOR_UPDATE)
-                .param("companyId", companyId).query(JdbcWorkspaceRepository::map).optional();
+        return jdbcClient
+                .sql(FIND_MAIN_FOR_UPDATE)
+                .param("companyId", companyId)
+                .query(JdbcWorkspaceRepository::map)
+                .optional();
     }
 
     @Override
     public Optional<Workspace> updateDetails(Workspace workspace, long expectedRowVersion) {
-        return jdbcClient.sql(UPDATE_DETAILS)
+        return jdbcClient
+                .sql(UPDATE_DETAILS)
                 .param("name", workspace.name())
                 .param("description", workspace.description())
                 .param("updatedAt", utc(workspace.updatedAt()))
@@ -134,7 +139,8 @@ public class JdbcWorkspaceRepository implements WorkspaceRepository {
     }
 
     private Optional<Workspace> find(String sql, UUID companyId, UUID workspaceId) {
-        return jdbcClient.sql(sql)
+        return jdbcClient
+                .sql(sql)
                 .param("companyId", companyId)
                 .param("workspaceId", workspaceId)
                 .query(JdbcWorkspaceRepository::map)
@@ -154,8 +160,7 @@ public class JdbcWorkspaceRepository implements WorkspaceRepository {
                 instant(resultSet, "created_at"),
                 resultSet.getObject("created_by_user_id", UUID.class),
                 instant(resultSet, "updated_at"),
-                resultSet.getObject("updated_by_user_id", UUID.class)
-        );
+                resultSet.getObject("updated_by_user_id", UUID.class));
     }
 
     private static Instant instant(ResultSet resultSet, String column) throws SQLException {
