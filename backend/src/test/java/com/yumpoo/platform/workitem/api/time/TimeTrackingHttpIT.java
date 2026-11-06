@@ -25,13 +25,16 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -74,6 +77,9 @@ class TimeTrackingHttpIT {
 
     @Autowired
     private JdbcClient jdbc;
+
+    @Autowired
+    private DataSource dataSource;
 
     @Autowired
     private ObjectMapper json;
@@ -628,6 +634,54 @@ class TimeTrackingHttpIT {
                         .query(Long.class)
                         .single())
                 .isZero();
+    }
+
+    @Test
+    void repairMigrationCorrectsSharesLeftByEarlierDeletes() throws Exception {
+        for (Project project : List.of(source, target))
+            ok(mutate(
+                    "POST",
+                    "/api/v1/me/time-sessions/fill",
+                    member,
+                    fillBody("PARALLEL", project.itemId(), "09:00", "10:00"),
+                    null));
+
+        jdbc.sql("""
+                UPDATE yumpoo.work_item
+                   SET deleted_at=transaction_timestamp(), deleted_by_user_id=:actor, delete_reason='旧版删除',
+                       row_version=row_version+1, updated_at=transaction_timestamp(), updated_by_user_id=:actor
+                 WHERE id=:item
+                """)
+                .param("actor", member.userId())
+                .param("item", source.itemId())
+                .update();
+        String history = "/api/v1/work-items/" + target.itemId() + "/time-sessions";
+        assertThat(ok(get(history, member))
+                        .path("items")
+                        .get(0)
+                        .path("allocatedDurationMs")
+                        .asLong())
+                .isEqualTo(1800000);
+
+        new ResourceDatabasePopulator(new ClassPathResource("db/migration/workitem/V90__deleted_item_time_shares.sql"))
+                .execute(dataSource);
+
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_time_share WHERE work_item_id=:item")
+                        .param("item", source.itemId())
+                        .query(Long.class)
+                        .single())
+                .isZero();
+        assertThat(jdbc.sql("SELECT concurrency FROM yumpoo.work_item_time_share WHERE work_item_id=:item")
+                        .param("item", target.itemId())
+                        .query(Integer.class)
+                        .single())
+                .isOne();
+        assertThat(ok(get(history, member))
+                        .path("items")
+                        .get(0)
+                        .path("allocatedDurationMs")
+                        .asLong())
+                .isEqualTo(3600000);
     }
 
     @Test
