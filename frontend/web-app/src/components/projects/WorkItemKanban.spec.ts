@@ -115,4 +115,12 @@ describe('看板卡片', () => {
     await children[0]!.trigger('click')
     expect(wrapper.emitted('open')?.[0]?.[0]).toMatchObject({ id: 'child' })
   })
+
+  it('卡片菜单的「添加子工作项」展开子项并打开子项输入', async () => {
+    const wrapper = card()
+    wrapper.findComponent({ name: 'WorkItemRowActions' }).vm.$emit('addSubitem', item('a'))
+    await flushPromises()
+    expect(wrapper.emitted('toggleSubitems')).toHaveLength(1)
+    expect(wrapper.find('.kanban-subitem--input input').exists()).toBe(true)
+  })
 })

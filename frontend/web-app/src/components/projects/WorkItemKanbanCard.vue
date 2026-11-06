@@ -71,7 +71,6 @@ const emit = defineEmits<{
   changed: [affectedIds: string[]]
   removed: [item: ProjectWorkItemListItem]
   createBelow: [item: ProjectWorkItemListItem]
-  addSubitem: [item: ProjectWorkItemListItem]
   dragstart: [item: ProjectWorkItemListItem]
   dragend: []
 }>()
@@ -201,7 +200,7 @@ defineExpose({ openSubitemInput })
           :sorted="false"
           :disabled="busy"
           @open="emit('open', $event, 'details')"
-          @add-subitem="emit('addSubitem', $event)"
+          @add-subitem="openSubitemInput"
           @duplicate="emit('duplicate', $event)"
           @create-below="emit('createBelow', $event)"
           @moved="emit('moved', $event)"
