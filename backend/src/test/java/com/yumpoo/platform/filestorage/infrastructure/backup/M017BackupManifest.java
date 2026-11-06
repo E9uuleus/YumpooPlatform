@@ -17,13 +17,10 @@ public record M017BackupManifest(
         String databaseDumpPath,
         String restoreDescriptorPath,
         RetentionMetadata retention,
-        List<FileRecord> files
-) {
-    public record RetentionMetadata(List<String> labels, boolean legalHold) {
-    }
+        List<FileRecord> files) {
+    public record RetentionMetadata(List<String> labels, boolean legalHold) {}
 
-    public record FileRecord(String path, FileRole role, long bytes, String sha256) {
-    }
+    public record FileRecord(String path, FileRole role, long bytes, String sha256) {}
 
     public enum FileRole {
         DATABASE_DUMP,

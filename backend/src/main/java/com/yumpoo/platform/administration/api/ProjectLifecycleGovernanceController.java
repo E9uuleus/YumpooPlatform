@@ -16,6 +16,8 @@ import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.CurrentActorProvider;
 import com.yumpoo.platform.identityaccess.api.PlatformRoleCode;
 import jakarta.validation.Valid;
+import java.util.Map;
+import java.util.UUID;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -27,9 +29,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import tools.jackson.databind.ObjectMapper;
 
-import java.util.Map;
-import java.util.UUID;
-
 @ApiV1Controller
 public final class ProjectLifecycleGovernanceController {
     private final CurrentActorProvider actors;
@@ -40,68 +39,103 @@ public final class ProjectLifecycleGovernanceController {
     private final IdempotencyRequestHasher hasher;
     private final ObjectMapper objectMapper;
 
-    public ProjectLifecycleGovernanceController(CurrentActorProvider actors,
-            ProjectAccessSnapshotQuery access, ProjectLifecycleGovernanceService service,
-            IfMatchParser ifMatch, IdempotencyKeyParser keys,
-            IdempotencyRequestHasher hasher, ObjectMapper objectMapper) {
-        this.actors = actors; this.access = access; this.service = service; this.ifMatch = ifMatch;
-        this.keys = keys; this.hasher = hasher; this.objectMapper = objectMapper;
+    public ProjectLifecycleGovernanceController(
+            CurrentActorProvider actors,
+            ProjectAccessSnapshotQuery access,
+            ProjectLifecycleGovernanceService service,
+            IfMatchParser ifMatch,
+            IdempotencyKeyParser keys,
+            IdempotencyRequestHasher hasher,
+            ObjectMapper objectMapper) {
+        this.actors = actors;
+        this.access = access;
+        this.service = service;
+        this.ifMatch = ifMatch;
+        this.keys = keys;
+        this.hasher = hasher;
+        this.objectMapper = objectMapper;
     }
 
     @PostMapping("/projects/{projectId}/archive")
-    ResponseEntity<String> archive(@PathVariable UUID projectId,
+    ResponseEntity<String> archive(
+            @PathVariable UUID projectId,
             @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader,
             @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String keyHeader) {
         CurrentActor actor = visible(projectId);
         long version = ifMatch.parseForVisibleResource(true, ifMatchHeader);
         UUID key = keys.parseRequired(keyHeader);
-        StoredCommandResult result = service.archive(new ProjectArchiveOperationCommand(actor,
-                projectId, version, key, hasher.hash("archiveProject",
-                Map.of("projectId", projectId.toString(), "ifMatch", Long.toString(version)),
-                objectMapper.createObjectNode()))).result();
+        StoredCommandResult result = service.archive(new ProjectArchiveOperationCommand(
+                        actor,
+                        projectId,
+                        version,
+                        key,
+                        hasher.hash(
+                                "archiveProject",
+                                Map.of("projectId", projectId.toString(), "ifMatch", Long.toString(version)),
+                                objectMapper.createObjectNode())))
+                .result();
         return stored(result);
     }
 
     @PostMapping("/projects/{projectId}/restore")
-    ResponseEntity<String> restore(@PathVariable UUID projectId,
+    ResponseEntity<String> restore(
+            @PathVariable UUID projectId,
             @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader,
             @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String keyHeader) {
         CurrentActor actor = visible(projectId);
         long version = ifMatch.parseForVisibleResource(true, ifMatchHeader);
         UUID key = keys.parseRequired(keyHeader);
-        StoredCommandResult result = service.restore(new ProjectRestoreOperationCommand(actor,
-                projectId, version, key, hasher.hash("restoreProject",
-                Map.of("projectId", projectId.toString(), "ifMatch", Long.toString(version)),
-                objectMapper.createObjectNode()))).result();
+        StoredCommandResult result = service.restore(new ProjectRestoreOperationCommand(
+                        actor,
+                        projectId,
+                        version,
+                        key,
+                        hasher.hash(
+                                "restoreProject",
+                                Map.of("projectId", projectId.toString(), "ifMatch", Long.toString(version)),
+                                objectMapper.createObjectNode())))
+                .result();
         return stored(result);
     }
 
     @PostMapping("/projects/{projectId}/end")
-    ResponseEntity<String> end(@PathVariable UUID projectId,
+    ResponseEntity<String> end(
+            @PathVariable UUID projectId,
             @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader,
             @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String keyHeader) {
         return changeEnded(projectId, true, "endProject", ifMatchHeader, keyHeader);
     }
 
     @PostMapping("/projects/{projectId}/resume")
-    ResponseEntity<String> resume(@PathVariable UUID projectId,
+    ResponseEntity<String> resume(
+            @PathVariable UUID projectId,
             @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader,
             @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String keyHeader) {
         return changeEnded(projectId, false, "resumeProject", ifMatchHeader, keyHeader);
     }
 
-    private ResponseEntity<String> changeEnded(UUID projectId, boolean ended, String route, String ifMatchHeader, String keyHeader) {
+    private ResponseEntity<String> changeEnded(
+            UUID projectId, boolean ended, String route, String ifMatchHeader, String keyHeader) {
         CurrentActor actor = visible(projectId);
         long version = ifMatch.parseForVisibleResource(true, ifMatchHeader);
         UUID key = keys.parseRequired(keyHeader);
-        return stored(service.changeEnded(new ProjectEndOperationCommand(actor, projectId, version, key,
-                hasher.hash(route, Map.of("projectId", projectId.toString(), "ifMatch", Long.toString(version)),
-                        objectMapper.createObjectNode()), ended)).result());
+        return stored(service.changeEnded(new ProjectEndOperationCommand(
+                        actor,
+                        projectId,
+                        version,
+                        key,
+                        hasher.hash(
+                                route,
+                                Map.of("projectId", projectId.toString(), "ifMatch", Long.toString(version)),
+                                objectMapper.createObjectNode()),
+                        ended))
+                .result());
     }
 
     @Deprecated(forRemoval = false)
     @PostMapping("/projects/{projectId}/workspace-moves")
-    ResponseEntity<Void> legacyMove(@PathVariable UUID projectId,
+    ResponseEntity<Void> legacyMove(
+            @PathVariable UUID projectId,
             @Valid @RequestBody ProjectWorkspaceMoveRequest body,
             @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader,
             @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String keyHeader) {

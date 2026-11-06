@@ -3,13 +3,12 @@ package com.yumpoo.platform.administration.infrastructure.governance;
 import com.yumpoo.platform.foundation.application.event.DomainEventEnvelope;
 import com.yumpoo.platform.foundation.application.event.EventSubscription;
 import com.yumpoo.platform.foundation.application.event.OutboxEventConsumer;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Component;
-
-import java.util.Set;
-import java.util.UUID;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Set;
+import java.util.UUID;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Component;
 
 @Component
 public class JdbcGovernanceIssueProjection implements OutboxEventConsumer {
@@ -29,10 +28,7 @@ public class JdbcGovernanceIssueProjection implements OutboxEventConsumer {
 
     @Override
     public Set<EventSubscription> subscriptions() {
-        return Set.of(
-                new EventSubscription(MISSING, 1),
-                new EventSubscription(RESTORED, 1)
-        );
+        return Set.of(new EventSubscription(MISSING, 1), new EventSubscription(RESTORED, 1));
     }
 
     @Override
@@ -47,7 +43,8 @@ public class JdbcGovernanceIssueProjection implements OutboxEventConsumer {
     }
 
     private void open(DomainEventEnvelope event) {
-        jdbcClient.sql("""
+        jdbcClient
+                .sql("""
                         INSERT INTO yumpoo.governance_issue (
                             id, company_id, issue_type, target_type, target_id, status,
                             safe_summary_code, detected_event_id, detected_at,
@@ -72,7 +69,8 @@ public class JdbcGovernanceIssueProjection implements OutboxEventConsumer {
     }
 
     private void resolve(DomainEventEnvelope event) {
-        jdbcClient.sql("""
+        jdbcClient
+                .sql("""
                         UPDATE yumpoo.governance_issue
                         SET status = 'RESOLVED',
                             resolved_event_id = :eventId,

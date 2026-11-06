@@ -1,7 +1,6 @@
 package com.yumpoo.platform.identityaccess.application.desktopauth;
 
 import com.yumpoo.platform.foundation.application.request.RequestIdContext;
-
 import java.time.Instant;
 import java.util.Objects;
 
@@ -11,8 +10,7 @@ public record DesktopAuthAttempt(
         PkceS256Challenge pkceChallenge,
         String requestId,
         Instant createdAt,
-        Instant authorizeExpiresAt
-) {
+        Instant authorizeExpiresAt) {
 
     public DesktopAuthAttempt {
         Objects.requireNonNull(desktopStateHash, "desktopStateHash must not be null");

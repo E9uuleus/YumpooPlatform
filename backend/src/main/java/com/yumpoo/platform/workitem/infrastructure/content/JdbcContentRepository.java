@@ -3,9 +3,6 @@ package com.yumpoo.platform.workitem.infrastructure.content;
 import com.yumpoo.platform.workitem.application.content.ContentModels.ContentLocator;
 import com.yumpoo.platform.workitem.application.content.ContentRepository;
 import com.yumpoo.platform.workitem.domain.Content;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Repository;
-
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
@@ -15,6 +12,8 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Repository;
 
 @Repository
 public class JdbcContentRepository implements ContentRepository {
@@ -50,15 +49,25 @@ public class JdbcContentRepository implements ContentRepository {
                     :updatedAt, :updatedByUserId, :deletedAt, :deletedByUserId
                 ) ON CONFLICT (project_id, code) DO NOTHING
                 """)
-                .param("id", content.id()).param("companyId", content.companyId())
-                .param("projectId", content.projectId()).param("code", content.code())
-                .param("name", content.name()).param("colorToken", content.colorToken())
-                .param("sortOrder", content.sortOrder()).param("active", content.active())
-                .param("protectedContent", content.protectedContent()).param("everUsed", content.everUsed())
+                .param("id", content.id())
+                .param("companyId", content.companyId())
+                .param("projectId", content.projectId())
+                .param("code", content.code())
+                .param("name", content.name())
+                .param("colorToken", content.colorToken())
+                .param("sortOrder", content.sortOrder())
+                .param("active", content.active())
+                .param("protectedContent", content.protectedContent())
+                .param("everUsed", content.everUsed())
                 .param("rowVersion", content.rowVersion())
-                .param("createdAt", at(content.createdAt())).param("createdByUserId", content.createdByUserId())
-                .param("updatedAt", at(content.updatedAt())).param("updatedByUserId", content.updatedByUserId());
-        statement = nullable(statement, "deletedAt", content.deletedAt() == null ? null : at(content.deletedAt()),
+                .param("createdAt", at(content.createdAt()))
+                .param("createdByUserId", content.createdByUserId())
+                .param("updatedAt", at(content.updatedAt()))
+                .param("updatedByUserId", content.updatedByUserId());
+        statement = nullable(
+                statement,
+                "deletedAt",
+                content.deletedAt() == null ? null : at(content.deletedAt()),
                 Types.TIMESTAMP_WITH_TIMEZONE);
         statement = nullable(statement, "deletedByUserId", content.deletedByUserId(), Types.OTHER);
         return statement.update() == 1;
@@ -70,8 +79,11 @@ public class JdbcContentRepository implements ContentRepository {
                 INSERT INTO yumpoo.content_catalog_version(project_id, company_id, row_version, updated_at)
                 VALUES (:projectId, :companyId, 0, :now)
                 ON CONFLICT (project_id) DO NOTHING
-                """).param("projectId", projectId).param("companyId", companyId)
-                .param("now", at(now)).update();
+                """)
+                .param("projectId", projectId)
+                .param("companyId", companyId)
+                .param("now", at(now))
+                .update();
     }
 
     @Override
@@ -79,8 +91,12 @@ public class JdbcContentRepository implements ContentRepository {
         return jdbc.sql("""
                 SELECT row_version FROM yumpoo.content_catalog_version
                 WHERE company_id=:companyId AND project_id=:projectId
-                """).param("companyId", companyId).param("projectId", projectId)
-                .query(Long.class).optional().orElseThrow();
+                """)
+                .param("companyId", companyId)
+                .param("projectId", projectId)
+                .query(Long.class)
+                .optional()
+                .orElseThrow();
     }
 
     @Override
@@ -88,8 +104,12 @@ public class JdbcContentRepository implements ContentRepository {
         return jdbc.sql("""
                 SELECT row_version FROM yumpoo.content_catalog_version
                 WHERE company_id=:companyId AND project_id=:projectId FOR UPDATE
-                """).param("companyId", companyId).param("projectId", projectId)
-                .query(Long.class).optional().orElseThrow();
+                """)
+                .param("companyId", companyId)
+                .param("projectId", projectId)
+                .query(Long.class)
+                .optional()
+                .orElseThrow();
     }
 
     @Override
@@ -98,8 +118,13 @@ public class JdbcContentRepository implements ContentRepository {
                 UPDATE yumpoo.content_catalog_version
                    SET row_version=row_version+1, updated_at=:now
                  WHERE company_id=:companyId AND project_id=:projectId AND row_version=:expectedVersion
-                """).param("now", at(now)).param("companyId", companyId).param("projectId", projectId)
-                .param("expectedVersion", expectedVersion).update() == 1;
+                """)
+                        .param("now", at(now))
+                        .param("companyId", companyId)
+                        .param("projectId", projectId)
+                        .param("expectedVersion", expectedVersion)
+                        .update()
+                == 1;
     }
 
     @Override
@@ -107,8 +132,11 @@ public class JdbcContentRepository implements ContentRepository {
         return jdbc.sql("""
                 SELECT COALESCE(max(sort_order), 0) + 10 FROM yumpoo.content
                 WHERE company_id=:companyId AND project_id=:projectId AND deleted_at IS NULL
-                """).param("companyId", companyId).param("projectId", projectId)
-                .query(Integer.class).single();
+                """)
+                .param("companyId", companyId)
+                .param("projectId", projectId)
+                .query(Integer.class)
+                .single();
     }
 
     @Override
@@ -117,8 +145,12 @@ public class JdbcContentRepository implements ContentRepository {
                 SELECT count(*) FROM yumpoo.content
                 WHERE company_id=:companyId AND project_id=:projectId AND active=true
                   AND deleted_at IS NULL AND id<>:excludingContentId
-                """).param("companyId", companyId).param("projectId", projectId)
-                .param("excludingContentId", excludingContentId).query(Long.class).single();
+                """)
+                .param("companyId", companyId)
+                .param("projectId", projectId)
+                .param("excludingContentId", excludingContentId)
+                .query(Long.class)
+                .single();
     }
 
     @Override
@@ -126,8 +158,10 @@ public class JdbcContentRepository implements ContentRepository {
         return jdbc.sql("SELECT " + COLUMNS + " FROM yumpoo.content "
                         + "WHERE company_id=:companyId AND project_id=:projectId AND deleted_at IS NULL "
                         + "ORDER BY sort_order, id")
-                .param("companyId", companyId).param("projectId", projectId)
-                .query(JdbcContentRepository::map).list();
+                .param("companyId", companyId)
+                .param("projectId", projectId)
+                .query(JdbcContentRepository::map)
+                .list();
     }
 
     @Override
@@ -135,9 +169,12 @@ public class JdbcContentRepository implements ContentRepository {
         return jdbc.sql("""
                 SELECT id, project_id FROM yumpoo.content
                 WHERE company_id=:companyId AND id=:contentId AND deleted_at IS NULL
-                """).param("companyId", companyId).param("contentId", contentId)
-                .query((rs, row) -> new ContentLocator(rs.getObject("id", UUID.class),
-                        rs.getObject("project_id", UUID.class))).optional();
+                """)
+                .param("companyId", companyId)
+                .param("contentId", contentId)
+                .query((rs, row) ->
+                        new ContentLocator(rs.getObject("id", UUID.class), rs.getObject("project_id", UUID.class)))
+                .optional();
     }
 
     @Override
@@ -155,10 +192,12 @@ public class JdbcContentRepository implements ContentRepository {
         return jdbc.sql("SELECT " + COLUMNS + " FROM yumpoo.content "
                         + "WHERE company_id=:companyId AND project_id=:projectId AND id=:contentId "
                         + "AND deleted_at IS NULL FOR SHARE")
-                .param("companyId", companyId).param("projectId", projectId)
-                .param("contentId", contentId).query(JdbcContentRepository::map).optional();
+                .param("companyId", companyId)
+                .param("projectId", projectId)
+                .param("contentId", contentId)
+                .query(JdbcContentRepository::map)
+                .optional();
     }
-
 
     @Override
     public Optional<Content> update(Content content, long expectedVersion) {
@@ -172,13 +211,21 @@ public class JdbcContentRepository implements ContentRepository {
                    AND row_version=:expectedVersion
                 RETURNING %s
                 """.formatted(COLUMNS))
-                .param("name", content.name()).param("colorToken", content.colorToken())
-                .param("sortOrder", content.sortOrder()).param("active", content.active())
-                .param("everUsed", content.everUsed()).param("updatedAt", at(content.updatedAt()))
-                .param("updatedByUserId", content.updatedByUserId()).param("companyId", content.companyId())
-                .param("projectId", content.projectId()).param("id", content.id())
+                .param("name", content.name())
+                .param("colorToken", content.colorToken())
+                .param("sortOrder", content.sortOrder())
+                .param("active", content.active())
+                .param("everUsed", content.everUsed())
+                .param("updatedAt", at(content.updatedAt()))
+                .param("updatedByUserId", content.updatedByUserId())
+                .param("companyId", content.companyId())
+                .param("projectId", content.projectId())
+                .param("id", content.id())
                 .param("expectedVersion", expectedVersion);
-        statement = nullable(statement, "deletedAt", content.deletedAt() == null ? null : at(content.deletedAt()),
+        statement = nullable(
+                statement,
+                "deletedAt",
+                content.deletedAt() == null ? null : at(content.deletedAt()),
                 Types.TIMESTAMP_WITH_TIMEZONE);
         statement = nullable(statement, "deletedByUserId", content.deletedByUserId(), Types.OTHER);
         return statement.query(JdbcContentRepository::map).optional();
@@ -191,13 +238,20 @@ public class JdbcContentRepository implements ContentRepository {
         jdbc.sql("""
                 UPDATE yumpoo.content SET sort_order=sort_order+1000000
                 WHERE company_id=:companyId AND project_id=:projectId AND deleted_at IS NULL
-                """).param("companyId", first.companyId()).param("projectId", first.projectId()).update();
+                """)
+                .param("companyId", first.companyId())
+                .param("projectId", first.projectId())
+                .update();
         for (Content content : contents) {
             jdbc.sql("""
                     UPDATE yumpoo.content SET sort_order=:sortOrder
                     WHERE company_id=:companyId AND project_id=:projectId AND id=:id
-                    """).param("sortOrder", content.sortOrder()).param("companyId", content.companyId())
-                    .param("projectId", content.projectId()).param("id", content.id()).update();
+                    """)
+                    .param("sortOrder", content.sortOrder())
+                    .param("companyId", content.companyId())
+                    .param("projectId", content.projectId())
+                    .param("id", content.id())
+                    .update();
         }
     }
 
@@ -205,18 +259,32 @@ public class JdbcContentRepository implements ContentRepository {
         return jdbc.sql("SELECT " + COLUMNS + " FROM yumpoo.content "
                         + "WHERE company_id=:companyId AND project_id=:projectId AND id=:contentId "
                         + "AND deleted_at IS NULL" + (lock ? " FOR UPDATE" : ""))
-                .param("companyId", companyId).param("projectId", projectId).param("contentId", contentId)
-                .query(JdbcContentRepository::map).optional();
+                .param("companyId", companyId)
+                .param("projectId", projectId)
+                .param("contentId", contentId)
+                .query(JdbcContentRepository::map)
+                .optional();
     }
 
     private static Content map(ResultSet rs, int row) throws SQLException {
-        return new Content(rs.getObject("id", UUID.class), rs.getObject("company_id", UUID.class),
-                rs.getObject("project_id", UUID.class), rs.getString("code"), rs.getString("name"),
-                rs.getString("color_token"), rs.getInt("sort_order"), rs.getBoolean("active"),
-                rs.getBoolean("protected_content"), rs.getBoolean("ever_used"), rs.getLong("row_version"),
-                instant(rs, "created_at"), rs.getObject("created_by_user_id", UUID.class),
-                instant(rs, "updated_at"), rs.getObject("updated_by_user_id", UUID.class),
-                nullableInstant(rs, "deleted_at"), rs.getObject("deleted_by_user_id", UUID.class));
+        return new Content(
+                rs.getObject("id", UUID.class),
+                rs.getObject("company_id", UUID.class),
+                rs.getObject("project_id", UUID.class),
+                rs.getString("code"),
+                rs.getString("name"),
+                rs.getString("color_token"),
+                rs.getInt("sort_order"),
+                rs.getBoolean("active"),
+                rs.getBoolean("protected_content"),
+                rs.getBoolean("ever_used"),
+                rs.getLong("row_version"),
+                instant(rs, "created_at"),
+                rs.getObject("created_by_user_id", UUID.class),
+                instant(rs, "updated_at"),
+                rs.getObject("updated_by_user_id", UUID.class),
+                nullableInstant(rs, "deleted_at"),
+                rs.getObject("deleted_by_user_id", UUID.class));
     }
 
     private static OffsetDateTime at(Instant value) {
@@ -232,8 +300,8 @@ public class JdbcContentRepository implements ContentRepository {
         return value == null ? null : value.toInstant();
     }
 
-    private static JdbcClient.StatementSpec nullable(JdbcClient.StatementSpec statement,
-            String name, Object value, int type) {
+    private static JdbcClient.StatementSpec nullable(
+            JdbcClient.StatementSpec statement, String name, Object value, int type) {
         return value == null ? statement.param(name, null, type) : statement.param(name, value);
     }
 }

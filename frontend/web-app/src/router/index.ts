@@ -17,16 +17,6 @@ import LoginView from '../views/auth/LoginView.vue'
 import ForbiddenView from '../views/status/ForbiddenView.vue'
 import NotFoundView from '../views/status/NotFoundView.vue'
 import SessionStatusView from '../views/status/SessionStatusView.vue'
-import IdentityAdminLayout from '../views/admin/IdentityAdminLayout.vue'
-import IdentityMembersView from '../views/admin/IdentityMembersView.vue'
-import IdentityOverviewView from '../views/admin/IdentityOverviewView.vue'
-import IdentitySyncRunsView from '../views/admin/IdentitySyncRunsView.vue'
-import ProjectsView from '../views/projects/ProjectsView.vue'
-import ProjectLayout from '../views/projects/ProjectLayout.vue'
-import ProjectOverviewView from '../views/projects/ProjectOverviewView.vue'
-import ProjectMembersView from '../views/projects/ProjectMembersView.vue'
-import ProjectSettingsView from '../views/projects/ProjectSettingsView.vue'
-import ProjectActivityView from '../views/projects/ProjectActivityView.vue'
 
 export const routes: RouteRecordRaw[] = [
   { path: SHELL_SURFACE.timer, name: 'timer', component: TimerPanel, props: route => ({ initialExpanded: route.query.mode !== 'compact' }) },
@@ -98,13 +88,13 @@ export const routes: RouteRecordRaw[] = [
       {
         path: 'workspace',
         name: 'workspace-entry',
-        component: ProjectsView,
+        component: () => import('../views/projects/ProjectsView.vue'),
         meta: { shellSection: 'work' },
       },
       {
         path: 'workspace/:workspaceSlug',
         name: 'workspace',
-        component: ProjectsView,
+        component: () => import('../views/projects/ProjectsView.vue'),
         meta: { shellSection: 'work', onboardingTour: 'workspace' },
       },
       {
@@ -152,20 +142,20 @@ export const routes: RouteRecordRaw[] = [
       },
       {
         path: 'projects/:projectId',
-        component: ProjectLayout,
+        component: () => import('../views/projects/ProjectLayout.vue'),
         redirect: route => ({ name: 'project-overview', params: route.params }),
         meta: { shellSection: 'work' },
         children: [
-          { path: 'overview', name: 'project-overview', component: ProjectOverviewView, meta: { onboardingTour: 'project-work-items' } },
+          { path: 'overview', name: 'project-overview', component: () => import('../views/projects/ProjectOverviewView.vue'), meta: { onboardingTour: 'project-work-items' } },
           { path: 'statistics', name: 'project-statistics', component: () => import('../views/projects/ProjectStatisticsView.vue') },
-          { path: 'members', name: 'project-members', component: ProjectMembersView },
-          { path: 'activity', name: 'project-activity', component: ProjectActivityView },
-          { path: 'settings', name: 'project-settings', component: ProjectSettingsView },
+          { path: 'members', name: 'project-members', component: () => import('../views/projects/ProjectMembersView.vue') },
+          { path: 'activity', name: 'project-activity', component: () => import('../views/projects/ProjectActivityView.vue') },
+          { path: 'settings', name: 'project-settings', component: () => import('../views/projects/ProjectSettingsView.vue') },
         ],
       },
       {
         path: 'admin/company',
-        component: IdentityAdminLayout,
+        component: () => import('../views/admin/IdentityAdminLayout.vue'),
         redirect: '/admin/company/overview',
         meta: {
           frame: 'fixed',
@@ -176,11 +166,11 @@ export const routes: RouteRecordRaw[] = [
           ],
         },
         children: [
-          { path: 'overview', name: 'company-overview', component: IdentityOverviewView, meta: { onboardingTour: 'company' } },
+          { path: 'overview', name: 'company-overview', component: () => import('../views/admin/IdentityOverviewView.vue'), meta: { onboardingTour: 'company' } },
           { path: 'projects', name: 'company-projects', component: () => import('../views/admin/CompanyProjectsView.vue') },
-          { path: 'members', name: 'company-members', component: IdentityMembersView },
+          { path: 'members', name: 'company-members', component: () => import('../views/admin/IdentityMembersView.vue') },
           { path: 'activity', name: 'company-activity', component: () => import('../views/admin/CompanyActivityView.vue') },
-          { path: 'sync-runs', name: 'company-sync-runs', component: IdentitySyncRunsView },
+          { path: 'sync-runs', name: 'company-sync-runs', component: () => import('../views/admin/IdentitySyncRunsView.vue') },
           { path: 'scheduled-jobs', name: 'company-scheduled-jobs', component: () => import('../views/admin/CompanyScheduledJobsView.vue') },
           { path: 'work-calendar', name: 'company-work-calendar', component: () => import('../views/admin/CompanyWorkCalendarView.vue'), meta: { onboardingTour: 'work-calendar' } },
         ],

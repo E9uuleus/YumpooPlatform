@@ -8,14 +8,6 @@ import com.yumpoo.platform.foundation.application.outbox.OutboxClaim;
 import com.yumpoo.platform.foundation.application.outbox.OutboxFailure;
 import com.yumpoo.platform.foundation.application.outbox.OutboxLease;
 import com.yumpoo.platform.foundation.application.outbox.OutboxStorePort;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Repository;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
-
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
@@ -25,6 +17,13 @@ import java.time.ZoneOffset;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 @Repository
 public class JdbcOutboxRepository implements OutboxStorePort {
@@ -160,7 +159,8 @@ public class JdbcOutboxRepository implements OutboxStorePort {
     @Override
     public void append(DomainEventEnvelope event) {
         EventActor actor = event.actor();
-        int inserted = jdbcClient.sql(INSERT_EVENT)
+        int inserted = jdbcClient
+                .sql(INSERT_EVENT)
                 .param("eventId", event.eventId())
                 .param("eventType", event.eventType())
                 .param("eventVersion", event.eventVersion())
@@ -186,14 +186,10 @@ public class JdbcOutboxRepository implements OutboxStorePort {
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public List<OutboxClaim> claimBatch(
-            int batchSize,
-            String leaseOwner,
-            UUID leaseToken,
-            Instant claimedAt,
-            Duration leaseDuration
-    ) {
+            int batchSize, String leaseOwner, UUID leaseToken, Instant claimedAt, Duration leaseDuration) {
         Instant leaseUntil = claimedAt.plus(leaseDuration);
-        List<OutboxClaim> claims = jdbcClient.sql(CLAIM_BATCH)
+        List<OutboxClaim> claims = jdbcClient
+                .sql(CLAIM_BATCH)
                 .param("claimedAt", utc(claimedAt))
                 .param("batchSize", batchSize)
                 .param("leaseOwner", leaseOwner)
@@ -202,8 +198,8 @@ public class JdbcOutboxRepository implements OutboxStorePort {
                 .query(this::mapClaim)
                 .list();
         return claims.stream()
-                .sorted(Comparator
-                        .comparing((OutboxClaim claim) -> claim.event().occurredAt())
+                .sorted(Comparator.comparing(
+                                (OutboxClaim claim) -> claim.event().occurredAt())
                         .thenComparing(claim -> claim.event().eventId()))
                 .toList();
     }
@@ -211,50 +207,53 @@ public class JdbcOutboxRepository implements OutboxStorePort {
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean markCompleted(OutboxLease lease, Instant completedAt) {
-        return jdbcClient.sql(COMPLETE)
-                .param("completedAt", utc(completedAt))
-                .param("eventId", lease.eventId())
-                .param("leaseOwner", lease.leaseOwner())
-                .param("leaseToken", lease.leaseToken())
-                .update() == 1;
+        return jdbcClient
+                        .sql(COMPLETE)
+                        .param("completedAt", utc(completedAt))
+                        .param("eventId", lease.eventId())
+                        .param("leaseOwner", lease.leaseOwner())
+                        .param("leaseToken", lease.leaseToken())
+                        .update()
+                == 1;
     }
 
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public boolean markRetry(
-            OutboxLease lease,
-            OutboxFailure failure,
-            Instant nextAttemptAt
-    ) {
-        return jdbcClient.sql(RETRY)
-                .param("nextAttemptAt", utc(nextAttemptAt))
-                .param("consumerName", failure.consumerName())
-                .param("errorCode", failure.errorCode())
-                .param("exceptionType", failure.exceptionType())
-                .param("eventId", lease.eventId())
-                .param("leaseOwner", lease.leaseOwner())
-                .param("leaseToken", lease.leaseToken())
-                .update() == 1;
+    public boolean markRetry(OutboxLease lease, OutboxFailure failure, Instant nextAttemptAt) {
+        return jdbcClient
+                        .sql(RETRY)
+                        .param("nextAttemptAt", utc(nextAttemptAt))
+                        .param("consumerName", failure.consumerName())
+                        .param("errorCode", failure.errorCode())
+                        .param("exceptionType", failure.exceptionType())
+                        .param("eventId", lease.eventId())
+                        .param("leaseOwner", lease.leaseOwner())
+                        .param("leaseToken", lease.leaseToken())
+                        .update()
+                == 1;
     }
 
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean markDead(OutboxLease lease, OutboxFailure failure, Instant deadAt) {
-        return jdbcClient.sql(DEAD)
-                .param("deadAt", utc(deadAt))
-                .param("consumerName", failure.consumerName())
-                .param("errorCode", failure.errorCode())
-                .param("exceptionType", failure.exceptionType())
-                .param("eventId", lease.eventId())
-                .param("leaseOwner", lease.leaseOwner())
-                .param("leaseToken", lease.leaseToken())
-                .update() == 1;
+        return jdbcClient
+                        .sql(DEAD)
+                        .param("deadAt", utc(deadAt))
+                        .param("consumerName", failure.consumerName())
+                        .param("errorCode", failure.errorCode())
+                        .param("exceptionType", failure.exceptionType())
+                        .param("eventId", lease.eventId())
+                        .param("leaseOwner", lease.leaseOwner())
+                        .param("leaseToken", lease.leaseToken())
+                        .update()
+                == 1;
     }
 
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public int requeueMissingConsumerEvents(EventSubscription subscription, Instant nextAttemptAt) {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                         UPDATE yumpoo.outbox_event
                         SET status = 'RETRY',
                             next_attempt_at = GREATEST(occurred_at, :nextAttemptAt),
@@ -288,19 +287,11 @@ public class JdbcOutboxRepository implements OutboxStorePort {
                 resultSet.getString("request_id"),
                 resultSet.getString("correlation_id"),
                 resultSet.getObject("causation_id", UUID.class),
-                readPayload(resultSet.getString("payload_json"))
-        );
+                readPayload(resultSet.getString("payload_json")));
         OutboxLease lease = new OutboxLease(
-                eventId,
-                resultSet.getString("lease_owner"),
-                resultSet.getObject("lease_token", UUID.class)
-        );
+                eventId, resultSet.getString("lease_owner"), resultSet.getObject("lease_token", UUID.class));
         return new OutboxClaim(
-                event,
-                resultSet.getInt("attempt_count"),
-                lease,
-                requiredInstant(resultSet, "lease_until")
-        );
+                event, resultSet.getInt("attempt_count"), lease, requiredInstant(resultSet, "lease_until"));
     }
 
     private JsonNode readPayload(String json) throws SQLException {
@@ -316,10 +307,10 @@ public class JdbcOutboxRepository implements OutboxStorePort {
         return switch (type) {
             case USER -> EventActor.user(resultSet.getObject("actor_user_id", UUID.class));
             case SYSTEM -> EventActor.system(resultSet.getString("actor_system_code"));
-            case ADMIN_OVERRIDE -> EventActor.adminOverride(
-                    resultSet.getObject("actor_user_id", UUID.class),
-                    resultSet.getString("actor_reason_reference")
-            );
+            case ADMIN_OVERRIDE ->
+                EventActor.adminOverride(
+                        resultSet.getObject("actor_user_id", UUID.class),
+                        resultSet.getString("actor_reason_reference"));
         };
     }
 

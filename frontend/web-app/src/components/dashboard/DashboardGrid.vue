@@ -87,4 +87,6 @@ onBeforeUnmount(() => { ++sequence; ++revealSequence; observer?.disconnect(); gr
 </template>
 <style>
 .dashboard-grid{margin:-8px;min-height:160px}.dashboard-grid .grid-stack-item-content{overflow:hidden!important;border-radius:8px;background:var(--yp-bg-surface);}.dashboard-grid .grid-stack-placeholder>.placeholder-content{border:1px dashed var(--yp-action-primary);background:color-mix(in srgb,var(--yp-action-primary) 7%,transparent);border-radius:8px}.dashboard-grid .ui-resizable-se{opacity:.55}.dashboard-grid .ui-draggable-dragging{z-index:20}.dashboard-grid.is-editing .dashboard-card__handle{cursor:grab}
+/* GridStack 角手柄的 data: SVG 会被生产 CSP 的 default-src 'self' 拦截；改用同源图标做遮罩，颜色跟随主题。 */
+.dashboard-grid .grid-stack-item>.ui-resizable-handle:is(.ui-resizable-ne,.ui-resizable-nw,.ui-resizable-se,.ui-resizable-sw){background:var(--yp-text-muted);mask:url('./resize-handle.svg?no-inline') center/20px no-repeat}
 </style>

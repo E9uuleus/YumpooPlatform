@@ -1,8 +1,7 @@
 package com.yumpoo.platform.identityaccess.infrastructure.wecom;
 
-import org.springframework.boot.context.properties.ConfigurationProperties;
-
 import java.time.Duration;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "yumpoo.wecom.directory")
 public final class DirectorySyncWeComProperties {

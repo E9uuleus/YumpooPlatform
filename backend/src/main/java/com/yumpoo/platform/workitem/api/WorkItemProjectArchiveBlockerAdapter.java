@@ -1,9 +1,8 @@
 package com.yumpoo.platform.workitem.api;
 
 import com.yumpoo.platform.workitem.application.WorkItemRepository;
-import org.springframework.stereotype.Component;
-
 import java.util.UUID;
+import org.springframework.stereotype.Component;
 
 @Component
 public final class WorkItemProjectArchiveBlockerAdapter implements WorkItemProjectArchiveBlockerPort {

@@ -1,69 +1,97 @@
 package com.yumpoo.platform.audit.api;
 
+import com.yumpoo.platform.audit.api.ActivityProjectionContextPort.WorkItemReference;
 import com.yumpoo.platform.audit.application.ActivityRepository;
 import com.yumpoo.platform.audit.application.ActivityStoredEvent;
-import com.yumpoo.platform.audit.api.ActivityProjectionContextPort.WorkItemReference;
 import com.yumpoo.platform.foundation.application.event.DomainEventEnvelope;
 import com.yumpoo.platform.foundation.application.event.EventSubscription;
 import com.yumpoo.platform.foundation.application.event.OutboxConsumerException;
 import com.yumpoo.platform.foundation.application.event.OutboxEventConsumer;
+import java.util.LinkedHashSet;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
-
 @Component
 public class ActivityProjectionService implements OutboxEventConsumer {
     private static final Set<String> PROJECT_EVENTS = Set.of(
-            "catalog.project_created", "catalog.project_updated",
-            "catalog.project_archived", "catalog.project_reopened",
-            "catalog.project_ended", "catalog.project_resumed",
+            "catalog.project_created",
+            "catalog.project_updated",
+            "catalog.project_archived",
+            "catalog.project_reopened",
+            "catalog.project_ended",
+            "catalog.project_resumed",
             "catalog.project_moved_to_workspace",
-            "catalog.project_member_added", "catalog.project_member_removed",
+            "catalog.project_member_added",
+            "catalog.project_member_removed",
             "catalog.project_owner_reassigned");
     private static final Set<String> CONTENT_EVENTS = Set.of(
-            "workitem.content_created", "workitem.content_updated",
-            "workitem.content_deleted", "workitem.content_archived", "workitem.content_restored");
+            "workitem.content_created",
+            "workitem.content_updated",
+            "workitem.content_deleted",
+            "workitem.content_archived",
+            "workitem.content_restored");
     private static final Set<String> CONNECTION_EVENTS = Set.of(
-            "workitem.connect_column_created", "workitem.connect_column_updated", "workitem.connect_column_deleted",
-            "workitem.connection_created", "workitem.connection_deleted");
+            "workitem.connect_column_created",
+            "workitem.connect_column_updated",
+            "workitem.connect_column_deleted",
+            "workitem.connection_created",
+            "workitem.connection_deleted");
     private static final Set<String> WORK_ITEM_EVENTS = Set.of(
-            "workitem.work_item_created", "workitem.work_item_fields_changed",
-            "workitem.work_item_assigned", "workitem.work_item_unassigned", "workitem.work_item_assignees_changed",
-            "workitem.work_item_status_changed", "workitem.work_item_rank_changed",
-            "workitem.work_item_deleted", "workitem.work_item_restored",
-            "workitem.work_item_archived", "workitem.work_item_unarchived",
-            "workitem.work_item_relation_created", "workitem.work_item_relation_deleted",
-            "workitem.work_item_parent_changed", "workitem.work_item_update_published",
-            "workitem.work_item_update_edited", "workitem.work_item_update_deleted",
+            "workitem.work_item_created",
+            "workitem.work_item_fields_changed",
+            "workitem.work_item_assigned",
+            "workitem.work_item_unassigned",
+            "workitem.work_item_assignees_changed",
+            "workitem.work_item_status_changed",
+            "workitem.work_item_rank_changed",
+            "workitem.work_item_deleted",
+            "workitem.work_item_restored",
+            "workitem.work_item_archived",
+            "workitem.work_item_unarchived",
+            "workitem.work_item_relation_created",
+            "workitem.work_item_relation_deleted",
+            "workitem.work_item_parent_changed",
+            "workitem.work_item_update_published",
+            "workitem.work_item_update_edited",
+            "workitem.work_item_update_deleted",
             "workitem.work_item_update_pin_changed");
-    private static final Set<String> TIME_EVENTS = Set.of("workitem.time_tracking_started", "workitem.time_tracking_stopped",
-            "workitem.time_tracking_added", "workitem.time_tracking_edited", "workitem.time_tracking_deleted");
-    private static final Set<String> ATTACHMENT_EVENTS = Set.of(
-            "filestorage.attachment_available", "filestorage.attachment_deleted");
-    private static final Set<String> V2_EVENTS = Set.of("catalog.project_created", "workitem.time_tracking_edited", "workitem.time_tracking_deleted",
-            "workitem.content_created", "workitem.content_updated", "workitem.content_deleted",
-            "workitem.work_item_created", "workitem.work_item_fields_changed",
-            "workitem.work_item_status_changed", "workitem.work_item_deleted",
-            "workitem.work_item_restored", "workitem.work_item_update_published",
-            "workitem.work_item_update_edited", "workitem.work_item_update_deleted");
-    private static final Set<String> V2_ONLY_EVENTS = Set.of(
-            "catalog.project_created", "workitem.content_deleted");
+    private static final Set<String> TIME_EVENTS = Set.of(
+            "workitem.time_tracking_started",
+            "workitem.time_tracking_stopped",
+            "workitem.time_tracking_added",
+            "workitem.time_tracking_edited",
+            "workitem.time_tracking_deleted");
+    private static final Set<String> ATTACHMENT_EVENTS =
+            Set.of("filestorage.attachment_available", "filestorage.attachment_deleted");
+    private static final Set<String> V2_EVENTS = Set.of(
+            "catalog.project_created",
+            "workitem.time_tracking_edited",
+            "workitem.time_tracking_deleted",
+            "workitem.content_created",
+            "workitem.content_updated",
+            "workitem.content_deleted",
+            "workitem.work_item_created",
+            "workitem.work_item_fields_changed",
+            "workitem.work_item_status_changed",
+            "workitem.work_item_deleted",
+            "workitem.work_item_restored",
+            "workitem.work_item_update_published",
+            "workitem.work_item_update_edited",
+            "workitem.work_item_update_deleted");
+    private static final Set<String> V2_ONLY_EVENTS = Set.of("catalog.project_created", "workitem.content_deleted");
 
     private final ActivityRepository repository;
     private final ActivityProjectionContextPort context;
     private final ObjectMapper objectMapper;
 
-    public ActivityProjectionService(ActivityRepository repository,
-            ActivityProjectionContextPort context, ObjectMapper objectMapper) {
+    public ActivityProjectionService(
+            ActivityRepository repository, ActivityProjectionContextPort context, ObjectMapper objectMapper) {
         this.repository = repository;
         this.context = context;
         this.objectMapper = objectMapper;
@@ -78,7 +106,8 @@ public class ActivityProjectionService implements OutboxEventConsumer {
     public Set<EventSubscription> subscriptions() {
         LinkedHashSet<EventSubscription> subscriptions = new LinkedHashSet<>();
         subscriptions.add(new EventSubscription("catalog.project_purged", 1));
-        allEvents().stream().filter(type -> !V2_ONLY_EVENTS.contains(type))
+        allEvents().stream()
+                .filter(type -> !V2_ONLY_EVENTS.contains(type))
                 .forEach(type -> subscriptions.add(new EventSubscription(type, 1)));
         V2_EVENTS.forEach(type -> subscriptions.add(new EventSubscription(type, 2)));
         return Set.copyOf(subscriptions);
@@ -89,9 +118,12 @@ public class ActivityProjectionService implements OutboxEventConsumer {
         if (event.occurredAt().isBefore(repository.acceptedFrom())) return;
         try {
             if ("catalog.project_purged".equals(event.eventType())) return;
-            for (String field : java.util.List.of("projectId", "sourceProjectId", "targetProjectId", "leftProjectId", "rightProjectId")) {
+            for (String field : java.util.List.of(
+                    "projectId", "sourceProjectId", "targetProjectId", "leftProjectId", "rightProjectId")) {
                 JsonNode project = event.payload().get(field);
-                if (project != null && project.isTextual() && context.projectPurging(event.companyId(), UUID.fromString(project.asText()))) return;
+                if (project != null
+                        && project.isTextual()
+                        && context.projectPurging(event.companyId(), UUID.fromString(project.asText()))) return;
             }
             if (PROJECT_EVENTS.contains(event.eventType())) appendProject(event);
             else if (CONTENT_EVENTS.contains(event.eventType())) appendContent(event);
@@ -108,10 +140,21 @@ public class ActivityProjectionService implements OutboxEventConsumer {
     }
 
     private void appendTimeTracking(DomainEventEnvelope event) {
-        UUID itemId=uuid(event.payload(),"workItemId");
-        String ref=context.workItem(event.companyId(),itemId).map(WorkItemReference::displayRef).orElse("已删除工作项");
-        append(event,ActivityAudienceType.PROJECT,uuid(event.payload(),"projectId"),"WORK_ITEM",itemId,ref,
-                template(event.eventType()),safeRef(ref),itemId,null);
+        UUID itemId = uuid(event.payload(), "workItemId");
+        String ref = context.workItem(event.companyId(), itemId)
+                .map(WorkItemReference::displayRef)
+                .orElse("已删除工作项");
+        append(
+                event,
+                ActivityAudienceType.PROJECT,
+                uuid(event.payload(), "projectId"),
+                "WORK_ITEM",
+                itemId,
+                ref,
+                template(event.eventType()),
+                safeRef(ref),
+                itemId,
+                null);
     }
 
     private void appendProject(DomainEventEnvelope event) {
@@ -129,9 +172,20 @@ public class ActivityProjectionService implements OutboxEventConsumer {
             safe.put("memberDisplayName", user(event, uuid(payload, "newOwnerUserId")));
         }
         String templateCode = event.eventType().endsWith("member_removed")
-                && uuid(payload, "userId").equals(event.actor().userId()) ? "PROJECT_MEMBER_LEFT" : template(event.eventType());
-        append(event, ActivityAudienceType.PROJECT, projectId, entityType, entityId, ref,
-                templateCode, safe, null, null);
+                        && uuid(payload, "userId").equals(event.actor().userId())
+                ? "PROJECT_MEMBER_LEFT"
+                : template(event.eventType());
+        append(
+                event,
+                ActivityAudienceType.PROJECT,
+                projectId,
+                entityType,
+                entityId,
+                ref,
+                templateCode,
+                safe,
+                null,
+                null);
     }
 
     private void appendContent(DomainEventEnvelope event) {
@@ -144,8 +198,17 @@ public class ActivityProjectionService implements OutboxEventConsumer {
             safe.put("colorToken", text(payload, "colorToken"));
             safe.put("active", payload.path("active").asBoolean());
         }
-        append(event, ActivityAudienceType.PROJECT, uuid(payload, "projectId"), "CONTENT",
-                contentId, ref, template(event.eventType()), safe, null, null);
+        append(
+                event,
+                ActivityAudienceType.PROJECT,
+                uuid(payload, "projectId"),
+                "CONTENT",
+                contentId,
+                ref,
+                template(event.eventType()),
+                safe,
+                null,
+                null);
     }
 
     private void appendWorkItem(DomainEventEnvelope event) {
@@ -155,7 +218,8 @@ public class ActivityProjectionService implements OutboxEventConsumer {
             appendRelation(event);
             return;
         }
-        if ((event.eventType().equals("workitem.work_item_assigned") || event.eventType().equals("workitem.work_item_unassigned"))
+        if ((event.eventType().equals("workitem.work_item_assigned")
+                        || event.eventType().equals("workitem.work_item_unassigned"))
                 && payload.has("assigneeUserIds")) return;
         UUID workItemId = uuid(payload, "workItemId");
         UUID projectId = uuid(payload, "projectId");
@@ -167,7 +231,8 @@ public class ActivityProjectionService implements OutboxEventConsumer {
             ArrayNode kept = objectMapper.createArrayNode();
             boolean contentChanged = false;
             fields.forEach(field -> {
-                if (field.isTextual() && !"assigneeUserId".equals(field.textValue())
+                if (field.isTextual()
+                        && !"assigneeUserId".equals(field.textValue())
                         && !"description".equals(field.textValue())
                         && !"notes".equals(field.textValue())) kept.add(field.textValue());
             });
@@ -199,15 +264,27 @@ public class ActivityProjectionService implements OutboxEventConsumer {
             safe.put("mentionCount", array(payload, "mentionedUserIds").size());
         } else if (type.endsWith("update_edited")) {
             safe.put("mentionCount", array(payload, "mentionedUserIds").size());
-            safe.put("addedMentionCount", array(payload, "addedMentionedUserIds").size());
-            safe.put("removedMentionCount", array(payload, "removedMentionedUserIds").size());
+            safe.put(
+                    "addedMentionCount", array(payload, "addedMentionedUserIds").size());
+            safe.put(
+                    "removedMentionCount",
+                    array(payload, "removedMentionedUserIds").size());
         }
-        if (type.endsWith("update_pin_changed")) safe.put("pinned", payload.path("pinned").asBoolean());
+        if (type.endsWith("update_pin_changed"))
+            safe.put("pinned", payload.path("pinned").asBoolean());
         boolean update = type.contains("work_item_update_");
         UUID entityId = update ? uuid(payload, "updateId") : workItemId;
-        append(event, ActivityAudienceType.PROJECT, projectId,
-                update ? "WORK_ITEM_UPDATE" : "WORK_ITEM", entityId, ref,
-                template(type), safe, workItemId, null);
+        append(
+                event,
+                ActivityAudienceType.PROJECT,
+                projectId,
+                update ? "WORK_ITEM_UPDATE" : "WORK_ITEM",
+                entityId,
+                ref,
+                template(type),
+                safe,
+                workItemId,
+                null);
     }
 
     private String memberNames(DomainEventEnvelope event, String field) {
@@ -223,21 +300,48 @@ public class ActivityProjectionService implements OutboxEventConsumer {
             ObjectNode safe = objectMapper.createObjectNode().put("name", name);
             if (event.eventType().equals("workitem.connect_column_deleted"))
                 safe.put("removedConnectionCount", number(payload, "removedConnectionCount"));
-            append(event, ActivityAudienceType.PROJECT, uuid(payload, "projectId"), "CONNECT_COLUMN",
-                    uuid(payload, "columnId"), name, template(event.eventType()), safe, null, null);
+            append(
+                    event,
+                    ActivityAudienceType.PROJECT,
+                    uuid(payload, "projectId"),
+                    "CONNECT_COLUMN",
+                    uuid(payload, "columnId"),
+                    name,
+                    template(event.eventType()),
+                    safe,
+                    null,
+                    null);
             return;
         }
         UUID sourceItem = uuid(payload, "sourceWorkItemId");
         UUID targetItem = uuid(payload, "targetWorkItemId");
         String base = template(event.eventType());
         ObjectNode sourceParameters = objectMapper.createObjectNode().put("columnName", text(payload, "columnName"));
-        append(event, ActivityAudienceType.PROJECT, uuid(payload, "sourceProjectId"), "WORK_ITEM", sourceItem,
-                null, base + "_SOURCE", sourceParameters, sourceItem, null);
+        append(
+                event,
+                ActivityAudienceType.PROJECT,
+                uuid(payload, "sourceProjectId"),
+                "WORK_ITEM",
+                sourceItem,
+                null,
+                base + "_SOURCE",
+                sourceParameters,
+                sourceItem,
+                null);
         String targetTemplate = base + "_TARGET";
         if (event.eventType().equals("workitem.connection_created") && "CREATED".equals(text(payload, "origin")))
             targetTemplate += "_NEW";
-        append(event, ActivityAudienceType.PROJECT, uuid(payload, "targetProjectId"), "WORK_ITEM", targetItem,
-                null, targetTemplate, objectMapper.createObjectNode(), targetItem, null);
+        append(
+                event,
+                ActivityAudienceType.PROJECT,
+                uuid(payload, "targetProjectId"),
+                "WORK_ITEM",
+                targetItem,
+                null,
+                targetTemplate,
+                objectMapper.createObjectNode(),
+                targetItem,
+                null);
     }
 
     private void appendRelation(DomainEventEnvelope event) {
@@ -249,20 +353,34 @@ public class ActivityProjectionService implements OutboxEventConsumer {
         UUID rightProject = uuid(payload, "rightProjectId");
         ObjectNode leftSafe = objectMapper.createObjectNode();
         leftSafe.put("relationType", text(payload, "relationType"));
-        context.workItem(event.companyId(), leftId)
-                .ifPresent(item -> leftSafe.put("entityRef", item.displayRef()));
-        append(event, ActivityAudienceType.PROJECT, leftProject, "WORK_ITEM_RELATION",
-                relationId, leftSafe.path("entityRef").asText(null),
-                template(event.eventType()), leftSafe, leftId,
+        context.workItem(event.companyId(), leftId).ifPresent(item -> leftSafe.put("entityRef", item.displayRef()));
+        append(
+                event,
+                ActivityAudienceType.PROJECT,
+                leftProject,
+                "WORK_ITEM_RELATION",
+                relationId,
+                leftSafe.path("entityRef").asText(null),
+                template(event.eventType()),
+                leftSafe,
+                leftId,
                 leftProject.equals(rightProject) ? rightId : null);
         if (!leftProject.equals(rightProject)) {
             ObjectNode rightSafe = objectMapper.createObjectNode();
             rightSafe.put("relationType", text(payload, "relationType"));
             context.workItem(event.companyId(), rightId)
                     .ifPresent(item -> rightSafe.put("entityRef", item.displayRef()));
-            append(event, ActivityAudienceType.PROJECT, rightProject, "WORK_ITEM_RELATION",
-                    relationId, rightSafe.path("entityRef").asText(null),
-                    template(event.eventType()), rightSafe, rightId, null);
+            append(
+                    event,
+                    ActivityAudienceType.PROJECT,
+                    rightProject,
+                    "WORK_ITEM_RELATION",
+                    relationId,
+                    rightSafe.path("entityRef").asText(null),
+                    template(event.eventType()),
+                    rightSafe,
+                    rightId,
+                    null);
         }
     }
 
@@ -272,34 +390,66 @@ public class ActivityProjectionService implements OutboxEventConsumer {
         UUID workItemId = optionalUuid(payload, "workItemId").orElseGet(() -> {
             String ownerType = text(payload, "ownerType");
             if ("WORK_ITEM".equals(ownerType)) return uuid(payload, "ownerId");
-            return context.attachmentOwnerWorkItem(event.companyId(), ownerType,
-                            uuid(payload, "ownerId"))
-                    .map(WorkItemReference::id).orElse(null);
+            return context.attachmentOwnerWorkItem(event.companyId(), ownerType, uuid(payload, "ownerId"))
+                    .map(WorkItemReference::id)
+                    .orElse(null);
         });
         ObjectNode safe = safeRef(text(payload, "fileName"));
         safe.put("sizeBytes", number(payload, "sizeBytes"));
         if (event.eventType().endsWith("available")) {
-            optionalUuid(payload, "uploadedByUserId")
-                    .ifPresent(id -> safe.put("memberDisplayName", user(event, id)));
+            optionalUuid(payload, "uploadedByUserId").ifPresent(id -> safe.put("memberDisplayName", user(event, id)));
         }
-        append(event, ActivityAudienceType.PROJECT, uuid(payload, "projectId"), "ATTACHMENT",
-                attachmentId, text(payload, "fileName"), template(event.eventType()), safe,
-                workItemId, null);
+        append(
+                event,
+                ActivityAudienceType.PROJECT,
+                uuid(payload, "projectId"),
+                "ATTACHMENT",
+                attachmentId,
+                text(payload, "fileName"),
+                template(event.eventType()),
+                safe,
+                workItemId,
+                null);
     }
 
-    private void append(DomainEventEnvelope source, ActivityAudienceType audience, UUID scopeId,
-            String entityType, UUID entityId, String entityRef, String template,
-            ObjectNode safe, UUID primaryWorkItemId, UUID secondaryWorkItemId) {
+    private void append(
+            DomainEventEnvelope source,
+            ActivityAudienceType audience,
+            UUID scopeId,
+            String entityType,
+            UUID entityId,
+            String entityRef,
+            String template,
+            ObjectNode safe,
+            UUID primaryWorkItemId,
+            UUID secondaryWorkItemId) {
         String actorType = source.actor().type().name();
         UUID actorUserId = source.actor().userId();
         String actorSystemCode = source.actor().systemCode();
-        String display = actorUserId == null ? systemDisplay(actorSystemCode)
+        String display = actorUserId == null
+                ? systemDisplay(actorSystemCode)
                 : context.userDisplayName(source.companyId(), actorUserId).orElse("已停用成员");
-        repository.append(new ActivityStoredEvent(UUID.randomUUID(), source.eventId(), audience.name(),
-                source.companyId(), scopeId, entityType, entityId, truncate(entityRef, 320),
-                source.eventType(), actorType, actorUserId, actorSystemCode, display,
-                source.occurredAt(), template, safe, source.aggregateVersion(),
-                source.requestId(), source.correlationId(), primaryWorkItemId,
+        repository.append(new ActivityStoredEvent(
+                UUID.randomUUID(),
+                source.eventId(),
+                audience.name(),
+                source.companyId(),
+                scopeId,
+                entityType,
+                entityId,
+                truncate(entityRef, 320),
+                source.eventType(),
+                actorType,
+                actorUserId,
+                actorSystemCode,
+                display,
+                source.occurredAt(),
+                template,
+                safe,
+                source.aggregateVersion(),
+                source.requestId(),
+                source.correlationId(),
+                primaryWorkItemId,
                 secondaryWorkItemId));
     }
 
@@ -315,9 +465,12 @@ public class ActivityProjectionService implements OutboxEventConsumer {
 
     private static Set<String> allEvents() {
         LinkedHashSet<String> result = new LinkedHashSet<>();
-        result.addAll(PROJECT_EVENTS); result.addAll(CONTENT_EVENTS);
+        result.addAll(PROJECT_EVENTS);
+        result.addAll(CONTENT_EVENTS);
         result.addAll(CONNECTION_EVENTS);
-        result.addAll(TIME_EVENTS); result.addAll(WORK_ITEM_EVENTS); result.addAll(ATTACHMENT_EVENTS);
+        result.addAll(TIME_EVENTS);
+        result.addAll(WORK_ITEM_EVENTS);
+        result.addAll(ATTACHMENT_EVENTS);
         return result;
     }
 
@@ -328,8 +481,11 @@ public class ActivityProjectionService implements OutboxEventConsumer {
     private static UUID uuid(JsonNode payload, String field) {
         JsonNode value = payload.get(field);
         if (value == null || !value.isTextual()) throw invalid();
-        try { return UUID.fromString(value.textValue()); }
-        catch (IllegalArgumentException failure) { throw invalid(); }
+        try {
+            return UUID.fromString(value.textValue());
+        } catch (IllegalArgumentException failure) {
+            throw invalid();
+        }
     }
 
     private static Optional<UUID> optionalUuid(JsonNode payload, String field) {
@@ -361,7 +517,8 @@ public class ActivityProjectionService implements OutboxEventConsumer {
     }
 
     private static String optionalJoin(JsonNode payload, String first, String second) {
-        JsonNode left = payload.get(first); JsonNode right = payload.get(second);
+        JsonNode left = payload.get(first);
+        JsonNode right = payload.get(second);
         String one = left != null && left.isTextual() ? left.textValue() : null;
         String two = right != null && right.isTextual() ? right.textValue() : null;
         if (one == null && two == null) return null;

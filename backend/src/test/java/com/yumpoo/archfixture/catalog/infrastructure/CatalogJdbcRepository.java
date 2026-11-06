@@ -1,4 +1,3 @@
 package com.yumpoo.archfixture.catalog.infrastructure;
 
-public final class CatalogJdbcRepository {
-}
+public final class CatalogJdbcRepository {}

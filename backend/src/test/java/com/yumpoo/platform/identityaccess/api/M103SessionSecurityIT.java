@@ -1,5 +1,11 @@
 package com.yumpoo.platform.identityaccess.api;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import com.yumpoo.platform.foundation.application.idempotency.RequestHash;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelation;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelationContext;
@@ -11,32 +17,11 @@ import com.yumpoo.platform.identityaccess.application.session.SessionService;
 import com.yumpoo.platform.identityaccess.domain.identity.AccountStatus;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
 import jakarta.servlet.http.Cookie;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.MvcResult;
-import org.springframework.test.web.servlet.result.MockMvcResultMatchers;
-import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
-import java.nio.charset.StandardCharsets;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
-import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -47,27 +32,34 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-
-@Import({
-        PostgreSqlTestContainerConfiguration.class,
-        M103SessionSecurityIT.ProbeConfiguration.class
-})
+@Import({PostgreSqlTestContainerConfiguration.class, M103SessionSecurityIT.ProbeConfiguration.class})
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 class M103SessionSecurityIT {
 
-    private static final UUID COMPANY_ID = UUID.fromString(
-            "00000000-0000-4000-8000-000000000001"
-    );
-    private static final UUID USER_ID = UUID.fromString(
-            "30000000-0000-4000-8000-000000000103"
-    );
+    private static final UUID COMPANY_ID = UUID.fromString("00000000-0000-4000-8000-000000000001");
+    private static final UUID USER_ID = UUID.fromString("30000000-0000-4000-8000-000000000103");
     private static final String API = "/api/v1/__test/m1-03/session";
 
     private final HttpClient httpClient = HttpClient.newHttpClient();
@@ -95,7 +87,8 @@ class M103SessionSecurityIT {
     @BeforeEach
     void setUp() {
         deleteTestUser();
-        jdbcClient.sql("""
+        jdbcClient
+                .sql("""
                         INSERT INTO yumpoo.identity_user (
                             id, company_id, employment_status, account_status,
                             display_name, directory_synced_at,
@@ -109,7 +102,8 @@ class M103SessionSecurityIT {
                 .param("userId", USER_ID)
                 .param("companyId", COMPANY_ID)
                 .update();
-        jdbcClient.sql("""
+        jdbcClient
+                .sql("""
                         INSERT INTO yumpoo.platform_role_assignment (
                             id, company_id, user_id, role_code, scope_type, scope_id, status,
                             granted_by_actor_type, granted_by_system_code, grant_reason,
@@ -133,31 +127,39 @@ class M103SessionSecurityIT {
     }
 
     private void deleteTestUser() {
-        jdbcClient.sql("DELETE FROM yumpoo.security_audit_event WHERE actor_user_id = :userId OR target_id = :targetId")
+        jdbcClient
+                .sql("DELETE FROM yumpoo.security_audit_event WHERE actor_user_id = :userId OR target_id = :targetId")
                 .param("userId", USER_ID)
                 .param("targetId", USER_ID.toString())
                 .update();
-        jdbcClient.sql("DELETE FROM yumpoo.idempotency_record WHERE actor_user_id = :userId")
+        jdbcClient
+                .sql("DELETE FROM yumpoo.idempotency_record WHERE actor_user_id = :userId")
                 .param("userId", USER_ID)
                 .update();
-        jdbcClient.sql("DELETE FROM yumpoo.login_session WHERE user_id = :userId")
+        jdbcClient
+                .sql("DELETE FROM yumpoo.login_session WHERE user_id = :userId")
                 .param("userId", USER_ID)
                 .update();
-        jdbcClient.sql("DELETE FROM yumpoo.outbox_event WHERE aggregate_id = :userId")
+        jdbcClient
+                .sql("DELETE FROM yumpoo.outbox_event WHERE aggregate_id = :userId")
                 .param("userId", USER_ID)
                 .update();
-        jdbcClient.sql("DELETE FROM yumpoo.platform_role_assignment WHERE user_id = :userId")
+        jdbcClient
+                .sql("DELETE FROM yumpoo.platform_role_assignment WHERE user_id = :userId")
                 .param("userId", USER_ID)
                 .update();
-        jdbcClient.sql("DELETE FROM yumpoo.identity_user WHERE id = :userId")
+        jdbcClient
+                .sql("DELETE FROM yumpoo.identity_user WHERE id = :userId")
                 .param("userId", USER_ID)
                 .update();
     }
 
     @Test
     void streamingResponseFinishesItsAsyncDispatchWithoutReauthentication() throws Exception {
-        MvcResult started = mockMvc.perform(get(API + "/stream").cookie(
-                        new Cookie(SessionHttpCookies.SESSION_COOKIE, issued.sessionCredential().value())))
+        MvcResult started = mockMvc.perform(get(API + "/stream")
+                        .cookie(new Cookie(
+                                SessionHttpCookies.SESSION_COOKIE,
+                                issued.sessionCredential().value())))
                 .andExpect(MockMvcResultMatchers.request().asyncStarted())
                 .andReturn();
 
@@ -172,11 +174,9 @@ class M103SessionSecurityIT {
         HttpResponse<String> malformed = send("POST", "malformed", null, null);
         HttpResponse<String> duplicate = send(
                 "POST",
-                issued.sessionCredential().value() + "; "
-                        + SessionHttpCookies.SESSION_COOKIE + "=another",
+                issued.sessionCredential().value() + "; " + SessionHttpCookies.SESSION_COOKIE + "=another",
                 null,
-                null
-        );
+                null);
 
         assertThat(anonymous.statusCode()).as(anonymous.body()).isEqualTo(401);
         assertThat(anonymous.body()).contains("AUTHENTICATION_REQUIRED");
@@ -186,12 +186,7 @@ class M103SessionSecurityIT {
 
     @Test
     void safeRequestRepairsMissingCsrfCookieWithSecurityAttributes() throws Exception {
-        HttpResponse<String> response = send(
-                "GET",
-                issued.sessionCredential().value(),
-                null,
-                null
-        );
+        HttpResponse<String> response = send("GET", issued.sessionCredential().value(), null, null);
 
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.body()).contains(USER_ID.toString());
@@ -223,12 +218,7 @@ class M103SessionSecurityIT {
                 requests.add(executor.submit(() -> {
                     ready.countDown();
                     start.await();
-                    return send(
-                            "GET",
-                            issued.sessionCredential().value(),
-                            csrfCookieValue,
-                            null
-                    );
+                    return send("GET", issued.sessionCredential().value(), csrfCookieValue, null);
                 }));
             }
             assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
@@ -243,7 +233,8 @@ class M103SessionSecurityIT {
 
             assertThat(repairedTokens).hasSize(1);
             String repaired = repairedTokens.iterator().next();
-            assertThat(send("POST", issued.sessionCredential().value(), repaired, repaired).statusCode())
+            assertThat(send("POST", issued.sessionCredential().value(), repaired, repaired)
+                            .statusCode())
                     .isEqualTo(204);
         } finally {
             start.countDown();
@@ -264,8 +255,8 @@ class M103SessionSecurityIT {
 
         assertThat(valid.statusCode()).as(valid.body()).isEqualTo(204);
         assertThat(valid.headers().allValues("set-cookie"))
-                .noneMatch(cookie -> cookie.startsWith(SessionHttpCookies.CSRF_COOKIE + "=")
-                        && cookie.contains("Max-Age=0"));
+                .noneMatch(cookie ->
+                        cookie.startsWith(SessionHttpCookies.CSRF_COOKIE + "=") && cookie.contains("Max-Age=0"));
         assertThat(missing.statusCode()).isEqualTo(403);
         assertThat(headerOnly.statusCode()).isEqualTo(403);
         assertThat(cookieOnly.statusCode()).isEqualTo(403);
@@ -280,16 +271,13 @@ class M103SessionSecurityIT {
     void authorizationChangeInvalidatesAnAuthenticatedCredential() throws Exception {
         sessionService.incrementAuthorizationVersion(
                 USER_ID,
-                com.yumpoo.platform.identityaccess.domain.session.SessionRevocationReason
-                        .AUTHORIZATION_CHANGED
-        );
+                com.yumpoo.platform.identityaccess.domain.session.SessionRevocationReason.AUTHORIZATION_CHANGED);
 
         HttpResponse<String> response = send(
                 "GET",
                 issued.sessionCredential().value(),
                 issued.csrfCredential().value(),
-                null
-        );
+                null);
 
         assertThat(response.statusCode()).isEqualTo(401);
         assertThat(response.body()).contains("AUTHENTICATION_REQUIRED");
@@ -303,9 +291,8 @@ class M103SessionSecurityIT {
         var pending = httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString());
         assertThat(revocationGate.controllerEntered.await(10, TimeUnit.SECONDS)).isTrue();
 
-        try (RequestCorrelationContext.Scope ignored = RequestCorrelationContext.open(
-                RequestCorrelation.root("m107-current-actor-race")
-        )) {
+        try (RequestCorrelationContext.Scope ignored =
+                RequestCorrelationContext.open(RequestCorrelation.root("m107-current-actor-race"))) {
             accountStatusUseCase.change(new AccountStatusChangeCommand(
                     COMPANY_ID,
                     USER_ID,
@@ -314,8 +301,7 @@ class M103SessionSecurityIT {
                     0,
                     UUID.randomUUID(),
                     new RequestHash("7".repeat(64)),
-                    "current-actor-race"
-            ));
+                    "current-actor-race"));
         }
         revocationGate.continueController.countDown();
         HttpResponse<String> response = pending.get(10, TimeUnit.SECONDS);
@@ -326,23 +312,14 @@ class M103SessionSecurityIT {
     }
 
     private HttpResponse<String> send(
-            String method,
-            String sessionValue,
-            String csrfCookieValue,
-            String csrfHeaderValue
-    ) throws Exception {
+            String method, String sessionValue, String csrfCookieValue, String csrfHeaderValue) throws Exception {
         return httpClient.send(
                 request(method, sessionValue, csrfCookieValue, csrfHeaderValue).build(),
-                HttpResponse.BodyHandlers.ofString()
-        );
+                HttpResponse.BodyHandlers.ofString());
     }
 
     private HttpRequest.Builder request(
-            String method,
-            String sessionValue,
-            String csrfCookieValue,
-            String csrfHeaderValue
-    ) {
+            String method, String sessionValue, String csrfCookieValue, String csrfHeaderValue) {
         HttpRequest.Builder request = HttpRequest.newBuilder()
                 .uri(URI.create("http://127.0.0.1:" + port + API))
                 .method(method, HttpRequest.BodyPublishers.noBody());
@@ -377,10 +354,7 @@ class M103SessionSecurityIT {
     static class ProbeConfiguration {
 
         @Bean
-        ProbeController m103ProbeController(
-                CurrentActorProvider currentActorProvider,
-                RevocationGate revocationGate
-        ) {
+        ProbeController m103ProbeController(CurrentActorProvider currentActorProvider, RevocationGate revocationGate) {
             return new ProbeController(currentActorProvider, revocationGate);
         }
 

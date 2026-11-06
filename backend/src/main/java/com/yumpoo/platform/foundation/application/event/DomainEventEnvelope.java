@@ -1,10 +1,9 @@
 package com.yumpoo.platform.foundation.application.event;
 
 import com.yumpoo.platform.foundation.application.request.RequestIdContext;
-import tools.jackson.databind.JsonNode;
-
 import java.time.Instant;
 import java.util.UUID;
+import tools.jackson.databind.JsonNode;
 
 /**
  * 持久化和消费使用的稳定事件信封。
@@ -22,8 +21,7 @@ public record DomainEventEnvelope(
         String requestId,
         String correlationId,
         UUID causationId,
-        JsonNode payload
-) {
+        JsonNode payload) {
 
     public DomainEventEnvelope {
         if (eventId == null || occurredAt == null || aggregateId == null || companyId == null || actor == null) {

@@ -1,17 +1,16 @@
 package com.yumpoo.platform.foundation.api.http;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.yumpoo.platform.foundation.application.idempotency.RequestHash;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.MissingNode;
-
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class IdempotencyRequestHasherTest {
 
@@ -62,25 +61,20 @@ class IdempotencyRequestHasherTest {
     @Test
     void includesOperationPathBodyAndAttachmentContentInTheDigest() throws Exception {
         JsonNode body = objectMapper.readTree("{\"title\":\"first\"}");
-        RequestHash baseline = hasher.hash(
-                "updateWorkItem",
-                Map.of("workItemId", "w-1"),
-                body,
-                Map.of("content", "aaa")
-        );
+        RequestHash baseline =
+                hasher.hash("updateWorkItem", Map.of("workItemId", "w-1"), body, Map.of("content", "aaa"));
 
         assertThat(List.of(
-                baseline,
-                hasher.hash("replaceWorkItem", Map.of("workItemId", "w-1"), body, Map.of("content", "aaa")),
-                hasher.hash("updateWorkItem", Map.of("workItemId", "w-2"), body, Map.of("content", "aaa")),
-                hasher.hash(
-                        "updateWorkItem",
-                        Map.of("workItemId", "w-1"),
-                        objectMapper.readTree("{\"title\":\"second\"}"),
-                        Map.of("content", "aaa")
-                ),
-                hasher.hash("updateWorkItem", Map.of("workItemId", "w-1"), body, Map.of("content", "bbb"))
-        )).doesNotHaveDuplicates();
+                        baseline,
+                        hasher.hash("replaceWorkItem", Map.of("workItemId", "w-1"), body, Map.of("content", "aaa")),
+                        hasher.hash("updateWorkItem", Map.of("workItemId", "w-2"), body, Map.of("content", "aaa")),
+                        hasher.hash(
+                                "updateWorkItem",
+                                Map.of("workItemId", "w-1"),
+                                objectMapper.readTree("{\"title\":\"second\"}"),
+                                Map.of("content", "aaa")),
+                        hasher.hash("updateWorkItem", Map.of("workItemId", "w-1"), body, Map.of("content", "bbb"))))
+                .doesNotHaveDuplicates();
     }
 
     @Test
@@ -103,11 +97,7 @@ class IdempotencyRequestHasherTest {
     }
 
     private static Map<String, String> linkedMap(
-            String firstKey,
-            String firstValue,
-            String secondKey,
-            String secondValue
-    ) {
+            String firstKey, String firstValue, String secondKey, String secondValue) {
         Map<String, String> values = new LinkedHashMap<>();
         values.put(firstKey, firstValue);
         values.put(secondKey, secondValue);

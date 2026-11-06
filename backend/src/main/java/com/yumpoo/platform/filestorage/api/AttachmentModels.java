@@ -10,11 +10,7 @@ import java.util.UUID;
 public final class AttachmentModels {
     private AttachmentModels() {}
 
-    public record AttachmentCapabilities(
-            boolean canUploadContent,
-            boolean canDownloadContent,
-            boolean canDelete
-    ) {}
+    public record AttachmentCapabilities(boolean canUploadContent, boolean canDownloadContent, boolean canDelete) {}
 
     public record AttachmentMetadata(
             UUID id,
@@ -34,15 +30,10 @@ public final class AttachmentModels {
             Instant expiresAt,
             long rowVersion,
             String etag,
-            AttachmentCapabilities capabilities
-    ) {}
+            AttachmentCapabilities capabilities) {}
 
     public record AttachmentIntentResult(
-            String uploadUrl,
-            Instant expiresAt,
-            long maxBytes,
-            AttachmentMetadata metadata
-    ) {}
+            String uploadUrl, Instant expiresAt, long maxBytes, AttachmentMetadata metadata) {}
 
     public record AttachmentPage(List<AttachmentMetadata> items, String nextCursor) {
         public AttachmentPage {
@@ -60,16 +51,10 @@ public final class AttachmentModels {
             String declaredMime,
             Long sizeBytes,
             UUID uploadedByUserId,
-            Instant now
-    ) {}
+            Instant now) {}
 
     public record UploadContent(
-            UUID companyId,
-            UUID attachmentId,
-            InputStream content,
-            OptionalLong contentLength,
-            Instant now
-    ) {
+            UUID companyId, UUID attachmentId, InputStream content, OptionalLong contentLength, Instant now) {
         public UploadContent {
             Objects.requireNonNull(content, "content must not be null");
             Objects.requireNonNull(contentLength, "contentLength must not be null");
@@ -77,11 +62,7 @@ public final class AttachmentModels {
     }
 
     public record DownloadContent(
-            InputStream inputStream,
-            String originalFileName,
-            String detectedMime,
-            long sizeBytes
-    ) {
+            InputStream inputStream, String originalFileName, String detectedMime, long sizeBytes) {
         public DownloadContent {
             Objects.requireNonNull(inputStream, "inputStream must not be null");
         }
@@ -95,8 +76,7 @@ public final class AttachmentModels {
             String deleteReason,
             long previousRowVersion,
             long rowVersion,
-            String etag
-    ) {}
+            String etag) {}
 
     public record ScanClaim(
             UUID taskId,
@@ -114,12 +94,13 @@ public final class AttachmentModels {
             String detectedMime,
             String storageKey,
             int generation,
-            int attemptCount
-    ) {}
+            int attemptCount) {}
 
     public sealed interface ScanOutcome {
         record Clean(String detectedMime, String storageKey) implements ScanOutcome {}
+
         record Rejected(AttachmentRejectedCode code) implements ScanOutcome {}
+
         record Unavailable() implements ScanOutcome {}
     }
 
@@ -136,9 +117,8 @@ public final class AttachmentModels {
             String storageKey,
             int generation,
             UUID taskId,
-            UUID leaseToken
-    ) {}
+            UUID leaseToken) {}
 
-    public record RescanResult(UUID attachmentId, AttachmentStatus status, int generation,
-            long rowVersion, String etag) {}
+    public record RescanResult(
+            UUID attachmentId, AttachmentStatus status, int generation, long rowVersion, String etag) {}
 }

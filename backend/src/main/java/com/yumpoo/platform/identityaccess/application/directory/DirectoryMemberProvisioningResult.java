@@ -2,7 +2,6 @@ package com.yumpoo.platform.identityaccess.application.directory;
 
 import com.yumpoo.platform.identityaccess.domain.identity.AccountStatus;
 import com.yumpoo.platform.identityaccess.domain.identity.EmploymentStatus;
-
 import java.util.Objects;
 import java.util.UUID;
 
@@ -13,8 +12,7 @@ public record DirectoryMemberProvisioningResult(
         AccountStatus accountStatus,
         long authorizationVersion,
         long rowVersion,
-        DirectoryMemberProvisioningOutcome outcome
-) {
+        DirectoryMemberProvisioningOutcome outcome) {
 
     public DirectoryMemberProvisioningResult {
         Objects.requireNonNull(userId, "userId must not be null");

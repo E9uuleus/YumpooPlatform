@@ -1,5 +1,11 @@
 package com.yumpoo.platform.identityaccess.infrastructure.identity;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.UUID;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.MigrationVersion;
 import org.junit.jupiter.api.Test;
@@ -11,39 +17,20 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 @Testcontainers
 class PersonalWorkspaceSlugMigrationIT {
 
-    private static final UUID COMPANY_ID = UUID.fromString(
-            "00000000-0000-4000-8000-000000000001"
-    );
-    private static final UUID FIRST_USER_ID = UUID.fromString(
-            "11111111-1111-4111-8111-111111111101"
-    );
-    private static final UUID COLLIDING_USER_ID = UUID.fromString(
-            "22222222-2222-4222-8222-222222222202"
-    );
-    private static final UUID RESERVED_USER_ID = UUID.fromString(
-            "33333333-3333-4333-8333-333333333303"
-    );
-    private static final UUID INVALID_USER_ID = UUID.fromString(
-            "44444444-4444-4444-8444-444444444404"
-    );
-    private static final UUID UNBOUND_USER_ID = UUID.fromString(
-            "55555555-5555-4555-8555-555555555505"
-    );
+    private static final UUID COMPANY_ID = UUID.fromString("00000000-0000-4000-8000-000000000001");
+    private static final UUID FIRST_USER_ID = UUID.fromString("11111111-1111-4111-8111-111111111101");
+    private static final UUID COLLIDING_USER_ID = UUID.fromString("22222222-2222-4222-8222-222222222202");
+    private static final UUID RESERVED_USER_ID = UUID.fromString("33333333-3333-4333-8333-333333333303");
+    private static final UUID INVALID_USER_ID = UUID.fromString("44444444-4444-4444-8444-444444444404");
+    private static final UUID UNBOUND_USER_ID = UUID.fromString("55555555-5555-4555-8555-555555555505");
 
     @Container
     private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer(
-            DockerImageName.parse("postgres:17.10-alpine")
-    ).withDatabaseName("yumpoo_workspace_slug")
+                    DockerImageName.parse("postgres:17.10-alpine"))
+            .withDatabaseName("yumpoo_workspace_slug")
             .withUsername("yumpoo_test")
             .withPassword("yumpoo_test")
             .withEnv("TZ", "UTC")
@@ -70,34 +57,25 @@ class PersonalWorkspaceSlugMigrationIT {
                         FROM pg_constraint
                         WHERE connamespace = 'yumpoo'::regnamespace
                           AND conname = 'uq_identity_user_company_workspace_slug'
-                        """)
-                .query(String.class)
-                .single()).isEqualTo("UNIQUE (company_id, workspace_slug)");
+                        """).query(String.class).single()).isEqualTo("UNIQUE (company_id, workspace_slug)");
         assertThat(slug(jdbcClient, FIRST_USER_ID)).isEqualTo("alpha-user");
-        assertThat(slug(jdbcClient, COLLIDING_USER_ID))
-                .isEqualTo("alpha-user-22222222");
-        assertThat(slug(jdbcClient, RESERVED_USER_ID))
-                .isEqualTo("u-33333333333343338333333333333303");
-        assertThat(slug(jdbcClient, INVALID_USER_ID))
-                .isEqualTo("u-44444444444444448444444444444404");
-        assertThat(slug(jdbcClient, UNBOUND_USER_ID))
-                .isEqualTo("u-55555555555545558555555555555505");
+        assertThat(slug(jdbcClient, COLLIDING_USER_ID)).isEqualTo("alpha-user-22222222");
+        assertThat(slug(jdbcClient, RESERVED_USER_ID)).isEqualTo("u-33333333333343338333333333333303");
+        assertThat(slug(jdbcClient, INVALID_USER_ID)).isEqualTo("u-44444444444444448444444444444404");
+        assertThat(slug(jdbcClient, UNBOUND_USER_ID)).isEqualTo("u-55555555555545558555555555555505");
 
-        UUID fallbackUserId = UUID.fromString(
-                "66666666-6666-4666-8666-666666666606"
-        );
+        UUID fallbackUserId = UUID.fromString("66666666-6666-4666-8666-666666666606");
         insertUser(jdbcClient, fallbackUserId, "Internal", 6);
-        assertThat(slug(jdbcClient, fallbackUserId))
-                .isEqualTo("u-66666666666646668666666666666606");
+        assertThat(slug(jdbcClient, fallbackUserId)).isEqualTo("u-66666666666646668666666666666606");
 
         assertThatThrownBy(() -> jdbcClient.sql("""
                         UPDATE yumpoo.identity_user
                         SET workspace_slug = 'changed'
                         WHERE id = :id
-                        """)
-                .param("id", FIRST_USER_ID)
-                .update()).isInstanceOf(DataAccessException.class);
-        assertThatThrownBy(() -> jdbcClient.sql("""
+                        """).param("id", FIRST_USER_ID).update())
+                .isInstanceOf(DataAccessException.class);
+        assertThatThrownBy(() -> jdbcClient
+                        .sql("""
                         INSERT INTO yumpoo.identity_user (
                             id, company_id, employment_status, account_status,
                             display_name, workspace_slug, directory_synced_at,
@@ -108,10 +86,11 @@ class PersonalWorkspaceSlugMigrationIT {
                             0, :now, :now
                         )
                         """)
-                .param("id", UUID.fromString("77777777-7777-4777-8777-777777777707"))
-                .param("companyId", COMPANY_ID)
-                .param("now", timestamp(7))
-                .update()).isInstanceOf(DataAccessException.class);
+                        .param("id", UUID.fromString("77777777-7777-4777-8777-777777777707"))
+                        .param("companyId", COMPANY_ID)
+                        .param("now", timestamp(7))
+                        .update())
+                .isInstanceOf(DataAccessException.class);
     }
 
     private static void migrateTo(MigrationVersion target) {
@@ -130,20 +109,13 @@ class PersonalWorkspaceSlugMigrationIT {
     }
 
     private static JdbcClient jdbcClient() {
-        return JdbcClient.create(new DriverManagerDataSource(
-                POSTGRES.getJdbcUrl(),
-                POSTGRES.getUsername(),
-                POSTGRES.getPassword()
-        ));
+        return JdbcClient.create(
+                new DriverManagerDataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword()));
     }
 
-    private static void insertUser(
-            JdbcClient jdbcClient,
-            UUID userId,
-            String displayName,
-            int minute
-    ) {
-        jdbcClient.sql("""
+    private static void insertUser(JdbcClient jdbcClient, UUID userId, String displayName, int minute) {
+        jdbcClient
+                .sql("""
                         INSERT INTO yumpoo.identity_user (
                             id, company_id, employment_status, account_status,
                             display_name, directory_synced_at,
@@ -161,13 +133,9 @@ class PersonalWorkspaceSlugMigrationIT {
                 .update();
     }
 
-    private static void insertExternalIdentity(
-            JdbcClient jdbcClient,
-            UUID userId,
-            String externalUserId,
-            int minute
-    ) {
-        jdbcClient.sql("""
+    private static void insertExternalIdentity(JdbcClient jdbcClient, UUID userId, String externalUserId, int minute) {
+        jdbcClient
+                .sql("""
                         INSERT INTO yumpoo.external_identity (
                             id, company_id, user_id, provider, external_user_id,
                             provider_employment_status, raw_profile_hash,
@@ -192,10 +160,7 @@ class PersonalWorkspaceSlugMigrationIT {
                         SELECT workspace_slug
                         FROM yumpoo.identity_user
                         WHERE id = :id
-                        """)
-                .param("id", userId)
-                .query(String.class)
-                .single();
+                        """).param("id", userId).query(String.class).single();
     }
 
     private static OffsetDateTime timestamp(int minute) {

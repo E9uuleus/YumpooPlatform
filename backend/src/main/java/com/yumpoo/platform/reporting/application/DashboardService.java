@@ -1,5 +1,7 @@
 package com.yumpoo.platform.reporting.application;
 
+import static com.yumpoo.platform.reporting.application.DashboardModels.*;
+
 import com.yumpoo.platform.catalog.api.MemberProjectQuery;
 import com.yumpoo.platform.catalog.api.ProjectDeletionQuery;
 import com.yumpoo.platform.foundation.application.concurrency.StrongEtag;
@@ -8,19 +10,19 @@ import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.foundation.application.idempotency.*;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.workitem.api.WorkItemStatisticsQuery;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Isolation;
-import org.springframework.transaction.annotation.Transactional;
-import tools.jackson.databind.ObjectMapper;
 import java.time.Clock;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import static com.yumpoo.platform.reporting.application.DashboardModels.*;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.ObjectMapper;
 
 @Service
 public class DashboardService {
@@ -31,50 +33,94 @@ public class DashboardService {
     private final IdempotentCommandExecutor idempotency;
     private final ObjectMapper json;
     private final Clock clock;
-    public DashboardService(DashboardRepository repository, MemberProjectQuery projects, ProjectDeletionQuery deletion,
-            WorkItemStatisticsQuery statistics, IdempotentCommandExecutor idempotency, ObjectMapper json, Clock clock) {
-        this.repository = repository; this.projects = projects; this.deletion = deletion; this.statistics = statistics;
-        this.idempotency = idempotency; this.json = json; this.clock = clock;
+
+    public DashboardService(
+            DashboardRepository repository,
+            MemberProjectQuery projects,
+            ProjectDeletionQuery deletion,
+            WorkItemStatisticsQuery statistics,
+            IdempotentCommandExecutor idempotency,
+            ObjectMapper json,
+            Clock clock) {
+        this.repository = repository;
+        this.projects = projects;
+        this.deletion = deletion;
+        this.statistics = statistics;
+        this.idempotency = idempotency;
+        this.json = json;
+        this.clock = clock;
     }
+
     @Transactional(readOnly = true)
     public ListResponse list(CurrentActor actor) {
-        return new ListResponse(repository.list(actor.companyId(), actor.userId()).stream().map(d ->
-                new Summary(d.id(), d.name(), activeProjectIds(actor, d).size(), d.configuration().widgets().size(), d.updatedAt())).toList());
+        return new ListResponse(repository.list(actor.companyId(), actor.userId()).stream()
+                .map(d -> new Summary(
+                        d.id(),
+                        d.name(),
+                        activeProjectIds(actor, d).size(),
+                        d.configuration().widgets().size(),
+                        d.updatedAt()))
+                .toList());
     }
+
     @Transactional(readOnly = true)
     public Stored requireOwned(CurrentActor actor, UUID id, boolean includeDeleted) {
-        return repository.find(actor.companyId(), actor.userId(), id, includeDeleted)
+        return repository
+                .find(actor.companyId(), actor.userId(), id, includeDeleted)
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
     }
+
     @Transactional(readOnly = true)
-    public View get(CurrentActor actor, UUID id) { return view(actor, requireOwned(actor, id, false)); }
+    public View get(CurrentActor actor, UUID id) {
+        return view(actor, requireOwned(actor, id, false));
+    }
 
     @Transactional
-    public IdempotencyExecutionResult command(CurrentActor actor, String method, UUID id, Write input,
-            long expected, UUID key, RequestHash hash) {
+    public IdempotencyExecutionResult command(
+            CurrentActor actor, String method, UUID id, Write input, long expected, UUID key, RequestHash hash) {
         if (id != null) requireOwned(actor, id, method.equals("DELETE"));
-        return idempotency.execute(new IdempotencyCommand(new IdempotencyScope(actor.userId(), method,
-                "/me/dashboards" + (id == null ? "" : "/" + id), key), hash), () -> {
-            Stored before = id == null ? null : requireOwned(actor, id, false);
-            if (before != null && before.version() != expected) throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
-            var now = clock.instant();
-            if (method.equals("DELETE")) {
-                if (!repository.delete(actor.companyId(), actor.userId(), id, expected, now))
-                    throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
-                return new StoredCommandResult(200, "{\"deleted\":true}", id, null);
-            }
-            Write valid = DashboardValidation.normalize(input, statistics);
-            lockReferencedProjects(actor, valid.configuration());
-            List<UUID> added = valid.configuration().projectIds().stream()
-                    .filter(project -> before == null || !before.configuration().projectIds().contains(project)).toList();
-            if (projects.find(actor, added).size() != added.size())
-                throw new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND);
-            Stored next = new Stored(id == null ? UUID.randomUUID() : id, actor.companyId(), actor.userId(), valid.name(),
-                    valid.configuration(), before == null ? 0 : expected + 1, before == null ? now : before.createdAt(), now, null);
-            if (before == null) repository.insert(next);
-            else if (!repository.update(next, expected)) throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
-            return new StoredCommandResult(before == null ? 201 : 200, json.writeValueAsString(view(actor, next)), next.id(), StrongEtag.format(next.version()));
-        });
+        return idempotency.execute(
+                new IdempotencyCommand(
+                        new IdempotencyScope(
+                                actor.userId(), method, "/me/dashboards" + (id == null ? "" : "/" + id), key),
+                        hash),
+                () -> {
+                    Stored before = id == null ? null : requireOwned(actor, id, false);
+                    if (before != null && before.version() != expected)
+                        throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
+                    var now = clock.instant();
+                    if (method.equals("DELETE")) {
+                        if (!repository.delete(actor.companyId(), actor.userId(), id, expected, now))
+                            throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
+                        return new StoredCommandResult(200, "{\"deleted\":true}", id, null);
+                    }
+                    Write valid = DashboardValidation.normalize(input, statistics);
+                    lockReferencedProjects(actor, valid.configuration());
+                    List<UUID> added = valid.configuration().projectIds().stream()
+                            .filter(project -> before == null
+                                    || !before.configuration().projectIds().contains(project))
+                            .toList();
+                    if (projects.find(actor, added).size() != added.size())
+                        throw new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND);
+                    Stored next = new Stored(
+                            id == null ? UUID.randomUUID() : id,
+                            actor.companyId(),
+                            actor.userId(),
+                            valid.name(),
+                            valid.configuration(),
+                            before == null ? 0 : expected + 1,
+                            before == null ? now : before.createdAt(),
+                            now,
+                            null);
+                    if (before == null) repository.insert(next);
+                    else if (!repository.update(next, expected))
+                        throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
+                    return new StoredCommandResult(
+                            before == null ? 201 : 200,
+                            json.writeValueAsString(view(actor, next)),
+                            next.id(),
+                            StrongEtag.format(next.version()));
+                });
     }
 
     private void lockReferencedProjects(CurrentActor actor, Configuration configuration) {
@@ -83,75 +129,194 @@ public class DashboardService {
         for (var widget : configuration.widgets()) {
             if (widget.chart() == null) continue;
             addProjectIds(ids, widget.chart().projectIds());
-            if (widget.chart().filters() != null) addProjectIds(ids, widget.chart().filters().projectIds());
+            if (widget.chart().filters() != null)
+                addProjectIds(ids, widget.chart().filters().projectIds());
         }
-        // Hold every persisted project reference until the dashboard transaction commits, including retained connections.
+        // Hold every persisted project reference until the dashboard transaction commits, including retained
+        // connections.
         for (UUID id : ids.stream().sorted(Comparator.comparing(UUID::toString)).toList())
-            deletion.lockForProjection(actor.companyId(), id).filter(project -> project.purgeStartedAt() == null)
+            deletion.lockForProjection(actor.companyId(), id)
+                    .filter(project -> project.purgeStartedAt() == null)
                     .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
     }
 
     private static void addProjectIds(Set<UUID> ids, List<UUID> projectIds) {
-        if (projectIds != null) projectIds.stream().filter(java.util.Objects::nonNull).forEach(ids::add);
+        if (projectIds != null)
+            projectIds.stream().filter(java.util.Objects::nonNull).forEach(ids::add);
     }
+
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public QueryResponse query(CurrentActor actor, UUID id, Query query) {
         var dashboard = requireOwned(actor, id, false);
         var activeProjects = activeProjectIds(actor, dashboard);
-        var result = statistics.aggregate(actor, activeProjects,
-                query == null || query.filters() == null ? dashboard.configuration().filters() : query.filters());
-        var widgets = query == null || query.widgets() == null ? dashboard.configuration().widgets() : query.widgets();
+        var result = statistics.aggregate(
+                actor,
+                activeProjects,
+                query == null || query.filters() == null
+                        ? dashboard.configuration().filters()
+                        : query.filters());
+        var widgets = query == null || query.widgets() == null
+                ? dashboard.configuration().widgets()
+                : query.widgets();
         validateQueryWidgets(widgets, statistics);
-        var charts = statistics.charts(actor, activeProjects,
-                query == null || query.filters() == null ? dashboard.configuration().filters() : query.filters(),
-                widgets.stream().map(DashboardCharts::request).toList(), result.asOf());
-        return new QueryResponse(result.buckets(), result.options(), result.asOf(), view(actor, dashboard).projects(), charts);
+        var charts = statistics.charts(
+                actor,
+                activeProjects,
+                query == null || query.filters() == null
+                        ? dashboard.configuration().filters()
+                        : query.filters(),
+                widgets.stream().map(DashboardCharts::request).toList(),
+                result.asOf());
+        return new QueryResponse(
+                result.buckets(),
+                result.options(),
+                result.asOf(),
+                view(actor, dashboard).projects(),
+                charts);
     }
+
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public WorkItemStatisticsQuery.Page items(CurrentActor actor, UUID id, ItemsQuery query) {
         var dashboard = requireOwned(actor, id, false);
         var activeProjects = activeProjectIds(actor, dashboard);
         if (query.widget() != null) {
             validateQueryWidgets(List.of(query.widget()), statistics);
-            return statistics.chartItems(actor, activeProjects,
+            return statistics.chartItems(
+                    actor,
+                    activeProjects,
                     query.filters() == null ? dashboard.configuration().filters() : query.filters(),
-                    DashboardCharts.request(query.widget()), query.selection(), query.offset(), query.limit());
+                    DashboardCharts.request(query.widget()),
+                    query.selection(),
+                    query.offset(),
+                    query.limit());
         }
-        return statistics.items(actor, activeProjects,
-                query.filters() == null ? dashboard.configuration().filters() : query.filters(), query.offset(), query.limit());
+        return statistics.items(
+                actor,
+                activeProjects,
+                query.filters() == null ? dashboard.configuration().filters() : query.filters(),
+                query.offset(),
+                query.limit());
     }
+
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public WorkItemStatisticsQuery.TablePage table(CurrentActor actor, UUID id, TableQuery query) {
         var dashboard = requireOwned(actor, id, false);
-        if (query.widget() == null) throw ApplicationException.validation(
-                new com.yumpoo.platform.foundation.application.error.FieldViolation("widget", "REQUIRED", "图表不能为空"));
+        if (query.widget() == null)
+            throw ApplicationException.validation(new com.yumpoo.platform.foundation.application.error.FieldViolation(
+                    "widget", "REQUIRED", "图表不能为空"));
         validateQueryWidgets(List.of(query.widget()), statistics);
-        return statistics.table(actor, activeProjectIds(actor, dashboard),
+        return statistics.table(
+                actor,
+                activeProjectIds(actor, dashboard),
                 query.filters() == null ? dashboard.configuration().filters() : query.filters(),
-                DashboardCharts.request(query.widget()), query.selection(), query.projectId(), query.table());
+                DashboardCharts.request(query.widget()),
+                query.selection(),
+                query.projectId(),
+                query.table());
     }
+
     private List<UUID> activeProjectIds(CurrentActor actor, Stored dashboard) {
         return projects.find(actor, dashboard.configuration().projectIds()).stream()
                 .filter(project -> "ACTIVE".equals(project.lifecycle()))
-                .map(MemberProjectQuery.Project::id).toList();
+                .map(MemberProjectQuery.Project::id)
+                .toList();
     }
 
     private View view(CurrentActor actor, Stored d) {
-        Map<UUID, MemberProjectQuery.Project> visible = projects.find(actor, d.configuration().projectIds()).stream()
+        Map<UUID, MemberProjectQuery.Project> visible = projects
+                .find(actor, d.configuration().projectIds())
+                .stream()
                 .collect(Collectors.toMap(MemberProjectQuery.Project::id, p -> p));
-        var connections = d.configuration().projectIds().stream().map(id -> {
-            var p = visible.get(id);
-            return p == null ? new Connection(id, null, null, null, false) : new Connection(id, p.name(), p.code(), p.lifecycle(), true);
-        }).toList();
-        return new View(d.id(), d.name(), d.configuration(), connections, d.version(), StrongEtag.format(d.version()), d.updatedAt());
+        var connections = d.configuration().projectIds().stream()
+                .map(id -> {
+                    var p = visible.get(id);
+                    return p == null
+                            ? new Connection(id, null, null, null, false)
+                            : new Connection(id, p.name(), p.code(), p.lifecycle(), true);
+                })
+                .toList();
+        Configuration stored = d.configuration();
+        Configuration configuration = new Configuration(
+                stored.projectIds(),
+                stored.widgets().stream().map(DashboardService::widgetForView).toList(),
+                stored.filters());
+        return new View(
+                d.id(),
+                d.name(),
+                configuration,
+                connections,
+                d.version(),
+                StrongEtag.format(d.version()),
+                d.updatedAt());
     }
+
+    private static Widget widgetForView(Widget widget) {
+        Chart chart = widget.chart();
+        if (chart == null || chart.filters() == null) return widget;
+        var f = chart.filters();
+        var filters = new WorkItemStatisticsQuery.Filters(
+                Objects.requireNonNullElse(f.projectIds(), List.of()),
+                Objects.requireNonNullElse(f.assignees(), List.of()),
+                Objects.requireNonNullElse(f.statuses(), List.of()),
+                Objects.requireNonNullElse(f.priorities(), List.of()),
+                Objects.requireNonNullElse(f.contentIds(), List.of()),
+                Objects.requireNonNullElse(f.categories(), List.of()),
+                f.dueFrom(),
+                f.dueTo(),
+                f.includeArchived(),
+                Objects.requireNonNullElse(f.query(), ""),
+                f.hasTime());
+        Chart result = new Chart(
+                chart.type(),
+                chart.dimension(),
+                chart.series(),
+                chart.dateInterval(),
+                chart.timezone(),
+                chart.measure(),
+                chart.xMeasure(),
+                chart.sizeMeasure(),
+                chart.stacked(),
+                chart.showLegend(),
+                chart.showValues(),
+                chart.valueFormat(),
+                chart.sort(),
+                chart.limit(),
+                chart.showEmpty(),
+                chart.projectIds(),
+                filters,
+                chart.labels(),
+                chart.detailColumns());
+        return new Widget(
+                widget.id(),
+                widget.kind(),
+                widget.title(),
+                widget.metric(),
+                widget.grouping(),
+                widget.sort(),
+                widget.showLegend(),
+                widget.showValues(),
+                widget.wide(),
+                widget.medium(),
+                result);
+    }
+
     static void validateQueryWidgets(List<Widget> widgets, WorkItemStatisticsQuery statistics) {
-        if (widgets.size() > 40 || widgets.stream().anyMatch(w -> w == null || w.kind() == null || w.metric() == null || w.grouping() == null || w.sort() == null))
-            throw ApplicationException.validation(new com.yumpoo.platform.foundation.application.error.FieldViolation("widgets", "INVALID_VALUE", "图表配置无效"));
+        if (widgets.size() > 40
+                || widgets.stream()
+                        .anyMatch(w -> w == null
+                                || w.kind() == null
+                                || w.metric() == null
+                                || w.grouping() == null
+                                || w.sort() == null))
+            throw ApplicationException.validation(new com.yumpoo.platform.foundation.application.error.FieldViolation(
+                    "widgets", "INVALID_VALUE", "图表配置无效"));
         for (var w : widgets) {
-            if (!java.util.Set.of("METRIC", "STATUS", "PROJECT_WORKLOAD", "MEMBER_WORKLOAD", "PROJECT_TIME", "CHART").contains(w.kind())
+            if (!java.util.Set.of("METRIC", "STATUS", "PROJECT_WORKLOAD", "MEMBER_WORKLOAD", "PROJECT_TIME", "CHART")
+                            .contains(w.kind())
                     || w.kind().equals("CHART") && w.chart() == null)
-                throw ApplicationException.validation(new com.yumpoo.platform.foundation.application.error.FieldViolation("widgets", "INVALID_VALUE", "图表配置无效"));
+                throw ApplicationException.validation(
+                        new com.yumpoo.platform.foundation.application.error.FieldViolation(
+                                "widgets", "INVALID_VALUE", "图表配置无效"));
             DashboardCharts.validate(w, statistics);
         }
     }

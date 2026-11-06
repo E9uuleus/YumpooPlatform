@@ -2,11 +2,10 @@ package com.yumpoo.platform.foundation.application.outbox;
 
 import com.yumpoo.platform.foundation.application.event.DomainEventEnvelope;
 import com.yumpoo.platform.foundation.application.event.OutboxEventConsumer;
+import java.time.Clock;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.Clock;
 
 @Service
 public class OutboxConsumerExecutor {
@@ -20,15 +19,8 @@ public class OutboxConsumerExecutor {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public OutboxConsumerOutcome execute(
-            OutboxEventConsumer consumer,
-            DomainEventEnvelope event
-    ) {
-        boolean acquired = receiptPort.tryBegin(
-                consumer.consumerName(),
-                event.eventId(),
-                clock.instant()
-        );
+    public OutboxConsumerOutcome execute(OutboxEventConsumer consumer, DomainEventEnvelope event) {
+        boolean acquired = receiptPort.tryBegin(consumer.consumerName(), event.eventId(), clock.instant());
         if (!acquired) {
             return OutboxConsumerOutcome.ALREADY_COMPLETED;
         }

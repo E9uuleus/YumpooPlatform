@@ -1,18 +1,13 @@
 package com.yumpoo.platform.identityaccess.application.directory;
 
 import com.yumpoo.platform.foundation.application.event.EventActor;
-
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 
 public interface DirectorySyncRepository {
 
-    DirectorySyncClaim claim(
-            UUID companyId,
-            DirectorySyncCommand command,
-            Duration leaseDuration
-    );
+    DirectorySyncClaim claim(UUID companyId, DirectorySyncCommand command, Duration leaseDuration);
 
     void stageIdPage(
             UUID runId,
@@ -21,30 +16,14 @@ public interface DirectorySyncRepository {
             int pageNumber,
             String nextCursor,
             List<String> externalUserIds,
-            Duration leaseDuration
-    );
+            Duration leaseDuration);
 
-    void confirmScan(
-            UUID runId,
-            UUID leaseToken,
-            DirectoryScanResult result,
-            Duration leaseDuration
-    );
+    void confirmScan(UUID runId, UUID leaseToken, DirectoryScanResult result, Duration leaseDuration);
 
-    void stageProfile(
-            UUID runId,
-            UUID leaseToken,
-            WeComMemberProfile profile,
-            Duration leaseDuration
-    );
+    void stageProfile(UUID runId, UUID leaseToken, WeComMemberProfile profile, Duration leaseDuration);
 
     void markProfileFailed(
-            UUID runId,
-            UUID leaseToken,
-            String externalUserId,
-            String errorCode,
-            Duration leaseDuration
-    );
+            UUID runId, UUID leaseToken, String externalUserId, String errorCode, Duration leaseDuration);
 
     boolean hasActiveDirectoryMembers(UUID companyId);
 
@@ -60,23 +39,11 @@ public interface DirectorySyncRepository {
             WeComMemberProfile profile,
             DirectoryMemberProvisioningResult result,
             EventActor actor,
-            Duration leaseDuration
-    );
+            Duration leaseDuration);
 
-    void markApplyFailed(
-            UUID runId,
-            UUID leaseToken,
-            String externalUserId,
-            Duration leaseDuration
-    );
+    void markApplyFailed(UUID runId, UUID leaseToken, String externalUserId, Duration leaseDuration);
 
-    DirectorySyncRunSnapshot fail(
-            UUID runId,
-            UUID leaseToken,
-            String errorCode,
-            String safeSummary,
-            EventActor actor
-    );
+    DirectorySyncRunSnapshot fail(UUID runId, UUID leaseToken, String errorCode, String safeSummary, EventActor actor);
 
     DirectorySyncRunSnapshot completePartial(UUID runId, UUID leaseToken, EventActor actor);
 

@@ -3,7 +3,6 @@ package com.yumpoo.platform.filestorage.infrastructure.backup;
 import com.yumpoo.platform.filestorage.infrastructure.backup.M017BackupManifest.FileRecord;
 import com.yumpoo.platform.filestorage.infrastructure.backup.M017BackupManifest.FileRole;
 import com.yumpoo.platform.filestorage.infrastructure.backup.M017BackupManifest.RetentionMetadata;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.AtomicMoveNotSupportedException;
@@ -44,8 +43,7 @@ public final class M017BackupSet {
     private static final HexFormat HEX = HexFormat.of();
     private static final ObjectMapper JSON = new ObjectMapper();
 
-    private M017BackupSet() {
-    }
+    private M017BackupSet() {}
 
     public static Path create(CreateRequest request) throws IOException {
         Objects.requireNonNull(request, "request must not be null");
@@ -79,9 +77,9 @@ public final class M017BackupSet {
                     "database/yumpoo.dump",
                     "recovery/secret-recovery.json",
                     new RetentionMetadata(List.copyOf(request.retentionLabels()), request.legalHold()),
-                    records
-            );
-            JSON.writerWithDefaultPrettyPrinter().writeValue(partialRoot.resolve(MANIFEST_FILE).toFile(), manifest);
+                    records);
+            JSON.writerWithDefaultPrettyPrinter()
+                    .writeValue(partialRoot.resolve(MANIFEST_FILE).toFile(), manifest);
             validate(partialRoot);
             moveCompleted(partialRoot, finalRoot);
             completed = true;
@@ -204,26 +202,39 @@ public final class M017BackupSet {
     }
 
     private static void validateManifestShape(M017BackupManifest manifest) throws IOException {
-        if (manifest == null || manifest.schemaVersion() != 1 || !"M0-17".equals(manifest.milestone())
-                || manifest.backupSetId() == null || manifest.createdAt() == null
+        if (manifest == null
+                || manifest.schemaVersion() != 1
+                || !"M0-17".equals(manifest.milestone())
+                || manifest.backupSetId() == null
+                || manifest.createdAt() == null
                 || !"Asia/Shanghai".equals(manifest.companyTimeZone())
-                || manifest.applicationVersion() == null || manifest.applicationVersion().isBlank()
-                || manifest.sourceCommit() == null || !SOURCE_COMMIT.matcher(manifest.sourceCommit()).matches()
-                || manifest.postgresVersion() == null || !manifest.postgresVersion().startsWith("17.")
-                || manifest.flywaySchemaVersion() == null || manifest.flywaySchemaVersion().isBlank()
+                || manifest.applicationVersion() == null
+                || manifest.applicationVersion().isBlank()
+                || manifest.sourceCommit() == null
+                || !SOURCE_COMMIT.matcher(manifest.sourceCommit()).matches()
+                || manifest.postgresVersion() == null
+                || !manifest.postgresVersion().startsWith("17.")
+                || manifest.flywaySchemaVersion() == null
+                || manifest.flywaySchemaVersion().isBlank()
                 || !"database/yumpoo.dump".equals(manifest.databaseDumpPath())
                 || !"recovery/secret-recovery.json".equals(manifest.restoreDescriptorPath())
-                || manifest.retention() == null || manifest.files() == null || manifest.files().isEmpty()) {
+                || manifest.retention() == null
+                || manifest.files() == null
+                || manifest.files().isEmpty()) {
             throw new IOException("backup manifest shape is invalid");
         }
-        if (!List.of("daily", "weekly", "monthly").containsAll(manifest.retention().labels())) {
+        if (!List.of("daily", "weekly", "monthly")
+                .containsAll(manifest.retention().labels())) {
             throw new IOException("manifest retention labels are invalid");
         }
     }
 
     private static void validateRecord(FileRecord record) throws IOException {
-        if (record == null || record.role() == null || record.bytes() < 0
-                || record.sha256() == null || !SHA_256.matcher(record.sha256()).matches()) {
+        if (record == null
+                || record.role() == null
+                || record.bytes() < 0
+                || record.sha256() == null
+                || !SHA_256.matcher(record.sha256()).matches()) {
             throw new IOException("manifest file record is invalid");
         }
         safeRelativePath(record.path());
@@ -232,9 +243,9 @@ public final class M017BackupSet {
     private static void validateRolePath(FileRecord record) throws IOException {
         boolean valid = switch (record.role()) {
             case DATABASE_DUMP -> record.path().equals("database/yumpoo.dump");
-            case ATTACHMENT_BLOB -> record.path().matches(
-                    "^attachments/sha256/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64}$"
-            ) && record.path().endsWith("/" + record.sha256());
+            case ATTACHMENT_BLOB ->
+                record.path().matches("^attachments/sha256/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64}$")
+                        && record.path().endsWith("/" + record.sha256());
             case CONFIGURATION -> record.path().equals("configuration/application.yml");
             case RESTORE_DESCRIPTOR -> record.path().equals("recovery/secret-recovery.json");
         };
@@ -244,18 +255,25 @@ public final class M017BackupSet {
     }
 
     private static void validateRestoreDescriptor(Path descriptor) throws IOException {
-        JsonNode root = JSON.readTree(requireRegularFile(descriptor, "restoreDescriptor").toFile());
-        if (!root.isObject() || root.size() != 4 || root.path("schemaVersion").asInt() != 1
+        JsonNode root = JSON.readTree(
+                requireRegularFile(descriptor, "restoreDescriptor").toFile());
+        if (!root.isObject()
+                || root.size() != 4
+                || root.path("schemaVersion").asInt() != 1
                 || root.path("secretValuesIncluded").asBoolean(true)) {
             throw new IOException("restore descriptor must explicitly exclude secret values");
         }
         JsonNode variables = root.path("requiredSecretVariables");
         JsonNode process = root.path("recoveryProcess");
-        if (!variables.isArray() || variables.isEmpty() || !process.isTextual() || process.asText().isBlank()) {
+        if (!variables.isArray()
+                || variables.isEmpty()
+                || !process.isTextual()
+                || process.asText().isBlank()) {
             throw new IOException("restore descriptor is incomplete");
         }
         for (JsonNode variable : variables) {
-            if (!variable.isTextual() || !SECRET_VARIABLE.matcher(variable.asText()).matches()) {
+            if (!variable.isTextual()
+                    || !SECRET_VARIABLE.matcher(variable.asText()).matches()) {
                 throw new IOException("restore descriptor variable name is invalid");
             }
         }
@@ -266,11 +284,7 @@ public final class M017BackupSet {
         List<FileRecord> records = new ArrayList<>();
         for (Map.Entry<String, Path> entry : files.entrySet()) {
             records.add(new FileRecord(
-                    entry.getKey(),
-                    roleFor(entry.getKey()),
-                    Files.size(entry.getValue()),
-                    sha256(entry.getValue())
-            ));
+                    entry.getKey(), roleFor(entry.getKey()), Files.size(entry.getValue()), sha256(entry.getValue())));
         }
         records.sort(Comparator.comparing(FileRecord::path));
         return List.copyOf(records);
@@ -361,12 +375,18 @@ public final class M017BackupSet {
     }
 
     private static Path safeRelativePath(String value) throws IOException {
-        if (value == null || value.isBlank() || value.contains("\\") || value.startsWith("/")
-                || value.matches("^[A-Za-z]:.*") || value.contains("//")) {
+        if (value == null
+                || value.isBlank()
+                || value.contains("\\")
+                || value.startsWith("/")
+                || value.matches("^[A-Za-z]:.*")
+                || value.contains("//")) {
             throw new IOException("manifest path is not a portable relative path");
         }
         Path path = Path.of(value);
-        if (path.isAbsolute() || path.normalize().startsWith("..") || !portable(path.normalize()).equals(value)) {
+        if (path.isAbsolute()
+                || path.normalize().startsWith("..")
+                || !portable(path.normalize()).equals(value)) {
             throw new IOException("manifest path escapes or is not normalized");
         }
         return path;
@@ -422,8 +442,7 @@ public final class M017BackupSet {
         }
         Path resolved = root.toAbsolutePath().normalize();
         String name = resolved.getFileName().toString();
-        if (!(name.equals("m0-17") || name.equals("backup-set.partial")
-                || name.startsWith("m017-"))) {
+        if (!(name.equals("m0-17") || name.equals("backup-set.partial") || name.startsWith("m017-"))) {
             throw new IOException("refusing to delete an unexpected M0-17 path");
         }
         try (Stream<Path> paths = Files.walk(resolved)) {
@@ -450,7 +469,5 @@ public final class M017BackupSet {
             Path configuration,
             Path restoreDescriptor,
             List<String> retentionLabels,
-            boolean legalHold
-    ) {
-    }
+            boolean legalHold) {}
 }

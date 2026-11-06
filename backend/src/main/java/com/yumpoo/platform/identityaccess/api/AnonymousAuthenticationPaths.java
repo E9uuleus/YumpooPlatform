@@ -13,9 +13,7 @@ final class AnonymousAuthenticationPaths {
             WebAuthenticationPaths.CALLBACK,
             DesktopAuthenticationPaths.ATTEMPTS,
             DesktopAuthenticationPaths.CALLBACK,
-            DesktopAuthenticationPaths.EXCHANGE
-    );
+            DesktopAuthenticationPaths.EXCHANGE);
 
-    private AnonymousAuthenticationPaths() {
-    }
+    private AnonymousAuthenticationPaths() {}
 }

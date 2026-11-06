@@ -24,8 +24,11 @@ final class JdbcConnectionFilterSql {
         int index = 0;
         for (UUID id : filter.connectedColumnIds().stream().sorted().toList()) {
             String key = "connectedColumn" + index++;
-            sql.append(" AND EXISTS (SELECT 1").append(activeConnections(false))
-                    .append(" AND connection.column_id=:").append(key).append(")");
+            sql.append(" AND EXISTS (SELECT 1")
+                    .append(activeConnections(false))
+                    .append(" AND connection.column_id=:")
+                    .append(key)
+                    .append(")");
             parameters.put(key, id);
         }
         index = 0;
@@ -33,13 +36,19 @@ final class JdbcConnectionFilterSql {
             String key = "unconnectedColumn" + index++;
             sql.append(" AND EXISTS (SELECT 1 FROM yumpoo.work_item_connect_column selected_column")
                     .append(" WHERE selected_column.company_id=:companyId AND selected_column.project_id=:projectId")
-                    .append(" AND selected_column.deleted_at IS NULL AND selected_column.id=:").append(key).append(")")
-                    .append(" AND NOT EXISTS (SELECT 1").append(activeConnections(false))
-                    .append(" AND connection.column_id=:").append(key).append(")");
+                    .append(" AND selected_column.deleted_at IS NULL AND selected_column.id=:")
+                    .append(key)
+                    .append(")")
+                    .append(" AND NOT EXISTS (SELECT 1")
+                    .append(activeConnections(false))
+                    .append(" AND connection.column_id=:")
+                    .append(key)
+                    .append(")");
             parameters.put(key, id);
         }
         if (!filter.incomingProjectIds().isEmpty()) {
-            sql.append(" AND EXISTS (SELECT 1").append(activeConnections(true))
+            sql.append(" AND EXISTS (SELECT 1")
+                    .append(activeConnections(true))
                     .append(" AND connection.source_project_id IN (:incomingProjectIds))");
             parameters.put("incomingProjectIds", filter.incomingProjectIds());
         }

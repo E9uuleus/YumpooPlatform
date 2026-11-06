@@ -9,6 +9,9 @@ import com.yumpoo.platform.foundation.application.idempotency.StoredCommandResul
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.CurrentActorProvider;
 import jakarta.validation.Valid;
+import java.net.URI;
+import java.util.Map;
+import java.util.UUID;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -18,10 +21,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import tools.jackson.databind.ObjectMapper;
-
-import java.net.URI;
-import java.util.Map;
-import java.util.UUID;
 
 @ApiV1Controller
 public final class ProjectCreationController {
@@ -39,8 +38,7 @@ public final class ProjectCreationController {
             ProjectCreationOrchestrator orchestrator,
             IdempotencyKeyParser idempotencyKeyParser,
             IdempotencyRequestHasher requestHasher,
-            ObjectMapper objectMapper
-    ) {
+            ObjectMapper objectMapper) {
         this.currentActorProvider = currentActorProvider;
         this.orchestrator = orchestrator;
         this.idempotencyKeyParser = idempotencyKeyParser;
@@ -51,15 +49,18 @@ public final class ProjectCreationController {
     @PostMapping("/projects")
     ResponseEntity<String> create(
             @Valid @RequestBody ProjectCreateRequest body,
-            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false)
-            String idempotencyHeader
-    ) {
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String idempotencyHeader) {
         CurrentActor actor = currentActorProvider.requiredActive();
         UUID idempotencyKey = idempotencyKeyParser.parseRequired(idempotencyHeader);
         ProjectCreationCommand command = new ProjectCreationCommand(
-                actor, body.name(), body.description(), idempotencyKey,
+                actor,
+                body.name(),
+                body.description(),
+                idempotencyKey,
                 requestHasher.hash("createProject", Map.of(), objectMapper.valueToTree(body)),
-                null, null, body.initialColors());
+                null,
+                null,
+                body.initialColors());
         return stored(orchestrator.create(command).result());
     }
 
@@ -69,7 +70,6 @@ public final class ProjectCreationController {
         headers.setCacheControl(CacheControl.noStore());
         headers.setETag(stored.etag());
         headers.setLocation(URI.create(PROJECT_PATH + stored.resourceId()));
-        return new ResponseEntity<>(stored.responseJson(), headers,
-                HttpStatus.valueOf(stored.httpStatus()));
+        return new ResponseEntity<>(stored.responseJson(), headers, HttpStatus.valueOf(stored.httpStatus()));
     }
 }

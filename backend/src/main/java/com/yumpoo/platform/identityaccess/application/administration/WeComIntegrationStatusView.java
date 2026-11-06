@@ -10,6 +10,4 @@ public record WeComIntegrationStatusView(
         UUID activeRunId,
         Instant lastSuccessfulRunAt,
         Instant lastProblemAt,
-        String lastProblemCode
-) {
-}
+        String lastProblemCode) {}

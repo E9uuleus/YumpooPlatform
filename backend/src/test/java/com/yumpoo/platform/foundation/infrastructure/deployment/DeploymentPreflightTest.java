@@ -1,17 +1,16 @@
 package com.yumpoo.platform.foundation.infrastructure.deployment;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.boot.health.contributor.Status;
 import org.springframework.mock.env.MockEnvironment;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class DeploymentPreflightTest {
 
@@ -33,7 +32,11 @@ class DeploymentPreflightTest {
         properties.setLogRoot(directory("logs").toString());
 
         environment = new MockEnvironment()
-                .withProperty("logging.file.name", Path.of(properties.getLogRoot()).resolve("yumpoo-server.log").toString())
+                .withProperty(
+                        "logging.file.name",
+                        Path.of(properties.getLogRoot())
+                                .resolve("yumpoo-server.log")
+                                .toString())
                 .withProperty("server.address", "127.0.0.1")
                 .withProperty("server.port", "18080")
                 .withProperty("spring.datasource.url", "jdbc:postgresql://127.0.0.1:5432/yumpoo")
@@ -43,10 +46,7 @@ class DeploymentPreflightTest {
                 .withProperty("spring.flyway.user", "yumpoo_migrator")
                 .withProperty("spring.flyway.password", "B2!yumpoo-ddl-2026")
                 .withProperty("yumpoo.session.current-key-version", "prod-v1")
-                .withProperty(
-                        "yumpoo.session.current-key",
-                        "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE="
-                );
+                .withProperty("yumpoo.session.current-key", "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=");
     }
 
     @Test
@@ -86,7 +86,9 @@ class DeploymentPreflightTest {
     void structuredLogMustBeAnAbsoluteFileInsideLogRoot() {
         environment.setProperty("logging.file.name", "out/server.log");
         assertFailure("PATH_INVALID", "logging.file.name");
-        environment.setProperty("logging.file.name", Path.of(properties.getLogRoot()).resolve("../outside.log").toString());
+        environment.setProperty(
+                "logging.file.name",
+                Path.of(properties.getLogRoot()).resolve("../outside.log").toString());
         assertFailure("PATH_INVALID", "logging.file.name");
     }
 

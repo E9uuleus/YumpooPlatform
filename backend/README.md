@@ -142,21 +142,6 @@ java -jar .\target\yumpoo-server.jar
 
 readiness 组包含 `db` 与无详情的 `deploymentDirectories` 写探针；附件、临时上传、日志或数据库故障会使 readiness 返回 503/DOWN，liveness 继续返回 200/UP。响应仍严格只暴露 `status`。当前 M1-13 云服务器验证使用全 C 盘和手工 Java 控制台；完整模板、PostgreSQL 初始化与 Nginx 步骤位于仓库根 `deployment/windows`，历史 M0 服务包装资产不进入 M1-13 ZIP。
 
-## M0-15 Electron 登录交接诊断 PoC
-
-M0-15 在 M0-12 企微身份网关之上增加可复用的 desktop state/PKCE/handoff 技术闭环，但不创建正式用户或桌面会话。M0 开发门禁使用自动化测试验证交接协议与安全边界，不要求真实企微 OAuth 或扫码登录；M4-14 使用受控身份提供者验证本地桌面语义，真实企微、公司 HTTPS、packaged app 和协议唤起统一在 M6-01 部署/发布环境门禁补验。诊断 Controller 采用双重门禁：profile 必须包含 `m0-15-live`，且 `YUMPOO_M015_WECOM_ENABLED=true`；默认启动时三条路径均不注册：
-
-- `GET /_m0/m0-15/electron/auth/authorize`
-- `GET /_m0/m0-15/wecom/callback`
-- `POST /_m0/m0-15/electron/auth/exchange`
-
-启动真实诊断后端前，从外部注入 `YUMPOO_M015_WECOM_CORP_ID`、`YUMPOO_M015_WECOM_AGENT_ID`、`YUMPOO_M015_WECOM_APP_SECRET`、`YUMPOO_M015_WECOM_CALLBACK_URI`、`YUMPOO_M015_WECOM_ALLOWED_MEMBER_IDS` 和独立的 `YUMPOO_M015_EVIDENCE_HMAC_KEY`。callback 必须是同源 HTTPS 的 `/_m0/m0-15/wecom/callback` 且不带 query/fragment；证据密钥至少 32 个 UTF-8 字节和 8 种字符，不能包含常见占位值或复用企微 Secret。
-
-authorize 只接受随机 `state`、PKCE `codeChallenge` 与 `S256`，通过 Secure/HttpOnly/SameSite=Lax Cookie 绑定 OAuth nonce 和 desktop state。callback 成功后只向 `yumpoo://auth/callback` 发送短时 opaque code 与原 state；exchange 的 JSON 仅为 `code`、`state`、`codeVerifier`。明文 state、verifier、handoff code、企微身份和 Secret 不进入持久化或日志，handoff 采用哈希和条件更新原子消费，重复、过期、state/PKCE 不匹配均失败关闭。
-
-exchange 成功只返回一次短期 HMAC 收据；其中 requestId、企业/成员指纹和签名仅用于 live runner 即时验签，随后删除，不写入最终 M0-15 证据。正式 `/api/v1/electron/auth/attempts`、`/exchange`、logout、User/ExternalIdentity/LoginSession、账号状态编排和 Windows 凭据仍属于 M1/M4。
-
-桌面交付使用 `pnpm ci:windows`；打包与完整性校验分别为 `pnpm package:desktop:win` 和 `node tools/verification/verify-desktop-package.mjs`。旧 live runner 和静态证据文件已退役，真实企微、HTTPS 与协议唤起仍需独立环境验证。
 
 ## M0-14 file-security PoC
 
@@ -230,22 +215,6 @@ M0-11 新增 `outbox_event` 与 `outbox_consumer_receipt`。`TransactionalEventP
 
 每次领取使用短事务、`FOR UPDATE SKIP LOCKED` 和 owner + lease token；到期重试及租约过期项均可领取。同聚合的低版本未完成或 `DEAD` 时高版本保持阻塞。消费者的数据库效果与 receipt 在独立新事务中提交，重复或并发投递只保留一份效果；多消费者中已成功者在后续重试时跳过。可恢复失败采用 1 分钟、5 分钟、30 分钟、2 小时、8 小时加正向抖动，第六次进入 `DEAD`；永久错误、无消费者和不支持版本首次即 `DEAD`。
 
-## M0-12 企微 OAuth 诊断流程
-
-M0 开发门禁为 `pnpm run ci`，通过受控测试边界验证授权参数、corp/member 映射、state/nonce、原子消费、并发/重放拒绝、供应商失败映射和脱敏；不要求真实成员授权或扫码、公开域名和真实 HTTPS 回调。下面的 Java 诊断配置暂时保留；旧 Node live 编排已退役，真实联调仍需独立验收。
-
-真实企微路由采用双重门禁，默认不会注册。启动前必须同时设置 `SPRING_PROFILES_ACTIVE=m0-12-live`、`YUMPOO_M012_WECOM_ENABLED=true`，并从外部注入：
-
-- `YUMPOO_M012_WECOM_CORP_ID`
-- `YUMPOO_M012_WECOM_AGENT_ID`
-- `YUMPOO_M012_WECOM_APP_SECRET`
-- `YUMPOO_M012_WECOM_CALLBACK_URI`
-- `YUMPOO_M012_WECOM_ALLOWED_MEMBER_IDS`
-- `YUMPOO_M012_EVIDENCE_HMAC_KEY`
-
-callback URI 必须是固定、不带 query 的 HTTPS 地址；证据 HMAC 密钥至少包含 32 个 UTF-8 字节和 8 种字符，且不得使用占位值或复用企微应用 Secret。缺项、弱密钥或不安全 callback 会拒绝启用。启用后只增加 `/_m0/m0-12/wecom/authorize` 与 `/_m0/m0-12/wecom/callback` 两个诊断路径；它们不属于 `/api/v1` 正式契约，不创建用户、外部身份或登录会话。
-
-旧企微 Node live runner 和静态证据文件已退役，历史执行记录由 Git 保留。当前自动回归使用 `pnpm ci:backend`；真实企业授权与 HTTPS 回调需要独立验证，不能用普通 CI 通过替代。
 
 ## M0-13 企微通讯录诊断流程
 

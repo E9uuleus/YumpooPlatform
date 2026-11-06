@@ -2,7 +2,6 @@ package com.yumpoo.platform.foundation.application.concurrency;
 
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
-
 import java.util.Objects;
 import java.util.function.Supplier;
 
@@ -11,26 +10,20 @@ import java.util.function.Supplier;
  */
 public final class ConditionalUpdateGuard {
 
-    private ConditionalUpdateGuard() {
-    }
+    private ConditionalUpdateGuard() {}
 
-    public static void requireSingleRowUpdated(
-            int updatedRows,
-            Supplier<ConditionalUpdateFailure> failureSupplier
-    ) {
+    public static void requireSingleRowUpdated(int updatedRows, Supplier<ConditionalUpdateFailure> failureSupplier) {
         if (updatedRows != 0 && updatedRows != 1) {
-            throw new IllegalStateException("conditional update must affect zero or one row, but affected "
-                    + updatedRows);
+            throw new IllegalStateException(
+                    "conditional update must affect zero or one row, but affected " + updatedRows);
         }
         if (updatedRows == 1) {
             return;
         }
 
         Objects.requireNonNull(failureSupplier, "failureSupplier must not be null");
-        ConditionalUpdateFailure failure = Objects.requireNonNull(
-                failureSupplier.get(),
-                "failureSupplier must return a failure"
-        );
+        ConditionalUpdateFailure failure =
+                Objects.requireNonNull(failureSupplier.get(), "failureSupplier must return a failure");
         throw new ApplicationException(errorCodeFor(failure));
     }
 

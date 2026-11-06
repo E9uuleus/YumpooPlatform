@@ -2,15 +2,14 @@ package com.yumpoo.platform.foundation.application.idempotency;
 
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Supplier;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 在一个数据库事务中完成幂等占位、业务命令和可重放结果保存。
@@ -32,10 +31,7 @@ public class IdempotentCommandExecutor {
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
     }
 
-    public IdempotencyExecutionResult execute(
-            IdempotencyCommand command,
-            Supplier<StoredCommandResult> callback
-    ) {
+    public IdempotencyExecutionResult execute(IdempotencyCommand command, Supplier<StoredCommandResult> callback) {
         Objects.requireNonNull(command, "command must not be null");
         Objects.requireNonNull(callback, "callback must not be null");
 
@@ -46,21 +42,12 @@ public class IdempotentCommandExecutor {
                 command,
                 claimedAt,
                 claimedAt.plus(PROCESSING_RECOVERY_METADATA_WINDOW),
-                claimedAt.plus(DEFAULT_RETENTION_METADATA)
-        );
+                claimedAt.plus(DEFAULT_RETENTION_METADATA));
 
         if (claim instanceof IdempotencyClaim.Acquired acquired) {
-            StoredCommandResult result = Objects.requireNonNull(
-                    callback.get(),
-                    "callback result must not be null"
-            );
+            StoredCommandResult result = Objects.requireNonNull(callback.get(), "callback result must not be null");
             Instant completedAt = clock.instant();
-            recordPort.complete(
-                    acquired.recordId(),
-                    result,
-                    completedAt,
-                    completedAt.plus(DEFAULT_RETENTION_METADATA)
-            );
+            recordPort.complete(acquired.recordId(), result, completedAt, completedAt.plus(DEFAULT_RETENTION_METADATA));
             return IdempotencyExecutionResult.executed(result);
         }
 

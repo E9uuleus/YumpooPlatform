@@ -8,11 +8,10 @@ import com.yumpoo.platform.identityaccess.application.authorization.PlatformRole
 import com.yumpoo.platform.identityaccess.application.authorization.PlatformRoleMutationResult;
 import com.yumpoo.platform.identityaccess.application.authorization.RevokePlatformRoleCommand;
 import com.yumpoo.platform.identityaccess.application.authorization.RoleCommandActor;
+import java.util.Objects;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
-
-import java.util.Objects;
 
 @Component
 public class PlatformRoleCommandAdapter implements PlatformRoleCommandPort {
@@ -20,21 +19,24 @@ public class PlatformRoleCommandAdapter implements PlatformRoleCommandPort {
     private final PlatformRoleManagementUseCase useCase;
     private final ObjectMapper objectMapper;
 
-    public PlatformRoleCommandAdapter(
-            PlatformRoleManagementUseCase useCase,
-            ObjectMapper objectMapper
-    ) {
+    public PlatformRoleCommandAdapter(PlatformRoleManagementUseCase useCase, ObjectMapper objectMapper) {
         this.useCase = Objects.requireNonNull(useCase, "useCase must not be null");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
     }
 
     @Override
     public PlatformRoleTierChangeResult changeTier(PlatformRoleTierChangeCommand command) {
-        var result = useCase.changeTier(new com.yumpoo.platform.identityaccess.application.authorization.ChangePlatformRoleTierCommand(
-                command.companyId(), command.targetUserId(),
-                com.yumpoo.platform.identityaccess.application.authorization.MemberRoleTier.valueOf(command.role().name()),
-                command.expectedTargetRowVersion(), actor(command.actor()), command.idempotencyKey(),
-                new RequestHash(command.requestHash()), command.reasonReference()));
+        var result = useCase.changeTier(
+                new com.yumpoo.platform.identityaccess.application.authorization.ChangePlatformRoleTierCommand(
+                        command.companyId(),
+                        command.targetUserId(),
+                        com.yumpoo.platform.identityaccess.application.authorization.MemberRoleTier.valueOf(
+                                command.role().name()),
+                        command.expectedTargetRowVersion(),
+                        actor(command.actor()),
+                        command.idempotencyKey(),
+                        new RequestHash(command.requestHash()),
+                        command.reasonReference()));
         try {
             return objectMapper.readValue(result.result().responseJson(), PlatformRoleTierChangeResult.class);
         } catch (JacksonException exception) {
@@ -53,8 +55,7 @@ public class PlatformRoleCommandAdapter implements PlatformRoleCommandPort {
                 actor(command.actor()),
                 command.idempotencyKey(),
                 new RequestHash(command.requestHash()),
-                command.reasonReference()
-        )));
+                command.reasonReference())));
     }
 
     @Override
@@ -68,37 +69,32 @@ public class PlatformRoleCommandAdapter implements PlatformRoleCommandPort {
                 actor(command.actor()),
                 command.idempotencyKey(),
                 new RequestHash(command.requestHash()),
-                command.reasonReference()
-        )));
+                command.reasonReference())));
     }
 
     private PlatformRoleCommandReceipt receipt(IdempotencyExecutionResult result) {
         try {
-            PlatformRoleMutationResult mutation = objectMapper.readValue(
-                    result.result().responseJson(),
-                    PlatformRoleMutationResult.class
-            );
-            return new PlatformRoleCommandReceipt(new PlatformRoleAssignmentMutation(
-                    mutation.assignmentId(),
-                    mutation.companyId(),
-                    mutation.userId(),
-                    PlatformRoleCode.valueOf(mutation.role().name()),
-                    PlatformRoleAssignmentStatus.valueOf(mutation.status().name()),
-                    mutation.assignmentRowVersion(),
-                    mutation.userRowVersion(),
-                    mutation.authorizationVersion(),
-                    mutation.changedAt()
-            ), result.replayed());
+            PlatformRoleMutationResult mutation =
+                    objectMapper.readValue(result.result().responseJson(), PlatformRoleMutationResult.class);
+            return new PlatformRoleCommandReceipt(
+                    new PlatformRoleAssignmentMutation(
+                            mutation.assignmentId(),
+                            mutation.companyId(),
+                            mutation.userId(),
+                            PlatformRoleCode.valueOf(mutation.role().name()),
+                            PlatformRoleAssignmentStatus.valueOf(
+                                    mutation.status().name()),
+                            mutation.assignmentRowVersion(),
+                            mutation.userRowVersion(),
+                            mutation.authorizationVersion(),
+                            mutation.changedAt()),
+                    result.replayed());
         } catch (JacksonException exception) {
             throw new IllegalStateException("platform role result deserialization failed", exception);
         }
     }
 
     private static RoleCommandActor actor(PlatformRoleCommandActor actor) {
-        return new RoleCommandActor(
-                actor.userId(),
-                actor.sessionAuthorizationVersion(),
-                actor.authenticatedAt()
-        );
+        return new RoleCommandActor(actor.userId(), actor.sessionAuthorizationVersion(), actor.authenticatedAt());
     }
 }

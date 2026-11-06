@@ -1,19 +1,18 @@
 package com.yumpoo.platform.foundation.application.outbox;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.yumpoo.platform.foundation.application.event.DomainEventEnvelope;
 import com.yumpoo.platform.foundation.application.event.EventActor;
 import com.yumpoo.platform.foundation.application.event.EventSubscription;
 import com.yumpoo.platform.foundation.application.event.OutboxEventConsumer;
-import org.junit.jupiter.api.Test;
-import tools.jackson.databind.node.JsonNodeFactory;
-
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.node.JsonNodeFactory;
 
 class OutboxConsumerRegistryTest {
 
@@ -32,10 +31,9 @@ class OutboxConsumerRegistryTest {
 
     @Test
     void duplicateConsumerNamesFailApplicationStartup() {
-        assertThatThrownBy(() -> new OutboxConsumerRegistry(List.of(
-                consumer("audit.duplicate", 1),
-                consumer("audit.duplicate", 2)
-        ))).isInstanceOf(IllegalStateException.class)
+        assertThatThrownBy(() -> new OutboxConsumerRegistry(
+                        List.of(consumer("audit.duplicate", 1), consumer("audit.duplicate", 2))))
+                .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("duplicate outbox consumer name");
     }
 
@@ -52,8 +50,7 @@ class OutboxConsumerRegistryTest {
             }
 
             @Override
-            public void consume(DomainEventEnvelope event) {
-            }
+            public void consume(DomainEventEnvelope event) {}
         };
     }
 
@@ -71,7 +68,6 @@ class OutboxConsumerRegistryTest {
                 "m011-registry",
                 "m011-registry",
                 null,
-                JsonNodeFactory.instance.objectNode()
-        );
+                JsonNodeFactory.instance.objectNode());
     }
 }

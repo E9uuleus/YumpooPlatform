@@ -4,15 +4,14 @@ import com.yumpoo.platform.identityaccess.application.authentication.Authenticat
 import com.yumpoo.platform.identityaccess.application.authentication.AuthenticationUserRepository;
 import com.yumpoo.platform.identityaccess.domain.identity.AccountStatus;
 import com.yumpoo.platform.identityaccess.domain.identity.EmploymentStatus;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Repository;
-
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Repository;
 
 @Repository
 public class JdbcAuthenticationUserRepository implements AuthenticationUserRepository {
@@ -36,11 +35,9 @@ public class JdbcAuthenticationUserRepository implements AuthenticationUserRepos
     }
 
     @Override
-    public Optional<AuthenticationUser> lockByWeComIdentity(
-            UUID companyId,
-            String externalUserId
-    ) {
-        List<AuthenticationUser> users = jdbcClient.sql("""
+    public Optional<AuthenticationUser> lockByWeComIdentity(UUID companyId, String externalUserId) {
+        List<AuthenticationUser> users = jdbcClient
+                .sql("""
                         SELECT %s
                         FROM yumpoo.external_identity identity
                         JOIN yumpoo.identity_user user_record
@@ -60,7 +57,8 @@ public class JdbcAuthenticationUserRepository implements AuthenticationUserRepos
 
     @Override
     public Optional<AuthenticationUser> findByUserId(UUID userId) {
-        List<AuthenticationUser> users = jdbcClient.sql("""
+        List<AuthenticationUser> users = jdbcClient
+                .sql("""
                         SELECT %s
                         FROM yumpoo.identity_user user_record
                         JOIN yumpoo.external_identity identity
@@ -82,8 +80,7 @@ public class JdbcAuthenticationUserRepository implements AuthenticationUserRepos
         return users.stream().findFirst();
     }
 
-    private static AuthenticationUser map(ResultSet resultSet, int rowNumber)
-            throws SQLException {
+    private static AuthenticationUser map(ResultSet resultSet, int rowNumber) throws SQLException {
         return new AuthenticationUser(
                 resultSet.getObject("user_id", UUID.class),
                 resultSet.getObject("company_id", UUID.class),
@@ -93,7 +90,6 @@ public class JdbcAuthenticationUserRepository implements AuthenticationUserRepos
                 AccountStatus.valueOf(resultSet.getString("account_status")),
                 EmploymentStatus.valueOf(resultSet.getString("provider_employment_status")),
                 resultSet.getLong("authorization_version"),
-                resultSet.getLong("row_version")
-        );
+                resultSet.getLong("row_version"));
     }
 }

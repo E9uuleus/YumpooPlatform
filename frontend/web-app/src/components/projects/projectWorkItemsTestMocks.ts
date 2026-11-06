@@ -1,0 +1,71 @@
+import { vi } from 'vitest'
+
+export const state = {
+  route: undefined as unknown as { params: { projectId: string }, query: Record<string, string> },
+  push: vi.fn(),
+  replace: vi.fn(),
+  getProject: vi.fn(),
+  listProjectContents: vi.fn(),
+  listProjectMembers: vi.fn(),
+  listProjectWorkItems: vi.fn(),
+  listWorkItemSubitems: vi.fn(),
+  listWorkItemRelations: vi.fn(),
+  listProjectWorkItemFilterOptions: vi.fn(),
+  getProjectWorkItemLabels: vi.fn(),
+  getMyWorkItemTableSettings: vi.fn(),
+  moveProjectWorkItemOrder: vi.fn(),
+  moveWorkItemSubitemOrder: vi.fn(),
+  patchWorkItemAssignees: vi.fn(),
+  patchWorkItemPriority: vi.fn(),
+  patchWorkItemDueDate: vi.fn(),
+  createWorkItem: vi.fn(),
+  createWorkItemSubitem: vi.fn(),
+  getWorkItem: vi.fn(),
+  updateWorkItem: vi.fn(),
+  transitionWorkItem: vi.fn(),
+  listConnectColumns: vi.fn(),
+  listWorkItemConnectionCells: vi.fn(),
+  searchConnectTargetProjects: vi.fn(),
+  getWorkItemConnection: vi.fn(),
+  unlinkWorkItemConnection: vi.fn(),
+  routeLeave: vi.fn(),
+  routeUpdate: vi.fn(),
+  onboardingReady: vi.fn(),
+}
+
+export const onboardingModule = () => ({ usePageOnboarding: () => ({ ready: state.onboardingReady }) })
+
+export const vueRouterModule = () => ({
+  onBeforeRouteLeave: state.routeLeave,
+  onBeforeRouteUpdate: state.routeUpdate,
+  useRoute: () => state.route,
+  useRouter: () => ({ push: state.push, replace: state.replace }),
+})
+
+export const apiClientModule = () => ({
+  projectsApi: { getProject: state.getProject, listProjectMembers: state.listProjectMembers },
+  contentsApi: { listProjectContents: state.listProjectContents },
+  workItemsApi: {
+    listConnectColumns: state.listConnectColumns,
+    listWorkItemConnectionCells: state.listWorkItemConnectionCells,
+    searchConnectTargetProjects: state.searchConnectTargetProjects,
+    getWorkItemConnection: state.getWorkItemConnection,
+    unlinkWorkItemConnection: state.unlinkWorkItemConnection,
+    listProjectWorkItems: state.listProjectWorkItems,
+    listWorkItemSubitems: state.listWorkItemSubitems,
+    listWorkItemRelations: state.listWorkItemRelations,
+    listProjectWorkItemFilterOptions: state.listProjectWorkItemFilterOptions,
+    getProjectWorkItemLabels: state.getProjectWorkItemLabels,
+    getMyWorkItemTableSettings: state.getMyWorkItemTableSettings,
+    moveProjectWorkItemOrder: state.moveProjectWorkItemOrder,
+    moveWorkItemSubitemOrder: state.moveWorkItemSubitemOrder,
+    patchWorkItemAssignees: state.patchWorkItemAssignees,
+    patchWorkItemPriority: state.patchWorkItemPriority,
+    patchWorkItemDueDate: state.patchWorkItemDueDate,
+    createWorkItem: state.createWorkItem,
+    createWorkItemSubitem: state.createWorkItemSubitem,
+    getWorkItem: state.getWorkItem,
+    updateWorkItem: state.updateWorkItem,
+    transitionWorkItem: state.transitionWorkItem,
+  },
+})

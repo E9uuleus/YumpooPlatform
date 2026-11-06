@@ -24,8 +24,11 @@ final class ConnectionAccess {
 
     static void requireWritable(ProjectAccessSnapshot project) {
         if (!member(project)) throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
-        if (!project.contentWritable()) throw conflict(project.lifecycle() == ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED
-                ? "PROJECT_ARCHIVED" : "PROJECT_ENDED");
+        if (!project.contentWritable())
+            throw conflict(
+                    project.lifecycle() == ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED
+                            ? "PROJECT_ARCHIVED"
+                            : "PROJECT_ENDED");
     }
 
     static void requireWritable(ProjectFactWriteSnapshot project) {
@@ -34,13 +37,18 @@ final class ConnectionAccess {
         if (project.lifecycle() != ProjectFactWriteSnapshot.ProjectLifecycle.ACTIVE) throw conflict("PROJECT_ARCHIVED");
     }
 
-    static ApplicationException missing() { return new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND); }
+    static ApplicationException missing() {
+        return new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND);
+    }
+
     static ApplicationException conflict(String reason) {
         return ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION, reason);
     }
+
     static ApplicationException invalid(String field, String code, String message) {
         return ApplicationException.validation(new FieldViolation(field, code, message));
     }
+
     static void requireVersion(long actual, long expected) {
         if (actual != expected) throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
     }

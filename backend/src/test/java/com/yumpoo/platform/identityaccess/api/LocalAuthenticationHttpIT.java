@@ -1,12 +1,8 @@
 package com.yumpoo.platform.identityaccess.api;
 
-import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
-import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Import;
-import org.springframework.test.context.ActiveProfiles;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -19,22 +15,24 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.ActiveProfiles;
 
 @ActiveProfiles({"test", "local"})
 @Import(PostgreSqlTestContainerConfiguration.class)
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
-                "yumpoo.auth.local.enabled=true",
-                "yumpoo.auth.local.member-id=local-http-admin",
-                "yumpoo.auth.local.display-name=本地 HTTP 管理员",
-                "yumpoo.auth.local.backup-member-id=local-http-backup",
-                "yumpoo.auth.local.backup-display-name=本地 HTTP 备份管理员",
-                "yumpoo.outbox.enabled=false"
-        }
-)
+            "yumpoo.auth.local.enabled=true",
+            "yumpoo.auth.local.member-id=local-http-admin",
+            "yumpoo.auth.local.display-name=本地 HTTP 管理员",
+            "yumpoo.auth.local.backup-member-id=local-http-backup",
+            "yumpoo.auth.local.backup-display-name=本地 HTTP 备份管理员",
+            "yumpoo.outbox.enabled=false"
+        })
 class LocalAuthenticationHttpIT {
 
     private final HttpClient client = HttpClient.newHttpClient();
@@ -52,8 +50,8 @@ class LocalAuthenticationHttpIT {
                 .contains("\"roles\":[\"COMPANY_MEMBER\",\"COMPANY_ADMIN\",\"APP_MANAGER\"]");
         String session = cookie(me, SessionHttpCookies.SESSION_COOKIE);
         String csrf = cookie(me, SessionHttpCookies.CSRF_COOKIE);
-        String securityCookies = SessionHttpCookies.SESSION_COOKIE + "=" + session
-                + "; " + SessionHttpCookies.CSRF_COOKIE + "=" + csrf;
+        String securityCookies =
+                SessionHttpCookies.SESSION_COOKIE + "=" + session + "; " + SessionHttpCookies.CSRF_COOKIE + "=" + csrf;
 
         HttpResponse<String> projects = get("/api/v1/projects", securityCookies);
         assertThat(projects.statusCode()).as(projects.body()).isEqualTo(200);
@@ -64,17 +62,14 @@ class LocalAuthenticationHttpIT {
                         .header(SessionBoundCsrfTokenRepository.HEADER_NAME, csrf)
                         .POST(HttpRequest.BodyPublishers.noBody())
                         .build(),
-                HttpResponse.BodyHandlers.ofString()
-        );
+                HttpResponse.BodyHandlers.ofString());
         assertThat(logout.statusCode()).as(logout.body()).isEqualTo(204);
     }
 
     @Test
     void staleLocalCookieIsReplacedWithoutReturningAuthenticationRequired() throws Exception {
-        HttpResponse<String> response = get(
-                "/api/v1/auth/me",
-                SessionHttpCookies.SESSION_COOKIE + "=" + "z".repeat(43)
-        );
+        HttpResponse<String> response =
+                get("/api/v1/auth/me", SessionHttpCookies.SESSION_COOKIE + "=" + "z".repeat(43));
 
         assertThat(response.statusCode()).as(response.body()).isEqualTo(200);
         assertThat(response.body()).doesNotContain("AUTHENTICATION_REQUIRED");
@@ -93,8 +88,7 @@ class LocalAuthenticationHttpIT {
                 "/api/v1/projects?page=0&size=20",
                 "/api/v1/workspaces",
                 "/api/v1/projects/owner-options",
-                "/api/v1/admin/members?employmentStatus=ACTIVE&accountStatus=ENABLED&page=0&size=100"
-        );
+                "/api/v1/admin/members?employmentStatus=ACTIVE&accountStatus=ENABLED&page=0&size=100");
         CountDownLatch ready = new CountDownLatch(paths.size());
         CountDownLatch start = new CountDownLatch(1);
         var executor = Executors.newFixedThreadPool(paths.size());

@@ -19,8 +19,7 @@ public final class ProjectSortKey {
         return SparseRank.evenlySpaced(position, total);
     }
 
-    public static Optional<String> evenlySpacedBetween(String lower, String upper,
-            int position, int total) {
+    public static Optional<String> evenlySpacedBetween(String lower, String upper, int position, int total) {
         return SparseRank.evenlySpacedBetween(lower, upper, position, total, FIELD);
     }
 }

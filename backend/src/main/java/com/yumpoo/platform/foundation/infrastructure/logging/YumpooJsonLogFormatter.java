@@ -8,9 +8,8 @@ import org.springframework.boot.logging.structured.StructuredLogFormatter;
 public final class YumpooJsonLogFormatter implements StructuredLogFormatter<ILoggingEvent> {
 
     private final LogRecordMapper mapper = new LogRecordMapper();
-    private final JsonWriter<Map<String, Object>> writer = JsonWriter.<
-        Map<String, Object>
-    >standard().withNewLineAtEnd();
+    private final JsonWriter<Map<String, Object>> writer =
+            JsonWriter.<Map<String, Object>>standard().withNewLineAtEnd();
 
     @Override
     public String format(ILoggingEvent event) {

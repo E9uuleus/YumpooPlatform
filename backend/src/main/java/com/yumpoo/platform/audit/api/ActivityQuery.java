@@ -9,8 +9,7 @@ public record ActivityQuery(
         List<String> eventTypes,
         List<String> entityTypes,
         Instant occurredFrom,
-        Instant occurredTo
-) {
+        Instant occurredTo) {
     public ActivityQuery {
         eventTypes = eventTypes == null ? List.of() : List.copyOf(eventTypes);
         entityTypes = entityTypes == null ? List.of() : List.copyOf(entityTypes);

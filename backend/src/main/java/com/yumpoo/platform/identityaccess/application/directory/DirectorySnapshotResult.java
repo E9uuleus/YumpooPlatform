@@ -26,8 +26,8 @@ public sealed interface DirectorySnapshotResult
             List<DirectoryMemberFingerprint> memberFingerprints,
             String corpFingerprint,
             String memberSetFingerprint,
-            int completedPageCount
-    ) implements DirectorySnapshotResult {
+            int completedPageCount)
+            implements DirectorySnapshotResult {
 
         public Complete {
             memberFingerprints = validatedFingerprints(memberFingerprints);
@@ -40,8 +40,8 @@ public sealed interface DirectorySnapshotResult
 
         @Override
         public String toString() {
-            return "DirectorySnapshotResult.Complete[memberCount=" + memberFingerprints.size()
-                    + ", completedPageCount=" + completedPageCount + "]";
+            return "DirectorySnapshotResult.Complete[memberCount=" + memberFingerprints.size() + ", completedPageCount="
+                    + completedPageCount + "]";
         }
     }
 
@@ -50,8 +50,8 @@ public sealed interface DirectorySnapshotResult
             String corpFingerprint,
             String memberSetFingerprint,
             int completedPageCount,
-            DirectorySnapshotFailure failure
-    ) implements DirectorySnapshotResult {
+            DirectorySnapshotFailure failure)
+            implements DirectorySnapshotResult {
 
         public Incomplete {
             memberFingerprints = validatedFingerprints(memberFingerprints);
@@ -72,8 +72,7 @@ public sealed interface DirectorySnapshotResult
     }
 
     private static List<DirectoryMemberFingerprint> validatedFingerprints(
-            List<DirectoryMemberFingerprint> fingerprints
-    ) {
+            List<DirectoryMemberFingerprint> fingerprints) {
         Objects.requireNonNull(fingerprints, "memberFingerprints must not be null");
         List<DirectoryMemberFingerprint> copy = List.copyOf(fingerprints);
         if (copy.stream().anyMatch(Objects::isNull)) {
@@ -102,7 +101,6 @@ public sealed interface DirectorySnapshotResult
     final class HmacPattern {
         private static final Pattern VALUE = Pattern.compile("^[0-9a-f]{64}$");
 
-        private HmacPattern() {
-        }
+        private HmacPattern() {}
     }
 }

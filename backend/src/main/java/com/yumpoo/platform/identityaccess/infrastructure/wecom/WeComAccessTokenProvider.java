@@ -1,16 +1,15 @@
 package com.yumpoo.platform.identityaccess.infrastructure.wecom;
 
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.MediaType;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientException;
-
 import java.time.Clock;
 import java.time.DateTimeException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.MediaType;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 
 /** 每个企微 Secret 独占实例和缓存，避免应用 Secret 与通讯录 Secret 混用 token。 */
 final class WeComAccessTokenProvider {
@@ -18,8 +17,7 @@ final class WeComAccessTokenProvider {
     private static final String GET_TOKEN_PATH = "/cgi-bin/gettoken";
     private static final Duration TOKEN_REFRESH_SKEW = Duration.ofSeconds(60);
     private static final ParameterizedTypeReference<Map<String, Object>> JSON_OBJECT_TYPE =
-            new ParameterizedTypeReference<>() {
-            };
+            new ParameterizedTypeReference<>() {};
 
     private final RestClient restClient;
     private final String corpId;
@@ -89,7 +87,8 @@ final class WeComAccessTokenProvider {
 
     private Map<String, Object> getJson() {
         try {
-            Map<String, Object> response = restClient.get()
+            Map<String, Object> response = restClient
+                    .get()
                     .uri(uriBuilder -> uriBuilder
                             .path(GET_TOKEN_PATH)
                             .queryParam("corpid", corpId)

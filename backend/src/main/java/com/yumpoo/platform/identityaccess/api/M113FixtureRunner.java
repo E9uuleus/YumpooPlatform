@@ -10,6 +10,13 @@ import com.yumpoo.platform.identityaccess.application.directory.DirectoryMemberP
 import com.yumpoo.platform.identityaccess.application.verification.IdentityAcceptanceFixtureProvisioner;
 import com.yumpoo.platform.identityaccess.application.verification.IdentityAcceptanceFixtureStateQuery;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Clock;
+import java.util.HexFormat;
+import java.util.Objects;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -19,20 +26,8 @@ import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
 import org.springframework.stereotype.Component;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.time.Clock;
-import java.util.HexFormat;
-import java.util.Objects;
-import java.util.UUID;
-
 @Component
-@ConditionalOnProperty(
-        prefix = "yumpoo.verification.m1-13",
-        name = "fixture-enabled",
-        havingValue = "true"
-)
+@ConditionalOnProperty(prefix = "yumpoo.verification.m1-13", name = "fixture-enabled", havingValue = "true")
 public class M113FixtureRunner implements ApplicationRunner {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(M113FixtureRunner.class);
@@ -53,37 +48,21 @@ public class M113FixtureRunner implements ApplicationRunner {
             IdentityAcceptanceFixtureProvisioner fixtureProvisioner,
             PlatformRoleMaintenanceUseCase maintenanceUseCase,
             PlatformRoleCommandPort roleCommandPort,
-            Clock clock
-    ) {
+            Clock clock) {
         this.environment = Objects.requireNonNull(environment, "environment must not be null");
-        this.fixtureStateQuery = Objects.requireNonNull(
-                fixtureStateQuery,
-                "fixtureStateQuery must not be null"
-        );
-        this.companyConfigurationQuery = Objects.requireNonNull(
-                companyConfigurationQuery,
-                "companyConfigurationQuery must not be null"
-        );
-        this.fixtureProvisioner = Objects.requireNonNull(
-                fixtureProvisioner,
-                "fixtureProvisioner must not be null"
-        );
-        this.maintenanceUseCase = Objects.requireNonNull(
-                maintenanceUseCase,
-                "maintenanceUseCase must not be null"
-        );
-        this.roleCommandPort = Objects.requireNonNull(
-                roleCommandPort,
-                "roleCommandPort must not be null"
-        );
+        this.fixtureStateQuery = Objects.requireNonNull(fixtureStateQuery, "fixtureStateQuery must not be null");
+        this.companyConfigurationQuery =
+                Objects.requireNonNull(companyConfigurationQuery, "companyConfigurationQuery must not be null");
+        this.fixtureProvisioner = Objects.requireNonNull(fixtureProvisioner, "fixtureProvisioner must not be null");
+        this.maintenanceUseCase = Objects.requireNonNull(maintenanceUseCase, "maintenanceUseCase must not be null");
+        this.roleCommandPort = Objects.requireNonNull(roleCommandPort, "roleCommandPort must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
     }
 
     @Override
     public void run(ApplicationArguments args) {
-        try (RequestCorrelationContext.Scope ignored = RequestCorrelationContext.open(
-                RequestCorrelation.root("m113-fixture-" + UUID.randomUUID())
-        )) {
+        try (RequestCorrelationContext.Scope ignored =
+                RequestCorrelationContext.open(RequestCorrelation.root("m113-fixture-" + UUID.randomUUID()))) {
             initialize();
         }
     }
@@ -94,48 +73,34 @@ public class M113FixtureRunner implements ApplicationRunner {
             throw new IllegalStateException("M1-13 fixture requires pristine identity facts");
         }
 
-        String controlledMemberId = requireMemberId(
-                environment.getProperty("yumpoo.auth.controlled.member-id"),
-                "controlled member id"
-        );
+        String controlledMemberId =
+                requireMemberId(environment.getProperty("yumpoo.auth.controlled.member-id"), "controlled member id");
         String backupMemberId = requireMemberId(
-                environment.getProperty("yumpoo.verification.m1-13.backup-member-id"),
-                "backup member id"
-        );
+                environment.getProperty("yumpoo.verification.m1-13.backup-member-id"), "backup member id");
         if (controlledMemberId.equals(backupMemberId)) {
             throw new IllegalStateException("M1-13 fixture members must be distinct");
         }
 
-        DirectoryMemberProvisioningResult controlled = fixtureProvisioner.provision(
-                controlledMemberId,
-                "M1-13 Controlled Company Admin"
-        );
-        DirectoryMemberProvisioningResult backup = fixtureProvisioner.provision(
-                backupMemberId,
-                "M1-13 Backup App Manager"
-        );
+        DirectoryMemberProvisioningResult controlled =
+                fixtureProvisioner.provision(controlledMemberId, "M1-13 Controlled Company Admin");
+        DirectoryMemberProvisioningResult backup =
+                fixtureProvisioner.provision(backupMemberId, "M1-13 Backup App Manager");
         UUID companyId = companyConfigurationQuery.current().companyId();
-        PlatformRoleMutationResult manager = maintenanceUseCase.execute(new MaintenanceRoleCommand(
-                companyId,
-                backup.userId(),
-                MaintenanceRoleMode.BOOTSTRAP,
-                REASON
-        ));
+        PlatformRoleMutationResult manager = maintenanceUseCase.execute(
+                new MaintenanceRoleCommand(companyId, backup.userId(), MaintenanceRoleMode.BOOTSTRAP, REASON));
         roleCommandPort.grant(new PlatformRoleGrantCommand(
                 companyId,
                 controlled.userId(),
                 PlatformRoleCode.COMPANY_ADMIN,
                 controlled.rowVersion(),
-                new PlatformRoleCommandActor(
-                        backup.userId(),
-                        manager.authorizationVersion(),
-                        clock.instant()
-                ),
+                new PlatformRoleCommandActor(backup.userId(), manager.authorizationVersion(), clock.instant()),
                 UUID.randomUUID(),
                 sha256("grant-company-admin:" + companyId + ":" + controlled.userId()),
-                REASON
-        ));
-        LOGGER.atInfo().setMessage("controlled acceptance fixture initialized").addKeyValue("event", "identity.fixture.initialized").log();
+                REASON));
+        LOGGER.atInfo()
+                .setMessage("controlled acceptance fixture initialized")
+                .addKeyValue("event", "identity.fixture.initialized")
+                .log();
     }
 
     private void validateRuntimeBoundary() {
@@ -144,30 +109,15 @@ public class M113FixtureRunner implements ApplicationRunner {
         }
         if (!environment.acceptsProfiles(Profiles.of("m1-13-e2e"))
                 || !environment.acceptsProfiles(Profiles.of("local | test"))) {
-            throw new IllegalStateException(
-                    "M1-13 fixture requires m1-13-e2e and local/test profiles"
-            );
+            throw new IllegalStateException("M1-13 fixture requires m1-13-e2e and local/test profiles");
         }
-        if (!environment.getProperty(
-                "yumpoo.auth.controlled.enabled",
-                Boolean.class,
-                false
-        )) {
+        if (!environment.getProperty("yumpoo.auth.controlled.enabled", Boolean.class, false)) {
             throw new IllegalStateException("M1-13 fixture requires controlled authentication");
         }
-        if (environment.getProperty(
-                "yumpoo.maintenance.app-manager.enabled",
-                Boolean.class,
-                false
-        )) {
-            throw new IllegalStateException(
-                    "M1-13 fixture cannot run with app-manager maintenance mode"
-            );
+        if (environment.getProperty("yumpoo.maintenance.app-manager.enabled", Boolean.class, false)) {
+            throw new IllegalStateException("M1-13 fixture cannot run with app-manager maintenance mode");
         }
-        requireMemberId(
-                environment.getProperty("yumpoo.auth.controlled.corp-id"),
-                "controlled corp id"
-        );
+        requireMemberId(environment.getProperty("yumpoo.auth.controlled.corp-id"), "controlled corp id");
     }
 
     private static String requireMemberId(String value, String field) {
@@ -179,10 +129,8 @@ public class M113FixtureRunner implements ApplicationRunner {
 
     private static String sha256(String value) {
         try {
-            return HexFormat.of().formatHex(
-                    MessageDigest.getInstance("SHA-256")
-                            .digest(value.getBytes(StandardCharsets.UTF_8))
-            );
+            return HexFormat.of()
+                    .formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 is unavailable", exception);
         }

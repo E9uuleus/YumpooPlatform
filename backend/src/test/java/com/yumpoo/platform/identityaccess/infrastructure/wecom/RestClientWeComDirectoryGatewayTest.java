@@ -1,8 +1,25 @@
 package com.yumpoo.platform.identityaccess.infrastructure.wecom;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySnapshotFailure;
 import com.yumpoo.platform.identityaccess.application.directory.WeComDirectoryGatewayException;
 import com.yumpoo.platform.identityaccess.application.directory.WeComDirectoryPage;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.util.Set;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -15,24 +32,6 @@ import org.springframework.test.json.JsonCompareMode;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
-import java.io.PrintWriter;
-import java.io.StringWriter;
-import java.time.Clock;
-import java.time.Duration;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
-import java.util.Set;
-import java.util.stream.Stream;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
-
 class RestClientWeComDirectoryGatewayTest {
 
     private static final String API_BASE_URL = "https://qyapi.weixin.qq.com";
@@ -44,12 +43,7 @@ class RestClientWeComDirectoryGatewayTest {
     void postsTheOfficialPageShapeAndDeduplicatesMultiDepartmentMembers() {
         GatewayFixture fixture = fixture(DIRECTORY_SECRET);
         expectToken(fixture.server(), DIRECTORY_SECRET, "token-a");
-        expectPage(
-                fixture.server(),
-                "token-a",
-                null,
-                1,
-                """
+        expectPage(fixture.server(), "token-a", null, 1, """
                         {
                           "errcode": 0,
                           "errmsg": "ok",
@@ -60,22 +54,15 @@ class RestClientWeComDirectoryGatewayTest {
                             {"userid": "member-b", "department": 1}
                           ]
                         }
-                        """
-        );
-        expectPage(
-                fixture.server(),
-                "token-a",
-                "cursor-1",
-                1,
-                """
+                        """);
+        expectPage(fixture.server(), "token-a", "cursor-1", 1, """
                         {
                           "errcode": 0,
                           "errmsg": "ok",
                           "next_cursor": "",
                           "dept_user": [{"userid": "member-c", "department": 3}]
                         }
-                        """
-        );
+                        """);
 
         WeComDirectoryPage first = fixture.gateway().fetchPage("", 1);
         WeComDirectoryPage second = fixture.gateway().fetchPage("cursor-1", 1);
@@ -96,13 +83,7 @@ class RestClientWeComDirectoryGatewayTest {
         expectToken(fixture.server(), DIRECTORY_SECRET, "token-a");
         expectPageError(fixture.server(), "token-a", null, 1, 40014);
         expectToken(fixture.server(), DIRECTORY_SECRET, "token-b");
-        expectPage(
-                fixture.server(),
-                "token-b",
-                null,
-                1,
-                successPage("member-a", "")
-        );
+        expectPage(fixture.server(), "token-b", null, 1, successPage("member-a", ""));
 
         WeComDirectoryPage page = fixture.gateway().fetchPage("", 1);
 
@@ -121,20 +102,17 @@ class RestClientWeComDirectoryGatewayTest {
         expectPage(fixture.server(), "token-c", null, 1, successPage("member-a", ""));
 
         assertThatThrownBy(() -> fixture.gateway().fetchPage("", 1))
-                .isInstanceOfSatisfying(WeComDirectoryGatewayException.class, exception ->
-                        assertThat(exception.failure())
-                                .isEqualTo(DirectorySnapshotFailure.ACCESS_TOKEN_REJECTED)
-                );
+                .isInstanceOfSatisfying(
+                        WeComDirectoryGatewayException.class,
+                        exception -> assertThat(exception.failure())
+                                .isEqualTo(DirectorySnapshotFailure.ACCESS_TOKEN_REJECTED));
         assertThat(fixture.gateway().fetchPage("", 1).memberIds()).containsExactly("member-a");
         fixture.server().verify();
     }
 
     @ParameterizedTest
     @MethodSource("safeProviderFailures")
-    void classifiesProviderErrorsWithoutRetainingErrmsg(
-            long errorCode,
-            DirectorySnapshotFailure expectedFailure
-    ) {
+    void classifiesProviderErrorsWithoutRetainingErrmsg(long errorCode, DirectorySnapshotFailure expectedFailure) {
         GatewayFixture fixture = fixture(DIRECTORY_SECRET);
         expectToken(fixture.server(), DIRECTORY_SECRET, "token-a");
         expectPageError(fixture.server(), "token-a", null, 1, errorCode);
@@ -158,19 +136,17 @@ class RestClientWeComDirectoryGatewayTest {
                 "token-a",
                 null,
                 1,
-                "{" +
-                        "\"errcode\":0," +
-                        "\"errmsg\":\"ok\"," +
-                        "\"next_cursor\":\"\"," +
-                        "\"dept_user\":[{\"department\":1}]" +
-                        "}"
-        );
+                "{" + "\"errcode\":0,"
+                        + "\"errmsg\":\"ok\","
+                        + "\"next_cursor\":\"\","
+                        + "\"dept_user\":[{\"department\":1}]"
+                        + "}");
 
         assertThatThrownBy(() -> fixture.gateway().fetchPage("", 1))
-                .isInstanceOfSatisfying(WeComDirectoryGatewayException.class, exception ->
-                        assertThat(exception.failure())
-                                .isEqualTo(DirectorySnapshotFailure.MALFORMED_MEMBER)
-                );
+                .isInstanceOfSatisfying(
+                        WeComDirectoryGatewayException.class,
+                        exception ->
+                                assertThat(exception.failure()).isEqualTo(DirectorySnapshotFailure.MALFORMED_MEMBER));
         fixture.server().verify();
     }
 
@@ -178,18 +154,11 @@ class RestClientWeComDirectoryGatewayTest {
     void classifiesMissingMemberListWithoutRetainingTheResponse() {
         GatewayFixture fixture = fixture(DIRECTORY_SECRET);
         expectToken(fixture.server(), DIRECTORY_SECRET, "token-a");
-        expectPage(
-                fixture.server(),
-                "token-a",
-                null,
-                1,
-                "{\"errcode\":0,\"errmsg\":\"ok\",\"next_cursor\":\"\"}"
-        );
+        expectPage(fixture.server(), "token-a", null, 1, "{\"errcode\":0,\"errmsg\":\"ok\",\"next_cursor\":\"\"}");
 
         assertThatThrownBy(() -> fixture.gateway().fetchPage("", 1))
                 .isInstanceOfSatisfying(WeComDirectoryGatewayException.class, exception -> {
-                    assertThat(exception.failure())
-                            .isEqualTo(DirectorySnapshotFailure.MALFORMED_MEMBER_LIST);
+                    assertThat(exception.failure()).isEqualTo(DirectorySnapshotFailure.MALFORMED_MEMBER_LIST);
                     assertThat(exception).hasNoCause();
                 });
         fixture.server().verify();
@@ -204,9 +173,7 @@ class RestClientWeComDirectoryGatewayTest {
                 "token-a",
                 null,
                 1,
-                "{\"errcode\":0,\"errmsg\":\"ok\","
-                        + "\"dept_user\":[{\"userid\":\"member-a\",\"department\":1}]}"
-        );
+                "{\"errcode\":0,\"errmsg\":\"ok\"," + "\"dept_user\":[{\"userid\":\"member-a\",\"department\":1}]}");
 
         WeComDirectoryPage page = fixture.gateway().fetchPage("", 1);
 
@@ -229,8 +196,7 @@ class RestClientWeComDirectoryGatewayTest {
                 null,
                 1,
                 "{\"errcode\":0,\"errmsg\":\"ok\",\"next_cursor\":null,"
-                        + "\"dept_user\":[{\"userid\":\"member-a\",\"department\":1}]}"
-        );
+                        + "\"dept_user\":[{\"userid\":\"member-a\",\"department\":1}]}");
 
         WeComDirectoryPage page = fixture.gateway().fetchPage("", 1);
 
@@ -241,10 +207,7 @@ class RestClientWeComDirectoryGatewayTest {
 
     @ParameterizedTest
     @MethodSource("invalidCursorCases")
-    void rejectsInvalidNextCursor(
-            String nextCursorJson,
-            DirectorySnapshotFailure expectedFailure
-    ) {
+    void rejectsInvalidNextCursor(String nextCursorJson, DirectorySnapshotFailure expectedFailure) {
         GatewayFixture fixture = fixture(DIRECTORY_SECRET);
         expectToken(fixture.server(), DIRECTORY_SECRET, "token-a");
         expectPage(
@@ -254,13 +217,11 @@ class RestClientWeComDirectoryGatewayTest {
                 1,
                 "{\"errcode\":0,\"errmsg\":\"ok\",\"next_cursor\":"
                         + nextCursorJson
-                        + ",\"dept_user\":[{\"userid\":\"member-a\",\"department\":1}]}"
-        );
+                        + ",\"dept_user\":[{\"userid\":\"member-a\",\"department\":1}]}");
 
         assertThatThrownBy(() -> fixture.gateway().fetchPage("", 1))
                 .isInstanceOfSatisfying(WeComDirectoryGatewayException.class, exception -> {
-                    assertThat(exception.failure())
-                            .isEqualTo(expectedFailure);
+                    assertThat(exception.failure()).isEqualTo(expectedFailure);
                     assertThat(exception).hasNoCause();
                 });
         fixture.server().verify();
@@ -269,8 +230,7 @@ class RestClientWeComDirectoryGatewayTest {
     private static Stream<Arguments> invalidCursorCases() {
         return Stream.of(
                 Arguments.of("123", DirectorySnapshotFailure.INVALID_CURSOR_TYPE),
-                Arguments.of("\"   \"", DirectorySnapshotFailure.INVALID_CURSOR_VALUE)
-        );
+                Arguments.of("\"   \"", DirectorySnapshotFailure.INVALID_CURSOR_VALUE));
     }
 
     @Test
@@ -283,15 +243,10 @@ class RestClientWeComDirectoryGatewayTest {
                 "token-a",
                 null,
                 1,
-                "{\"errcode\":0,\"next_cursor\":\"\",\"dept_user\":[{\"userid\":\""
-                        + sensitiveResponseBody
-        );
+                "{\"errcode\":0,\"next_cursor\":\"\",\"dept_user\":[{\"userid\":\"" + sensitiveResponseBody);
 
-        WeComDirectoryGatewayException exception = org.assertj.core.api.Assertions
-                .catchThrowableOfType(
-                        () -> fixture.gateway().fetchPage("", 1),
-                        WeComDirectoryGatewayException.class
-                );
+        WeComDirectoryGatewayException exception = org.assertj.core.api.Assertions.catchThrowableOfType(
+                () -> fixture.gateway().fetchPage("", 1), WeComDirectoryGatewayException.class);
         StringWriter stackTrace = new StringWriter();
         exception.printStackTrace(new PrintWriter(stackTrace));
 
@@ -308,28 +263,21 @@ class RestClientWeComDirectoryGatewayTest {
         String sensitiveProviderBody = "sensitive-provider-body";
         GatewayFixture fixture = fixture(DIRECTORY_SECRET);
         expectToken(fixture.server(), DIRECTORY_SECRET, "sensitive-token");
-        fixture.server().expect(requestTo(pageUri("sensitive-token")))
+        fixture.server()
+                .expect(requestTo(pageUri("sensitive-token")))
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .body("{\"errmsg\":\"" + sensitiveProviderBody
-                                + "\",\"userid\":\"" + sensitiveMember + "\"}"));
+                        .body("{\"errmsg\":\"" + sensitiveProviderBody + "\",\"userid\":\"" + sensitiveMember + "\"}"));
 
-        WeComDirectoryGatewayException exception = org.assertj.core.api.Assertions
-                .catchThrowableOfType(
-                        () -> fixture.gateway().fetchPage(sensitiveCursor, 1),
-                        WeComDirectoryGatewayException.class
-                );
+        WeComDirectoryGatewayException exception = org.assertj.core.api.Assertions.catchThrowableOfType(
+                () -> fixture.gateway().fetchPage(sensitiveCursor, 1), WeComDirectoryGatewayException.class);
         StringWriter stackTrace = new StringWriter();
         exception.printStackTrace(new PrintWriter(stackTrace));
 
-        assertThat(stackTrace.toString()).doesNotContain(
-                DIRECTORY_SECRET,
-                "sensitive-token",
-                sensitiveCursor,
-                sensitiveMember,
-                sensitiveProviderBody
-        );
+        assertThat(stackTrace.toString())
+                .doesNotContain(
+                        DIRECTORY_SECRET, "sensitive-token", sensitiveCursor, sensitiveMember, sensitiveProviderBody);
         assertThat(exception.failure()).isEqualTo(DirectorySnapshotFailure.TRANSPORT_ERROR);
         assertThat(exception).hasNoCause();
         fixture.server().verify();
@@ -377,20 +325,16 @@ class RestClientWeComDirectoryGatewayTest {
         assertThatThrownBy(() -> fixture.gateway().fetchPage("", 0))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("limit must be between 1 and 10000");
-        assertThatThrownBy(() -> fixture.gateway().fetchPage("", 10_001))
-                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> fixture.gateway().fetchPage("", 10_001)).isInstanceOf(IllegalArgumentException.class);
         fixture.server().verify();
     }
 
     @ParameterizedTest
     @EnumSource(DirectorySnapshotFailure.class)
-    void exposesRetryabilityOnlyForDocumentedProviderFailures(
-            DirectorySnapshotFailure failure
-    ) {
-        assertThat(failure.retryable()).isEqualTo(Set.of(
-                DirectorySnapshotFailure.SYSTEM_BUSY,
-                DirectorySnapshotFailure.RATE_LIMITED
-        ).contains(failure));
+    void exposesRetryabilityOnlyForDocumentedProviderFailures(DirectorySnapshotFailure failure) {
+        assertThat(failure.retryable())
+                .isEqualTo(Set.of(DirectorySnapshotFailure.SYSTEM_BUSY, DirectorySnapshotFailure.RATE_LIMITED)
+                        .contains(failure));
     }
 
     private static Stream<Arguments> safeProviderFailures() {
@@ -400,8 +344,7 @@ class RestClientWeComDirectoryGatewayTest {
                 Arguments.of(45009, DirectorySnapshotFailure.RATE_LIMITED),
                 Arguments.of(48002, DirectorySnapshotFailure.PERMISSION_DENIED),
                 Arguments.of(60020, DirectorySnapshotFailure.UNTRUSTED_IP),
-                Arguments.of(999_999, DirectorySnapshotFailure.PROVIDER_ERROR)
-        );
+                Arguments.of(999_999, DirectorySnapshotFailure.PROVIDER_ERROR));
     }
 
     private static GatewayFixture fixture(String directorySecret) {
@@ -414,55 +357,29 @@ class RestClientWeComDirectoryGatewayTest {
         return new GatewayFixture(gateway(builder, directorySecret, clock), server);
     }
 
-    private static RestClientWeComDirectoryGateway gateway(
-            RestClient.Builder builder,
-            String directorySecret
-    ) {
+    private static RestClientWeComDirectoryGateway gateway(RestClient.Builder builder, String directorySecret) {
         return gateway(builder, directorySecret, Clock.systemUTC());
     }
 
     private static RestClientWeComDirectoryGateway gateway(
-            RestClient.Builder builder,
-            String directorySecret,
-            Clock clock
-    ) {
-        return new RestClientWeComDirectoryGateway(
-                builder,
-                CORP_ID,
-                directorySecret,
-                clock
-        );
+            RestClient.Builder builder, String directorySecret, Clock clock) {
+        return new RestClientWeComDirectoryGateway(builder, CORP_ID, directorySecret, clock);
     }
 
-    private static void expectToken(
-            MockRestServiceServer server,
-            String secret,
-            String token
-    ) {
+    private static void expectToken(MockRestServiceServer server, String secret, String token) {
         expectToken(server, secret, token, 7200);
     }
 
-    private static void expectToken(
-            MockRestServiceServer server,
-            String secret,
-            String token,
-            long expiresIn
-    ) {
+    private static void expectToken(MockRestServiceServer server, String secret, String token, long expiresIn) {
         server.expect(requestTo(tokenUri(secret)))
                 .andRespond(withSuccess(
-                        "{\"errcode\":0,\"errmsg\":\"ok\",\"access_token\":\""
-                                + token + "\",\"expires_in\":" + expiresIn + "}",
-                        MediaType.APPLICATION_JSON
-                ));
+                        "{\"errcode\":0,\"errmsg\":\"ok\",\"access_token\":\"" + token + "\",\"expires_in\":"
+                                + expiresIn + "}",
+                        MediaType.APPLICATION_JSON));
     }
 
     private static void expectPage(
-            MockRestServiceServer server,
-            String token,
-            String cursor,
-            int limit,
-            String response
-    ) {
+            MockRestServiceServer server, String token, String cursor, int limit, String response) {
         String expectedRequest = cursor == null
                 ? "{\"limit\":" + limit + "}"
                 : "{\"cursor\":\"" + cursor + "\",\"limit\":" + limit + "}";
@@ -473,19 +390,13 @@ class RestClientWeComDirectoryGatewayTest {
     }
 
     private static void expectPageError(
-            MockRestServiceServer server,
-            String token,
-            String cursor,
-            int limit,
-            long errorCode
-    ) {
+            MockRestServiceServer server, String token, String cursor, int limit, long errorCode) {
         expectPage(
                 server,
                 token,
                 cursor,
                 limit,
-                "{\"errcode\":" + errorCode + ",\"errmsg\":\"sensitive provider error\"}"
-        );
+                "{\"errcode\":" + errorCode + ",\"errmsg\":\"sensitive provider error\"}");
     }
 
     private static String successPage(String memberId, String nextCursor) {
@@ -502,11 +413,7 @@ class RestClientWeComDirectoryGatewayTest {
         return API_BASE_URL + "/cgi-bin/user/list_id?access_token=" + token;
     }
 
-    private record GatewayFixture(
-            RestClientWeComDirectoryGateway gateway,
-            MockRestServiceServer server
-    ) {
-    }
+    private record GatewayFixture(RestClientWeComDirectoryGateway gateway, MockRestServiceServer server) {}
 
     private static final class MutableClock extends Clock {
 

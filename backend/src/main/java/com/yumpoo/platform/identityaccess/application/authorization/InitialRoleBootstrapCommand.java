@@ -4,12 +4,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 public record InitialRoleBootstrapCommand(
-        UUID companyId,
-        UUID appManagerUserId,
-        UUID companyAdminUserId,
-        UUID directoryRunId,
-        String reasonReference
-) {
+        UUID companyId, UUID appManagerUserId, UUID companyAdminUserId, UUID directoryRunId, String reasonReference) {
     public InitialRoleBootstrapCommand {
         Objects.requireNonNull(companyId, "companyId must not be null");
         Objects.requireNonNull(appManagerUserId, "appManagerUserId must not be null");

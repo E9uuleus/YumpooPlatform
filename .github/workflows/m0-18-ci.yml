@@ -223,6 +223,7 @@ jobs:
           name: linux-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             out/ci/*.json
+            out/e2e/
           if-no-files-found: warn
           retention-days: 14
 

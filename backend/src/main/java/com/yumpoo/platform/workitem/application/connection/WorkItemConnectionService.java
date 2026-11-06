@@ -1,9 +1,11 @@
 package com.yumpoo.platform.workitem.application.connection;
 
-import com.yumpoo.platform.workitem.application.ItemWriteTarget;
-import com.yumpoo.platform.workitem.application.WorkItemModels;
-import com.yumpoo.platform.workitem.application.WorkItemRepository;
-import com.yumpoo.platform.workitem.application.WorkItemService;
+import static com.yumpoo.platform.workitem.application.connection.ConnectionAccess.*;
+import static com.yumpoo.platform.workitem.application.connection.WorkItemConnectionCommands.*;
+import static com.yumpoo.platform.workitem.application.connection.WorkItemConnectionModels.*;
+import static com.yumpoo.platform.workitem.application.connection.WorkItemConnectionRepository.CandidateQuery;
+import static com.yumpoo.platform.workitem.application.connection.WorkItemConnectionRepository.ConnectionRow;
+
 import com.yumpoo.platform.catalog.api.ProjectAccessSnapshot;
 import com.yumpoo.platform.catalog.api.ProjectAccessSnapshotQuery;
 import com.yumpoo.platform.catalog.api.ProjectConnectionTargetQuery;
@@ -19,17 +21,15 @@ import com.yumpoo.platform.foundation.application.idempotency.*;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.MinimalUserSnapshot;
 import com.yumpoo.platform.identityaccess.api.MinimalUserSnapshotQuery;
+import com.yumpoo.platform.workitem.application.ItemWriteTarget;
+import com.yumpoo.platform.workitem.application.WorkItemCommandService;
+import com.yumpoo.platform.workitem.application.WorkItemModels;
+import com.yumpoo.platform.workitem.application.WorkItemRepository;
 import com.yumpoo.platform.workitem.domain.ConnectColumn;
 import com.yumpoo.platform.workitem.domain.WorkItem;
 import com.yumpoo.platform.workitem.domain.WorkItemConnection;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Isolation;
-import org.springframework.transaction.annotation.Transactional;
-import tools.jackson.databind.ObjectMapper;
-
 import java.time.Clock;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -37,21 +37,20 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-
-import static com.yumpoo.platform.workitem.application.connection.ConnectionAccess.*;
-import static com.yumpoo.platform.workitem.application.connection.WorkItemConnectionCommands.*;
-import static com.yumpoo.platform.workitem.application.connection.WorkItemConnectionModels.*;
-import static com.yumpoo.platform.workitem.application.connection.WorkItemConnectionRepository.CandidateQuery;
-import static com.yumpoo.platform.workitem.application.connection.WorkItemConnectionRepository.ConnectionRow;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.ObjectMapper;
 
 @Service
 public class WorkItemConnectionService {
     /** Assignee search resolves at most this many matching people before filtering candidates. */
     static final int ASSIGNEE_MATCH_LIMIT = 100;
+
     private final WorkItemConnectionRepository connections;
     private final ConnectColumnRepository columns;
     private final WorkItemRepository items;
-    private final WorkItemService itemService;
+    private final WorkItemCommandService itemService;
     private final ProjectAccessSnapshotQuery access;
     private final ProjectConnectionTargetQuery targets;
     private final ProjectFactWriteGuard guard;
@@ -62,11 +61,20 @@ public class WorkItemConnectionService {
     private final ObjectMapper json;
     private final Clock clock;
 
-    public WorkItemConnectionService(WorkItemConnectionRepository connections, ConnectColumnRepository columns,
-            WorkItemRepository items, WorkItemService itemService, ProjectAccessSnapshotQuery access,
-            ProjectConnectionTargetQuery targets, ProjectFactWriteGuard guard, ConnectionCardReader cards,
-            MinimalUserSnapshotQuery users, IdempotentCommandExecutor idempotency, TransactionalEventPort events,
-            ObjectMapper json, Clock clock) {
+    public WorkItemConnectionService(
+            WorkItemConnectionRepository connections,
+            ConnectColumnRepository columns,
+            WorkItemRepository items,
+            WorkItemCommandService itemService,
+            ProjectAccessSnapshotQuery access,
+            ProjectConnectionTargetQuery targets,
+            ProjectFactWriteGuard guard,
+            ConnectionCardReader cards,
+            MinimalUserSnapshotQuery users,
+            IdempotentCommandExecutor idempotency,
+            TransactionalEventPort events,
+            ObjectMapper json,
+            Clock clock) {
         this.connections = connections;
         this.columns = columns;
         this.items = items;
@@ -85,7 +93,9 @@ public class WorkItemConnectionService {
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public CellList cells(CurrentActor actor, UUID projectId, List<UUID> workItemIds) {
         visible(actor, projectId);
-        if (workItemIds == null || workItemIds.isEmpty() || workItemIds.size() > 100
+        if (workItemIds == null
+                || workItemIds.isEmpty()
+                || workItemIds.size() > 100
                 || workItemIds.stream().anyMatch(java.util.Objects::isNull))
             throw invalid("workItemIds", "INVALID_CONNECTION_ITEM_IDS", "请选择 1–100 个工作项");
         var ids = connections.findActiveProjectItems(actor.companyId(), projectId, workItemIds);
@@ -99,24 +109,41 @@ public class WorkItemConnectionService {
         Map<UUID, Long> totals = new LinkedHashMap<>();
         Map<UUID, Map<UUID, List<ConnectionView>>> inByColumn = new LinkedHashMap<>();
         Map<UUID, Map<UUID, Long>> columnTotals = new LinkedHashMap<>();
-        for (var row : outgoing) out.computeIfAbsent(row.connection().sourceWorkItemId(), ignored -> new LinkedHashMap<>())
-                .computeIfAbsent(row.connection().columnId(), ignored -> new ArrayList<>()).add(views.get(row.connection().id()));
+        for (var row : outgoing)
+            out.computeIfAbsent(row.connection().sourceWorkItemId(), ignored -> new LinkedHashMap<>())
+                    .computeIfAbsent(row.connection().columnId(), ignored -> new ArrayList<>())
+                    .add(views.get(row.connection().id()));
         for (var value : incoming) {
             var connection = value.row().connection();
             UUID id = connection.targetWorkItemId();
             var view = views.get(connection.id());
             // Every column keeps its first 50 rows, so the first 50 across columns are always among them.
-            if (value.cellPosition() <= WorkItemConnection.MAX_PER_CELL) in.computeIfAbsent(id, ignored -> new ArrayList<>()).add(view);
+            if (value.cellPosition() <= WorkItemConnection.MAX_PER_CELL)
+                in.computeIfAbsent(id, ignored -> new ArrayList<>()).add(view);
             totals.put(id, value.row().incomingTotal());
-            inByColumn.computeIfAbsent(id, ignored -> new LinkedHashMap<>())
-                    .computeIfAbsent(connection.columnId(), ignored -> new ArrayList<>()).add(view);
-            columnTotals.computeIfAbsent(id, ignored -> new LinkedHashMap<>()).put(connection.columnId(), value.columnTotal());
+            inByColumn
+                    .computeIfAbsent(id, ignored -> new LinkedHashMap<>())
+                    .computeIfAbsent(connection.columnId(), ignored -> new ArrayList<>())
+                    .add(view);
+            columnTotals
+                    .computeIfAbsent(id, ignored -> new LinkedHashMap<>())
+                    .put(connection.columnId(), value.columnTotal());
         }
-        return new CellList(ids.stream().map(id -> new Cell(id,
-                out.getOrDefault(id, Map.of()).entrySet().stream().map(entry -> new Outgoing(entry.getKey(), entry.getValue())).toList(),
-                in.getOrDefault(id, List.of()), totals.getOrDefault(id, 0L),
-                inByColumn.getOrDefault(id, Map.of()).entrySet().stream().map(entry -> new IncomingByColumn(entry.getKey(),
-                        entry.getValue(), columnTotals.get(id).get(entry.getKey()))).toList())).toList());
+        return new CellList(ids.stream()
+                .map(id -> new Cell(
+                        id,
+                        out.getOrDefault(id, Map.of()).entrySet().stream()
+                                .map(entry -> new Outgoing(entry.getKey(), entry.getValue()))
+                                .toList(),
+                        in.getOrDefault(id, List.of()),
+                        totals.getOrDefault(id, 0L),
+                        inByColumn.getOrDefault(id, Map.of()).entrySet().stream()
+                                .map(entry -> new IncomingByColumn(
+                                        entry.getKey(),
+                                        entry.getValue(),
+                                        columnTotals.get(id).get(entry.getKey())))
+                                .toList()))
+                .toList());
     }
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
@@ -131,15 +158,20 @@ public class WorkItemConnectionService {
         var rows = connections.findIncomingPage(actor.companyId(), workItemId, columnId, visible.keySet(), page);
         long total = connections.countIncoming(actor.companyId(), workItemId, columnId, visible.keySet());
         var views = cards.connections(actor, rows, false);
-        return new ConnectionPage(rows.stream().map(row -> views.get(row.connection().id())).toList(),
-                page.page(), page.size(), total, totalPages(total, page.size()));
+        return new ConnectionPage(
+                rows.stream().map(row -> views.get(row.connection().id())).toList(),
+                page.page(),
+                page.size(),
+                total,
+                totalPages(total, page.size()));
     }
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public ConnectionView find(CurrentActor actor, UUID connectionId) {
         ConnectionRow row = requireVisibleConnection(actor, connectionId);
         var visibility = access.findVisible(actor, endpoints(row.connection()));
-        var readable = connections.findReadable(actor.companyId(), connectionId, visibility.keySet())
+        var readable = connections
+                .findReadable(actor.companyId(), connectionId, visibility.keySet())
                 .orElseThrow(ConnectionAccess::missing);
         return cards.connections(actor, List.of(readable), false).get(connectionId);
     }
@@ -158,7 +190,8 @@ public class WorkItemConnectionService {
         if (!member(source)) throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
         var column = column(actor.companyId(), projectId, columnId, false);
         requireTarget(column, targetProjectId);
-        var target = targets.findByIds(actor.companyId(), List.of(targetProjectId)).get(targetProjectId);
+        var target =
+                targets.findByIds(actor.companyId(), List.of(targetProjectId)).get(targetProjectId);
         if (target == null) throw missing();
         if (target.lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ACTIVE) {
             if (access.findVisible(actor, targetProjectId).isEmpty()) throw missing();
@@ -166,30 +199,60 @@ public class WorkItemConnectionService {
         }
         var categories = connections.findActiveCategories(actor.companyId(), targetProjectId);
         if (categories.isEmpty()) throw invalid("contentId", "CONTENT_NOT_ACTIVE", "目标项目没有启用的工作项类别");
-        return new CreateOptions(targetProjectId, target.name(), categories, categories.getFirst().id());
+        return new CreateOptions(
+                targetProjectId,
+                target.name(),
+                categories,
+                categories.getFirst().id());
     }
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
-    public CandidatePage candidates(CurrentActor actor, UUID projectId, UUID columnId, UUID targetProjectId,
-            UUID sourceWorkItemId, ConnectCandidateSearch search, OffsetPageRequest page) {
+    public CandidatePage candidates(
+            CurrentActor actor,
+            UUID projectId,
+            UUID columnId,
+            UUID targetProjectId,
+            UUID sourceWorkItemId,
+            ConnectCandidateSearch search,
+            OffsetPageRequest page) {
         requireWritable(visible(actor, projectId));
         requirePage(page, 20);
         var column = column(actor.companyId(), projectId, columnId, false);
         requireTarget(column, targetProjectId);
         requireWritableEndpoint(actor, targetProjectId);
         items.findLocator(actor.companyId(), projectId, sourceWorkItemId).orElseThrow(ConnectionAccess::missing);
-        return candidatePage(actor, new CandidateQuery(targetProjectId, columnId, sourceWorkItemId, true, search.text(),
-                search.fields(), assignees(actor, search), search.sort()), page);
+        return candidatePage(
+                actor,
+                new CandidateQuery(
+                        targetProjectId,
+                        columnId,
+                        sourceWorkItemId,
+                        true,
+                        search.text(),
+                        search.fields(),
+                        assignees(actor, search),
+                        search.sort()),
+                page);
     }
 
     /** Searches the column's own project from a reverse column; {@code workItemId} is the target-side row. */
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
-    public CandidatePage reverseCandidates(CurrentActor actor, UUID workItemId, UUID columnId,
-            ConnectCandidateSearch search, OffsetPageRequest page) {
+    public CandidatePage reverseCandidates(
+            CurrentActor actor, UUID workItemId, UUID columnId, ConnectCandidateSearch search, OffsetPageRequest page) {
         requirePage(page, 20);
         var reverse = reverse(actor, workItemId, columnId);
-        return candidatePage(actor, new CandidateQuery(reverse.column().projectId(), columnId, reverse.target().workItemId(),
-                false, search.text(), search.fields(), assignees(actor, search), search.sort()), page);
+        return candidatePage(
+                actor,
+                new CandidateQuery(
+                        reverse.column().projectId(),
+                        columnId,
+                        reverse.target().workItemId(),
+                        false,
+                        search.text(),
+                        search.fields(),
+                        assignees(actor, search),
+                        search.sort()),
+                page);
     }
 
     @Transactional(readOnly = true)
@@ -200,52 +263,95 @@ public class WorkItemConnectionService {
         if (project == null) throw missing();
         var categories = connections.findActiveCategories(actor.companyId(), projectId);
         if (categories.isEmpty()) throw invalid("contentId", "CONTENT_NOT_ACTIVE", "来源项目没有启用的工作项类别");
-        return new CreateOptions(projectId, project.name(), categories, categories.getFirst().id());
+        return new CreateOptions(
+                projectId, project.name(), categories, categories.getFirst().id());
     }
 
     private CandidatePage candidatePage(CurrentActor actor, CandidateQuery query, OffsetPageRequest page) {
         var rows = connections.findCandidates(actor.companyId(), query, page);
         long total = connections.countCandidates(actor.companyId(), query);
-        var cardViews = cards.cards(actor, rows.stream().map(WorkItemConnectionRepository.CandidateRow::workItemId).toList());
-        return new CandidatePage(rows.stream().map(row -> new Candidate(cardViews.get(row.workItemId()), row.parent(), row.alreadyConnected()))
-                .toList(), page.page(), page.size(), total, totalPages(total, page.size()));
+        var cardViews = cards.cards(
+                actor,
+                rows.stream()
+                        .map(WorkItemConnectionRepository.CandidateRow::workItemId)
+                        .toList());
+        return new CandidatePage(
+                rows.stream()
+                        .map(row ->
+                                new Candidate(cardViews.get(row.workItemId()), row.parent(), row.alreadyConnected()))
+                        .toList(),
+                page.page(),
+                page.size(),
+                total,
+                totalPages(total, page.size()));
     }
 
     private List<UUID> assignees(CurrentActor actor, ConnectCandidateSearch search) {
         if (search.text().isEmpty() || !search.fields().contains(CandidateField.ASSIGNEE)) return List.of();
-        return users.findActiveEnabledByName(actor.companyId(), search.text(), new OffsetPageRequest(0, ASSIGNEE_MATCH_LIMIT))
-                .items().stream().map(MinimalUserSnapshot::userId).toList();
+        return users
+                .findActiveEnabledByName(
+                        actor.companyId(), search.text(), new OffsetPageRequest(0, ASSIGNEE_MATCH_LIMIT))
+                .items()
+                .stream()
+                .map(MinimalUserSnapshot::userId)
+                .toList();
     }
 
     public IdempotencyExecutionResult link(Link command) {
         var source = source(command.actor(), command.workItemId());
         var column = column(command.actor().companyId(), source.projectId(), command.columnId(), false);
-        var target = items.findLocator(command.actor().companyId(), command.targetWorkItemId()).orElseThrow(ConnectionAccess::missing);
+        var target = items.findLocator(command.actor().companyId(), command.targetWorkItemId())
+                .orElseThrow(ConnectionAccess::missing);
         requireTarget(column, target.projectId());
         requireWritableEndpoint(command.actor(), target.projectId());
-        return idempotency.execute(new IdempotencyCommand(new IdempotencyScope(command.actor().userId(), "POST",
-                "linkWorkItemConnection", command.idempotencyKey()), command.requestHash()), () -> {
-            lockProjects(command.actor(), source.projectId(), target.projectId(), Set.of(source.projectId(), target.projectId()));
-            var lockedColumn = column(command.actor().companyId(), source.projectId(), command.columnId(), true);
-            requireTarget(lockedColumn, target.projectId());
-            var lockedItems = lockItems(command.actor().companyId(), Map.of(source.workItemId(), source.projectId(),
-                    target.workItemId(), target.projectId()));
-            lockedItems.values().forEach(WorkItemConnectionService::requireUnarchived);
-            var existing = connections.findActivePair(command.actor().companyId(), lockedColumn.id(),
-                    source.workItemId(), target.workItemId());
-            if (existing.isPresent()) return stored(200, response(command.actor(), existing.get(), lockedColumn));
-            requireCapacity(command.actor().companyId(), lockedColumn.id(), source.workItemId());
-            var connection = WorkItemConnection.create(UUID.randomUUID(), command.actor().companyId(), lockedColumn.id(),
-                    source.projectId(), source.workItemId(), target.projectId(), target.workItemId(),
-                    WorkItemConnection.Origin.LINKED, command.actor().userId(), clock.instant());
-            if (!connections.insert(connection)) {
-                var duplicate = connections.findActivePair(command.actor().companyId(), lockedColumn.id(),
-                        source.workItemId(), target.workItemId()).orElseThrow(() -> new IllegalStateException("connection conflict without active pair"));
-                return stored(200, response(command.actor(), duplicate, lockedColumn));
-            }
-            append("workitem.connection_created", connection, lockedColumn.name(), command.actor());
-            return stored(201, response(command.actor(), connection, lockedColumn));
-        });
+        return idempotency.execute(
+                new IdempotencyCommand(
+                        new IdempotencyScope(
+                                command.actor().userId(), "POST", "linkWorkItemConnection", command.idempotencyKey()),
+                        command.requestHash()),
+                () -> {
+                    lockProjects(
+                            command.actor(),
+                            source.projectId(),
+                            target.projectId(),
+                            Set.of(source.projectId(), target.projectId()));
+                    var lockedColumn =
+                            column(command.actor().companyId(), source.projectId(), command.columnId(), true);
+                    requireTarget(lockedColumn, target.projectId());
+                    var lockedItems = lockItems(
+                            command.actor().companyId(),
+                            Map.of(source.workItemId(), source.projectId(), target.workItemId(), target.projectId()));
+                    lockedItems.values().forEach(WorkItemConnectionService::requireUnarchived);
+                    var existing = connections.findActivePair(
+                            command.actor().companyId(), lockedColumn.id(), source.workItemId(), target.workItemId());
+                    if (existing.isPresent())
+                        return stored(200, response(command.actor(), existing.get(), lockedColumn));
+                    requireCapacity(command.actor().companyId(), lockedColumn.id(), source.workItemId());
+                    var connection = WorkItemConnection.create(
+                            UUID.randomUUID(),
+                            command.actor().companyId(),
+                            lockedColumn.id(),
+                            source.projectId(),
+                            source.workItemId(),
+                            target.projectId(),
+                            target.workItemId(),
+                            WorkItemConnection.Origin.LINKED,
+                            command.actor().userId(),
+                            clock.instant());
+                    if (!connections.insert(connection)) {
+                        var duplicate = connections
+                                .findActivePair(
+                                        command.actor().companyId(),
+                                        lockedColumn.id(),
+                                        source.workItemId(),
+                                        target.workItemId())
+                                .orElseThrow(
+                                        () -> new IllegalStateException("connection conflict without active pair"));
+                        return stored(200, response(command.actor(), duplicate, lockedColumn));
+                    }
+                    append("workitem.connection_created", connection, lockedColumn.name(), command.actor());
+                    return stored(201, response(command.actor(), connection, lockedColumn));
+                });
     }
 
     public IdempotencyExecutionResult createConnected(CreateConnected command) {
@@ -254,29 +360,47 @@ public class WorkItemConnectionService {
         requireTarget(column, command.targetProjectId());
         String title = command.title() == null ? "" : command.title().strip();
         if (title.isEmpty() || title.length() > 300) throw invalid("title", "INVALID_LENGTH", "标题须为 1–300 个字符");
-        return idempotency.execute(new IdempotencyCommand(new IdempotencyScope(command.actor().userId(), "POST",
-                "createConnectedWorkItem", command.idempotencyKey()), command.requestHash()), () -> {
-            var projects = lockProjects(command.actor(), source.projectId(), command.targetProjectId(), Set.of(source.projectId()));
-            var lockedColumn = column(command.actor().companyId(), source.projectId(), command.columnId(), true);
-            requireTarget(lockedColumn, command.targetProjectId());
-            UUID contentId = command.contentId();
-            if (contentId == null) {
-                var categories = connections.findActiveCategories(command.actor().companyId(), command.targetProjectId());
-                if (categories.isEmpty()) throw invalid("contentId", "CONTENT_NOT_ACTIVE", "目标项目没有启用的工作项类别");
-                contentId = categories.getFirst().id();
-            }
-            WorkItem target = itemService.createRootItemForConnection(projects.get(command.targetProjectId()), contentId, title, command.actor());
-            WorkItem lockedSource = lockItems(command.actor().companyId(), Map.of(source.workItemId(), source.projectId()))
-                    .get(source.workItemId());
-            requireUnarchived(lockedSource);
-            requireCapacity(command.actor().companyId(), lockedColumn.id(), lockedSource.id());
-            var connection = WorkItemConnection.create(UUID.randomUUID(), command.actor().companyId(), lockedColumn.id(),
-                    source.projectId(), source.workItemId(), target.projectId(), target.id(), WorkItemConnection.Origin.CREATED,
-                    command.actor().userId(), clock.instant());
-            if (!connections.insert(connection)) throw new IllegalStateException("new connected item already connected");
-            append("workitem.connection_created", connection, lockedColumn.name(), command.actor());
-            return stored(201, response(command.actor(), connection, lockedColumn));
-        });
+        return idempotency.execute(
+                new IdempotencyCommand(
+                        new IdempotencyScope(
+                                command.actor().userId(), "POST", "createConnectedWorkItem", command.idempotencyKey()),
+                        command.requestHash()),
+                () -> {
+                    var projects = lockProjects(
+                            command.actor(), source.projectId(), command.targetProjectId(), Set.of(source.projectId()));
+                    var lockedColumn =
+                            column(command.actor().companyId(), source.projectId(), command.columnId(), true);
+                    requireTarget(lockedColumn, command.targetProjectId());
+                    UUID contentId = command.contentId();
+                    if (contentId == null) {
+                        var categories = connections.findActiveCategories(
+                                command.actor().companyId(), command.targetProjectId());
+                        if (categories.isEmpty()) throw invalid("contentId", "CONTENT_NOT_ACTIVE", "目标项目没有启用的工作项类别");
+                        contentId = categories.getFirst().id();
+                    }
+                    WorkItem target = itemService.createRootItemForConnection(
+                            projects.get(command.targetProjectId()), contentId, title, command.actor());
+                    WorkItem lockedSource = lockItems(
+                                    command.actor().companyId(), Map.of(source.workItemId(), source.projectId()))
+                            .get(source.workItemId());
+                    requireUnarchived(lockedSource);
+                    requireCapacity(command.actor().companyId(), lockedColumn.id(), lockedSource.id());
+                    var connection = WorkItemConnection.create(
+                            UUID.randomUUID(),
+                            command.actor().companyId(),
+                            lockedColumn.id(),
+                            source.projectId(),
+                            source.workItemId(),
+                            target.projectId(),
+                            target.id(),
+                            WorkItemConnection.Origin.CREATED,
+                            command.actor().userId(),
+                            clock.instant());
+                    if (!connections.insert(connection))
+                        throw new IllegalStateException("new connected item already connected");
+                    append("workitem.connection_created", connection, lockedColumn.name(), command.actor());
+                    return stored(201, response(command.actor(), connection, lockedColumn));
+                });
     }
 
     /** Creates a root item in the column's own project from a reverse column and connects it to the target-side row. */
@@ -287,52 +411,98 @@ public class WorkItemConnectionService {
         UUID companyId = command.actor().companyId();
         String title = command.title() == null ? "" : command.title().strip();
         if (title.isEmpty() || title.length() > 300) throw invalid("title", "INVALID_LENGTH", "标题须为 1–300 个字符");
-        return idempotency.execute(new IdempotencyCommand(new IdempotencyScope(command.actor().userId(), "POST",
-                "createReverseConnectedWorkItem", command.idempotencyKey()), command.requestHash()), () -> {
-            var projects = lockProjects(command.actor(), sourceProjectId, target.projectId(),
-                    Set.of(sourceProjectId, target.projectId()));
-            var lockedColumn = column(companyId, sourceProjectId, command.columnId(), true);
-            requireTarget(lockedColumn, target.projectId());
-            UUID contentId = command.contentId();
-            if (contentId == null) {
-                var categories = connections.findActiveCategories(companyId, sourceProjectId);
-                if (categories.isEmpty()) throw invalid("contentId", "CONTENT_NOT_ACTIVE", "来源项目没有启用的工作项类别");
-                contentId = categories.getFirst().id();
-            }
-            WorkItem source = itemService.createRootItemForConnection(projects.get(sourceProjectId), contentId, title, command.actor());
-            WorkItem lockedTarget = lockItems(companyId, Map.of(target.workItemId(), target.projectId())).get(target.workItemId());
-            requireUnarchived(lockedTarget);
-            // The actor is a member of both projects, so this is an ordinary link rather than a cross-project intake.
-            var connection = WorkItemConnection.create(UUID.randomUUID(), companyId, lockedColumn.id(), sourceProjectId,
-                    source.id(), target.projectId(), target.workItemId(), WorkItemConnection.Origin.LINKED,
-                    command.actor().userId(), clock.instant());
-            if (!connections.insert(connection)) throw new IllegalStateException("new reverse connected item already connected");
-            append("workitem.connection_created", connection, lockedColumn.name(), command.actor());
-            return stored(201, response(command.actor(), connection, lockedColumn));
-        });
+        return idempotency.execute(
+                new IdempotencyCommand(
+                        new IdempotencyScope(
+                                command.actor().userId(),
+                                "POST",
+                                "createReverseConnectedWorkItem",
+                                command.idempotencyKey()),
+                        command.requestHash()),
+                () -> {
+                    var projects = lockProjects(
+                            command.actor(),
+                            sourceProjectId,
+                            target.projectId(),
+                            Set.of(sourceProjectId, target.projectId()));
+                    var lockedColumn = column(companyId, sourceProjectId, command.columnId(), true);
+                    requireTarget(lockedColumn, target.projectId());
+                    UUID contentId = command.contentId();
+                    if (contentId == null) {
+                        var categories = connections.findActiveCategories(companyId, sourceProjectId);
+                        if (categories.isEmpty()) throw invalid("contentId", "CONTENT_NOT_ACTIVE", "来源项目没有启用的工作项类别");
+                        contentId = categories.getFirst().id();
+                    }
+                    WorkItem source = itemService.createRootItemForConnection(
+                            projects.get(sourceProjectId), contentId, title, command.actor());
+                    WorkItem lockedTarget = lockItems(companyId, Map.of(target.workItemId(), target.projectId()))
+                            .get(target.workItemId());
+                    requireUnarchived(lockedTarget);
+                    // The actor is a member of both projects, so this is an ordinary link rather than a cross-project
+                    // intake.
+                    var connection = WorkItemConnection.create(
+                            UUID.randomUUID(),
+                            companyId,
+                            lockedColumn.id(),
+                            sourceProjectId,
+                            source.id(),
+                            target.projectId(),
+                            target.workItemId(),
+                            WorkItemConnection.Origin.LINKED,
+                            command.actor().userId(),
+                            clock.instant());
+                    if (!connections.insert(connection))
+                        throw new IllegalStateException("new reverse connected item already connected");
+                    append("workitem.connection_created", connection, lockedColumn.name(), command.actor());
+                    return stored(201, response(command.actor(), connection, lockedColumn));
+                });
     }
 
     public IdempotencyExecutionResult unlink(Unlink command) {
-        var snapshot = requireVisibleConnection(command.actor(), command.connectionId()).connection();
-        return idempotency.execute(new IdempotencyCommand(new IdempotencyScope(command.actor().userId(), "DELETE",
-                "unlinkWorkItemConnection", command.idempotencyKey()), command.requestHash()), () -> {
-            var visibility = access.findVisible(command.actor(), endpoints(snapshot));
-            UUID memberProject = endpoints(snapshot).stream().sorted(Comparator.comparing(UUID::toString))
-                    .filter(id -> member(visibility.get(id))).findFirst()
-                    .orElseThrow(() -> new ApplicationException(StandardErrorCode.ACCESS_DENIED));
-            lockProjects(command.actor(), snapshot.sourceProjectId(), snapshot.targetProjectId(), Set.of(memberProject));
-            var column = columns.lock(command.actor().companyId(), snapshot.sourceProjectId(), snapshot.columnId(), true)
-                    .orElseThrow(ConnectionAccess::missing);
-            lockItems(command.actor().companyId(), Map.of(snapshot.sourceWorkItemId(), snapshot.sourceProjectId(),
-                    snapshot.targetWorkItemId(), snapshot.targetProjectId()));
-            var connection = connections.lock(command.actor().companyId(), command.connectionId()).orElseThrow(ConnectionAccess::missing);
-            if (!connection.active() || !column.active()) throw conflict("CONNECTION_NOT_ACTIVE");
-            requireVersion(connection.rowVersion(), command.expectedVersion());
-            var deleted = connection.delete(command.actor().userId(), WorkItemConnection.DeleteReason.UNLINKED, clock.instant());
-            if (!connections.softDelete(deleted, connection.rowVersion())) throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
-            append("workitem.connection_deleted", deleted, column.name(), command.actor());
-            return stored(200, response(command.actor(), deleted, column));
-        });
+        var snapshot = requireVisibleConnection(command.actor(), command.connectionId())
+                .connection();
+        return idempotency.execute(
+                new IdempotencyCommand(
+                        new IdempotencyScope(
+                                command.actor().userId(),
+                                "DELETE",
+                                "unlinkWorkItemConnection",
+                                command.idempotencyKey()),
+                        command.requestHash()),
+                () -> {
+                    var visibility = access.findVisible(command.actor(), endpoints(snapshot));
+                    UUID memberProject = endpoints(snapshot).stream()
+                            .sorted(Comparator.comparing(UUID::toString))
+                            .filter(id -> member(visibility.get(id)))
+                            .findFirst()
+                            .orElseThrow(() -> new ApplicationException(StandardErrorCode.ACCESS_DENIED));
+                    lockProjects(
+                            command.actor(),
+                            snapshot.sourceProjectId(),
+                            snapshot.targetProjectId(),
+                            Set.of(memberProject));
+                    var column = columns.lock(
+                                    command.actor().companyId(), snapshot.sourceProjectId(), snapshot.columnId(), true)
+                            .orElseThrow(ConnectionAccess::missing);
+                    lockItems(
+                            command.actor().companyId(),
+                            Map.of(
+                                    snapshot.sourceWorkItemId(),
+                                    snapshot.sourceProjectId(),
+                                    snapshot.targetWorkItemId(),
+                                    snapshot.targetProjectId()));
+                    var connection = connections
+                            .lock(command.actor().companyId(), command.connectionId())
+                            .orElseThrow(ConnectionAccess::missing);
+                    if (!connection.active() || !column.active()) throw conflict("CONNECTION_NOT_ACTIVE");
+                    requireVersion(connection.rowVersion(), command.expectedVersion());
+                    var deleted = connection.delete(
+                            command.actor().userId(), WorkItemConnection.DeleteReason.UNLINKED, clock.instant());
+                    if (!connections.softDelete(deleted, connection.rowVersion()))
+                        throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
+                    append("workitem.connection_deleted", deleted, column.name(), command.actor());
+                    return stored(200, response(command.actor(), deleted, column));
+                });
     }
 
     private WorkItemModels.WorkItemLocator source(CurrentActor actor, UUID id) {
@@ -363,20 +533,29 @@ public class WorkItemConnectionService {
     private void requireWritableEndpoint(CurrentActor actor, UUID projectId) {
         var project = access.findVisible(actor, projectId).orElse(null);
         if (project == null) {
-            var endpoint = targets.findByIds(actor.companyId(), List.of(projectId)).get(projectId);
-            if (endpoint == null || endpoint.lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ACTIVE) throw missing();
+            var endpoint =
+                    targets.findByIds(actor.companyId(), List.of(projectId)).get(projectId);
+            if (endpoint == null || endpoint.lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ACTIVE)
+                throw missing();
         }
         requireWritable(project);
     }
 
     private ConnectColumn column(UUID companyId, UUID projectId, UUID columnId, boolean lock) {
-        return (lock ? columns.lock(companyId, projectId, columnId, true) : columns.find(companyId, projectId, columnId))
-                .filter(ConnectColumn::active).orElseThrow(ConnectionAccess::missing);
+        return (lock
+                        ? columns.lock(companyId, projectId, columnId, true)
+                        : columns.find(companyId, projectId, columnId))
+                .filter(ConnectColumn::active)
+                .orElseThrow(ConnectionAccess::missing);
     }
 
-    private Map<UUID, ItemWriteTarget> lockProjects(CurrentActor actor, UUID sourceId, UUID targetId, Set<UUID> memberProjects) {
+    private Map<UUID, ItemWriteTarget> lockProjects(
+            CurrentActor actor, UUID sourceId, UUID targetId, Set<UUID> memberProjects) {
         Map<UUID, ItemWriteTarget> result = new LinkedHashMap<>();
-        for (UUID id : List.of(sourceId, targetId).stream().distinct().sorted(Comparator.comparing(UUID::toString)).toList()) {
+        for (UUID id : List.of(sourceId, targetId).stream()
+                .distinct()
+                .sorted(Comparator.comparing(UUID::toString))
+                .toList()) {
             if (memberProjects.contains(id)) {
                 var project = guard.lockForFactWrite(actor, id);
                 requireWritable(project);
@@ -391,9 +570,11 @@ public class WorkItemConnectionService {
 
     private Map<UUID, WorkItem> lockItems(UUID companyId, Map<UUID, UUID> itemProjects) {
         Map<UUID, WorkItem> result = new LinkedHashMap<>();
-        for (var entry : itemProjects.entrySet().stream().sorted(Comparator
-                .comparing((Map.Entry<UUID, UUID> item) -> item.getValue().toString())
-                .thenComparing(item -> item.getKey().toString())).toList()) {
+        for (var entry : itemProjects.entrySet().stream()
+                .sorted(Comparator.comparing(
+                                (Map.Entry<UUID, UUID> item) -> item.getValue().toString())
+                        .thenComparing(item -> item.getKey().toString()))
+                .toList()) {
             WorkItem item = items.lockProjectItemIncludingDeleted(companyId, entry.getValue(), entry.getKey())
                     .orElseThrow(ConnectionAccess::missing);
             result.put(entry.getKey(), item);
@@ -424,14 +605,18 @@ public class WorkItemConnectionService {
         if (page.size() > maximum) throw invalid("size", "PAGE_SIZE_OUT_OF_RANGE", "分页大小超出允许范围");
     }
 
-    private static int totalPages(long total, int size) { return (int) Math.ceil((double) total / size); }
+    private static int totalPages(long total, int size) {
+        return (int) Math.ceil((double) total / size);
+    }
 
     private ConnectionView response(CurrentActor actor, WorkItemConnection connection, ConnectColumn column) {
-        return cards.connections(actor, List.of(new ConnectionRow(connection, column.name(), column.active(), 0)), true).get(connection.id());
+        return cards.connections(actor, List.of(new ConnectionRow(connection, column.name(), column.active(), 0)), true)
+                .get(connection.id());
     }
 
     private StoredCommandResult stored(int status, ConnectionView view) {
-        return new StoredCommandResult(status, json.writeValueAsString(view), view.id(), StrongEtag.format(view.rowVersion()));
+        return new StoredCommandResult(
+                status, json.writeValueAsString(view), view.id(), StrongEtag.format(view.rowVersion()));
     }
 
     private void append(String type, WorkItemConnection connection, String columnName, CurrentActor actor) {
@@ -444,8 +629,16 @@ public class WorkItemConnectionService {
         payload.put("sourceWorkItemId", connection.sourceWorkItemId());
         payload.put("targetProjectId", connection.targetProjectId());
         payload.put("targetWorkItemId", connection.targetWorkItemId());
-        if (connection.deleteReason() != null) payload.put("deleteReason", connection.deleteReason().name());
-        events.append(new EventDraft(type, 1, "WorkItemConnection", connection.id(), connection.rowVersion(), connection.companyId(),
-                EventActor.user(actor.userId()), json.valueToTree(payload)));
+        if (connection.deleteReason() != null)
+            payload.put("deleteReason", connection.deleteReason().name());
+        events.append(new EventDraft(
+                type,
+                1,
+                "WorkItemConnection",
+                connection.id(),
+                connection.rowVersion(),
+                connection.companyId(),
+                EventActor.user(actor.userId()),
+                json.valueToTree(payload)));
     }
 }

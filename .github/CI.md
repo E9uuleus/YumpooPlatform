@@ -18,11 +18,11 @@ pnpm run ci
 | --- | --- |
 | `pnpm ci:contracts` | PR 基线、历史迁移与冻结清单、OpenAPI 严格兼容、例外结构、lint/样例、生成客户端漂移、全部既有事件版本与共享载荷兼容、事件库存 |
 | `pnpm ci:static` | 上述契约检查各一次，加文档/归档完整性、校验器故障测试、前端/桌面 lint、架构、类型、构建与全部现有测试、品牌资产与生产部署配置不变量 |
-| `pnpm ci:backend` | 一次 `clean verify`：单元/集成、安全、架构、PostgreSQL/Flyway、备份恢复；随后单独执行 96 MiB JVM 的附件流式探针 |
-| `pnpm ci:portable` | 校验当前源码的 static/backend 成功记录与新鲜备份恢复报告；运行 packaged JAR + SPA HTTP；生成和验证 JAR/Web handoff |
+| `pnpm ci:backend` | Java 格式检查（Spotless）；一次 `clean verify`：单元/集成、安全、架构、PostgreSQL/Flyway、备份恢复；随后单独执行 96 MiB JVM 的附件流式探针 |
+| `pnpm ci:portable` | 校验当前源码的 static/backend 成功记录与新鲜备份恢复报告；运行 packaged JAR + SPA HTTP、浏览器冒烟（系统 Chrome / Edge）；生成和验证 JAR/Web handoff |
 | `pnpm ci:windows` | 复核 handoff，真实 Electron smoke、Windows 桌面安装包（EXE 图标/版本资源/fuse/ASAR 白名单，默认目录与 `/D=` 自定义目录的静默安装、自检、覆盖安装与卸载边界）、ZIP、PowerShell 行为及服务器包验证；服务器包逐文件对照同一 handoff；生成并核对后端与 Web 的 CycloneDX SBOM；把经过冒烟的安装包、blockmap、`latest.yml`、桌面 SBOM 与 manifest 收集到 `out/desktop` |
 
-[plan.mjs](../tools/ci/plan.mjs) 是统一入口的执行清单。static 资产步骤只保留品牌资产与 [部署配置校验](../tools/verification/verify-deployment-config.mjs)。portable 显式执行备份恢复报告、打包 HTTP 冒烟和交接包；Windows 显式执行工具链、配置隔离测试、引擎行为、交接包、桌面冒烟、打包、完整性、安装、更新、产物收集、首次引导和服务器组包校验，服务器不重复编译。桌面步骤默认使用 `desktop/desktop-shell/out/release`。
+[plan.mjs](../tools/ci/plan.mjs) 是统一入口的执行清单。static 资产步骤只保留品牌资产与 [部署配置校验](../tools/verification/verify-deployment-config.mjs)。portable 显式执行备份恢复报告、打包 HTTP 冒烟、浏览器冒烟和交接包；Windows 显式执行工具链、配置隔离测试、引擎行为、交接包、桌面冒烟、打包、完整性、安装、更新、产物收集、首次引导和服务器组包校验，服务器不重复编译。桌面步骤默认使用 `desktop/desktop-shell/out/release`。
 
 Windows 打包前的[配置隔离测试](../tools/verification/desktop-profile.test.mjs)验证卸载等待不会漏掉已分离的子孙进程，也不等待无关进程，并覆盖参数、退出码和超时终止。卸载助手先将挂起的根进程加入 Job Object，再恢复执行；完整进程树退出后才能恢复本机配置。失败与超时继续保留备份，具体边界见[桌面交付决策](../.agents/notes/implemented/process/2026-10-17-desktop-release-channel.md)。
 

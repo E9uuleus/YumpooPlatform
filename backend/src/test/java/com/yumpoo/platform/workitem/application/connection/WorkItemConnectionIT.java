@@ -1,17 +1,28 @@
 package com.yumpoo.platform.workitem.application.connection;
 
-import com.yumpoo.platform.workitem.application.DueTimeChange;
-import com.yumpoo.platform.workitem.application.WorkItemCommands;
-import com.yumpoo.platform.workitem.application.WorkItemModels;
-import com.yumpoo.platform.workitem.application.WorkItemService;
-import com.yumpoo.platform.workitem.application.content.ContentRepository;
-import com.yumpoo.platform.workitem.application.label.WorkItemLabelRepository;
+import static com.yumpoo.platform.workitem.application.connection.ConnectionFixture.*;
+import static com.yumpoo.platform.workitem.application.connection.WorkItemConnectionCommands.*;
+import static com.yumpoo.platform.workitem.application.connection.WorkItemConnectionModels.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.PlatformRoleCode;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
+import com.yumpoo.platform.workitem.application.DueTimeChange;
+import com.yumpoo.platform.workitem.application.WorkItemCommandService;
+import com.yumpoo.platform.workitem.application.WorkItemCommands;
+import com.yumpoo.platform.workitem.application.WorkItemModels;
+import com.yumpoo.platform.workitem.application.WorkItemQueryService;
+import com.yumpoo.platform.workitem.application.content.ContentRepository;
+import com.yumpoo.platform.workitem.application.label.WorkItemLabelRepository;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,28 +32,34 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
-
-import static com.yumpoo.platform.workitem.application.connection.ConnectionFixture.*;
-import static com.yumpoo.platform.workitem.application.connection.WorkItemConnectionCommands.*;
-import static com.yumpoo.platform.workitem.application.connection.WorkItemConnectionModels.*;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 @Import({PostgreSqlTestContainerConfiguration.class, ConnectionSqlCounter.Configuration.class})
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE, properties = "yumpoo.outbox.enabled=false")
 @Transactional
 class WorkItemConnectionIT {
-    @Autowired private JdbcClient jdbc;
-    @Autowired private WorkItemService items;
-    @Autowired private ConnectColumnService columns;
-    @Autowired private WorkItemConnectionService connections;
-    @Autowired private ContentRepository contents;
-    @Autowired private WorkItemLabelRepository labels;
-    @Autowired private ObjectMapper json;
+    @Autowired
+    private JdbcClient jdbc;
+
+    @Autowired
+    private WorkItemCommandService items;
+
+    @Autowired
+    private WorkItemQueryService queries;
+
+    @Autowired
+    private ConnectColumnService columns;
+
+    @Autowired
+    private WorkItemConnectionService connections;
+
+    @Autowired
+    private ContentRepository contents;
+
+    @Autowired
+    private WorkItemLabelRepository labels;
+
+    @Autowired
+    private ObjectMapper json;
+
     private ConnectionFixture fixture;
     private CurrentActor sourceOwner;
     private CurrentActor targetOwner;
@@ -71,8 +88,8 @@ class WorkItemConnectionIT {
     @Test
     void nonTargetMemberCreatesRootItemWithMinimalDefaultsAndBothEventsAtomically() {
         long createdBefore = fixture.eventCount("workitem.work_item_created");
-        var command = new CreateConnected(sourceOwner, sourceItem.id(), column.id(), target.id(), "  跨项目反馈  ",
-                null, UUID.randomUUID(), hash());
+        var command = new CreateConnected(
+                sourceOwner, sourceItem.id(), column.id(), target.id(), "  跨项目反馈  ", null, UUID.randomUUID(), hash());
         try (var ignored = correlation()) {
             var first = connections.createConnected(command);
             var view = json.readValue(first.result().responseJson(), ConnectionView.class);
@@ -88,12 +105,24 @@ class WorkItemConnectionIT {
             assertThat(view.target().assignee()).isNull();
             assertThat(view.target().category().id()).isEqualTo(target.contentId());
             var row = jdbc.sql("SELECT * FROM yumpoo.work_item WHERE id=:id")
-                    .param("id", view.target().workItemId()).query().singleRow();
-            for (String field : List.of("priority", "assignee_user_id", "description", "notes", "timeline_start_date",
-                    "timeline_end_date", "due_date", "due_time")) assertThat(row.get(field)).as(field).isNull();
+                    .param("id", view.target().workItemId())
+                    .query()
+                    .singleRow();
+            for (String field : List.of(
+                    "priority",
+                    "assignee_user_id",
+                    "description",
+                    "notes",
+                    "timeline_start_date",
+                    "timeline_end_date",
+                    "due_date",
+                    "due_time")) assertThat(row.get(field)).as(field).isNull();
             assertThat(row.get("reporter_user_id")).isEqualTo(sourceOwner.userId());
             assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_relation WHERE right_work_item_id=:id")
-                    .param("id", view.target().workItemId()).query(Long.class).single()).isZero();
+                            .param("id", view.target().workItemId())
+                            .query(Long.class)
+                            .single())
+                    .isZero();
             assertThat(fixture.eventCount("workitem.work_item_created")).isEqualTo(createdBefore + 1);
             assertThat(fixture.eventCount("workitem.connection_created")).isEqualTo(1);
         }
@@ -102,7 +131,9 @@ class WorkItemConnectionIT {
     @Test
     void createRejectsOutsideColumnDisabledCategoryAndArchivedTarget() {
         assertField(() -> create(sourceOwner, UUID.randomUUID(), null), "CONNECT_TARGET_NOT_IN_COLUMN");
-        jdbc.sql("UPDATE yumpoo.content SET active=false WHERE id=:id").param("id", target.contentId()).update();
+        jdbc.sql("UPDATE yumpoo.content SET active=false WHERE id=:id")
+                .param("id", target.contentId())
+                .update();
         assertField(() -> create(sourceOwner, target.id(), target.contentId()), "CONTENT_NOT_ACTIVE");
         fixture.archive(target);
         assertReason(() -> create(sourceOwner, target.id(), null), "PROJECT_ARCHIVED");
@@ -111,8 +142,12 @@ class WorkItemConnectionIT {
 
     @Test
     void aTargetWithoutEnabledCategoriesReturnsValidationErrorsForOptionsAndCreation() {
-        jdbc.sql("UPDATE yumpoo.content SET active=false WHERE project_id=:id").param("id", target.id()).update();
-        assertField(() -> connections.createOptions(sourceOwner, source.id(), column.id(), target.id()), "CONTENT_NOT_ACTIVE");
+        jdbc.sql("UPDATE yumpoo.content SET active=false WHERE project_id=:id")
+                .param("id", target.id())
+                .update();
+        assertField(
+                () -> connections.createOptions(sourceOwner, source.id(), column.id(), target.id()),
+                "CONTENT_NOT_ACTIVE");
         assertField(() -> create(sourceOwner, target.id(), null), "CONTENT_NOT_ACTIVE");
         assertThat(fixture.eventCount("workitem.connection_created")).isZero();
     }
@@ -130,11 +165,16 @@ class WorkItemConnectionIT {
 
     @Test
     void linkingRejectsArchivedItemsAndFiftyFirstConnection() {
-        jdbc.sql("UPDATE yumpoo.work_item SET archived=true WHERE id=:id").param("id", targetItem.id()).update();
+        jdbc.sql("UPDATE yumpoo.work_item SET archived=true WHERE id=:id")
+                .param("id", targetItem.id())
+                .update();
         assertReason(() -> link(both, targetItem.id()), "WORK_ITEM_ARCHIVED");
-        jdbc.sql("UPDATE yumpoo.work_item SET archived=false WHERE id=:id").param("id", targetItem.id()).update();
+        jdbc.sql("UPDATE yumpoo.work_item SET archived=false WHERE id=:id")
+                .param("id", targetItem.id())
+                .update();
         link(both, targetItem.id());
-        for (int i = 1; i < 50; i++) link(both, fixture.item(targetOwner, target, "目标" + i).id());
+        for (int i = 1; i < 50; i++)
+            link(both, fixture.item(targetOwner, target, "目标" + i).id());
         var extra = fixture.item(targetOwner, target, "第 51 条");
         assertReason(() -> link(both, extra.id()), "CONNECTION_LIMIT");
         assertThat(link(both, targetItem.id()).httpStatus()).isEqualTo(200);
@@ -148,10 +188,13 @@ class WorkItemConnectionIT {
         assertCode(() -> unlink(admin, linked.resourceId(), 0), StandardErrorCode.ACCESS_DENIED);
         assertCode(() -> unlink(sourceOwner, linked.resourceId(), 7), StandardErrorCode.VERSION_CONFLICT);
         var deleted = unlink(targetOwner, linked.resourceId(), 0);
-        assertThat(json.readTree(deleted.responseJson()).path("active").asBoolean()).isFalse();
+        assertThat(json.readTree(deleted.responseJson()).path("active").asBoolean())
+                .isFalse();
         assertReason(() -> unlink(sourceOwner, linked.resourceId(), 0), "CONNECTION_NOT_ACTIVE");
         assertReason(() -> unlink(sourceOwner, linked.resourceId(), 1), "CONNECTION_NOT_ACTIVE");
-        assertThat(unlink(sourceOwner, link(both, targetItem.id()).resourceId(), 0).httpStatus()).isEqualTo(200);
+        assertThat(unlink(sourceOwner, link(both, targetItem.id()).resourceId(), 0)
+                        .httpStatus())
+                .isEqualTo(200);
     }
 
     @Test
@@ -159,7 +202,9 @@ class WorkItemConnectionIT {
         var linked = link(both, targetItem.id());
         fixture.archive(target);
         assertReason(() -> unlink(sourceOwner, linked.resourceId(), 0), "PROJECT_ARCHIVED");
-        jdbc.sql("UPDATE yumpoo.project SET lifecycle='ACTIVE', archived_at=NULL WHERE id=:id").param("id", target.id()).update();
+        jdbc.sql("UPDATE yumpoo.project SET lifecycle='ACTIVE', archived_at=NULL WHERE id=:id")
+                .param("id", target.id())
+                .update();
         deleteItem(targetItem.id(), true);
         assertThat(unlink(sourceOwner, linked.resourceId(), 0).httpStatus()).isEqualTo(200);
     }
@@ -168,19 +213,39 @@ class WorkItemConnectionIT {
     void cardsExposeExactlyAllowedFieldsHideDeletedEndpointsAndIgnoreForeignItemIds() {
         var linked = link(both, targetItem.id());
         var read = connections.find(sourceOwner, linked.resourceId());
-        Set<String> expected = Set.of("workItemId", "itemNo", "title", "archived", "projectId", "projectCode",
-                "projectName", "projectLifecycle", "status", "priority", "category", "assignee", "canOpen", "available");
+        Set<String> expected = Set.of(
+                "workItemId",
+                "itemNo",
+                "title",
+                "archived",
+                "projectId",
+                "projectCode",
+                "projectName",
+                "projectLifecycle",
+                "status",
+                "priority",
+                "category",
+                "assignee",
+                "canOpen",
+                "available");
         assertThat(json.valueToTree(read.target()).propertyNames()).containsExactlyInAnyOrderElementsOf(expected);
         assertThat(read.target().canOpen()).isFalse();
         assertThat(read.target().available()).isTrue();
-        var cells = connections.cells(sourceOwner, source.id(), List.of(sourceItem.id(), targetItem.id(), UUID.randomUUID()));
+        var cells = connections.cells(
+                sourceOwner, source.id(), List.of(sourceItem.id(), targetItem.id(), UUID.randomUUID()));
         assertThat(cells.items()).singleElement().satisfies(cell -> {
             assertThat(cell.workItemId()).isEqualTo(sourceItem.id());
             assertThat(cell.outgoing()).hasSize(1);
         });
-        assertCode(() -> connections.find(fixture.user("旁观者"), linked.resourceId()), StandardErrorCode.RESOURCE_NOT_FOUND);
+        assertCode(
+                () -> connections.find(fixture.user("旁观者"), linked.resourceId()), StandardErrorCode.RESOURCE_NOT_FOUND);
         deleteItem(targetItem.id(), true);
-        assertThat(connections.cells(sourceOwner, source.id(), List.of(sourceItem.id())).items().getFirst().outgoing()).isEmpty();
+        assertThat(connections
+                        .cells(sourceOwner, source.id(), List.of(sourceItem.id()))
+                        .items()
+                        .getFirst()
+                        .outgoing())
+                .isEmpty();
         assertCode(() -> connections.find(sourceOwner, linked.resourceId()), StandardErrorCode.RESOURCE_NOT_FOUND);
         deleteItem(targetItem.id(), false);
         assertThat(connections.find(sourceOwner, linked.resourceId()).id()).isEqualTo(linked.resourceId());
@@ -196,19 +261,38 @@ class WorkItemConnectionIT {
             assertThat(view.source().available()).isTrue();
             assertThat(view.source().title()).isEqualTo(sourceItem.title());
             assertThat(view.capabilities().canUnlink()).isFalse();
-            var outgoing = connections.cells(actor, source.id(), List.of(sourceItem.id())).items().getFirst()
-                    .outgoing().getFirst().connections();
-            assertThat(outgoing).singleElement().satisfies(value -> assertUnavailable(value.target(), targetItem.id(), target.id()));
-            assertThat(columns.catalog(actor, source.id()).items().getFirst().targets()).singleElement().satisfies(value -> {
-                assertThat(value.projectId()).isEqualTo(target.id());
-                assertThat(value.available()).isFalse();
-                assertThat(value.name()).isEqualTo("不可访问的项目");
-                assertThat(value.code()).isEqualTo("—");
-                assertThat(value.actorCanLinkExisting()).isFalse();
-            });
-            assertCode(() -> connections.createOptions(actor, source.id(), column.id(), target.id()), StandardErrorCode.RESOURCE_NOT_FOUND);
-            assertCode(() -> connections.candidates(actor, source.id(), column.id(), target.id(), sourceItem.id(), search(""),
-                    new OffsetPageRequest(0, 20)), StandardErrorCode.RESOURCE_NOT_FOUND);
+            var outgoing = connections
+                    .cells(actor, source.id(), List.of(sourceItem.id()))
+                    .items()
+                    .getFirst()
+                    .outgoing()
+                    .getFirst()
+                    .connections();
+            assertThat(outgoing)
+                    .singleElement()
+                    .satisfies(value -> assertUnavailable(value.target(), targetItem.id(), target.id()));
+            assertThat(columns.catalog(actor, source.id()).items().getFirst().targets())
+                    .singleElement()
+                    .satisfies(value -> {
+                        assertThat(value.projectId()).isEqualTo(target.id());
+                        assertThat(value.available()).isFalse();
+                        assertThat(value.name()).isEqualTo("不可访问的项目");
+                        assertThat(value.code()).isEqualTo("—");
+                        assertThat(value.actorCanLinkExisting()).isFalse();
+                    });
+            assertCode(
+                    () -> connections.createOptions(actor, source.id(), column.id(), target.id()),
+                    StandardErrorCode.RESOURCE_NOT_FOUND);
+            assertCode(
+                    () -> connections.candidates(
+                            actor,
+                            source.id(),
+                            column.id(),
+                            target.id(),
+                            sourceItem.id(),
+                            search(""),
+                            new OffsetPageRequest(0, 20)),
+                    StandardErrorCode.RESOURCE_NOT_FOUND);
         }
         var adminUser = fixture.user("连接只读管理员");
         var admin = new CurrentActor(adminUser.userId(), COMPANY, 0, Set.of(PlatformRoleCode.COMPANY_ADMIN));
@@ -220,30 +304,46 @@ class WorkItemConnectionIT {
             assertThat(view.target().projectName()).isEqualTo("目标项目");
             assertThat(view.capabilities().canUnlink()).isFalse();
         }
-        assertThat(columns.catalog(admin, source.id()).items().getFirst().targets()).singleElement().satisfies(value -> {
-            assertThat(value.available()).isTrue();
-            assertThat(value.name()).isEqualTo("目标项目");
-        });
-        jdbc.sql("UPDATE yumpoo.project SET lifecycle='ACTIVE', archived_at=NULL WHERE id=:id").param("id", target.id()).update();
+        assertThat(columns.catalog(admin, source.id()).items().getFirst().targets())
+                .singleElement()
+                .satisfies(value -> {
+                    assertThat(value.available()).isTrue();
+                    assertThat(value.name()).isEqualTo("目标项目");
+                });
+        jdbc.sql("UPDATE yumpoo.project SET lifecycle='ACTIVE', archived_at=NULL WHERE id=:id")
+                .param("id", target.id())
+                .update();
         assertThat(connections.find(both, linked.resourceId()).target().title()).isEqualTo(targetItem.title());
         fixture.archive(source);
         var incoming = connections.find(targetOwner, linked.resourceId());
         assertUnavailable(incoming.source(), sourceItem.id(), source.id());
         assertThat(incoming.columnName()).isEqualTo("不可访问的连接列");
         assertThat(incoming.target().available()).isTrue();
-        assertCode(() -> connections.reverseCandidates(targetOwner, targetItem.id(), column.id(), search(""),
-                new OffsetPageRequest(0, 20)), StandardErrorCode.RESOURCE_NOT_FOUND);
-        assertThat(columns.catalog(targetOwner, target.id()).incomingColumns()).singleElement().satisfies(value -> {
-            assertThat(value.available()).isFalse();
-            assertThat(value.columnName()).isEqualTo("不可访问的连接列");
-            assertThat(value.projectName()).isEqualTo("不可访问的项目");
-            assertThat(value.projectCode()).isEqualTo("—");
-        });
-        assertCode(() -> connections.cells(both, source.id(), List.of(sourceItem.id())), StandardErrorCode.RESOURCE_NOT_FOUND);
+        assertCode(
+                () -> connections.reverseCandidates(
+                        targetOwner, targetItem.id(), column.id(), search(""), new OffsetPageRequest(0, 20)),
+                StandardErrorCode.RESOURCE_NOT_FOUND);
+        assertThat(columns.catalog(targetOwner, target.id()).incomingColumns())
+                .singleElement()
+                .satisfies(value -> {
+                    assertThat(value.available()).isFalse();
+                    assertThat(value.columnName()).isEqualTo("不可访问的连接列");
+                    assertThat(value.projectName()).isEqualTo("不可访问的项目");
+                    assertThat(value.projectCode()).isEqualTo("—");
+                });
+        assertCode(
+                () -> connections.cells(both, source.id(), List.of(sourceItem.id())),
+                StandardErrorCode.RESOURCE_NOT_FOUND);
         assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_connection WHERE id=:id AND deleted_at IS NULL")
-                .param("id", linked.resourceId()).query(Long.class).single()).isEqualTo(1);
-        assertThat(jdbc.sql("SELECT lifecycle FROM yumpoo.project WHERE id=:id").param("id", target.id())
-                .query(String.class).single()).isEqualTo("ACTIVE");
+                        .param("id", linked.resourceId())
+                        .query(Long.class)
+                        .single())
+                .isEqualTo(1);
+        assertThat(jdbc.sql("SELECT lifecycle FROM yumpoo.project WHERE id=:id")
+                        .param("id", target.id())
+                        .query(String.class)
+                        .single())
+                .isEqualTo("ACTIVE");
     }
 
     private static void assertUnavailable(ConnectionCard card, UUID itemId, UUID projectId) {
@@ -275,30 +375,45 @@ class WorkItemConnectionIT {
         var thirdItem = fixture.item(thirdOwner, thirdProject, "其他来源事项");
         var thirdColumn = fixture.column(thirdOwner, thirdProject, "其他列", target.id());
         try (var ignored = correlation()) {
-            connections.link(new Link(thirdOwner, thirdItem.id(), thirdColumn.id(), targetItem.id(), UUID.randomUUID(), hash()));
+            connections.link(
+                    new Link(thirdOwner, thirdItem.id(), thirdColumn.id(), targetItem.id(), UUID.randomUUID(), hash()));
         }
-        var cell = connections.cells(targetOwner, target.id(), List.of(targetItem.id())).items().getFirst();
-        assertThat(cell.incoming()).hasSize(50).allSatisfy(value -> assertThat(value.columnId()).isEqualTo(column.id()));
+        var cell = connections
+                .cells(targetOwner, target.id(), List.of(targetItem.id()))
+                .items()
+                .getFirst();
+        assertThat(cell.incoming())
+                .hasSize(50)
+                .allSatisfy(value -> assertThat(value.columnId()).isEqualTo(column.id()));
         assertThat(cell.incomingTotal()).isEqualTo(52);
-        assertThat(cell.incomingByColumn()).hasSize(2).anySatisfy(value -> {
-            assertThat(value.columnId()).isEqualTo(column.id());
-            assertThat(value.connections()).hasSize(50);
-            assertThat(value.total()).isEqualTo(51);
-        }).anySatisfy(value -> {
-            assertThat(value.columnId()).isEqualTo(thirdColumn.id());
-            assertThat(value.connections()).singleElement().satisfies(connection ->
-                    assertThat(connection.source().workItemId()).isEqualTo(thirdItem.id()));
-            assertThat(value.total()).isEqualTo(1);
-        });
-        var thirdOnly = connections.incoming(targetOwner, targetItem.id(), thirdColumn.id(), new OffsetPageRequest(0, 50));
+        assertThat(cell.incomingByColumn())
+                .hasSize(2)
+                .anySatisfy(value -> {
+                    assertThat(value.columnId()).isEqualTo(column.id());
+                    assertThat(value.connections()).hasSize(50);
+                    assertThat(value.total()).isEqualTo(51);
+                })
+                .anySatisfy(value -> {
+                    assertThat(value.columnId()).isEqualTo(thirdColumn.id());
+                    assertThat(value.connections())
+                            .singleElement()
+                            .satisfies(connection ->
+                                    assertThat(connection.source().workItemId()).isEqualTo(thirdItem.id()));
+                    assertThat(value.total()).isEqualTo(1);
+                });
+        var thirdOnly =
+                connections.incoming(targetOwner, targetItem.id(), thirdColumn.id(), new OffsetPageRequest(0, 50));
         assertThat(thirdOnly.totalElements()).isEqualTo(1);
-        assertThat(thirdOnly.items()).singleElement().satisfies(value -> assertThat(value.columnId()).isEqualTo(thirdColumn.id()));
+        assertThat(thirdOnly.items())
+                .singleElement()
+                .satisfies(value -> assertThat(value.columnId()).isEqualTo(thirdColumn.id()));
         var full = connections.incoming(targetOwner, targetItem.id(), null, new OffsetPageRequest(1, 50));
         assertThat(full.totalElements()).isEqualTo(52);
         assertThat(full.items()).hasSize(2);
         var sourceOnly = connections.incoming(sourceOwner, targetItem.id(), null, new OffsetPageRequest(0, 50));
         assertThat(sourceOnly.totalElements()).isEqualTo(51);
-        assertThat(sourceOnly.items()).allSatisfy(value -> assertThat(value.source().projectId()).isEqualTo(source.id()));
+        assertThat(sourceOnly.items())
+                .allSatisfy(value -> assertThat(value.source().projectId()).isEqualTo(source.id()));
     }
 
     @Test
@@ -306,22 +421,56 @@ class WorkItemConnectionIT {
         var options = connections.createOptions(sourceOwner, source.id(), column.id(), target.id());
         assertThat(options.defaultContentId()).isEqualTo(target.contentId());
         assertThat(options.categories()).hasSize(2);
-        assertCode(() -> connections.candidates(sourceOwner, source.id(), column.id(), target.id(), sourceItem.id(),
-                search("目标"), new OffsetPageRequest(0, 20)), StandardErrorCode.ACCESS_DENIED);
+        assertCode(
+                () -> connections.candidates(
+                        sourceOwner,
+                        source.id(),
+                        column.id(),
+                        target.id(),
+                        sourceItem.id(),
+                        search("目标"),
+                        new OffsetPageRequest(0, 20)),
+                StandardErrorCode.ACCESS_DENIED);
         link(both, targetItem.id());
-        var candidates = connections.candidates(both, source.id(), column.id(), target.id(), sourceItem.id(),
-                search(targetItem.itemNo()), new OffsetPageRequest(0, 20));
+        var candidates = connections.candidates(
+                both,
+                source.id(),
+                column.id(),
+                target.id(),
+                sourceItem.id(),
+                search(targetItem.itemNo()),
+                new OffsetPageRequest(0, 20));
         assertThat(candidates.items()).singleElement().satisfies(value -> {
             assertThat(value.alreadyConnected()).isTrue();
             assertThat(value.card().workItemId()).isEqualTo(targetItem.id());
         });
         try (var ignored = correlation()) {
-            var childResult = items.createSubitem(new WorkItemCommands.CreateSubitem(targetOwner, targetItem.id(), target.contentId(),
-                    "候选子项", null, null, null, null, null, null, null, UUID.randomUUID(), hash(), DueTimeChange.unchanged()));
-            var children = connections.candidates(both, source.id(), column.id(), target.id(), sourceItem.id(),
-                    search("候选子项"), new OffsetPageRequest(0, 20));
+            var childResult = items.createSubitem(new WorkItemCommands.CreateSubitem(
+                    targetOwner,
+                    targetItem.id(),
+                    target.contentId(),
+                    "候选子项",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    UUID.randomUUID(),
+                    hash(),
+                    DueTimeChange.unchanged()));
+            var children = connections.candidates(
+                    both,
+                    source.id(),
+                    column.id(),
+                    target.id(),
+                    sourceItem.id(),
+                    search("候选子项"),
+                    new OffsetPageRequest(0, 20));
             assertThat(children.items()).singleElement().satisfies(value -> {
-                assertThat(value.card().workItemId()).isEqualTo(childResult.result().resourceId());
+                assertThat(value.card().workItemId())
+                        .isEqualTo(childResult.result().resourceId());
                 assertThat(value.parent().workItemId()).isEqualTo(targetItem.id());
             });
         }
@@ -333,15 +482,21 @@ class WorkItemConnectionIT {
         fixture.member(target.id(), assignee);
         var assigned = fixture.item(targetOwner, target, "Beta 跟进", assignee.userId());
         var urgent = fixture.item(targetOwner, target, "alpha 跟进");
-        jdbc.sql("UPDATE yumpoo.work_item SET priority='URGENT' WHERE id=:id").param("id", urgent.id()).update();
+        jdbc.sql("UPDATE yumpoo.work_item SET priority='URGENT' WHERE id=:id")
+                .param("id", urgent.id())
+                .update();
         assertThat(candidateIds(search(""))).containsExactlyInAnyOrder(targetItem.id(), assigned.id(), urgent.id());
-        assertThat(candidateIds(ConnectCandidateSearch.of("", null, "title"))).containsExactly(urgent.id(), assigned.id(), targetItem.id());
-        assertThat(candidateIds(ConnectCandidateSearch.of("检索处理人", List.of("ASSIGNEE"), null))).containsExactly(assigned.id());
+        assertThat(candidateIds(ConnectCandidateSearch.of("", null, "title")))
+                .containsExactly(urgent.id(), assigned.id(), targetItem.id());
+        assertThat(candidateIds(ConnectCandidateSearch.of("检索处理人", List.of("ASSIGNEE"), null)))
+                .containsExactly(assigned.id());
         assertThat(candidateIds(search("检索处理人"))).isEmpty();
-        assertThat(candidateIds(ConnectCandidateSearch.of("紧急", List.of("PRIORITY"), null))).containsExactly(urgent.id());
+        assertThat(candidateIds(ConnectCandidateSearch.of("紧急", List.of("PRIORITY"), null)))
+                .containsExactly(urgent.id());
         assertThat(candidateIds(ConnectCandidateSearch.of("未开始", List.of("STATUS"), null)))
                 .containsExactlyInAnyOrder(targetItem.id(), assigned.id(), urgent.id());
-        assertThat(candidateIds(ConnectCandidateSearch.of("需求", List.of("CONTENT"), null))).hasSize(3);
+        assertThat(candidateIds(ConnectCandidateSearch.of("需求", List.of("CONTENT"), null)))
+                .hasSize(3);
         assertThat(candidateIds(ConnectCandidateSearch.of("跟进", List.of("STATUS", "NAME"), null)))
                 .containsExactlyInAnyOrder(assigned.id(), urgent.id());
         assertField(() -> ConnectCandidateSearch.of("x".repeat(81), null, null), "INVALID_LENGTH");
@@ -352,22 +507,29 @@ class WorkItemConnectionIT {
     @Test
     void reverseColumnSearchesAndCreatesInSourceProjectOnlyForMembersOfBothProjects() {
         var page = new OffsetPageRequest(0, 20);
-        assertCode(() -> connections.reverseCandidates(targetOwner, targetItem.id(), column.id(), search(""), page),
+        assertCode(
+                () -> connections.reverseCandidates(targetOwner, targetItem.id(), column.id(), search(""), page),
                 StandardErrorCode.ACCESS_DENIED);
-        assertThat(connections.reverseCandidates(both, targetItem.id(), column.id(), search(""), page).items())
-                .singleElement().satisfies(value -> {
+        assertThat(connections
+                        .reverseCandidates(both, targetItem.id(), column.id(), search(""), page)
+                        .items())
+                .singleElement()
+                .satisfies(value -> {
                     assertThat(value.card().workItemId()).isEqualTo(sourceItem.id());
                     assertThat(value.alreadyConnected()).isFalse();
                 });
         link(both, targetItem.id());
-        assertThat(connections.reverseCandidates(both, targetItem.id(), column.id(), search(sourceItem.itemNo()), page).items())
-                .singleElement().satisfies(value -> assertThat(value.alreadyConnected()).isTrue());
+        assertThat(connections
+                        .reverseCandidates(both, targetItem.id(), column.id(), search(sourceItem.itemNo()), page)
+                        .items())
+                .singleElement()
+                .satisfies(value -> assertThat(value.alreadyConnected()).isTrue());
         var options = connections.reverseCreateOptions(both, targetItem.id(), column.id());
         assertThat(options.targetProjectId()).isEqualTo(source.id());
         assertThat(options.defaultContentId()).isEqualTo(source.contentId());
         long createdBefore = fixture.eventCount("workitem.work_item_created");
-        var command = new CreateReverseConnected(both, targetItem.id(), column.id(), "  反向反馈  ", null,
-                UUID.randomUUID(), hash());
+        var command = new CreateReverseConnected(
+                both, targetItem.id(), column.id(), "  反向反馈  ", null, UUID.randomUUID(), hash());
         try (var ignored = correlation()) {
             var first = connections.reverseCreateConnected(command);
             assertThat(first.result().httpStatus()).isEqualTo(201);
@@ -378,52 +540,76 @@ class WorkItemConnectionIT {
             assertThat(view.source().projectId()).isEqualTo(source.id());
             assertThat(view.source().title()).isEqualTo("反向反馈");
             assertThat(view.target().workItemId()).isEqualTo(targetItem.id());
-            assertCode(() -> connections.reverseCreateConnected(new CreateReverseConnected(targetOwner, targetItem.id(),
-                    column.id(), "越权", null, UUID.randomUUID(), hash())), StandardErrorCode.ACCESS_DENIED);
+            assertCode(
+                    () -> connections.reverseCreateConnected(new CreateReverseConnected(
+                            targetOwner, targetItem.id(), column.id(), "越权", null, UUID.randomUUID(), hash())),
+                    StandardErrorCode.ACCESS_DENIED);
         }
         assertThat(fixture.eventCount("workitem.work_item_created")).isEqualTo(createdBefore + 1);
-        var unrelated = fixture.column(sourceOwner, source, "无关列", fixture.project(sourceOwner, "第三项目").id());
-        assertCode(() -> connections.reverseCandidates(both, targetItem.id(), unrelated.id(), search(""), page),
+        var unrelated = fixture.column(
+                sourceOwner, source, "无关列", fixture.project(sourceOwner, "第三项目").id());
+        assertCode(
+                () -> connections.reverseCandidates(both, targetItem.id(), unrelated.id(), search(""), page),
                 StandardErrorCode.RESOURCE_NOT_FOUND);
-        var cell = connections.cells(targetOwner, target.id(), List.of(targetItem.id())).items().getFirst();
+        var cell = connections
+                .cells(targetOwner, target.id(), List.of(targetItem.id()))
+                .items()
+                .getFirst();
         assertThat(cell.incomingByColumn()).singleElement().satisfies(value -> {
             assertThat(value.columnId()).isEqualTo(column.id());
             assertThat(value.total()).isEqualTo(2);
         });
-        assertThat(columns.catalog(both, target.id()).incomingColumns()).singleElement().satisfies(value -> {
-            assertThat(value.actorCanLinkExisting()).isTrue();
-            assertThat(value.projectLifecycle()).isEqualTo("ACTIVE");
-        });
-        assertThat(columns.catalog(targetOwner, target.id()).incomingColumns().getFirst().actorCanLinkExisting()).isFalse();
+        assertThat(columns.catalog(both, target.id()).incomingColumns())
+                .singleElement()
+                .satisfies(value -> {
+                    assertThat(value.actorCanLinkExisting()).isTrue();
+                    assertThat(value.projectLifecycle()).isEqualTo("ACTIVE");
+                });
+        assertThat(columns.catalog(targetOwner, target.id())
+                        .incomingColumns()
+                        .getFirst()
+                        .actorCanLinkExisting())
+                .isFalse();
         fixture.archive(source);
-        assertCode(() -> connections.reverseCandidates(both, targetItem.id(), column.id(), search(""), page), StandardErrorCode.RESOURCE_NOT_FOUND);
+        assertCode(
+                () -> connections.reverseCandidates(both, targetItem.id(), column.id(), search(""), page),
+                StandardErrorCode.RESOURCE_NOT_FOUND);
     }
 
     @Test
     void usedTargetCannotBeRemovedAndOwnerColumnDeleteSoftDeletesConnectionsOnce() {
         var other = fixture.project(sourceOwner, "备用目标");
         try (var ignored = correlation()) {
-            columns.update(new ConnectColumnCommands.Update(sourceOwner, source.id(), column.id(), 0,
-                    column.name(), List.of(target.id(), other.id())));
+            columns.update(new ConnectColumnCommands.Update(
+                    sourceOwner, source.id(), column.id(), 0, column.name(), List.of(target.id(), other.id())));
         }
         var linked = link(both, targetItem.id());
         try (var ignored = correlation()) {
-            assertThatThrownBy(() -> columns.update(new ConnectColumnCommands.Update(sourceOwner, source.id(), column.id(), 1,
-                    column.name(), List.of(other.id())))).isInstanceOfSatisfying(ApplicationException.class, error -> {
+            assertThatThrownBy(() -> columns.update(new ConnectColumnCommands.Update(
+                            sourceOwner, source.id(), column.id(), 1, column.name(), List.of(other.id()))))
+                    .isInstanceOfSatisfying(ApplicationException.class, error -> {
                         assertThat(error.reason()).isEqualTo("CONNECT_TARGET_IN_USE");
-                        assertThat(error.safeDetails()).containsEntry("targetProjectId", target.id())
+                        assertThat(error.safeDetails())
+                                .containsEntry("targetProjectId", target.id())
                                 .containsEntry("activeConnectionCount", 1L);
                     });
-            var deleted = columns.delete(new ConnectColumnCommands.Delete(sourceOwner, source.id(), column.id(), 1,
-                    UUID.randomUUID(), hash()));
-            assertThat(json.readTree(deleted.result().responseJson()).path("removedConnectionCount").asLong()).isEqualTo(1);
+            var deleted = columns.delete(new ConnectColumnCommands.Delete(
+                    sourceOwner, source.id(), column.id(), 1, UUID.randomUUID(), hash()));
+            assertThat(json.readTree(deleted.result().responseJson())
+                            .path("removedConnectionCount")
+                            .asLong())
+                    .isEqualTo(1);
         }
         assertThat(jdbc.sql("SELECT delete_reason FROM yumpoo.work_item_connection WHERE id=:id")
-                .param("id", linked.resourceId()).query(String.class).single()).isEqualTo("COLUMN_DELETED");
+                        .param("id", linked.resourceId())
+                        .query(String.class)
+                        .single())
+                .isEqualTo("COLUMN_DELETED");
         assertThat(fixture.eventCount("workitem.connection_deleted")).isZero();
         assertReason(() -> unlink(sourceOwner, linked.resourceId(), 0), "CONNECTION_NOT_ACTIVE");
-        assertThat(columns.catalog(targetOwner, target.id()).incomingAvailable()).isFalse();
-        assertThat(items.find(targetOwner, targetItem.id()).id()).isEqualTo(targetItem.id());
+        assertThat(columns.catalog(targetOwner, target.id()).incomingAvailable())
+                .isFalse();
+        assertThat(queries.find(targetOwner, targetItem.id()).id()).isEqualTo(targetItem.id());
     }
 
     @Test
@@ -439,12 +625,19 @@ class WorkItemConnectionIT {
         var targets = new ArrayList<UUID>();
         var incomingColumns = new ArrayList<UUID>();
         for (int i = 0; i < projects.size(); i++) {
-            targets.add(fixture.item(owners.get(i), projects.get(i), "批量目标" + i, assignees.get(i)).id());
-            incomingColumns.add(fixture.column(owners.get(i), projects.get(i), "回连", source.id()).id());
+            targets.add(fixture.item(owners.get(i), projects.get(i), "批量目标" + i, assignees.get(i))
+                    .id());
+            incomingColumns.add(fixture.column(owners.get(i), projects.get(i), "回连", source.id())
+                    .id());
         }
         try (var ignored = correlation()) {
-            columns.update(new ConnectColumnCommands.Update(sourceOwner, source.id(), column.id(), 0,
-                    column.name(), projects.stream().map(Project::id).toList()));
+            columns.update(new ConnectColumnCommands.Update(
+                    sourceOwner,
+                    source.id(),
+                    column.id(),
+                    0,
+                    column.name(),
+                    projects.stream().map(Project::id).toList()));
         }
         List<UUID> ids = new ArrayList<>();
         for (int i = 0; i < 100; i++) {
@@ -455,19 +648,28 @@ class WorkItemConnectionIT {
             try (var ignored = correlation()) {
                 for (UUID targetId : targets)
                     connections.link(new Link(both, item.id(), column.id(), targetId, UUID.randomUUID(), hash()));
-                connections.link(new Link(both, incoming.id(), incomingColumns.get(project), item.id(), UUID.randomUUID(), hash()));
+                connections.link(new Link(
+                        both, incoming.id(), incomingColumns.get(project), item.id(), UUID.randomUUID(), hash()));
             }
         }
         for (int i = 0; i < 52; i++) {
             int project = i % projects.size();
-            var incoming = fixture.item(owners.get(project), projects.get(project), "窗口上限入站" + i, assignees.get(project));
+            var incoming =
+                    fixture.item(owners.get(project), projects.get(project), "窗口上限入站" + i, assignees.get(project));
             try (var ignored = correlation()) {
-                connections.link(new Link(both, incoming.id(), incomingColumns.get(project), ids.getFirst(), UUID.randomUUID(), hash()));
+                connections.link(new Link(
+                        both, incoming.id(), incomingColumns.get(project), ids.getFirst(), UUID.randomUUID(), hash()));
             }
         }
-        int one = ConnectionSqlCounter.count(() -> assertThat(connections.cells(sourceOwner, source.id(), List.of(sourceItem.id())).items()).hasSize(1));
-        int mixedOne = ConnectionSqlCounter.count(() -> assertThat(connections.cells(sourceOwner, source.id(), List.of(ids.getFirst())).items())
-                .singleElement().satisfies(cell -> {
+        int one = ConnectionSqlCounter.count(() -> assertThat(connections
+                        .cells(sourceOwner, source.id(), List.of(sourceItem.id()))
+                        .items())
+                .hasSize(1));
+        int mixedOne = ConnectionSqlCounter.count(() -> assertThat(connections
+                        .cells(sourceOwner, source.id(), List.of(ids.getFirst()))
+                        .items())
+                .singleElement()
+                .satisfies(cell -> {
                     assertThat(cell.outgoing().getFirst().connections()).hasSize(3);
                     assertThat(cell.incoming()).hasSize(50);
                     assertThat(cell.incomingTotal()).isEqualTo(53);
@@ -480,62 +682,106 @@ class WorkItemConnectionIT {
                 assertThat(cell.incoming()).isNotEmpty();
             });
             var outgoing = cells.getFirst().outgoing().getFirst().connections();
-            assertThat(outgoing).extracting(value -> value.target().projectId()).containsExactlyInAnyOrderElementsOf(projects.stream().map(Project::id).toList());
-            assertThat(outgoing).extracting(value -> value.target().assignee().userId()).containsExactlyInAnyOrderElementsOf(assignees);
-            assertThat(outgoing).extracting(value -> value.target().canOpen()).containsExactlyInAnyOrder(false, false, true);
-            assertThat(cells).filteredOn(cell -> cell.workItemId().equals(ids.getFirst())).singleElement().satisfies(cell -> {
-                assertThat(cell.incoming()).hasSize(50);
-                assertThat(cell.incomingTotal()).isEqualTo(53);
-            });
+            assertThat(outgoing)
+                    .extracting(value -> value.target().projectId())
+                    .containsExactlyInAnyOrderElementsOf(
+                            projects.stream().map(Project::id).toList());
+            assertThat(outgoing)
+                    .extracting(value -> value.target().assignee().userId())
+                    .containsExactlyInAnyOrderElementsOf(assignees);
+            assertThat(outgoing)
+                    .extracting(value -> value.target().canOpen())
+                    .containsExactlyInAnyOrder(false, false, true);
+            assertThat(cells)
+                    .filteredOn(cell -> cell.workItemId().equals(ids.getFirst()))
+                    .singleElement()
+                    .satisfies(cell -> {
+                        assertThat(cell.incoming()).hasSize(50);
+                        assertThat(cell.incomingTotal()).isEqualTo(53);
+                    });
         });
         assertThat(one).isEqualTo(8);
         assertThat(mixedOne).isEqualTo(one);
         assertThat(hundred).isEqualTo(one);
     }
 
-    private com.yumpoo.platform.foundation.application.idempotency.StoredCommandResult create(CurrentActor actor, UUID targetId, UUID contentId) {
+    private com.yumpoo.platform.foundation.application.idempotency.StoredCommandResult create(
+            CurrentActor actor, UUID targetId, UUID contentId) {
         try (var ignored = correlation()) {
-            return connections.createConnected(new CreateConnected(actor, sourceItem.id(), column.id(), targetId,
-                    "新建", contentId, UUID.randomUUID(), hash())).result();
+            return connections
+                    .createConnected(new CreateConnected(
+                            actor, sourceItem.id(), column.id(), targetId, "新建", contentId, UUID.randomUUID(), hash()))
+                    .result();
         }
     }
 
-    private com.yumpoo.platform.foundation.application.idempotency.StoredCommandResult link(CurrentActor actor, UUID targetId) {
+    private com.yumpoo.platform.foundation.application.idempotency.StoredCommandResult link(
+            CurrentActor actor, UUID targetId) {
         try (var ignored = correlation()) {
-            return connections.link(new Link(actor, sourceItem.id(), column.id(), targetId, UUID.randomUUID(), hash())).result();
+            return connections
+                    .link(new Link(actor, sourceItem.id(), column.id(), targetId, UUID.randomUUID(), hash()))
+                    .result();
         }
     }
 
-    private com.yumpoo.platform.foundation.application.idempotency.StoredCommandResult unlink(CurrentActor actor, UUID id, long version) {
+    private com.yumpoo.platform.foundation.application.idempotency.StoredCommandResult unlink(
+            CurrentActor actor, UUID id, long version) {
         try (var ignored = correlation()) {
-            return connections.unlink(new Unlink(actor, id, version, UUID.randomUUID(), hash())).result();
+            return connections
+                    .unlink(new Unlink(actor, id, version, UUID.randomUUID(), hash()))
+                    .result();
         }
     }
 
     private void deleteItem(UUID id, boolean deleted) {
-        jdbc.sql(deleted ? "UPDATE yumpoo.work_item SET deleted_at=clock_timestamp(), deleted_by_user_id=:actor, delete_reason='fixture' WHERE id=:id"
-                        : "UPDATE yumpoo.work_item SET deleted_at=NULL, deleted_by_user_id=NULL, delete_reason=NULL WHERE id=:id")
-                .param("id", id).param("actor", targetOwner.userId()).update();
+        jdbc.sql(
+                        deleted
+                                ? "UPDATE yumpoo.work_item SET deleted_at=clock_timestamp(), deleted_by_user_id=:actor, delete_reason='fixture' WHERE id=:id"
+                                : "UPDATE yumpoo.work_item SET deleted_at=NULL, deleted_by_user_id=NULL, delete_reason=NULL WHERE id=:id")
+                .param("id", id)
+                .param("actor", targetOwner.userId())
+                .update();
     }
 
     private List<UUID> candidateIds(ConnectCandidateSearch search) {
-        return connections.candidates(both, source.id(), column.id(), target.id(), sourceItem.id(), search,
-                new OffsetPageRequest(0, 20)).items().stream().map(value -> value.card().workItemId()).toList();
+        return connections
+                .candidates(
+                        both,
+                        source.id(),
+                        column.id(),
+                        target.id(),
+                        sourceItem.id(),
+                        search,
+                        new OffsetPageRequest(0, 20))
+                .items()
+                .stream()
+                .map(value -> value.card().workItemId())
+                .toList();
     }
 
-    private static ConnectCandidateSearch search(String text) { return ConnectCandidateSearch.of(text, null, null); }
+    private static ConnectCandidateSearch search(String text) {
+        return ConnectCandidateSearch.of(text, null, null);
+    }
 
     private static void assertReason(Runnable operation, String reason) {
-        assertThatThrownBy(operation::run).isInstanceOfSatisfying(ApplicationException.class, error -> assertThat(error.reason()).isEqualTo(reason));
+        assertThatThrownBy(operation::run)
+                .isInstanceOfSatisfying(
+                        ApplicationException.class,
+                        error -> assertThat(error.reason()).isEqualTo(reason));
     }
+
     private static void assertCode(Runnable operation, StandardErrorCode code) {
-        assertThatThrownBy(operation::run).isInstanceOfSatisfying(ApplicationException.class, error -> assertThat(error.errorCode()).isEqualTo(code));
+        assertThatThrownBy(operation::run)
+                .isInstanceOfSatisfying(
+                        ApplicationException.class,
+                        error -> assertThat(error.errorCode()).isEqualTo(code));
     }
+
     private static void assertField(Runnable operation, String code) {
-        assertThatThrownBy(operation::run).isInstanceOfSatisfying(ApplicationException.class,
-                error -> {
-                    assertThat(error.errorCode()).isEqualTo(StandardErrorCode.VALIDATION_FAILED);
-                    assertThat(error.fieldViolations()).anySatisfy(field -> assertThat(field.code()).isEqualTo(code));
-                });
+        assertThatThrownBy(operation::run).isInstanceOfSatisfying(ApplicationException.class, error -> {
+            assertThat(error.errorCode()).isEqualTo(StandardErrorCode.VALIDATION_FAILED);
+            assertThat(error.fieldViolations())
+                    .anySatisfy(field -> assertThat(field.code()).isEqualTo(code));
+        });
     }
 }

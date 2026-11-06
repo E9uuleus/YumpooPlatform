@@ -4,10 +4,9 @@ import com.yumpoo.platform.audit.api.ActivityProjectionContextPort;
 import com.yumpoo.platform.catalog.api.ProjectDeletionQuery;
 import com.yumpoo.platform.identityaccess.api.MinimalUserSnapshotQuery;
 import com.yumpoo.platform.workitem.api.WorkItemActivitySourceQuery;
-import org.springframework.stereotype.Component;
-
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.stereotype.Component;
 
 @Component
 public class ActivityProjectionContextAdapter implements ActivityProjectionContextPort {
@@ -15,14 +14,15 @@ public class ActivityProjectionContextAdapter implements ActivityProjectionConte
     private final WorkItemActivitySourceQuery workItems;
     private final ProjectDeletionQuery deletion;
 
-    public ActivityProjectionContextAdapter(MinimalUserSnapshotQuery users,
-            WorkItemActivitySourceQuery workItems, ProjectDeletionQuery deletion) {
+    public ActivityProjectionContextAdapter(
+            MinimalUserSnapshotQuery users, WorkItemActivitySourceQuery workItems, ProjectDeletionQuery deletion) {
         this.users = users;
         this.workItems = workItems;
         this.deletion = deletion;
     }
 
-    @Override public boolean projectPurging(UUID companyId, UUID projectId) {
+    @Override
+    public boolean projectPurging(UUID companyId, UUID projectId) {
         return deletion.purgingOrPurged(companyId, projectId);
     }
 
@@ -37,33 +37,32 @@ public class ActivityProjectionContextAdapter implements ActivityProjectionConte
     }
 
     @Override
-    public Optional<WorkItemReference> attachmentOwnerWorkItem(UUID companyId, String ownerType,
-            UUID ownerId) {
-        return workItems.findAttachmentOwner(companyId, ownerType, ownerId)
-                .map(ActivityProjectionContextAdapter::map);
+    public Optional<WorkItemReference> attachmentOwnerWorkItem(UUID companyId, String ownerType, UUID ownerId) {
+        return workItems.findAttachmentOwner(companyId, ownerType, ownerId).map(ActivityProjectionContextAdapter::map);
     }
 
     @Override
     public Optional<ContentReference> content(UUID companyId, UUID projectId, UUID contentId) {
-        return workItems.findContent(companyId, projectId, contentId)
+        return workItems
+                .findContent(companyId, projectId, contentId)
                 .map(value -> new ContentReference(value.id(), value.displayName()));
     }
 
     @Override
     public Optional<LabelReference> status(UUID companyId, UUID projectId, String code) {
-        return workItems.findStatus(companyId, projectId, code)
+        return workItems
+                .findStatus(companyId, projectId, code)
                 .map(value -> new LabelReference(value.code(), value.displayName(), value.colorToken()));
     }
 
     @Override
     public Optional<LabelReference> priority(UUID companyId, UUID projectId, String code) {
-        return workItems.findPriority(companyId, projectId, code)
+        return workItems
+                .findPriority(companyId, projectId, code)
                 .map(value -> new LabelReference(value.code(), value.displayName(), value.colorToken()));
     }
 
-    private static WorkItemReference map(
-            WorkItemActivitySourceQuery.WorkItemActivityReference reference) {
-        return new WorkItemReference(reference.id(), reference.projectId(), reference.itemNo(),
-                reference.title());
+    private static WorkItemReference map(WorkItemActivitySourceQuery.WorkItemActivityReference reference) {
+        return new WorkItemReference(reference.id(), reference.projectId(), reference.itemNo(), reference.title());
     }
 }

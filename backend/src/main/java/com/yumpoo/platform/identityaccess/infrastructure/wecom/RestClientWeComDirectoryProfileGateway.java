@@ -1,56 +1,44 @@
 package com.yumpoo.platform.identityaccess.infrastructure.wecom;
 
 import com.yumpoo.platform.identityaccess.application.directory.DirectoryOptionalField;
-import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncFailureScope;
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncException;
+import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncFailureScope;
 import com.yumpoo.platform.identityaccess.application.directory.WeComDirectoryProfileGateway;
 import com.yumpoo.platform.identityaccess.application.directory.WeComRawMemberProfile;
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.MediaType;
-import org.springframework.http.converter.HttpMessageConversionException;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientException;
-
 import java.time.Clock;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.MediaType;
+import org.springframework.http.converter.HttpMessageConversionException;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 
 /** 使用独立成员资料 Secret 的只读成员/部门适配器。 */
-public final class RestClientWeComDirectoryProfileGateway
-        implements WeComDirectoryProfileGateway {
+public final class RestClientWeComDirectoryProfileGateway implements WeComDirectoryProfileGateway {
 
     private static final String API_BASE_URL = "https://qyapi.weixin.qq.com";
     private static final String GET_MEMBER_PATH = "/cgi-bin/user/get";
     private static final String LIST_DEPARTMENTS_PATH = "/cgi-bin/department/list";
     private static final Set<Long> INVALID_ACCESS_TOKEN_ERRORS = Set.of(40014L, 42001L);
     private static final ParameterizedTypeReference<Map<String, Object>> JSON_OBJECT_TYPE =
-            new ParameterizedTypeReference<>() {
-            };
+            new ParameterizedTypeReference<>() {};
 
     private final RestClient restClient;
     private final WeComAccessTokenProvider tokenProvider;
 
     public RestClientWeComDirectoryProfileGateway(
-            RestClient.Builder restClientBuilder,
-            String corpId,
-            String profileSecret,
-            Clock clock
-    ) {
+            RestClient.Builder restClientBuilder, String corpId, String profileSecret, Clock clock) {
         this.restClient = Objects.requireNonNull(restClientBuilder, "restClientBuilder must not be null")
                 .baseUrl(API_BASE_URL)
                 .defaultHeader("Accept", MediaType.APPLICATION_JSON_VALUE)
                 .build();
         this.tokenProvider = new WeComAccessTokenProvider(
-                restClient,
-                corpId,
-                profileSecret,
-                Objects.requireNonNull(clock, "clock must not be null")
-        );
+                restClient, corpId, profileSecret, Objects.requireNonNull(clock, "clock must not be null"));
     }
 
     @Override
@@ -77,9 +65,7 @@ public final class RestClientWeComDirectoryProfileGateway
         }
         if (result.isEmpty()) {
             throw new DirectorySyncException(
-                    "DIRECTORY_DEPARTMENT_SCOPE_EMPTY",
-                    "The member profile application could not read any department"
-            );
+                    "DIRECTORY_DEPARTMENT_SCOPE_EMPTY", "The member profile application could not read any department");
         }
         return Map.copyOf(result);
     }
@@ -96,16 +82,14 @@ public final class RestClientWeComDirectoryProfileGateway
             throw new DirectorySyncException(
                     "DIRECTORY_PROFILE_NAME_UNAVAILABLE",
                     "The member profile application could not read a required display name",
-                    DirectorySyncFailureScope.ITEM_ISOLATABLE
-            );
+                    DirectorySyncFailureScope.ITEM_ISOLATABLE);
         }
         Object departmentValue = response.get("department");
         if (!(departmentValue instanceof List<?> rawDepartmentIds) || rawDepartmentIds.isEmpty()) {
             throw new DirectorySyncException(
                     "DIRECTORY_PROFILE_DEPARTMENT_UNAVAILABLE",
                     "The member profile application could not read a required department",
-                    DirectorySyncFailureScope.ITEM_ISOLATABLE
-            );
+                    DirectorySyncFailureScope.ITEM_ISOLATABLE);
         }
         LinkedHashSet<Long> departmentIds = new LinkedHashSet<>();
         for (Object rawDepartmentId : rawDepartmentIds) {
@@ -121,8 +105,7 @@ public final class RestClientWeComDirectoryProfileGateway
                 optionalField(response, "email"),
                 optionalField(response, "mobile"),
                 List.copyOf(departmentIds),
-                accountDisabled(response)
-        );
+                accountDisabled(response));
     }
 
     private static boolean accountDisabled(Map<String, Object> response) {
@@ -159,15 +142,14 @@ public final class RestClientWeComDirectoryProfileGateway
             return tokenProvider.currentAccessToken();
         } catch (WeComAccessTokenProvider.AccessTokenException exception) {
             throw new DirectorySyncException(
-                    "DIRECTORY_PROFILE_TOKEN_UNAVAILABLE",
-                    "The member profile access token was unavailable"
-            );
+                    "DIRECTORY_PROFILE_TOKEN_UNAVAILABLE", "The member profile access token was unavailable");
         }
     }
 
     private Map<String, Object> get(String path, String token, String memberId) {
         try {
-            Map<String, Object> response = restClient.get()
+            Map<String, Object> response = restClient
+                    .get()
                     .uri(uriBuilder -> {
                         var builder = uriBuilder.path(path).queryParam("access_token", token);
                         if (memberId != null) {
@@ -183,8 +165,7 @@ public final class RestClientWeComDirectoryProfileGateway
                         "DIRECTORY_PROFILE_RESPONSE_MALFORMED",
                         memberId == null
                                 ? DirectorySyncFailureScope.RUN_FATAL
-                                : DirectorySyncFailureScope.ITEM_ISOLATABLE
-                );
+                                : DirectorySyncFailureScope.ITEM_ISOLATABLE);
             }
             return response;
         } catch (DirectorySyncException exception) {
@@ -194,16 +175,11 @@ public final class RestClientWeComDirectoryProfileGateway
         } catch (RestClientException | IllegalArgumentException exception) {
             // Cause 可能含 token、userid 或响应正文，禁止保留。
             throw new DirectorySyncException(
-                    "DIRECTORY_PROFILE_TRANSPORT_FAILED",
-                    "The member profile provider request failed"
-            );
+                    "DIRECTORY_PROFILE_TRANSPORT_FAILED", "The member profile provider request failed");
         }
     }
 
-    private static DirectoryOptionalField optionalField(
-            Map<String, Object> response,
-            String key
-    ) {
+    private static DirectoryOptionalField optionalField(Map<String, Object> response, String key) {
         if (!response.containsKey(key) || response.get(key) == null) {
             return DirectoryOptionalField.unavailable();
         }
@@ -211,18 +187,13 @@ public final class RestClientWeComDirectoryProfileGateway
         if (!(value instanceof String stringValue)) {
             throw malformed("DIRECTORY_PROFILE_RESPONSE_MALFORMED", DirectorySyncFailureScope.ITEM_ISOLATABLE);
         }
-        return stringValue.isBlank()
-                ? DirectoryOptionalField.clear()
-                : DirectoryOptionalField.present(stringValue);
+        return stringValue.isBlank() ? DirectoryOptionalField.clear() : DirectoryOptionalField.present(stringValue);
     }
 
     private static long requiredErrorCode(Map<String, Object> response) {
         Long value = longValue(response.get("errcode"));
         if (value == null) {
-            throw malformed(
-                    "DIRECTORY_PROFILE_RESPONSE_MALFORMED",
-                    DirectorySyncFailureScope.RUN_FATAL
-            );
+            throw malformed("DIRECTORY_PROFILE_RESPONSE_MALFORMED", DirectorySyncFailureScope.RUN_FATAL);
         }
         return value;
     }
@@ -247,22 +218,11 @@ public final class RestClientWeComDirectoryProfileGateway
         DirectorySyncFailureScope scope = memberRequest && !sharedFailure
                 ? DirectorySyncFailureScope.ITEM_ISOLATABLE
                 : DirectorySyncFailureScope.RUN_FATAL;
-        return new DirectorySyncException(
-                code,
-                "The member profile provider rejected the request",
-                scope
-        );
+        return new DirectorySyncException(code, "The member profile provider rejected the request", scope);
     }
 
-    private static DirectorySyncException malformed(
-            String code,
-            DirectorySyncFailureScope scope
-    ) {
-        return new DirectorySyncException(
-                code,
-                "The member profile provider returned malformed data",
-                scope
-        );
+    private static DirectorySyncException malformed(String code, DirectorySyncFailureScope scope) {
+        return new DirectorySyncException(code, "The member profile provider returned malformed data", scope);
     }
 
     private static Long longValue(Object value) {

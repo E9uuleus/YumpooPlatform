@@ -50,36 +50,30 @@ final class LogBufferAppender extends UnsynchronizedAppenderBase<ILoggingEvent> 
 
     synchronized void add(LogRecord original) {
         var error = original.error();
-        if (error != null) error = new LogRecord.LogError(
-            error.type(),
-            error.msg(),
-            LogSanitizer.text(error.stack(), 4096),
-            error.hash()
-        );
+        if (error != null)
+            error = new LogRecord.LogError(
+                    error.type(), error.msg(), LogSanitizer.text(error.stack(), 4096), error.hash());
         LogRecord record = new LogRecord(
-            original.time(),
-            original.level(),
-            original.module(),
-            original.event(),
-            original.msg(),
-            original.logger(),
-            original.thread(),
-            original.requestId(),
-            original.correlationId(),
-            original.userId(),
-            original.fields(),
-            error
-        );
+                original.time(),
+                original.level(),
+                original.module(),
+                original.event(),
+                original.msg(),
+                original.logger(),
+                original.thread(),
+                original.requestId(),
+                original.correlationId(),
+                original.userId(),
+                original.fields(),
+                error);
         // Conservative UTF-16 accounting, including map/object overhead.
-        int bytes =
-            1024 +
-            2 *
-                (record.msg().length() +
-                    record.fields().toString().length() +
-                    (error == null ? 0 : error.stack().length()));
-        counts
-            .computeIfAbsent(record.time().truncatedTo(ChronoUnit.MINUTES), ignored -> new HashMap<>())
-            .merge(record.level(), 1L, Long::sum);
+        int bytes = 1024
+                + 2
+                        * (record.msg().length()
+                                + record.fields().toString().length()
+                                + (error == null ? 0 : error.stack().length()));
+        counts.computeIfAbsent(record.time().truncatedTo(ChronoUnit.MINUTES), ignored -> new HashMap<>())
+                .merge(record.level(), 1L, Long::sum);
         totals.merge(record.level(), 1L, Long::sum);
         counts.headMap(Instant.now().minus(Duration.ofDays(1)), false).clear();
         Item item = new Item(++sequence, record, bytes);
@@ -108,11 +102,10 @@ final class LogBufferAppender extends UnsynchronizedAppenderBase<ILoggingEvent> 
 
     synchronized Snapshot snapshot(boolean problemOnly) {
         return new Snapshot(
-            List.copyOf(problemOnly ? problems : recent),
-            sequence,
-            Math.max(problemOnly ? problemEvicted : recentEvicted, lastDropped),
-            dropped
-        );
+                List.copyOf(problemOnly ? problems : recent),
+                sequence,
+                Math.max(problemOnly ? problemEvicted : recentEvicted, lastDropped),
+                dropped);
     }
 
     synchronized long evicted(boolean problemOnly) {
@@ -130,10 +123,9 @@ final class LogBufferAppender extends UnsynchronizedAppenderBase<ILoggingEvent> 
     synchronized Map<String, Long> countsSince(Instant since) {
         if (!since.isAfter(started)) return Map.copyOf(totals);
         Map<String, Long> result = new HashMap<>();
-        counts
-            .tailMap(since.truncatedTo(ChronoUnit.MINUTES), true)
-            .values()
-            .forEach(bucket -> bucket.forEach((k, v) -> result.merge(k, v, Long::sum)));
+        counts.tailMap(since.truncatedTo(ChronoUnit.MINUTES), true)
+                .values()
+                .forEach(bucket -> bucket.forEach((k, v) -> result.merge(k, v, Long::sum)));
         return Map.copyOf(result);
     }
 }

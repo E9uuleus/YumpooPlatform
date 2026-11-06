@@ -14,10 +14,6 @@ import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.MinimalUserSnapshot;
 import com.yumpoo.platform.identityaccess.api.MinimalUserSnapshotQuery;
 import com.yumpoo.platform.identityaccess.api.PlatformRoleCode;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import tools.jackson.databind.ObjectMapper;
-
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -25,6 +21,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.ObjectMapper;
 
 @Service
 public class ProjectService {
@@ -35,8 +34,12 @@ public class ProjectService {
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
-    public ProjectService(ProjectRepository repository, MinimalUserSnapshotQuery userQuery,
-                          TransactionalEventPort eventPort, ObjectMapper objectMapper, Clock clock) {
+    public ProjectService(
+            ProjectRepository repository,
+            MinimalUserSnapshotQuery userQuery,
+            TransactionalEventPort eventPort,
+            ObjectMapper objectMapper,
+            Clock clock) {
         this.repository = repository;
         this.userQuery = userQuery;
         this.eventPort = eventPort;
@@ -45,19 +48,22 @@ public class ProjectService {
     }
 
     @Transactional(readOnly = true)
-    public OffsetPageResponse<ProjectSummary> findAll(CurrentActor actor,
-            ProjectSearchCriteria criteria,
-            OffsetPageRequest page) {
+    public OffsetPageResponse<ProjectSummary> findAll(
+            CurrentActor actor, ProjectSearchCriteria criteria, OffsetPageRequest page) {
         requireActor(actor);
         ProjectPageResult result = repository.findVisible(actor, criteria, page);
-        Map<UUID, MinimalUserSnapshot> owners = userQuery.findByUserIds(actor.companyId(),
-                result.items().stream().map(row -> row.project().ownerUserId()).distinct().toList());
+        Map<UUID, MinimalUserSnapshot> owners = userQuery.findByUserIds(
+                actor.companyId(),
+                result.items().stream()
+                        .map(row -> row.project().ownerUserId())
+                        .distinct()
+                        .toList());
         List<ProjectSummary> items = result.items().stream()
-                .map(row -> summary(actor, row, displayName(owners, row.project().ownerUserId())))
+                .map(row ->
+                        summary(actor, row, displayName(owners, row.project().ownerUserId())))
                 .toList();
         return OffsetPageResponse.of(items, page, result.totalElements());
     }
-
 
     @Transactional(readOnly = true)
     public List<ProjectOwnerOption> findOwnerOptions(CurrentActor actor) {
@@ -74,8 +80,10 @@ public class ProjectService {
     @Transactional(readOnly = true)
     public ProjectDetail findVisible(CurrentActor actor, UUID projectId) {
         ProjectQueryRow row = requiredVisible(actor, projectId);
-        String ownerName = userQuery.findByUserId(actor.companyId(), row.project().ownerUserId())
-                .map(MinimalUserSnapshot::displayName).orElse("-");
+        String ownerName = userQuery
+                .findByUserId(actor.companyId(), row.project().ownerUserId())
+                .map(MinimalUserSnapshot::displayName)
+                .orElse("-");
         return detail(actor, row, ownerName);
     }
 
@@ -93,14 +101,17 @@ public class ProjectService {
         if (before.hasSameDetails(command.name(), command.description())) {
             return detail(command.actor(), row, ownerName(command.actor(), before.ownerUserId()));
         }
-        Project candidate = before.updateDetails(command.name(), command.description(),
-                command.actor().userId(), clock.instant());
-        Project after = repository.updateDetails(candidate, command.expectedRowVersion())
-                .orElseThrow(() -> conditionalFailure(command.actor(), command.projectId(),
-                        command.expectedRowVersion()));
+        Project candidate = before.updateDetails(
+                command.name(), command.description(), command.actor().userId(), clock.instant());
+        Project after = repository
+                .updateDetails(candidate, command.expectedRowVersion())
+                .orElseThrow(
+                        () -> conditionalFailure(command.actor(), command.projectId(), command.expectedRowVersion()));
         appendUpdated(before, after, command.actor());
-        return detail(command.actor(), new ProjectQueryRow(after, row.workspaceCode(),
-                row.workspaceName(), row.actorAccess()), ownerName(command.actor(), after.ownerUserId()));
+        return detail(
+                command.actor(),
+                new ProjectQueryRow(after, row.workspaceCode(), row.workspaceName(), row.actorAccess()),
+                ownerName(command.actor(), after.ownerUserId()));
     }
 
     private void appendUpdated(Project before, Project after, CurrentActor actor) {
@@ -109,8 +120,14 @@ public class ProjectService {
         payload.put("code", after.code());
         payload.put("lifecycle", after.lifecycle().name());
         payload.put("changedFields", changedFields(before, after));
-        eventPort.append(new EventDraft("catalog.project_updated", 1, "Project", after.id(),
-                after.rowVersion(), after.companyId(), EventActor.user(actor.userId()),
+        eventPort.append(new EventDraft(
+                "catalog.project_updated",
+                1,
+                "Project",
+                after.id(),
+                after.rowVersion(),
+                after.companyId(),
+                EventActor.user(actor.userId()),
                 objectMapper.valueToTree(payload)));
     }
 
@@ -123,7 +140,8 @@ public class ProjectService {
 
     private ProjectQueryRow requiredVisible(CurrentActor actor, UUID projectId) {
         requireActor(actor);
-        return repository.findVisibleById(actor, projectId)
+        return repository
+                .findVisibleById(actor, projectId)
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
     }
 
@@ -137,8 +155,10 @@ public class ProjectService {
     }
 
     private String ownerName(CurrentActor actor, UUID ownerId) {
-        return userQuery.findByUserId(actor.companyId(), ownerId)
-                .map(MinimalUserSnapshot::displayName).orElse("-");
+        return userQuery
+                .findByUserId(actor.companyId(), ownerId)
+                .map(MinimalUserSnapshot::displayName)
+                .orElse("-");
     }
 
     private static String displayName(Map<UUID, MinimalUserSnapshot> owners, UUID ownerId) {
@@ -148,19 +168,49 @@ public class ProjectService {
 
     private static ProjectSummary summary(CurrentActor actor, ProjectQueryRow row, String ownerName) {
         Project project = row.project();
-        return new ProjectSummary(project.id(), project.workspaceId(), row.workspaceCode(),
-                row.workspaceName(), project.code(), project.name(),
-                project.lifecycle().name(), project.ownerUserId(), ownerName, access(row),
-                capabilities(actor, row), project.rowVersion(), StrongEtag.format(project.rowVersion()),
-                project.createdAt(), project.updatedAt(), project.archivedAt(), project.endedAt(), deletion(project));
+        return new ProjectSummary(
+                project.id(),
+                project.workspaceId(),
+                row.workspaceCode(),
+                row.workspaceName(),
+                project.code(),
+                project.name(),
+                project.lifecycle().name(),
+                project.ownerUserId(),
+                ownerName,
+                access(row),
+                capabilities(actor, row),
+                project.rowVersion(),
+                StrongEtag.format(project.rowVersion()),
+                project.createdAt(),
+                project.updatedAt(),
+                project.archivedAt(),
+                project.endedAt(),
+                deletion(project));
     }
 
     private static ProjectDetail detail(CurrentActor actor, ProjectQueryRow row, String ownerName) {
         Project project = row.project();
-        return new ProjectDetail(project.id(), project.workspaceId(), row.workspaceCode(),
-                row.workspaceName(), project.code(), project.name(), project.description(), project.lifecycle().name(), project.ownerUserId(), ownerName, access(row),
-                capabilities(actor, row), project.rowVersion(), StrongEtag.format(project.rowVersion()),
-                project.createdAt(), project.updatedAt(), project.archivedAt(), project.endedAt(), deletion(project));
+        return new ProjectDetail(
+                project.id(),
+                project.workspaceId(),
+                row.workspaceCode(),
+                row.workspaceName(),
+                project.code(),
+                project.name(),
+                project.description(),
+                project.lifecycle().name(),
+                project.ownerUserId(),
+                ownerName,
+                access(row),
+                capabilities(actor, row),
+                project.rowVersion(),
+                StrongEtag.format(project.rowVersion()),
+                project.createdAt(),
+                project.updatedAt(),
+                project.archivedAt(),
+                project.endedAt(),
+                deletion(project));
     }
 
     private static ProjectActorAccess access(ProjectQueryRow row) {
@@ -179,16 +229,26 @@ public class ProjectService {
         boolean archived = project.lifecycle() == ProjectLifecycle.ARCHIVED;
         boolean running = !archived && !project.ended();
         boolean deletion = project.deletionRequestedAt() != null;
-        return new ProjectCapabilities(owner && running, steward && running, steward && running,
-                steward && !archived, steward && archived && !deletion, false, admin && !archived,
-                steward && archived && !deletion, steward && archived && deletion,
-                steward && running, steward && !archived && project.ended(),
+        return new ProjectCapabilities(
+                owner && running,
+                steward && running,
+                steward && running,
+                steward && !archived,
+                steward && archived && !deletion,
+                false,
+                admin && !archived,
+                steward && archived && !deletion,
+                steward && archived && deletion,
+                steward && running,
+                steward && !archived && project.ended(),
                 row.actorAccess() == ProjectMembershipModels.ActorAccess.MEMBER && running);
     }
 
     private static ProjectDeletion deletion(Project project) {
-        return project.deletionRequestedAt()==null ? null : new ProjectDeletion(project.deletionRequestedAt(),
-                project.deletionRequestedBy(),project.purgeAfter());
+        return project.deletionRequestedAt() == null
+                ? null
+                : new ProjectDeletion(
+                        project.deletionRequestedAt(), project.deletionRequestedBy(), project.purgeAfter());
     }
 
     private static void requireVersion(Project project, long version) {

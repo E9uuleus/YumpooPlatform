@@ -2,5 +2,5 @@ package com.yumpoo.platform.filestorage.application;
 
 import java.time.Duration;
 
-public record AttachmentRuntimeSettings(long companyQuotaBytes, long projectQuotaBytes,
-        Duration scanLease, Duration uploadLease) {}
+public record AttachmentRuntimeSettings(
+        long companyQuotaBytes, long projectQuotaBytes, Duration scanLease, Duration uploadLease) {}

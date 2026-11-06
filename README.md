@@ -50,6 +50,8 @@ scripts/                文档链接与 Agent Note 校验
 
 `docs/` 用于本地文档与原型导出，受 Git 忽略规则保护，不随仓库分发。
 
+后端代码由 Spotless 统一格式，提交前运行 `.\backend\mvnw.cmd -f backend/pom.xml spotless:apply`。
+
 ## 本地运行
 
 ### 1. 获取代码与安装依赖
@@ -140,7 +142,7 @@ pnpm test:e2e -- --skip-web-build
 - `YUMPOO_E2E_BASE_URL`：指向已运行的测试环境；设置后不构建或启动服务，也不清理该环境。用例会创建一个带时间戳的项目和工作项，环境需提供“本地测试管理员”身份。
 - `YUMPOO_E2E_BROWSER`：系统浏览器 channel，例如 `msedge` 或 `chrome`；不下载浏览器二进制。
 
-服务日志在 `out/e2e/logs/`，HTML 报告在 `out/e2e/report/`，失败时的截图与 trace 在 `out/e2e/results/`。该命令仅供本地使用，不加入 CI 或合并门禁。
+服务日志在 `out/e2e/logs/`，HTML 报告在 `out/e2e/report/`，失败时的截图与 trace 在 `out/e2e/results/`。CI 的 portable 阶段也会运行同一组用例。
 
 ## 常用配置
 

@@ -11,8 +11,7 @@ public record PlatformRoleRevokeCommand(
         PlatformRoleCommandActor actor,
         UUID idempotencyKey,
         String requestHash,
-        String reasonReference
-) {
+        String reasonReference) {
 
     public PlatformRoleRevokeCommand {
         Objects.requireNonNull(companyId, "companyId must not be null");

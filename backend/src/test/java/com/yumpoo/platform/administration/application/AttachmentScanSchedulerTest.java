@@ -1,19 +1,20 @@
 package com.yumpoo.platform.administration.application;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
 import com.yumpoo.platform.filestorage.api.AttachmentLifecyclePort;
 import com.yumpoo.platform.filestorage.api.AttachmentModels.ScanClaim;
 import com.yumpoo.platform.filestorage.api.AttachmentModels.ScanOutcome;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelation;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelationContext;
-import org.junit.jupiter.api.Test;
 import java.time.Clock;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import org.junit.jupiter.api.Test;
 
 class AttachmentScanSchedulerTest {
     @Test
@@ -27,10 +28,15 @@ class AttachmentScanSchedulerTest {
         when(attachments.claimDue(any(), any())).thenReturn(Optional.of(claim), Optional.empty());
         when(attachments.scan(claim)).thenReturn(outcome);
         doAnswer(call -> {
-            try { correlation.set(RequestCorrelationContext.required()); }
-            finally { finished.countDown(); }
-            return null;
-        }).when(finalizer).finalizeClean(claim, outcome);
+                    try {
+                        correlation.set(RequestCorrelationContext.required());
+                    } finally {
+                        finished.countDown();
+                    }
+                    return null;
+                })
+                .when(finalizer)
+                .finalizeClean(claim, outcome);
         var scheduler = new AttachmentScanScheduler(attachments, finalizer, 1, Clock.systemUTC());
         try {
             scheduler.poll();
@@ -39,6 +45,8 @@ class AttachmentScanSchedulerTest {
             assertThat(correlation.get().requestId()).startsWith("attachment-processing-");
             verify(attachments, never()).retryProcessing(any(), any());
             assertThat(RequestCorrelationContext.current()).isEmpty();
-        } finally { scheduler.destroy(); }
+        } finally {
+            scheduler.destroy();
+        }
     }
 }

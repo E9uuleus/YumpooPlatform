@@ -1,12 +1,11 @@
 package com.yumpoo.platform.foundation.application.outbox;
 
-import org.springframework.stereotype.Component;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.DoubleSupplier;
+import org.springframework.stereotype.Component;
 
 @Component
 public class OutboxRetryPolicy {
@@ -16,8 +15,7 @@ public class OutboxRetryPolicy {
             Duration.ofMinutes(5),
             Duration.ofMinutes(30),
             Duration.ofHours(2),
-            Duration.ofHours(8)
-    );
+            Duration.ofHours(8));
 
     private final DoubleSupplier jitterSupplier;
 

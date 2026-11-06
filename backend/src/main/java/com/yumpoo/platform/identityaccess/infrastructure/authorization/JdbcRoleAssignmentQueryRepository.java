@@ -6,15 +6,14 @@ import com.yumpoo.platform.identityaccess.application.authorization.RoleAssignme
 import com.yumpoo.platform.identityaccess.application.authorization.RoleAssignmentQueryRepository;
 import com.yumpoo.platform.identityaccess.application.authorization.RoleAssignmentStatus;
 import com.yumpoo.platform.identityaccess.application.authorization.RoleAssignmentView;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Repository;
-
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Repository;
 
 @Repository
 public class JdbcRoleAssignmentQueryRepository implements RoleAssignmentQueryRepository {
@@ -42,15 +41,14 @@ public class JdbcRoleAssignmentQueryRepository implements RoleAssignmentQueryRep
             statement = statement.param(parameter);
         }
         statement = statement.param(query.pageSize()).param((long) query.page() * query.pageSize());
-        List<RoleAssignmentView> items = statement
-                .query(JdbcRoleAssignmentQueryRepository::mapView)
-                .list();
+        List<RoleAssignmentView> items =
+                statement.query(JdbcRoleAssignmentQueryRepository::mapView).list();
         return new RoleAssignmentPage(items, query.page(), query.pageSize(), total);
     }
 
     private long count(UUID companyId, String predicate, List<Object> parameters) {
-        JdbcClient.StatementSpec statement = jdbcClient.sql(
-                "SELECT count(*) FROM yumpoo.platform_role_assignment WHERE company_id = ?" + predicate)
+        JdbcClient.StatementSpec statement = jdbcClient
+                .sql("SELECT count(*) FROM yumpoo.platform_role_assignment WHERE company_id = ?" + predicate)
                 .param(companyId);
         for (Object parameter : parameters) {
             statement = statement.param(parameter);
@@ -75,8 +73,7 @@ public class JdbcRoleAssignmentQueryRepository implements RoleAssignmentQueryRep
         return sql.toString();
     }
 
-    private static RoleAssignmentView mapView(ResultSet resultSet, int rowNumber)
-            throws SQLException {
+    private static RoleAssignmentView mapView(ResultSet resultSet, int rowNumber) throws SQLException {
         return new RoleAssignmentView(
                 resultSet.getObject("id", UUID.class),
                 resultSet.getObject("company_id", UUID.class),
@@ -87,8 +84,10 @@ public class JdbcRoleAssignmentQueryRepository implements RoleAssignmentQueryRep
                 RoleAssignmentStatus.valueOf(resultSet.getString("status")),
                 resultSet.getObject("granted_at", OffsetDateTime.class).toInstant(),
                 resultSet.getObject("revoked_at", OffsetDateTime.class) == null
-                        ? null : resultSet.getObject("revoked_at", OffsetDateTime.class).toInstant(),
-                resultSet.getLong("row_version")
-        );
+                        ? null
+                        : resultSet
+                                .getObject("revoked_at", OffsetDateTime.class)
+                                .toInstant(),
+                resultSet.getLong("row_version"));
     }
 }
