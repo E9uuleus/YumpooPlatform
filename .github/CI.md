@@ -18,7 +18,7 @@ pnpm run ci
 | --- | --- |
 | `pnpm ci:contracts` | PR 基线、历史迁移与冻结清单、OpenAPI 严格兼容、例外结构、lint/样例、生成客户端漂移、全部既有事件版本与共享载荷兼容、事件库存 |
 | `pnpm ci:static` | 上述契约检查各一次，加文档/归档完整性、校验器故障测试、前端/桌面 lint、架构、类型、构建与全部现有测试、品牌资产与生产部署配置不变量 |
-| `pnpm ci:backend` | 一次 `clean verify`：单元/集成、安全、架构、PostgreSQL/Flyway、备份恢复；随后单独执行 96 MiB JVM 的附件流式探针 |
+| `pnpm ci:backend` | Java 格式检查（Spotless）；一次 `clean verify`：单元/集成、安全、架构、PostgreSQL/Flyway、备份恢复；随后单独执行 96 MiB JVM 的附件流式探针 |
 | `pnpm ci:portable` | 校验当前源码的 static/backend 成功记录与新鲜备份恢复报告；运行 packaged JAR + SPA HTTP、浏览器冒烟（系统 Chrome / Edge）；生成和验证 JAR/Web handoff |
 | `pnpm ci:windows` | 复核 handoff，真实 Electron smoke、Windows 桌面安装包（EXE 图标/版本资源/fuse/ASAR 白名单，默认目录与 `/D=` 自定义目录的静默安装、自检、覆盖安装与卸载边界）、ZIP、PowerShell 行为及服务器包验证；服务器包逐文件对照同一 handoff；生成并核对后端与 Web 的 CycloneDX SBOM；把经过冒烟的安装包、blockmap、`latest.yml`、桌面 SBOM 与 manifest 收集到 `out/desktop` |
 

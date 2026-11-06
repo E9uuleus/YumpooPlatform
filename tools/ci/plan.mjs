@@ -58,6 +58,7 @@ export function plan(stage, baseRef = 'origin/dev') {
       ...contractSteps(baseRef), ...nodeSteps, ...assetSteps,
     ]
     case 'backend': return [
+      mvn('java-format', 'spotless:check'),
       mvn('backend-regression', 'clean', 'verify'),
       mvn('bounded-heap', '-q', '-Dtest=M014BoundedHeapVerification', '-DargLine=-Xmx96m', 'test'),
     ]
