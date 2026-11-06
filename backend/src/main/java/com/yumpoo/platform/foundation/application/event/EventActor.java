@@ -6,12 +6,7 @@ import java.util.regex.Pattern;
 /**
  * 事件触发主体。System Log 不直接输出这里的原始标识。
  */
-public record EventActor(
-        EventActorType type,
-        UUID userId,
-        String systemCode,
-        String reasonReference
-) {
+public record EventActor(EventActorType type, UUID userId, String systemCode, String reasonReference) {
 
     private static final Pattern SYSTEM_CODE = Pattern.compile("^[A-Z][A-Z0-9_.:-]{0,79}$");
 
@@ -26,15 +21,15 @@ public record EventActor(
             }
             case SYSTEM -> {
                 require(userId == null && reasonReference == null, "SYSTEM actor has unexpected fields");
-                require(systemCode != null && SYSTEM_CODE.matcher(systemCode).matches(),
+                require(
+                        systemCode != null && SYSTEM_CODE.matcher(systemCode).matches(),
                         "SYSTEM actor requires a stable systemCode");
             }
             case ADMIN_OVERRIDE -> {
                 require(userId != null, "ADMIN_OVERRIDE actor requires userId");
                 require(systemCode == null, "ADMIN_OVERRIDE actor has unexpected systemCode");
-                require(reasonReference != null
-                                && !reasonReference.isBlank()
-                                && reasonReference.length() <= 160,
+                require(
+                        reasonReference != null && !reasonReference.isBlank() && reasonReference.length() <= 160,
                         "ADMIN_OVERRIDE actor requires reasonReference");
             }
         }

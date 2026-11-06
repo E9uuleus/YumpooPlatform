@@ -8,18 +8,11 @@ import org.springframework.web.bind.annotation.RequestHeader;
 public final class RequiredIfMatchController {
 
     @GetMapping("/fixture/default-required-if-match")
-    void defaultRequiredIfMatch(@RequestHeader("If-Match") String ifMatch) {
-    }
+    void defaultRequiredIfMatch(@RequestHeader("If-Match") String ifMatch) {}
 
     @GetMapping("/fixture/explicit-required-if-match")
-    void explicitRequiredIfMatch(
-            @RequestHeader(name = "if-match", required = true) String ifMatch
-    ) {
-    }
+    void explicitRequiredIfMatch(@RequestHeader(name = "if-match", required = true) String ifMatch) {}
 
     @GetMapping("/fixture/optional-if-match")
-    void optionalIfMatch(
-            @RequestHeader(value = "If-Match", required = false) String ifMatch
-    ) {
-    }
+    void optionalIfMatch(@RequestHeader(value = "If-Match", required = false) String ifMatch) {}
 }

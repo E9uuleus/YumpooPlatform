@@ -1,20 +1,18 @@
 package com.yumpoo.platform.workitem.application.discussion;
 
-import com.yumpoo.platform.workitem.domain.WorkItemUpdate;
+import static com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateModels.UpdateCursor;
+import static com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateModels.UpdateLocator;
 
+import com.yumpoo.platform.workitem.domain.WorkItemUpdate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
-import static com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateModels.UpdateCursor;
-import static com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateModels.UpdateLocator;
-
 public interface WorkItemUpdateRepository {
     boolean insert(WorkItemUpdate update, Map<UUID, String> mentionedDisplayNames);
 
-    List<WorkItemUpdate> findOlderWindow(UUID companyId, UUID workItemId,
-            UpdateCursor before, int limit);
+    List<WorkItemUpdate> findOlderWindow(UUID companyId, UUID workItemId, UpdateCursor before, int limit);
 
     List<WorkItemUpdate> findPinned(UUID companyId, UUID workItemId);
 
@@ -34,8 +32,7 @@ public interface WorkItemUpdateRepository {
 
     Map<UUID, String> findMentionedDisplayNames(UUID companyId, UUID updateId);
 
-    boolean update(WorkItemUpdate update, Map<UUID, String> mentionedDisplayNames,
-            long expectedVersion);
+    boolean update(WorkItemUpdate update, Map<UUID, String> mentionedDisplayNames, long expectedVersion);
 
     boolean delete(WorkItemUpdate update, long expectedVersion);
 }

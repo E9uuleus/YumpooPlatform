@@ -5,6 +5,5 @@ package com.yumpoo.platform.reporting.api;
  */
 final class LayerMarker {
 
-    private LayerMarker() {
-    }
+    private LayerMarker() {}
 }

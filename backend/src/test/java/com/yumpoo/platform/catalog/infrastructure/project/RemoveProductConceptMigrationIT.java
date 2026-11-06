@@ -1,5 +1,11 @@
 package com.yumpoo.platform.catalog.infrastructure.project;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,13 +21,6 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 @Testcontainers
 class RemoveProductConceptMigrationIT {
     private static final UUID COMPANY = UUID.fromString("00000000-0000-4000-8000-000000000001");
@@ -29,14 +28,21 @@ class RemoveProductConceptMigrationIT {
     private static final UUID PROJECT = UUID.randomUUID();
     private static final UUID PRODUCT = UUID.randomUUID();
     private static final List<String> RETIRED_EVENTS = List.of(
-            "catalog.product_created", "catalog.product_updated", "catalog.product_archived",
-            "catalog.product_restored", "catalog.product_owner_reassigned", "catalog.product_linked_to_project",
-            "catalog.project_product_link_updated", "catalog.product_unlinked_from_project");
+            "catalog.product_created",
+            "catalog.product_updated",
+            "catalog.product_archived",
+            "catalog.product_restored",
+            "catalog.product_owner_reassigned",
+            "catalog.product_linked_to_project",
+            "catalog.project_product_link_updated",
+            "catalog.product_unlinked_from_project");
 
     @Container
-    private final PostgreSQLContainer postgres = new PostgreSQLContainer(
-            DockerImageName.parse("postgres:17.10-alpine"))
-            .withDatabaseName("up1_migration").withUsername("yumpoo_test").withPassword("yumpoo_test");
+    private final PostgreSQLContainer postgres = new PostgreSQLContainer(DockerImageName.parse("postgres:17.10-alpine"))
+            .withDatabaseName("up1_migration")
+            .withUsername("yumpoo_test")
+            .withPassword("yumpoo_test");
+
     private JdbcClient jdbc;
     private DriverManagerDataSource dataSource;
 
@@ -108,37 +114,51 @@ class RemoveProductConceptMigrationIT {
         var attachments = rows("attachment");
         flyway("60").migrate();
 
-        assertThat(jdbc.sql("SELECT to_regclass('yumpoo.product') IS NULL AND to_regclass('yumpoo.project_product_link') IS NULL")
-                .query(Boolean.class).single()).isTrue();
+        assertThat(jdbc.sql(
+                                "SELECT to_regclass('yumpoo.product') IS NULL AND to_regclass('yumpoo.project_product_link') IS NULL")
+                        .query(Boolean.class)
+                        .single())
+                .isTrue();
         assertThat(rows("security_audit_event")).isEqualTo(audits);
         assertThat(rows("project")).isEqualTo(projects);
         assertThat(rows("project_membership")).isEqualTo(memberships);
         assertThat(rows("project_template_definition")).isEqualTo(templates);
         assertThat(rows("attachment")).isEqualTo(attachments);
-        assertThat(rows("activity_event")).singleElement().satisfies(row ->
-                assertThat(row).containsEntry("event_type", "catalog.project_created"));
-        assertThat(jdbc.sql("SELECT event_type FROM yumpoo.outbox_event ORDER BY event_type").query(String.class).list())
+        assertThat(rows("activity_event"))
+                .singleElement()
+                .satisfies(row -> assertThat(row).containsEntry("event_type", "catalog.project_created"));
+        assertThat(jdbc.sql("SELECT event_type FROM yumpoo.outbox_event ORDER BY event_type")
+                        .query(String.class)
+                        .list())
                 .containsExactly("catalog.project_created", "identity.user_account_disabled");
         assertThat(count("outbox_consumer_receipt")).isEqualTo(2);
-        assertThat(rows("governance_issue")).singleElement().satisfies(row ->
-                assertThat(row).containsEntry("target_type", "PROJECT"));
-        assertThat(rows("admin_override")).singleElement().satisfies(row ->
-                assertThat(row).containsEntry("target_type", "PROJECT")
+        assertThat(rows("governance_issue"))
+                .singleElement()
+                .satisfies(row -> assertThat(row).containsEntry("target_type", "PROJECT"));
+        assertThat(rows("admin_override"))
+                .singleElement()
+                .satisfies(row -> assertThat(row)
+                        .containsEntry("target_type", "PROJECT")
                         .containsEntry("action", "PROJECT_ARCHIVE_WITH_OPEN_ITEMS"));
 
         for (String scope : List.of("PRODUCT", "FEEDBACK")) {
             assertThatThrownBy(() -> insertActivity(scope, "OTHER", "other.created"))
-                    .isInstanceOf(DataAccessException.class).hasMessageContaining("ck_activity_event_scope_type");
+                    .isInstanceOf(DataAccessException.class)
+                    .hasMessageContaining("ck_activity_event_scope_type");
         }
         assertThatThrownBy(() -> insertIssue("PRODUCT", UUID.randomUUID()))
-                .isInstanceOf(DataAccessException.class).hasMessageContaining("ck_governance_issue_target");
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("ck_governance_issue_target");
         assertThatThrownBy(() -> insertOverride("PRODUCT_ARCHIVE_WITH_BLOCKERS", "PROJECT"))
-                .isInstanceOf(DataAccessException.class).hasMessageContaining("ck_admin_override_action");
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("ck_admin_override_action");
         assertThatThrownBy(() -> insertOverride("PROJECT_ARCHIVE_WITH_OPEN_ITEMS", "PRODUCT"))
-                .isInstanceOf(DataAccessException.class).hasMessageContaining("ck_admin_override_target_type");
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("ck_admin_override_target_type");
         for (String ownerType : List.of("PRODUCT_FEEDBACK", "FEEDBACK_UPDATE")) {
             assertThatThrownBy(() -> insertAttachment(ownerType))
-                    .isInstanceOf(DataAccessException.class).hasMessageContaining("ck_attachment_owner_type");
+                    .isInstanceOf(DataAccessException.class)
+                    .hasMessageContaining("ck_attachment_owner_type");
         }
     }
 
@@ -146,8 +166,16 @@ class RemoveProductConceptMigrationIT {
     @ValueSource(strings = {"PRODUCT_FEEDBACK", "FEEDBACK_UPDATE"})
     void feedbackAttachmentsAbortMigrationWithoutLosingAnyFacts(String ownerType) {
         insertAttachment(ownerType);
-        List<String> tables = List.of("product", "project_product_link", "activity_event", "outbox_event",
-                "outbox_consumer_receipt", "governance_issue", "admin_override", "attachment", "security_audit_event");
+        List<String> tables = List.of(
+                "product",
+                "project_product_link",
+                "activity_event",
+                "outbox_event",
+                "outbox_consumer_receipt",
+                "governance_issue",
+                "admin_override",
+                "attachment",
+                "security_audit_event");
         var before = tables.stream().map(this::count).toList();
         var attachments = rows("attachment");
         assertThatThrownBy(() -> flyway("60").migrate())
@@ -158,22 +186,37 @@ class RemoveProductConceptMigrationIT {
     }
 
     private Flyway flyway(String target) {
-        return Flyway.configure().dataSource(dataSource).locations("classpath:db/migration")
-                .defaultSchema("yumpoo").schemas("yumpoo").createSchemas(true)
-                .target(target).validateOnMigrate(true).cleanDisabled(true).load();
+        return Flyway.configure()
+                .dataSource(dataSource)
+                .locations("classpath:db/migration")
+                .defaultSchema("yumpoo")
+                .schemas("yumpoo")
+                .createSchemas(true)
+                .target(target)
+                .validateOnMigrate(true)
+                .cleanDisabled(true)
+                .load();
     }
 
     private JdbcClient.StatementSpec sql(String statement) {
-        return jdbc.sql(statement).param("id", UUID.randomUUID()).param("company", COMPANY)
-                .param("user", USER).param("project", PROJECT).param("product", PRODUCT);
+        return jdbc.sql(statement)
+                .param("id", UUID.randomUUID())
+                .param("company", COMPANY)
+                .param("user", USER)
+                .param("project", PROJECT)
+                .param("product", PRODUCT);
     }
 
     private long count(String table) {
-        return jdbc.sql("SELECT count(*) FROM yumpoo." + table).query(Long.class).single();
+        return jdbc.sql("SELECT count(*) FROM yumpoo." + table)
+                .query(Long.class)
+                .single();
     }
 
     private List<Map<String, Object>> rows(String table) {
-        return jdbc.sql("SELECT * FROM yumpoo." + table + " ORDER BY id").query().listOfRows();
+        return jdbc.sql("SELECT * FROM yumpoo." + table + " ORDER BY id")
+                .query()
+                .listOfRows();
     }
 
     private void insertEvent(String type) {
@@ -198,7 +241,11 @@ class RemoveProductConceptMigrationIT {
                     occurred_at, template_code, entity_version, request_id, correlation_id)
                 VALUES (:id, :id, 'ACTIVITY_V1', :company, :scope, :project, :entityType, :project,
                     :eventType, 'USER', :user, 'UP1 Owner', now(), 'UP1_FIXTURE', 0, 'up1', 'up1')
-                """).param("scope", scope).param("entityType", entityType).param("eventType", eventType).update();
+                """)
+                .param("scope", scope)
+                .param("entityType", entityType)
+                .param("eventType", eventType)
+                .update();
     }
 
     private void insertIssue(String targetType, UUID targetId) {

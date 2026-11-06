@@ -1,30 +1,29 @@
 package com.yumpoo.platform.catalog.infrastructure.project;
 
-import com.yumpoo.platform.catalog.application.project.ProjectRepository;
-import com.yumpoo.platform.catalog.domain.project.Project;
 import com.yumpoo.platform.catalog.application.project.ProjectLifecycleFilter;
 import com.yumpoo.platform.catalog.application.project.ProjectMembershipModels;
 import com.yumpoo.platform.catalog.application.project.ProjectPageResult;
 import com.yumpoo.platform.catalog.application.project.ProjectQueryRow;
+import com.yumpoo.platform.catalog.application.project.ProjectRepository;
 import com.yumpoo.platform.catalog.application.project.ProjectSearchCriteria;
+import com.yumpoo.platform.catalog.domain.project.Project;
 import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.PlatformRoleCode;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Repository;
-
-import java.sql.Types;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.time.Instant;
-import java.util.Optional;
-import java.util.List;
-import java.util.UUID;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Repository;
 
 @Repository
 public class JdbcProjectRepository implements ProjectRepository {
@@ -67,15 +66,20 @@ public class JdbcProjectRepository implements ProjectRepository {
 
     @Override
     public long nextGeneratedCodeSequence(UUID companyId) {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                 SELECT coalesce(max(substring(project_code FROM 2)::bigint), 0) + 1
                 FROM yumpoo.project WHERE company_id=:companyId AND project_code ~ '^P[0-9]{3,9}$'
-                """).param("companyId", companyId).query(Long.class).single();
+                """)
+                .param("companyId", companyId)
+                .query(Long.class)
+                .single();
     }
 
     @Override
     public boolean insert(Project project) {
-        JdbcClient.StatementSpec statement = jdbcClient.sql(INSERT)
+        JdbcClient.StatementSpec statement = jdbcClient
+                .sql(INSERT)
                 .param("id", project.id())
                 .param("companyId", project.companyId())
                 .param("workspaceId", project.workspaceId())
@@ -89,8 +93,10 @@ public class JdbcProjectRepository implements ProjectRepository {
                 .param("updatedAt", OffsetDateTime.ofInstant(project.updatedAt(), ZoneOffset.UTC))
                 .param("updatedByUserId", project.updatedByUserId());
         statement = nullable(statement, "description", project.description(), Types.VARCHAR);
-        statement = nullable(statement, "archivedAt", project.archivedAt() == null
-                ? null : OffsetDateTime.ofInstant(project.archivedAt(), ZoneOffset.UTC),
+        statement = nullable(
+                statement,
+                "archivedAt",
+                project.archivedAt() == null ? null : OffsetDateTime.ofInstant(project.archivedAt(), ZoneOffset.UTC),
                 Types.TIMESTAMP_WITH_TIMEZONE);
         return statement.update() == 1;
     }
@@ -100,10 +106,17 @@ public class JdbcProjectRepository implements ProjectRepository {
         return find(companyId, projectId, false);
     }
 
-    @Override public List<Project> findAll(UUID companyId,Collection<UUID> ids) {
-        if(ids.isEmpty()) return List.of();
-        return jdbcClient.sql("SELECT "+COLUMNS+" FROM yumpoo.project WHERE company_id=:companyId AND id IN (:ids) AND purge_started_at IS NULL")
-                .param("companyId",companyId).param("ids",ids).query(JdbcProjectRepository::map).list();
+    @Override
+    public List<Project> findAll(UUID companyId, Collection<UUID> ids) {
+        if (ids.isEmpty()) return List.of();
+        return jdbcClient
+                .sql(
+                        "SELECT " + COLUMNS
+                                + " FROM yumpoo.project WHERE company_id=:companyId AND id IN (:ids) AND purge_started_at IS NULL")
+                .param("companyId", companyId)
+                .param("ids", ids)
+                .query(JdbcProjectRepository::map)
+                .list();
     }
 
     @Override
@@ -113,15 +126,19 @@ public class JdbcProjectRepository implements ProjectRepository {
 
     @Override
     public Optional<Project> lockByIdForShare(UUID companyId, UUID projectId) {
-        return jdbcClient.sql("SELECT " + COLUMNS + " FROM yumpoo.project "
+        return jdbcClient
+                .sql("SELECT " + COLUMNS + " FROM yumpoo.project "
                         + "WHERE company_id = :companyId AND id = :projectId AND purge_started_at IS NULL FOR SHARE")
-                .param("companyId", companyId).param("projectId", projectId)
-                .query(JdbcProjectRepository::map).optional();
+                .param("companyId", companyId)
+                .param("projectId", projectId)
+                .query(JdbcProjectRepository::map)
+                .optional();
     }
 
     @Override
     public Optional<Project> reassignOwner(Project project, long expectedVersion) {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                 UPDATE yumpoo.project SET owner_user_id = :ownerUserId,
                     row_version = row_version + 1, updated_at = :updatedAt,
                     updated_by_user_id = :updatedByUserId
@@ -132,13 +149,17 @@ public class JdbcProjectRepository implements ProjectRepository {
                 .param("ownerUserId", project.ownerUserId())
                 .param("updatedAt", OffsetDateTime.ofInstant(project.updatedAt(), ZoneOffset.UTC))
                 .param("updatedByUserId", project.updatedByUserId())
-                .param("companyId", project.companyId()).param("id", project.id())
-                .param("expectedVersion", expectedVersion).query(JdbcProjectRepository::map).optional();
+                .param("companyId", project.companyId())
+                .param("id", project.id())
+                .param("expectedVersion", expectedVersion)
+                .query(JdbcProjectRepository::map)
+                .optional();
     }
 
     @Override
     public Optional<Project> updateDetails(Project project, long expectedVersion) {
-        JdbcClient.StatementSpec statement = jdbcClient.sql("""
+        JdbcClient.StatementSpec statement = jdbcClient
+                .sql("""
                 UPDATE yumpoo.project SET name=:name, description=:description,
                     row_version=row_version+1, updated_at=:updatedAt,
                     updated_by_user_id=:updatedByUserId
@@ -149,16 +170,17 @@ public class JdbcProjectRepository implements ProjectRepository {
                 .param("name", project.name())
                 .param("updatedAt", OffsetDateTime.ofInstant(project.updatedAt(), ZoneOffset.UTC))
                 .param("updatedByUserId", project.updatedByUserId())
-                .param("companyId", project.companyId()).param("id", project.id())
+                .param("companyId", project.companyId())
+                .param("id", project.id())
                 .param("expectedVersion", expectedVersion);
         statement = nullable(statement, "description", project.description(), Types.VARCHAR);
         return statement.query(JdbcProjectRepository::map).optional();
     }
 
-
     @Override
     public Optional<Project> changeEnded(Project project, long expectedVersion) {
-        JdbcClient.StatementSpec statement = jdbcClient.sql("""
+        JdbcClient.StatementSpec statement = jdbcClient
+                .sql("""
                 UPDATE yumpoo.project SET ended_at=:endedAt,
                     row_version=row_version+1, updated_at=:updatedAt,
                     updated_by_user_id=:updatedByUserId
@@ -169,16 +191,21 @@ public class JdbcProjectRepository implements ProjectRepository {
                 .param("ending", project.ended())
                 .param("updatedAt", OffsetDateTime.ofInstant(project.updatedAt(), ZoneOffset.UTC))
                 .param("updatedByUserId", project.updatedByUserId())
-                .param("companyId", project.companyId()).param("id", project.id())
+                .param("companyId", project.companyId())
+                .param("id", project.id())
                 .param("expectedVersion", expectedVersion);
-        statement = nullable(statement, "endedAt", project.endedAt() == null ? null
-                : OffsetDateTime.ofInstant(project.endedAt(), ZoneOffset.UTC), Types.TIMESTAMP_WITH_TIMEZONE);
+        statement = nullable(
+                statement,
+                "endedAt",
+                project.endedAt() == null ? null : OffsetDateTime.ofInstant(project.endedAt(), ZoneOffset.UTC),
+                Types.TIMESTAMP_WITH_TIMEZONE);
         return statement.query(JdbcProjectRepository::map).optional();
     }
 
     @Override
     public Optional<Project> archive(Project project, long expectedVersion) {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                 UPDATE yumpoo.project SET lifecycle='ARCHIVED', archived_at=:archivedAt,
                     row_version=row_version+1, updated_at=:updatedAt,
                     updated_by_user_id=:updatedByUserId
@@ -189,14 +216,17 @@ public class JdbcProjectRepository implements ProjectRepository {
                 .param("archivedAt", OffsetDateTime.ofInstant(project.archivedAt(), ZoneOffset.UTC))
                 .param("updatedAt", OffsetDateTime.ofInstant(project.updatedAt(), ZoneOffset.UTC))
                 .param("updatedByUserId", project.updatedByUserId())
-                .param("companyId", project.companyId()).param("id", project.id())
+                .param("companyId", project.companyId())
+                .param("id", project.id())
                 .param("expectedVersion", expectedVersion)
-                .query(JdbcProjectRepository::map).optional();
+                .query(JdbcProjectRepository::map)
+                .optional();
     }
 
     @Override
     public Optional<Project> reopen(Project project, long expectedVersion) {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                 UPDATE yumpoo.project SET lifecycle='ACTIVE', archived_at=NULL,
                     row_version=row_version+1, updated_at=:updatedAt,
                     updated_by_user_id=:updatedByUserId
@@ -206,36 +236,43 @@ public class JdbcProjectRepository implements ProjectRepository {
                 """.formatted(COLUMNS))
                 .param("updatedAt", OffsetDateTime.ofInstant(project.updatedAt(), ZoneOffset.UTC))
                 .param("updatedByUserId", project.updatedByUserId())
-                .param("companyId", project.companyId()).param("id", project.id())
+                .param("companyId", project.companyId())
+                .param("id", project.id())
                 .param("expectedVersion", expectedVersion)
-                .query(JdbcProjectRepository::map).optional();
+                .query(JdbcProjectRepository::map)
+                .optional();
     }
 
     @Override
     public long countCurrentByWorkspace(UUID companyId, UUID workspaceId) {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                 SELECT count(*) FROM yumpoo.project
                  WHERE company_id=:companyId AND workspace_id=:workspaceId
                    AND lifecycle = 'ACTIVE'
                 """)
-                .param("companyId", companyId).param("workspaceId", workspaceId)
-                .query(Long.class).single();
+                .param("companyId", companyId)
+                .param("workspaceId", workspaceId)
+                .query(Long.class)
+                .single();
     }
 
     @Override
     public Optional<ProjectQueryRow> findVisibleById(CurrentActor actor, UUID projectId) {
-        return visible(jdbcClient.sql("SELECT p.*, w.code AS workspace_code, "
-                        + "w.name AS workspace_name, "
-                        + "CASE WHEN p.owner_user_id=:actorUserId THEN 'OWNER' "
-                        + "WHEN m.id IS NOT NULL THEN 'MEMBER' ELSE 'COMPANY_ADMIN_READ_ONLY' END actor_access "
-                        + VISIBLE_FROM + " AND p.id=:projectId"), actor)
+        return visible(
+                        jdbcClient.sql("SELECT p.*, w.code AS workspace_code, "
+                                + "w.name AS workspace_name, "
+                                + "CASE WHEN p.owner_user_id=:actorUserId THEN 'OWNER' "
+                                + "WHEN m.id IS NOT NULL THEN 'MEMBER' ELSE 'COMPANY_ADMIN_READ_ONLY' END actor_access "
+                                + VISIBLE_FROM + " AND p.id=:projectId"),
+                        actor)
                 .param("projectId", projectId)
-                .query(JdbcProjectRepository::mapQueryRow).optional();
+                .query(JdbcProjectRepository::mapQueryRow)
+                .optional();
     }
 
     @Override
-    public ProjectPageResult findVisible(CurrentActor actor, ProjectSearchCriteria criteria,
-                                         OffsetPageRequest page) {
+    public ProjectPageResult findVisible(CurrentActor actor, ProjectSearchCriteria criteria, OffsetPageRequest page) {
         String actorAccess = "CASE WHEN p.owner_user_id=:actorUserId THEN 'OWNER' "
                 + "WHEN m.id IS NOT NULL THEN 'MEMBER' ELSE 'COMPANY_ADMIN_READ_ONLY' END";
         String predicate = " AND (:allQuery OR p.name ILIKE :query ESCAPE '\\' "
@@ -247,100 +284,128 @@ public class JdbcProjectRepository implements ProjectRepository {
                 + "AND ((:active AND p.lifecycle='ACTIVE') "
                 + "OR (:archived AND p.lifecycle='ARCHIVED')) "
                 + "AND (:allEnded OR (p.ended_at IS NOT NULL) = :ended) ";
-        JdbcClient.StatementSpec items = visible(jdbcClient.sql("SELECT p.*, w.code AS workspace_code, "
-                + "w.name AS workspace_name, CASE WHEN p.owner_user_id=:actorUserId THEN 'OWNER' "
-                + "WHEN m.id IS NOT NULL THEN 'MEMBER' ELSE 'COMPANY_ADMIN_READ_ONLY' END actor_access "
-                + VISIBLE_FROM + predicate
-                + "ORDER BY p.name, p.project_code, p.id LIMIT :limit OFFSET :offset"), actor);
-        items = filters(items, criteria)
-                .param("limit", page.size()).param("offset", (long) page.page() * page.size());
-        JdbcClient.StatementSpec count = filters(visible(jdbcClient.sql(
-                "SELECT count(*) " + VISIBLE_FROM + predicate), actor),
-                criteria);
-        return new ProjectPageResult(items.query(JdbcProjectRepository::mapQueryRow).list(),
+        JdbcClient.StatementSpec items = visible(
+                jdbcClient.sql("SELECT p.*, w.code AS workspace_code, "
+                        + "w.name AS workspace_name, CASE WHEN p.owner_user_id=:actorUserId THEN 'OWNER' "
+                        + "WHEN m.id IS NOT NULL THEN 'MEMBER' ELSE 'COMPANY_ADMIN_READ_ONLY' END actor_access "
+                        + VISIBLE_FROM + predicate
+                        + "ORDER BY p.name, p.project_code, p.id LIMIT :limit OFFSET :offset"),
+                actor);
+        items = filters(items, criteria).param("limit", page.size()).param("offset", (long) page.page() * page.size());
+        JdbcClient.StatementSpec count =
+                filters(visible(jdbcClient.sql("SELECT count(*) " + VISIBLE_FROM + predicate), actor), criteria);
+        return new ProjectPageResult(
+                items.query(JdbcProjectRepository::mapQueryRow).list(),
                 count.query(Long.class).single());
     }
 
     @Override
     public List<UUID> findVisibleOwnerIds(CurrentActor actor) {
-        return visible(jdbcClient.sql("SELECT DISTINCT p.owner_user_id " + VISIBLE_FROM
-                + " ORDER BY p.owner_user_id"), actor)
-                .query(UUID.class).list();
+        return visible(
+                        jdbcClient.sql("SELECT DISTINCT p.owner_user_id " + VISIBLE_FROM + " ORDER BY p.owner_user_id"),
+                        actor)
+                .query(UUID.class)
+                .list();
     }
 
     @Override
-    public Map<UUID, Long> countVisibleCurrentByWorkspace(CurrentActor actor,
-                                                          Collection<UUID> workspaceIds) {
+    public Map<UUID, Long> countVisibleCurrentByWorkspace(CurrentActor actor, Collection<UUID> workspaceIds) {
         if (workspaceIds.isEmpty()) return Map.of();
-        return visible(jdbcClient.sql("SELECT p.workspace_id, count(*) AS visible_count "
-                        + VISIBLE_FROM + " AND p.workspace_id IN (:workspaceIds) "
-                        + "AND p.lifecycle = 'ACTIVE' GROUP BY p.workspace_id"), actor)
+        return visible(
+                        jdbcClient.sql("SELECT p.workspace_id, count(*) AS visible_count "
+                                + VISIBLE_FROM + " AND p.workspace_id IN (:workspaceIds) "
+                                + "AND p.lifecycle = 'ACTIVE' GROUP BY p.workspace_id"),
+                        actor)
                 .param("workspaceIds", workspaceIds)
-                .query((rs, row) -> Map.entry(rs.getObject("workspace_id", UUID.class),
-                        rs.getLong("visible_count"))).list().stream()
+                .query((rs, row) -> Map.entry(rs.getObject("workspace_id", UUID.class), rs.getLong("visible_count")))
+                .list()
+                .stream()
                 .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     private Optional<Project> find(UUID companyId, UUID projectId, boolean lock) {
-        return jdbcClient.sql("SELECT " + COLUMNS + " FROM yumpoo.project "
+        return jdbcClient
+                .sql("SELECT " + COLUMNS + " FROM yumpoo.project "
                         + "WHERE company_id = :companyId AND id = :projectId AND purge_started_at IS NULL"
                         + (lock ? " FOR UPDATE" : ""))
-                .param("companyId", companyId).param("projectId", projectId)
-                .query(JdbcProjectRepository::map).optional();
+                .param("companyId", companyId)
+                .param("projectId", projectId)
+                .query(JdbcProjectRepository::map)
+                .optional();
     }
 
     @Override
     public List<Project> findGovernedByOwner(UUID companyId, UUID ownerUserId) {
-        return jdbcClient.sql("SELECT " + COLUMNS + " FROM yumpoo.project "
+        return jdbcClient
+                .sql("SELECT " + COLUMNS + " FROM yumpoo.project "
                         + "WHERE company_id=:companyId AND owner_user_id=:ownerUserId "
                         + "AND lifecycle = 'ACTIVE' ORDER BY id")
-                .param("companyId", companyId).param("ownerUserId", ownerUserId)
-                .query(JdbcProjectRepository::map).list();
+                .param("companyId", companyId)
+                .param("ownerUserId", ownerUserId)
+                .query(JdbcProjectRepository::map)
+                .list();
     }
 
     static Project map(ResultSet rs, int row) throws SQLException {
-        return new Project(rs.getObject("id", UUID.class), rs.getObject("company_id", UUID.class),
-                rs.getObject("workspace_id", UUID.class), rs.getString("project_code"),
-                rs.getString("name"), rs.getString("description"),
+        return new Project(
+                rs.getObject("id", UUID.class),
+                rs.getObject("company_id", UUID.class),
+                rs.getObject("workspace_id", UUID.class),
+                rs.getString("project_code"),
+                rs.getString("name"),
+                rs.getString("description"),
                 com.yumpoo.platform.catalog.domain.project.ProjectLifecycle.valueOf(rs.getString("lifecycle")),
-                rs.getObject("owner_user_id", UUID.class), rs.getLong("row_version"), instant(rs, "created_at"),
-                rs.getObject("created_by_user_id", UUID.class), instant(rs, "updated_at"),
+                rs.getObject("owner_user_id", UUID.class),
+                rs.getLong("row_version"),
+                instant(rs, "created_at"),
+                rs.getObject("created_by_user_id", UUID.class),
+                instant(rs, "updated_at"),
                 rs.getObject("updated_by_user_id", UUID.class),
-                nullableInstant(rs, "archived_at"), nullableInstant(rs, "deletion_requested_at"),
-                rs.getObject("deletion_requested_by", UUID.class), nullableInstant(rs, "purge_after"),
-                nullableInstant(rs, "purge_started_at"), nullableInstant(rs, "ended_at"));
+                nullableInstant(rs, "archived_at"),
+                nullableInstant(rs, "deletion_requested_at"),
+                rs.getObject("deletion_requested_by", UUID.class),
+                nullableInstant(rs, "purge_after"),
+                nullableInstant(rs, "purge_started_at"),
+                nullableInstant(rs, "ended_at"));
     }
 
     private static ProjectQueryRow mapQueryRow(ResultSet rs, int row) throws SQLException {
-        return new ProjectQueryRow(map(rs, row), rs.getString("workspace_code"),
-                rs.getString("workspace_name"), ProjectMembershipModels.ActorAccess.valueOf(
-                rs.getString("actor_access")));
+        return new ProjectQueryRow(
+                map(rs, row),
+                rs.getString("workspace_code"),
+                rs.getString("workspace_name"),
+                ProjectMembershipModels.ActorAccess.valueOf(rs.getString("actor_access")));
     }
 
-    private static JdbcClient.StatementSpec visible(JdbcClient.StatementSpec statement,
-                                                     CurrentActor actor) {
-        return statement.param("actorUserId", actor.userId()).param("companyId", actor.companyId())
+    private static JdbcClient.StatementSpec visible(JdbcClient.StatementSpec statement, CurrentActor actor) {
+        return statement
+                .param("actorUserId", actor.userId())
+                .param("companyId", actor.companyId())
                 .param("admin", actor.hasRole(PlatformRoleCode.COMPANY_ADMIN));
     }
 
-    private static JdbcClient.StatementSpec filters(JdbcClient.StatementSpec statement,
-            ProjectSearchCriteria criteria) {
+    private static JdbcClient.StatementSpec filters(
+            JdbcClient.StatementSpec statement, ProjectSearchCriteria criteria) {
         ProjectLifecycleFilter lifecycle = criteria.lifecycle();
         boolean current = lifecycle == null || lifecycle == ProjectLifecycleFilter.ALL;
-        String normalizedQuery = criteria.query() == null ? "" : criteria.query()
-                .replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
-        List<UUID> ownerUserIds = criteria.ownerUserIds().isEmpty()
-                ? List.of(new UUID(0, 0)) : criteria.ownerUserIds();
+        String normalizedQuery = criteria.query() == null
+                ? ""
+                : criteria.query().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+        List<UUID> ownerUserIds = criteria.ownerUserIds().isEmpty() ? List.of(new UUID(0, 0)) : criteria.ownerUserIds();
         List<UUID> ids = criteria.ids().isEmpty() ? List.of(new UUID(0, 0)) : criteria.ids();
         List<String> actorAccesses = criteria.actorAccesses().isEmpty()
                 ? List.of("OWNER")
-                : criteria.actorAccesses().stream().map(access -> switch (access) {
-                    case OWNER -> "OWNER";
-                    case MEMBER -> "MEMBER";
-                    case COMPANY_ADMIN -> "COMPANY_ADMIN_READ_ONLY";
-                }).toList();
+                : criteria.actorAccesses().stream()
+                        .map(access -> switch (access) {
+                            case OWNER -> "OWNER";
+                            case MEMBER -> "MEMBER";
+                            case COMPANY_ADMIN -> "COMPANY_ADMIN_READ_ONLY";
+                        })
+                        .toList();
         Instant updatedSince = criteria.updatedSince() == null ? Instant.EPOCH : criteria.updatedSince();
-        return statement.param("allEnded", criteria.ended() == null).param("ended", Boolean.TRUE.equals(criteria.ended()))
+        return statement
+                .param("allEnded", criteria.ended() == null)
+                .param("ended", Boolean.TRUE.equals(criteria.ended()))
                 .param("allQuery", criteria.query() == null)
                 .param("query", "%" + normalizedQuery + "%")
                 .param("allOwners", criteria.ownerUserIds().isEmpty())
@@ -351,10 +416,16 @@ public class JdbcProjectRepository implements ProjectRepository {
                 .param("actorAccesses", actorAccesses)
                 .param("allUpdatedSince", criteria.updatedSince() == null)
                 .param("updatedSince", OffsetDateTime.ofInstant(updatedSince, ZoneOffset.UTC))
-                .param("active", current || lifecycle == ProjectLifecycleFilter.ACTIVE
-                        || lifecycle == ProjectLifecycleFilter.ALL)
-                .param("archived", current || lifecycle == ProjectLifecycleFilter.ARCHIVED
-                        || lifecycle == ProjectLifecycleFilter.ALL);
+                .param(
+                        "active",
+                        current
+                                || lifecycle == ProjectLifecycleFilter.ACTIVE
+                                || lifecycle == ProjectLifecycleFilter.ALL)
+                .param(
+                        "archived",
+                        current
+                                || lifecycle == ProjectLifecycleFilter.ARCHIVED
+                                || lifecycle == ProjectLifecycleFilter.ALL);
     }
 
     private static Instant instant(ResultSet rs, String column) throws SQLException {
@@ -367,11 +438,7 @@ public class JdbcProjectRepository implements ProjectRepository {
     }
 
     private static JdbcClient.StatementSpec nullable(
-            JdbcClient.StatementSpec statement,
-            String name,
-            Object value,
-            int sqlType
-    ) {
+            JdbcClient.StatementSpec statement, String name, Object value, int sqlType) {
         return value == null ? statement.param(name, null, sqlType) : statement.param(name, value);
     }
 }

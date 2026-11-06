@@ -11,10 +11,7 @@ public class WebLogoutService {
     private final SessionService sessionService;
     private final AuthenticationEventService eventService;
 
-    public WebLogoutService(
-            SessionService sessionService,
-            AuthenticationEventService eventService
-    ) {
+    public WebLogoutService(SessionService sessionService, AuthenticationEventService eventService) {
         this.sessionService = sessionService;
         this.eventService = eventService;
     }

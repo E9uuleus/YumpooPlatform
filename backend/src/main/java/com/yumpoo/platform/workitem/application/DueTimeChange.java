@@ -9,8 +9,7 @@ public record DueTimeChange(boolean supplied, LocalTime value) {
     }
 
     public LocalTime resolve(LocalDate date, LocalTime previous) {
-        if (date == null && supplied && value != null)
-            throw new IllegalArgumentException("截止时间必须同时设置截止日期");
+        if (date == null && supplied && value != null) throw new IllegalArgumentException("截止时间必须同时设置截止日期");
         return date == null ? null : supplied ? value : previous;
     }
 }

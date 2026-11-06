@@ -9,9 +9,6 @@ import com.yumpoo.platform.identityaccess.application.authorization.RoleAssignme
 import com.yumpoo.platform.identityaccess.application.authorization.RoleAssignmentStatus;
 import com.yumpoo.platform.identityaccess.application.authorization.RoleGovernanceRepository;
 import com.yumpoo.platform.identityaccess.application.authorization.RoleUserSnapshot;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Repository;
-
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
@@ -22,6 +19,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Repository;
 
 @Repository
 public class JdbcRoleGovernanceRepository implements RoleGovernanceRepository {
@@ -42,10 +41,9 @@ public class JdbcRoleGovernanceRepository implements RoleGovernanceRepository {
                         FROM yumpoo.company
                         WHERE id = :companyId
                         ON CONFLICT (company_id) DO NOTHING
-                        """)
-                .param("companyId", companyId)
-                .update();
-        return jdbcClient.sql("""
+                        """).param("companyId", companyId).update();
+        return jdbcClient
+                .sql("""
                         SELECT company_id, lifecycle_status, event_version, row_version
                         FROM yumpoo.app_manager_governance_state
                         WHERE company_id = :companyId
@@ -59,7 +57,8 @@ public class JdbcRoleGovernanceRepository implements RoleGovernanceRepository {
 
     @Override
     public Optional<RoleUserSnapshot> lockUser(UUID companyId, UUID userId) {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                         SELECT id, company_id, employment_status, account_status,
                                authorization_version, row_version
                         FROM yumpoo.identity_user
@@ -74,7 +73,8 @@ public class JdbcRoleGovernanceRepository implements RoleGovernanceRepository {
 
     @Override
     public Optional<RoleUserSnapshot> findUser(UUID companyId, UUID userId) {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                         SELECT id, company_id, employment_status, account_status,
                                authorization_version, row_version
                         FROM yumpoo.identity_user
@@ -88,7 +88,8 @@ public class JdbcRoleGovernanceRepository implements RoleGovernanceRepository {
 
     @Override
     public Optional<RoleUserSnapshot> findAvailableAppManager(UUID companyId) {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                         SELECT member.id, member.company_id, member.employment_status,
                                member.account_status, member.authorization_version,
                                member.row_version
@@ -111,9 +112,9 @@ public class JdbcRoleGovernanceRepository implements RoleGovernanceRepository {
 
     @Override
     public Optional<RoleAssignmentSnapshot> lockAssignment(
-            UUID companyId, UUID assignmentId, ManagedPlatformRole expectedRole
-    ) {
-        return jdbcClient.sql("""
+            UUID companyId, UUID assignmentId, ManagedPlatformRole expectedRole) {
+        return jdbcClient
+                .sql("""
                         SELECT id, company_id, user_id, role_code, status, row_version, granted_at
                         FROM yumpoo.platform_role_assignment
                         WHERE company_id = :companyId AND id = :assignmentId
@@ -129,9 +130,9 @@ public class JdbcRoleGovernanceRepository implements RoleGovernanceRepository {
 
     @Override
     public Optional<RoleAssignmentSnapshot> findActiveAssignment(
-            UUID companyId, UUID userId, ManagedPlatformRole role
-    ) {
-        return jdbcClient.sql("""
+            UUID companyId, UUID userId, ManagedPlatformRole role) {
+        return jdbcClient
+                .sql("""
                         SELECT id, company_id, user_id, role_code, status, row_version, granted_at
                         FROM yumpoo.platform_role_assignment
                         WHERE company_id = :companyId
@@ -148,7 +149,8 @@ public class JdbcRoleGovernanceRepository implements RoleGovernanceRepository {
 
     @Override
     public boolean hasAppManagerHistory(UUID companyId) {
-        return Boolean.TRUE.equals(jdbcClient.sql("""
+        return Boolean.TRUE.equals(jdbcClient
+                .sql("""
                         SELECT EXISTS (
                             SELECT 1 FROM yumpoo.platform_role_assignment
                             WHERE company_id = :companyId AND role_code = 'APP_MANAGER'
@@ -161,7 +163,8 @@ public class JdbcRoleGovernanceRepository implements RoleGovernanceRepository {
 
     @Override
     public boolean hasAnyRoleHistory(UUID companyId) {
-        return Boolean.TRUE.equals(jdbcClient.sql("""
+        return Boolean.TRUE.equals(jdbcClient
+                .sql("""
                         SELECT EXISTS (
                             SELECT 1 FROM yumpoo.platform_role_assignment
                             WHERE company_id = :companyId
@@ -174,7 +177,8 @@ public class JdbcRoleGovernanceRepository implements RoleGovernanceRepository {
 
     @Override
     public int countAvailableAppManagers(UUID companyId) {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                         SELECT count(*)
                         FROM yumpoo.platform_role_assignment assignment
                         JOIN yumpoo.identity_user member
@@ -193,13 +197,19 @@ public class JdbcRoleGovernanceRepository implements RoleGovernanceRepository {
 
     @Override
     public RoleAssignmentSnapshot grant(
-            UUID assignmentId, UUID companyId, UUID userId, ManagedPlatformRole role,
-            String actorType, UUID actorUserId, String systemCode,
-            String reasonReference, Instant now
-    ) {
+            UUID assignmentId,
+            UUID companyId,
+            UUID userId,
+            ManagedPlatformRole role,
+            String actorType,
+            UUID actorUserId,
+            String systemCode,
+            String reasonReference,
+            Instant now) {
         OffsetDateTime databaseNow = databaseTime(now);
         try {
-        return jdbcClient.sql("""
+            return jdbcClient
+                    .sql("""
                         INSERT INTO yumpoo.platform_role_assignment (
                             id, company_id, user_id, role_code, scope_type, scope_id, status,
                             granted_by_actor_type, granted_by_user_id, granted_by_system_code,
@@ -211,31 +221,29 @@ public class JdbcRoleGovernanceRepository implements RoleGovernanceRepository {
                         )
                         RETURNING id, company_id, user_id, role_code, status, row_version, granted_at
                         """)
-                .param("id", assignmentId)
-                .param("companyId", companyId)
-                .param("userId", userId)
-                .param("roleCode", role.name())
-                .param("scopeType", role.scopeType())
-                .param("actorType", actorType)
-                .param("actorUserId", actorUserId)
-                .param("systemCode", systemCode)
-                .param("reason", reasonReference)
-                .param("now", databaseNow)
-                .query(JdbcRoleGovernanceRepository::mapAssignment)
-                .single();
+                    .param("id", assignmentId)
+                    .param("companyId", companyId)
+                    .param("userId", userId)
+                    .param("roleCode", role.name())
+                    .param("scopeType", role.scopeType())
+                    .param("actorType", actorType)
+                    .param("actorUserId", actorUserId)
+                    .param("systemCode", systemCode)
+                    .param("reason", reasonReference)
+                    .param("now", databaseNow)
+                    .query(JdbcRoleGovernanceRepository::mapAssignment)
+                    .single();
         } catch (org.springframework.dao.DuplicateKeyException exception) {
-            throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION,
-                    "目标已拥有平台角色，请使用更改角色");
+            throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION, "目标已拥有平台角色，请使用更改角色");
         }
     }
 
     @Override
     public RoleAssignmentSnapshot revoke(
-            RoleAssignmentSnapshot assignment, UUID actorUserId,
-            String reasonReference, Instant now
-    ) {
+            RoleAssignmentSnapshot assignment, UUID actorUserId, String reasonReference, Instant now) {
         OffsetDateTime databaseNow = databaseTime(now);
-        List<RoleAssignmentSnapshot> changed = jdbcClient.sql("""
+        List<RoleAssignmentSnapshot> changed = jdbcClient
+                .sql("""
                         UPDATE yumpoo.platform_role_assignment
                         SET status = 'REVOKED',
                             revoked_by_actor_type = 'USER',
@@ -265,9 +273,10 @@ public class JdbcRoleGovernanceRepository implements RoleGovernanceRepository {
     }
 
     @Override
-    public RoleAssignmentSnapshot revokeBySystem(RoleAssignmentSnapshot assignment,
-            String systemCode, String reasonReference, Instant now) {
-        return jdbcClient.sql("""
+    public RoleAssignmentSnapshot revokeBySystem(
+            RoleAssignmentSnapshot assignment, String systemCode, String reasonReference, Instant now) {
+        return jdbcClient
+                .sql("""
                 UPDATE yumpoo.platform_role_assignment
                 SET status = 'REVOKED', revoked_by_actor_type = 'SYSTEM',
                     revoked_by_system_code = :systemCode, revoked_at = :now,
@@ -276,18 +285,21 @@ public class JdbcRoleGovernanceRepository implements RoleGovernanceRepository {
                   AND row_version = :version
                 RETURNING id, company_id, user_id, role_code, status, row_version, granted_at
                 """)
-                .param("systemCode", systemCode).param("now", databaseTime(now))
-                .param("reason", reasonReference).param("id", assignment.assignmentId())
-                .param("companyId", assignment.companyId()).param("version", assignment.rowVersion())
-                .query(JdbcRoleGovernanceRepository::mapAssignment).optional()
+                .param("systemCode", systemCode)
+                .param("now", databaseTime(now))
+                .param("reason", reasonReference)
+                .param("id", assignment.assignmentId())
+                .param("companyId", assignment.companyId())
+                .param("version", assignment.rowVersion())
+                .query(JdbcRoleGovernanceRepository::mapAssignment)
+                .optional()
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
     }
 
     @Override
-    public RoleUserSnapshot incrementAuthorizationVersion(
-            UUID companyId, UUID userId, long expectedRowVersion
-    ) {
-        List<RoleUserSnapshot> changed = jdbcClient.sql("""
+    public RoleUserSnapshot incrementAuthorizationVersion(UUID companyId, UUID userId, long expectedRowVersion) {
+        List<RoleUserSnapshot> changed = jdbcClient
+                .sql("""
                         UPDATE yumpoo.identity_user
                         SET authorization_version = authorization_version + 1,
                             row_version = row_version + 1,
@@ -312,7 +324,8 @@ public class JdbcRoleGovernanceRepository implements RoleGovernanceRepository {
     @Override
     public GovernanceStateSnapshot markAvailable(UUID companyId, boolean initialize, Instant now) {
         OffsetDateTime databaseNow = databaseTime(now);
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                         UPDATE yumpoo.app_manager_governance_state
                         SET lifecycle_status = 'AVAILABLE',
                             initialized_at = CASE
@@ -335,7 +348,8 @@ public class JdbcRoleGovernanceRepository implements RoleGovernanceRepository {
     @Override
     public GovernanceStateSnapshot markMissing(UUID companyId, Instant now) {
         OffsetDateTime databaseNow = databaseTime(now);
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                         UPDATE yumpoo.app_manager_governance_state
                         SET lifecycle_status = 'MISSING',
                             missing_since = :now,
@@ -357,7 +371,8 @@ public class JdbcRoleGovernanceRepository implements RoleGovernanceRepository {
         UUID companyId = resultSet.getObject("company_id", UUID.class);
         UUID userId = resultSet.getObject("id", UUID.class);
         Set<ManagedPlatformRole> roles = new LinkedHashSet<>();
-        jdbcClient.sql("""
+        jdbcClient
+                .sql("""
                         SELECT role_code FROM yumpoo.platform_role_assignment
                         WHERE company_id = :companyId AND user_id = :userId AND status = 'ACTIVE'
                         """)
@@ -373,12 +388,10 @@ public class JdbcRoleGovernanceRepository implements RoleGovernanceRepository {
                 resultSet.getString("account_status"),
                 resultSet.getLong("authorization_version"),
                 resultSet.getLong("row_version"),
-                Set.copyOf(roles)
-        );
+                Set.copyOf(roles));
     }
 
-    private static RoleAssignmentSnapshot mapAssignment(ResultSet resultSet, int rowNumber)
-            throws SQLException {
+    private static RoleAssignmentSnapshot mapAssignment(ResultSet resultSet, int rowNumber) throws SQLException {
         return new RoleAssignmentSnapshot(
                 resultSet.getObject("id", UUID.class),
                 resultSet.getObject("company_id", UUID.class),
@@ -386,18 +399,15 @@ public class JdbcRoleGovernanceRepository implements RoleGovernanceRepository {
                 ManagedPlatformRole.valueOf(resultSet.getString("role_code")),
                 RoleAssignmentStatus.valueOf(resultSet.getString("status")),
                 resultSet.getLong("row_version"),
-                resultSet.getObject("granted_at", OffsetDateTime.class).toInstant()
-        );
+                resultSet.getObject("granted_at", OffsetDateTime.class).toInstant());
     }
 
-    private static GovernanceStateSnapshot mapState(ResultSet resultSet, int rowNumber)
-            throws SQLException {
+    private static GovernanceStateSnapshot mapState(ResultSet resultSet, int rowNumber) throws SQLException {
         return new GovernanceStateSnapshot(
                 resultSet.getObject("company_id", UUID.class),
                 GovernanceLifecycleStatus.valueOf(resultSet.getString("lifecycle_status")),
                 resultSet.getLong("event_version"),
-                resultSet.getLong("row_version")
-        );
+                resultSet.getLong("row_version"));
     }
 
     private static OffsetDateTime databaseTime(Instant instant) {

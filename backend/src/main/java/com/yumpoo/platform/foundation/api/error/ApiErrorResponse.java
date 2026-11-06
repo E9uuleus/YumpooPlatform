@@ -9,8 +9,7 @@ public record ApiErrorResponse(
         String requestId,
         boolean retryable,
         List<ApiFieldError> fieldErrors,
-        ApiErrorDetails details
-) {
+        ApiErrorDetails details) {
 
     public ApiErrorResponse {
         Objects.requireNonNull(code, "code must not be null");

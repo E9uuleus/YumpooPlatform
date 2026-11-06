@@ -4,14 +4,13 @@ import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncSet
 import com.yumpoo.platform.identityaccess.application.directory.FullDirectoryScanCollector;
 import com.yumpoo.platform.identityaccess.application.directory.WeComDirectoryGateway;
 import com.yumpoo.platform.identityaccess.application.directory.WeComDirectoryProfileGateway;
+import java.time.Clock;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
-
-import java.time.Clock;
 
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnProperty(prefix = "yumpoo.wecom.directory", name = "enabled", havingValue = "true")
@@ -25,36 +24,20 @@ public class DirectorySyncWeComConfiguration {
     }
 
     @Bean
-    WeComDirectoryGateway directorySyncIdGateway(
-            DirectorySyncWeComProperties properties,
-            Clock clock
-    ) {
+    WeComDirectoryGateway directorySyncIdGateway(DirectorySyncWeComProperties properties, Clock clock) {
         return new RestClientWeComDirectoryGateway(
-                restClientBuilder(properties),
-                properties.getCorpId(),
-                properties.getDirectorySecret(),
-                clock
-        );
+                restClientBuilder(properties), properties.getCorpId(), properties.getDirectorySecret(), clock);
     }
 
     @Bean
-    WeComDirectoryProfileGateway directorySyncProfileGateway(
-            DirectorySyncWeComProperties properties,
-            Clock clock
-    ) {
+    WeComDirectoryProfileGateway directorySyncProfileGateway(DirectorySyncWeComProperties properties, Clock clock) {
         return new RestClientWeComDirectoryProfileGateway(
-                restClientBuilder(properties),
-                properties.getCorpId(),
-                properties.getProfileSecret(),
-                clock
-        );
+                restClientBuilder(properties), properties.getCorpId(), properties.getProfileSecret(), clock);
     }
 
     @Bean
     FullDirectoryScanCollector fullDirectoryScanCollector(
-            WeComDirectoryGateway directorySyncIdGateway,
-            DirectorySyncWeComProperties properties
-    ) {
+            WeComDirectoryGateway directorySyncIdGateway, DirectorySyncWeComProperties properties) {
         return new FullDirectoryScanCollector(directorySyncIdGateway, properties.getPageSize());
     }
 

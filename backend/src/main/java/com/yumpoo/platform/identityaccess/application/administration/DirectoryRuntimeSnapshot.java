@@ -4,9 +4,4 @@ import java.time.Instant;
 import java.util.UUID;
 
 public record DirectoryRuntimeSnapshot(
-        UUID activeRunId,
-        Instant lastSuccessfulRunAt,
-        Instant lastProblemAt,
-        String lastProblemCode
-) {
-}
+        UUID activeRunId, Instant lastSuccessfulRunAt, Instant lastProblemAt, String lastProblemCode) {}

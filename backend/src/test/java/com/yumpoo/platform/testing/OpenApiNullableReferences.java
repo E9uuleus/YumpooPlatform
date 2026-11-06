@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.BooleanNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -13,11 +12,10 @@ import java.util.Set;
 
 final class OpenApiNullableReferences {
 
-    private static final Set<String> ALLOWED_KEYS = Set.of(
-            "type", "nullable", "allOf", "description", "readOnly", "deprecated", "example");
+    private static final Set<String> ALLOWED_KEYS =
+            Set.of("type", "nullable", "allOf", "description", "readOnly", "deprecated", "example");
 
-    private OpenApiNullableReferences() {
-    }
+    private OpenApiNullableReferences() {}
 
     static void normalize(ObjectNode root) {
         List<String> problems = new ArrayList<>();
@@ -29,8 +27,8 @@ final class OpenApiNullableReferences {
 
     private static void visit(JsonNode node, JsonPointer pointer, List<String> problems) {
         if (node instanceof ObjectNode object) {
-            object.properties().forEach(entry ->
-                    visit(entry.getValue(), pointer.appendProperty(entry.getKey()), problems));
+            object.properties()
+                    .forEach(entry -> visit(entry.getValue(), pointer.appendProperty(entry.getKey()), problems));
             if (BooleanNode.TRUE.equals(object.get("nullable")) && object.has("allOf")) {
                 normalizeReference(object, pointer, problems);
             }
@@ -80,7 +78,8 @@ final class OpenApiNullableReferences {
         nullOnly.putArray("enum").addNull();
     }
 
-    private static void reportExtraKeys(ObjectNode node, JsonPointer pointer, Set<String> allowed, List<String> problems) {
+    private static void reportExtraKeys(
+            ObjectNode node, JsonPointer pointer, Set<String> allowed, List<String> problems) {
         List<String> extraKeys = node.properties().stream()
                 .map(Map.Entry::getKey)
                 .filter(key -> !allowed.contains(key))

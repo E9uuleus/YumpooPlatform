@@ -116,6 +116,7 @@ test('flat static plan runs shared capabilities once and Windows reuses the test
   ])
   assert.equal(steps.filter(step => step.id === 'event-compatibility').length, 1)
   assert.equal(steps.filter(step => step.id === 'generated-client').length, 1)
+  assert.deepEqual(plan('backend')[0].args, ['spotless:check'])
   assert.deepEqual(plan('backend').find(step => step.id === 'backend-regression').args, ['clean', 'verify'])
   assert(plan('backend').some(step => step.args.includes('-DargLine=-Xmx96m')))
   assert(!plan('windows').some(step => step.tool === 'maven' || step.args.includes('build')))

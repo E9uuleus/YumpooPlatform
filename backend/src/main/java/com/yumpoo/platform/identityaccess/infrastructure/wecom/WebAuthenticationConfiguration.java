@@ -1,18 +1,20 @@
 package com.yumpoo.platform.identityaccess.infrastructure.wecom;
 
 import com.yumpoo.platform.identityaccess.application.authentication.AuthenticationEventService;
+import com.yumpoo.platform.identityaccess.application.authentication.AuthenticationUserRepository;
 import com.yumpoo.platform.identityaccess.application.authentication.WebAuthenticationService;
 import com.yumpoo.platform.identityaccess.application.authentication.WebIdentityProvider;
 import com.yumpoo.platform.identityaccess.application.authentication.WebLoginCompletionService;
-import com.yumpoo.platform.identityaccess.application.authentication.AuthenticationUserRepository;
 import com.yumpoo.platform.identityaccess.application.desktopauth.DesktopAuthAttemptStore;
 import com.yumpoo.platform.identityaccess.application.desktopauth.DesktopAuthTokenHasher;
 import com.yumpoo.platform.identityaccess.application.desktopauth.ProductDesktopAuthenticationService;
 import com.yumpoo.platform.identityaccess.application.desktopauth.SecureDesktopAuthTokenGenerator;
-import com.yumpoo.platform.identityaccess.application.session.SessionService;
 import com.yumpoo.platform.identityaccess.application.oauth.OAuthAttemptHasher;
 import com.yumpoo.platform.identityaccess.application.oauth.OAuthAttemptStore;
 import com.yumpoo.platform.identityaccess.application.oauth.SecureOAuthAttemptTokenGenerator;
+import com.yumpoo.platform.identityaccess.application.session.SessionService;
+import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
+import java.time.Clock;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,15 +22,12 @@ import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
-import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
-
-import java.time.Clock;
 
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties({
-        WebOAuthProperties.class,
-        DirectorySyncWeComProperties.class,
-        ControlledAuthenticationProperties.class
+    WebOAuthProperties.class,
+    DirectorySyncWeComProperties.class,
+    ControlledAuthenticationProperties.class
 })
 public class WebAuthenticationConfiguration {
 
@@ -37,8 +36,7 @@ public class WebAuthenticationConfiguration {
             WebOAuthProperties oauth,
             ControlledAuthenticationProperties controlled,
             Environment environment,
-            Clock clock
-    ) {
+            Clock clock) {
         oauth.validateCleanup();
         controlled.validateForEnabled();
         if (oauth.isEnabled() && controlled.isEnabled()) {
@@ -47,9 +45,7 @@ public class WebAuthenticationConfiguration {
         if (controlled.isEnabled()) {
             if (environment.acceptsProfiles(Profiles.of("prod"))
                     || !environment.acceptsProfiles(Profiles.of("local", "test"))) {
-                throw new IllegalStateException(
-                        "Controlled identity provider is restricted to local/test profiles"
-                );
+                throw new IllegalStateException("Controlled identity provider is restricted to local/test profiles");
             }
             return new ControlledWebIdentityProvider(controlled, clock);
         }
@@ -62,11 +58,7 @@ public class WebAuthenticationConfiguration {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(oauth.getConnectTimeout());
         requestFactory.setReadTimeout(oauth.getReadTimeout());
-        return new RestClientWebIdentityProvider(
-                RestClient.builder().requestFactory(requestFactory),
-                oauth,
-                clock
-        );
+        return new RestClientWebIdentityProvider(RestClient.builder().requestFactory(requestFactory), oauth, clock);
     }
 
     @Bean
@@ -75,8 +67,7 @@ public class WebAuthenticationConfiguration {
             WebIdentityProvider identityProvider,
             WebLoginCompletionService completionService,
             AuthenticationEventService eventService,
-            Clock clock
-    ) {
+            Clock clock) {
         return new WebAuthenticationService(
                 attemptStore,
                 identityProvider,
@@ -84,8 +75,7 @@ public class WebAuthenticationConfiguration {
                 new OAuthAttemptHasher(),
                 completionService,
                 eventService,
-                clock
-        );
+                clock);
     }
 
     @Bean
@@ -96,8 +86,7 @@ public class WebAuthenticationConfiguration {
             CompanyConfigurationQuery companyQuery,
             SessionService sessionService,
             AuthenticationEventService eventService,
-            Clock clock
-    ) {
+            Clock clock) {
         return new ProductDesktopAuthenticationService(
                 attemptStore,
                 new SecureDesktopAuthTokenGenerator(),
@@ -107,22 +96,13 @@ public class WebAuthenticationConfiguration {
                 companyQuery,
                 sessionService,
                 eventService,
-                clock
-        );
+                clock);
     }
 
-    private static void requireIndependentSecret(
-            WebOAuthProperties oauth,
-            Environment environment
-    ) {
-        String directorySecret = environment.getProperty(
-                "yumpoo.wecom.directory.directory-secret"
-        );
-        String profileSecret = environment.getProperty(
-                "yumpoo.wecom.directory.profile-secret"
-        );
-        if (sameNonBlank(oauth.getAppSecret(), directorySecret)
-                || sameNonBlank(oauth.getAppSecret(), profileSecret)) {
+    private static void requireIndependentSecret(WebOAuthProperties oauth, Environment environment) {
+        String directorySecret = environment.getProperty("yumpoo.wecom.directory.directory-secret");
+        String profileSecret = environment.getProperty("yumpoo.wecom.directory.profile-secret");
+        if (sameNonBlank(oauth.getAppSecret(), directorySecret) || sameNonBlank(oauth.getAppSecret(), profileSecret)) {
             throw new IllegalStateException("WeCom OAuth app secret must be independent");
         }
     }

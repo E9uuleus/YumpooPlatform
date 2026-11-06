@@ -1,7 +1,6 @@
 package com.yumpoo.platform.catalog.application.workspace;
 
 import com.yumpoo.platform.catalog.domain.workspace.Workspace;
-
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;

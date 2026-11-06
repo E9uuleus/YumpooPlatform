@@ -2,13 +2,6 @@ package com.yumpoo.platform.identityaccess.infrastructure.bootstrap;
 
 import com.yumpoo.platform.identityaccess.application.bootstrap.InitialIdentityBootstrapException;
 import com.yumpoo.platform.identityaccess.application.bootstrap.InitialIdentityBootstrapInput;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -19,32 +12,27 @@ import java.nio.file.attribute.AclEntryType;
 import java.nio.file.attribute.AclFileAttributeView;
 import java.util.Locale;
 import java.util.Set;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.stereotype.Component;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 @Component
-@ConditionalOnProperty(
-        prefix = "yumpoo.maintenance.initial-identity",
-        name = "enabled",
-        havingValue = "true"
-)
+@ConditionalOnProperty(prefix = "yumpoo.maintenance.initial-identity", name = "enabled", havingValue = "true")
 public class InitialIdentityBootstrapInputReader {
 
     static final long MAX_INPUT_BYTES = 8L * 1024L;
     static final String CONFIRMATION = "M1-15_INITIAL_IDENTITY_BOOTSTRAP";
     private static final Set<String> FIELDS = Set.of(
-            "schemaVersion",
-            "confirmation",
-            "expectedCorpId",
-            "appManagerWeComUserId",
-            "companyAdminWeComUserId"
-    );
+            "schemaVersion", "confirmation", "expectedCorpId", "appManagerWeComUserId", "companyAdminWeComUserId");
 
     private final ObjectMapper objectMapper;
     private final String secretsRoot;
 
     public InitialIdentityBootstrapInputReader(
-            ObjectMapper objectMapper,
-            @Value("${yumpoo.deployment.secrets-root}") String secretsRoot
-    ) {
+            ObjectMapper objectMapper, @Value("${yumpoo.deployment.secrets-root}") String secretsRoot) {
         this.objectMapper = objectMapper;
         this.secretsRoot = secretsRoot;
     }
@@ -72,8 +60,7 @@ public class InitialIdentityBootstrapInputReader {
             return new InitialIdentityBootstrapInput(
                     text(root, "expectedCorpId"),
                     text(root, "appManagerWeComUserId"),
-                    text(root, "companyAdminWeComUserId")
-            );
+                    text(root, "companyAdminWeComUserId"));
         } catch (InitialIdentityBootstrapException exception) {
             throw exception;
         } catch (JacksonException exception) {
@@ -90,8 +77,7 @@ public class InitialIdentityBootstrapInputReader {
         try {
             Path resolvedSecretsRoot = Path.of(secretsRoot).toRealPath();
             Path normalized = configuredPath.normalize();
-            if (Files.isSymbolicLink(normalized)
-                    || !Files.isRegularFile(normalized, LinkOption.NOFOLLOW_LINKS)) {
+            if (Files.isSymbolicLink(normalized) || !Files.isRegularFile(normalized, LinkOption.NOFOLLOW_LINKS)) {
                 throw invalid("INITIAL_IDENTITY_BOOTSTRAP_INPUT_PATH_INVALID");
             }
             Path realInput = normalized.toRealPath();
@@ -108,14 +94,13 @@ public class InitialIdentityBootstrapInputReader {
     }
 
     private static void rejectBroadReadAcl(Path input) throws IOException {
-        AclFileAttributeView view = Files.getFileAttributeView(
-                input, AclFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+        AclFileAttributeView view =
+                Files.getFileAttributeView(input, AclFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
         if (view == null) {
             return;
         }
         for (var entry : view.getAcl()) {
-            if (entry.type() != AclEntryType.ALLOW
-                    || !entry.permissions().contains(AclEntryPermission.READ_DATA)) {
+            if (entry.type() != AclEntryType.ALLOW || !entry.permissions().contains(AclEntryPermission.READ_DATA)) {
                 continue;
             }
             String principal = entry.principal().getName().toUpperCase(Locale.ROOT);
@@ -137,10 +122,6 @@ public class InitialIdentityBootstrapInputReader {
     }
 
     private static InitialIdentityBootstrapException invalid(String code) {
-        return new InitialIdentityBootstrapException(
-                "INPUT",
-                code,
-                "Initial identity bootstrap input was rejected"
-        );
+        return new InitialIdentityBootstrapException("INPUT", code, "Initial identity bootstrap input was rejected");
     }
 }

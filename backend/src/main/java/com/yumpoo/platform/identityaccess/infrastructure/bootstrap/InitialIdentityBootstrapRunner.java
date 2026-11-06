@@ -11,6 +11,9 @@ import com.yumpoo.platform.identityaccess.application.bootstrap.InitialIdentityB
 import com.yumpoo.platform.identityaccess.infrastructure.wecom.DirectorySyncWeComProperties;
 import com.yumpoo.platform.identityaccess.infrastructure.wecom.WebOAuthProperties;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
+import java.util.Arrays;
+import java.util.Objects;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -22,16 +25,8 @@ import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.WebApplicationContext;
 
-import java.util.Arrays;
-import java.util.Objects;
-import java.util.UUID;
-
 @Component
-@ConditionalOnProperty(
-        prefix = "yumpoo.maintenance.initial-identity",
-        name = "enabled",
-        havingValue = "true"
-)
+@ConditionalOnProperty(prefix = "yumpoo.maintenance.initial-identity", name = "enabled", havingValue = "true")
 public class InitialIdentityBootstrapRunner implements ApplicationRunner {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(InitialIdentityBootstrapRunner.class);
@@ -55,8 +50,7 @@ public class InitialIdentityBootstrapRunner implements ApplicationRunner {
             WebOAuthProperties oauth,
             DirectorySyncWeComProperties directory,
             Environment environment,
-            ConfigurableApplicationContext applicationContext
-    ) {
+            ConfigurableApplicationContext applicationContext) {
         this.properties = properties;
         this.inputReader = inputReader;
         this.bootstrapService = bootstrapService;
@@ -71,8 +65,8 @@ public class InitialIdentityBootstrapRunner implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         String requestId = "m115-bootstrap-" + UUID.randomUUID();
-        try (RequestCorrelationContext.Scope ignored = RequestCorrelationContext.open(
-                RequestCorrelation.root(requestId))) {
+        try (RequestCorrelationContext.Scope ignored =
+                RequestCorrelationContext.open(RequestCorrelation.root(requestId))) {
             execute(requestId);
         }
     }
@@ -86,50 +80,48 @@ public class InitialIdentityBootstrapRunner implements ApplicationRunner {
             InitialIdentityBootstrapInput input = inputReader.read(properties.inputFile());
             validateWeComConfiguration(input);
             InitialIdentityBootstrapResult result = bootstrapService.execute(input, reason, requestId);
-            LOGGER.atInfo().setMessage("initial identity bootstrap completed").addKeyValue("event", "identity.bootstrap.completed")
+            LOGGER.atInfo()
+                    .setMessage("initial identity bootstrap completed")
+                    .addKeyValue("event", "identity.bootstrap.completed")
                     .addKeyValue("requestId", requestId)
-                    .addKeyValue("directoryRunId", result.directoryRunId()).log();
+                    .addKeyValue("directoryRunId", result.directoryRunId())
+                    .log();
             SpringApplication.exit(applicationContext, () -> 0);
         } catch (RuntimeException exception) {
             Failure failure = failure(exception);
             try {
                 auditService.failed(
-                        companyId,
-                        requestId,
-                        reason,
-                        failure.stage(),
-                        failure.errorCode(),
-                        failure.directoryRunId()
-                );
+                        companyId, requestId, reason, failure.stage(), failure.errorCode(), failure.directoryRunId());
             } catch (RuntimeException auditFailure) {
-                LOGGER.atError().setMessage("bootstrap failure audit failed").addKeyValue("event", "identity.bootstrap.audit.failed")
-                    .addKeyValue("requestId", requestId)
-                    .addKeyValue("errorCode", "INITIAL_IDENTITY_BOOTSTRAP_AUDIT_FAILED").log();
+                LOGGER.atError()
+                        .setMessage("bootstrap failure audit failed")
+                        .addKeyValue("event", "identity.bootstrap.audit.failed")
+                        .addKeyValue("requestId", requestId)
+                        .addKeyValue("errorCode", "INITIAL_IDENTITY_BOOTSTRAP_AUDIT_FAILED")
+                        .log();
             }
-            LOGGER.atError().setMessage("initial identity bootstrap failed").addKeyValue("event", "identity.bootstrap.failed")
+            LOGGER.atError()
+                    .setMessage("initial identity bootstrap failed")
+                    .addKeyValue("event", "identity.bootstrap.failed")
                     .addKeyValue("requestId", requestId)
                     .addKeyValue("stage", failure.stage())
                     .addKeyValue("errorCode", failure.errorCode())
-                    .addKeyValue("directoryRunId", failure.directoryRunId()).log();
+                    .addKeyValue("directoryRunId", failure.directoryRunId())
+                    .log();
             throw new IllegalStateException(
-                    "Initial identity bootstrap failed requestId=" + requestId
-                            + " errorCode=" + failure.errorCode()
-            );
+                    "Initial identity bootstrap failed requestId=" + requestId + " errorCode=" + failure.errorCode());
         }
     }
 
     private void validateRuntimeBoundary() {
         if (applicationContext instanceof WebApplicationContext
-                || !"none".equalsIgnoreCase(environment.getProperty(
-                        "spring.main.web-application-type", ""))) {
+                || !"none".equalsIgnoreCase(environment.getProperty("spring.main.web-application-type", ""))) {
             throw rejected("RUNTIME", "INITIAL_IDENTITY_BOOTSTRAP_WEB_MODE_FORBIDDEN");
         }
-        if (Arrays.stream(environment.getActiveProfiles())
-                .noneMatch("prod"::equalsIgnoreCase)) {
+        if (Arrays.stream(environment.getActiveProfiles()).noneMatch("prod"::equalsIgnoreCase)) {
             throw rejected("RUNTIME", "INITIAL_IDENTITY_BOOTSTRAP_PROD_PROFILE_REQUIRED");
         }
-        if (environment.getProperty(
-                "yumpoo.maintenance.app-manager.enabled", Boolean.class, false)) {
+        if (environment.getProperty("yumpoo.maintenance.app-manager.enabled", Boolean.class, false)) {
             throw rejected("RUNTIME", "INITIAL_IDENTITY_BOOTSTRAP_MAINTENANCE_CONFLICT");
         }
     }
@@ -154,9 +146,7 @@ public class InitialIdentityBootstrapRunner implements ApplicationRunner {
     }
 
     private static boolean independent(String left, String right) {
-        return left != null && !left.isBlank()
-                && right != null && !right.isBlank()
-                && !left.equals(right);
+        return left != null && !left.isBlank() && right != null && !right.isBlank() && !left.equals(right);
     }
 
     private static String normalizedReason(String value) {
@@ -167,28 +157,18 @@ public class InitialIdentityBootstrapRunner implements ApplicationRunner {
     }
 
     private static InitialIdentityBootstrapException rejected(String stage, String code) {
-        return new InitialIdentityBootstrapException(
-                stage,
-                code,
-                "Initial identity bootstrap was rejected"
-        );
+        return new InitialIdentityBootstrapException(stage, code, "Initial identity bootstrap was rejected");
     }
 
     private static Failure failure(RuntimeException exception) {
         if (exception instanceof InitialIdentityBootstrapException bootstrap) {
-            return new Failure(
-                    bootstrap.stage(), bootstrap.errorCode(), bootstrap.directoryRunId());
+            return new Failure(bootstrap.stage(), bootstrap.errorCode(), bootstrap.directoryRunId());
         }
         if (exception instanceof ApplicationException application) {
             return new Failure("ROLE_BOOTSTRAP", application.errorCode().name(), null);
         }
-        return new Failure(
-                "UNEXPECTED",
-                "INITIAL_IDENTITY_BOOTSTRAP_UNEXPECTED_FAILURE",
-                null
-        );
+        return new Failure("UNEXPECTED", "INITIAL_IDENTITY_BOOTSTRAP_UNEXPECTED_FAILURE", null);
     }
 
-    private record Failure(String stage, String errorCode, UUID directoryRunId) {
-    }
+    private record Failure(String stage, String errorCode, UUID directoryRunId) {}
 }

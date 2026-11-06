@@ -1,18 +1,17 @@
 package com.yumpoo.platform.identityaccess.api;
 
 import com.yumpoo.platform.identityaccess.application.session.AuthenticatedSession;
+import com.yumpoo.platform.identityaccess.application.session.SecureSessionCredentialGenerator;
 import com.yumpoo.platform.identityaccess.application.session.SessionCredential;
 import com.yumpoo.platform.identityaccess.application.session.SessionService;
-import com.yumpoo.platform.identityaccess.application.session.SecureSessionCredentialGenerator;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.time.Clock;
+import java.time.Duration;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
 import org.springframework.security.web.csrf.DefaultCsrfToken;
-
-import java.time.Clock;
-import java.time.Duration;
 
 final class SessionBoundCsrfTokenRepository implements CsrfTokenRepository {
 
@@ -21,8 +20,7 @@ final class SessionBoundCsrfTokenRepository implements CsrfTokenRepository {
 
     private final SessionService sessionService;
     private final Clock clock;
-    private final SecureSessionCredentialGenerator unboundTokenGenerator =
-            new SecureSessionCredentialGenerator();
+    private final SecureSessionCredentialGenerator unboundTokenGenerator = new SecureSessionCredentialGenerator();
 
     SessionBoundCsrfTokenRepository(SessionService sessionService, Clock clock) {
         this.sessionService = sessionService;
@@ -40,28 +38,21 @@ final class SessionBoundCsrfTokenRepository implements CsrfTokenRepository {
     }
 
     @Override
-    public void saveToken(
-            CsrfToken token,
-            HttpServletRequest request,
-            HttpServletResponse response
-    ) {
+    public void saveToken(CsrfToken token, HttpServletRequest request, HttpServletResponse response) {
         if (!SessionRequestContext.present(request)) {
             return;
         }
         if (token == null) {
-            response.addHeader(HttpHeaders.SET_COOKIE, SessionHttpCookies.clearCsrf().toString());
+            response.addHeader(
+                    HttpHeaders.SET_COOKIE, SessionHttpCookies.clearCsrf().toString());
             return;
         }
         AuthenticatedSession authenticated = SessionRequestContext.required(request);
         Duration remaining = SessionHttpCookies.maxAge(
-                authenticated.rememberMe(),
-                authenticated.absoluteExpiresAt(),
-                clock.instant()
-        );
+                authenticated.rememberMe(), authenticated.absoluteExpiresAt(), clock.instant());
         response.addHeader(
                 HttpHeaders.SET_COOKIE,
-                SessionHttpCookies.csrf(token.getToken(), remaining).toString()
-        );
+                SessionHttpCookies.csrf(token.getToken(), remaining).toString());
     }
 
     @Override

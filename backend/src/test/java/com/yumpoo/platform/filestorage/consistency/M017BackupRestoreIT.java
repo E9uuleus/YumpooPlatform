@@ -1,18 +1,14 @@
 package com.yumpoo.platform.filestorage.consistency;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.yumpoo.platform.filestorage.application.PublishedBlob;
 import com.yumpoo.platform.filestorage.application.SealedUpload;
 import com.yumpoo.platform.filestorage.infrastructure.LocalFileQuarantineStorage;
 import com.yumpoo.platform.filestorage.infrastructure.backup.M017BackupManifest;
 import com.yumpoo.platform.filestorage.infrastructure.backup.M017BackupSet;
 import com.yumpoo.platform.filestorage.infrastructure.backup.M017RetentionPlanner;
-import org.flywaydb.core.Flyway;
-import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.Container;
-import org.testcontainers.postgresql.PostgreSQLContainer;
-import org.testcontainers.utility.DockerImageName;
-import org.testcontainers.utility.MountableFile;
-
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -29,10 +25,9 @@ import java.sql.Statement;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -40,9 +35,12 @@ import java.util.OptionalLong;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.Test;
+import org.testcontainers.containers.Container;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+import org.testcontainers.utility.DockerImageName;
+import org.testcontainers.utility.MountableFile;
 
 class M017BackupRestoreIT {
 
@@ -52,24 +50,22 @@ class M017BackupRestoreIT {
     @Test
     void backsUpDatabaseAndAttachmentsAndRestoresIntoIsolatedTargets() throws Exception {
         Path repositoryRoot = Path.of("..").toAbsolutePath().normalize();
-        Path outputRoot = repositoryRoot.resolve(System.getenv().getOrDefault(
-                "YUMPOO_BACKUP_RESTORE_OUTPUT_ROOT", "out/backup-restore")).normalize();
+        Path outputRoot = repositoryRoot
+                .resolve(System.getenv().getOrDefault("YUMPOO_BACKUP_RESTORE_OUTPUT_ROOT", "out/backup-restore"))
+                .normalize();
         M017BackupSet.deleteTreeIfExists(outputRoot);
         Files.createDirectories(outputRoot);
         Path workRoot = Files.createDirectories(outputRoot.resolve("m017-work"));
         Instant startedAt = Instant.now();
 
         try (PostgreSQLContainer source = postgres("yumpoo_m017_source");
-             PostgreSQLContainer target = postgres("yumpoo_m017_restore")) {
+                PostgreSQLContainer target = postgres("yumpoo_m017_restore")) {
             source.start();
             migrate(source);
 
             Path sourceQuarantine = Files.createDirectories(workRoot.resolve("source-quarantine"));
             Path sourceBlobs = Files.createDirectories(workRoot.resolve("source-blobs"));
-            LocalFileQuarantineStorage sourceStorage = new LocalFileQuarantineStorage(
-                    sourceQuarantine,
-                    sourceBlobs
-            );
+            LocalFileQuarantineStorage sourceStorage = new LocalFileQuarantineStorage(sourceQuarantine, sourceBlobs);
             PublishedBlob first = publish(sourceStorage, "M0-17 合成附件 A\n");
             PublishedBlob second = publish(sourceStorage, "M0-17 synthetic attachment B\n");
             PublishedBlob orphan = publish(sourceStorage, "M0-17 unreferenced orphan\n");
@@ -102,8 +98,7 @@ class M017BackupRestoreIT {
                     configuration,
                     restoreDescriptor,
                     List.of("daily"),
-                    false
-            ));
+                    false));
             M017BackupManifest manifest = M017BackupSet.validate(backupRoot);
 
             target.start();
@@ -122,25 +117,18 @@ class M017BackupRestoreIT {
             assertThat(readIdentityBindingFact(target)).isEqualTo(readIdentityBindingFact(source));
             assertThat(readSessionSecurityFact(target)).isEqualTo(readSessionSecurityFact(source));
             assertThat(readDirectorySyncFact(target)).isEqualTo(readDirectorySyncFact(source));
-            assertThat(readProjectCatalogFact(target))
-                    .isEqualTo(readProjectCatalogFact(source));
+            assertThat(readProjectCatalogFact(target)).isEqualTo(readProjectCatalogFact(source));
             assertThat(readWorkspaceFact(target)).isEqualTo(readWorkspaceFact(source));
-            assertThat(readProjectContentFact(target))
-                    .isEqualTo(readProjectContentFact(source));
-            assertThat(readWorkItemStatusEventFact(target))
-                    .isEqualTo(readWorkItemStatusEventFact(source));
-            assertThat(readWorkItemUpdateFact(target))
-                    .isEqualTo(readWorkItemUpdateFact(source));
-            assertThat(readAdminOverrideFact(target))
-                    .isEqualTo(readAdminOverrideFact(source));
+            assertThat(readProjectContentFact(target)).isEqualTo(readProjectContentFact(source));
+            assertThat(readWorkItemStatusEventFact(target)).isEqualTo(readWorkItemStatusEventFact(source));
+            assertThat(readWorkItemUpdateFact(target)).isEqualTo(readWorkItemUpdateFact(source));
+            assertThat(readAdminOverrideFact(target)).isEqualTo(readAdminOverrideFact(source));
             assertThat(readAttachmentFact(target)).isEqualTo(readAttachmentFact(source));
             assertThat(readActivityFact(target)).isEqualTo(readActivityFact(source));
 
             Path restoreQuarantine = Files.createDirectories(restoreRoot.resolve("quarantine"));
-            LocalFileQuarantineStorage restoredStorage = new LocalFileQuarantineStorage(
-                    restoreQuarantine,
-                    restoredBlobs
-            );
+            LocalFileQuarantineStorage restoredStorage =
+                    new LocalFileQuarantineStorage(restoreQuarantine, restoredBlobs);
             for (PublishedBlob reference : restoredReferences) {
                 assertThat(restoredStorage.verify(reference)).isTrue();
                 try (InputStream input = restoredStorage.open(reference)) {
@@ -149,7 +137,8 @@ class M017BackupRestoreIT {
             }
             List<String> orphanKeys = orphanKeys(restoredBlobs, restoredReferences);
             assertThat(orphanKeys).containsExactly(orphan.storageKey());
-            assertThat(Files.exists(restoredBlobs.resolve(Path.of(orphan.storageKey())))).isTrue();
+            assertThat(Files.exists(restoredBlobs.resolve(Path.of(orphan.storageKey()))))
+                    .isTrue();
 
             assertThatThrownBy(() -> requireEmptyDatabaseTarget(target))
                     .isInstanceOf(IllegalStateException.class)
@@ -163,16 +152,11 @@ class M017BackupRestoreIT {
                     .isEqualTo("preserve");
 
             M017RetentionPlanner.RetentionPlan retentionPlan = sampleRetentionPlan(startedAt);
-            M017BackupSet.json().writerWithDefaultPrettyPrinter()
+            M017BackupSet.json()
+                    .writerWithDefaultPrettyPrinter()
                     .writeValue(outputRoot.resolve("retention-plan.json").toFile(), retentionPlan);
             writeVerificationReport(
-                    outputRoot,
-                    startedAt,
-                    sourceCommit,
-                    manifest,
-                    restoredReferences.size(),
-                    orphanKeys.size()
-            );
+                    outputRoot, startedAt, sourceCommit, manifest, restoredReferences.size(), orphanKeys.size());
         } finally {
             M017BackupSet.deleteTreeIfExists(workRoot);
         }
@@ -203,17 +187,14 @@ class M017BackupRestoreIT {
 
     private static PublishedBlob publish(LocalFileQuarantineStorage storage, String content) throws IOException {
         byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
-        SealedUpload sealed = storage.receive(
-                UUID.randomUUID(),
-                new ByteArrayInputStream(bytes),
-                OptionalLong.of(bytes.length)
-        );
+        SealedUpload sealed =
+                storage.receive(UUID.randomUUID(), new ByteArrayInputStream(bytes), OptionalLong.of(bytes.length));
         return storage.publish(sealed);
     }
 
     private static void createActivityFact(PostgreSQLContainer container) throws SQLException {
         try (Connection connection = connection(container);
-             Statement statement = connection.createStatement()) {
+                Statement statement = connection.createStatement()) {
             statement.executeUpdate("""
                     INSERT INTO yumpoo.activity_event (
                         id,event_id,projection_code,company_id,scope_type,scope_id,
@@ -239,8 +220,8 @@ class M017BackupRestoreIT {
 
     private static String readActivityFact(PostgreSQLContainer container) throws SQLException {
         try (Connection connection = connection(container);
-             Statement statement = connection.createStatement();
-             ResultSet result = statement.executeQuery("""
+                Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("""
                      SELECT event_id || ':' || projection_code || ':' || scope_id || ':'
                             || entity_type || ':' || entity_id || ':' || entity_ref || ':'
                             || event_type || ':' || actor_display_name || ':' || template_code
@@ -255,8 +236,7 @@ class M017BackupRestoreIT {
         }
     }
 
-    private static void createAttachmentFact(PostgreSQLContainer container, PublishedBlob blob)
-            throws SQLException {
+    private static void createAttachmentFact(PostgreSQLContainer container, PublishedBlob blob) throws SQLException {
         OffsetDateTime now = OffsetDateTime.parse("2026-08-25T03:00:00Z");
         try (Connection connection = connection(container)) {
             connection.setAutoCommit(false);
@@ -265,12 +245,12 @@ class M017BackupRestoreIT {
                         storage_key,sha256,size_bytes,presence_status,last_verified_at,created_at,updated_at
                     ) VALUES (?, ?, ?, 'PRESENT', ?, ?, ?)
                     """)) {
-                registry.setString(1,blob.storageKey());
-                registry.setString(2,blob.sha256());
-                registry.setLong(3,blob.sizeBytes());
-                registry.setObject(4,now);
-                registry.setObject(5,now.minusMinutes(3));
-                registry.setObject(6,now);
+                registry.setString(1, blob.storageKey());
+                registry.setString(2, blob.sha256());
+                registry.setLong(3, blob.sizeBytes());
+                registry.setObject(4, now);
+                registry.setObject(5, now.minusMinutes(3));
+                registry.setObject(6, now);
                 assertThat(registry.executeUpdate()).isOne();
             }
             try (PreparedStatement attachment = connection.prepareStatement("""
@@ -337,8 +317,8 @@ class M017BackupRestoreIT {
 
     private static String readAttachmentFact(PostgreSQLContainer container) throws SQLException {
         try (Connection connection = connection(container);
-             Statement statement = connection.createStatement();
-             ResultSet result = statement.executeQuery("""
+                Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("""
                      SELECT concat_ws(':', attachment.owner_type, attachment.owner_id,
                                 attachment.original_file_name, attachment.detected_mime,
                                 attachment.size_bytes, attachment.status, attachment.storage_key,
@@ -361,12 +341,10 @@ class M017BackupRestoreIT {
         }
     }
 
-    private static void createSyntheticReferences(
-            PostgreSQLContainer container,
-            List<PublishedBlob> blobs
-    ) throws SQLException {
+    private static void createSyntheticReferences(PostgreSQLContainer container, List<PublishedBlob> blobs)
+            throws SQLException {
         try (Connection connection = connection(container);
-             Statement statement = connection.createStatement()) {
+                Statement statement = connection.createStatement()) {
             statement.execute("""
                     CREATE TABLE yumpoo.m017_backup_reference (
                         id uuid PRIMARY KEY,
@@ -379,7 +357,7 @@ class M017BackupRestoreIT {
                     """);
         }
         try (Connection connection = connection(container);
-             PreparedStatement insert = connection.prepareStatement("""
+                PreparedStatement insert = connection.prepareStatement("""
                      INSERT INTO yumpoo.m017_backup_reference (
                          id, business_key, storage_key, size_bytes, sha256, created_at
                      ) VALUES (?, ?, ?, ?, ?, ?)
@@ -408,8 +386,7 @@ class M017BackupRestoreIT {
                 "--no-privileges",
                 "--file=" + containerPath,
                 "--username=" + container.getUsername(),
-                "--dbname=" + container.getDatabaseName()
-        );
+                "--dbname=" + container.getDatabaseName());
         requireSuccess(result, "pg_dump");
         container.copyFileFromContainer(containerPath, destination.toString());
         assertThat(Files.size(destination)).isPositive();
@@ -426,17 +403,15 @@ class M017BackupRestoreIT {
                 "--no-privileges",
                 "--username=" + container.getUsername(),
                 "--dbname=" + container.getDatabaseName(),
-                containerPath
-        );
+                containerPath);
         requireSuccess(result, "pg_restore");
     }
 
     private static void requireEmptyDatabaseTarget(PostgreSQLContainer container) throws SQLException {
         try (Connection connection = connection(container);
-             PreparedStatement query = connection.prepareStatement(
-                     "SELECT count(*) FROM pg_namespace WHERE nspname = 'yumpoo'"
-             );
-             ResultSet result = query.executeQuery()) {
+                PreparedStatement query =
+                        connection.prepareStatement("SELECT count(*) FROM pg_namespace WHERE nspname = 'yumpoo'");
+                ResultSet result = query.executeQuery()) {
             result.next();
             if (result.getInt(1) != 0) {
                 throw new IllegalStateException("restore target already contains yumpoo schema");
@@ -446,8 +421,8 @@ class M017BackupRestoreIT {
 
     private static String latestFlywayVersion(PostgreSQLContainer container) throws SQLException {
         try (Connection connection = connection(container);
-             Statement statement = connection.createStatement();
-             ResultSet result = statement.executeQuery("""
+                Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("""
                      SELECT version FROM yumpoo.flyway_schema_history
                      WHERE success AND version IS NOT NULL
                      ORDER BY installed_rank DESC LIMIT 1
@@ -459,8 +434,8 @@ class M017BackupRestoreIT {
 
     private static String readProjectCatalogFact(PostgreSQLContainer container) throws SQLException {
         try (Connection connection = connection(container);
-             Statement statement = connection.createStatement();
-             ResultSet result = statement.executeQuery("""
+                Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("""
                      SELECT string_agg(fact, E'\n' ORDER BY fact)
                      FROM (
                          SELECT 'C|' || project_id || '|' || code || '|' || name || '|' || color_token || '|' || sort_order AS fact
@@ -481,7 +456,7 @@ class M017BackupRestoreIT {
 
     private static void createCompanyCalendarFact(PostgreSQLContainer container) throws SQLException {
         try (Connection connection = connection(container);
-             PreparedStatement insert = connection.prepareStatement("""
+                PreparedStatement insert = connection.prepareStatement("""
                      INSERT INTO yumpoo.company_calendar_day (
                          company_id, calendar_date, day_type, standard_minutes,
                          source, note, row_version, created_at, updated_at
@@ -491,22 +466,17 @@ class M017BackupRestoreIT {
                          'IMPORT', 'M0-17 restore probe', 3, ?, ?
                      )
                      """)) {
-            OffsetDateTime createdAt = OffsetDateTime.ofInstant(
-                    Instant.parse("2026-08-13T03:00:00Z"),
-                    ZoneOffset.UTC
-            );
+            OffsetDateTime createdAt = OffsetDateTime.ofInstant(Instant.parse("2026-08-13T03:00:00Z"), ZoneOffset.UTC);
             insert.setObject(1, createdAt);
             insert.setObject(2, createdAt);
             assertThat(insert.executeUpdate()).isOne();
         }
     }
 
-    private static CompanyCalendarFact readCompanyCalendarFact(
-            PostgreSQLContainer container
-    ) throws SQLException {
+    private static CompanyCalendarFact readCompanyCalendarFact(PostgreSQLContainer container) throws SQLException {
         try (Connection connection = connection(container);
-             Statement statement = connection.createStatement();
-             ResultSet result = statement.executeQuery("""
+                Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("""
                      SELECT
                          company.timezone,
                          company.week_start_day,
@@ -528,18 +498,14 @@ class M017BackupRestoreIT {
                     result.getObject("calendar_date", LocalDate.class),
                     result.getString("day_type"),
                     result.getInt("standard_minutes"),
-                    result.getLong("row_version")
-            );
+                    result.getLong("row_version"));
             assertThat(result.next()).isFalse();
             return fact;
         }
     }
 
     private static void createIdentityBindingFact(PostgreSQLContainer container) throws SQLException {
-        OffsetDateTime observedAt = OffsetDateTime.ofInstant(
-                Instant.parse("2026-08-13T04:00:00Z"),
-                ZoneOffset.UTC
-        );
+        OffsetDateTime observedAt = OffsetDateTime.ofInstant(Instant.parse("2026-08-13T04:00:00Z"), ZoneOffset.UTC);
         try (Connection connection = connection(container)) {
             connection.setAutoCommit(false);
             try (PreparedStatement user = connection.prepareStatement("""
@@ -550,7 +516,9 @@ class M017BackupRestoreIT {
                         '00000000-0000-4000-8000-000000000001','ACTIVE','ENABLED',
                         'M2-05 Removed Restore User',?,0,0,?,?)
                     """)) {
-                user.setObject(1, observedAt); user.setObject(2, observedAt); user.setObject(3, observedAt);
+                user.setObject(1, observedAt);
+                user.setObject(2, observedAt);
+                user.setObject(3, observedAt);
                 assertThat(user.executeUpdate()).isOne();
             }
             try (PreparedStatement insertUser = connection.prepareStatement("""
@@ -663,12 +631,10 @@ class M017BackupRestoreIT {
         }
     }
 
-    private static IdentityBindingFact readIdentityBindingFact(
-            PostgreSQLContainer container
-    ) throws SQLException {
+    private static IdentityBindingFact readIdentityBindingFact(PostgreSQLContainer container) throws SQLException {
         try (Connection connection = connection(container);
-             Statement statement = connection.createStatement();
-             ResultSet result = statement.executeQuery("""
+                Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("""
                      SELECT
                          identity_user.id,
                          identity_user.company_id,
@@ -699,8 +665,7 @@ class M017BackupRestoreIT {
                     result.getObject("identity_id", UUID.class),
                     result.getString("provider"),
                     result.getString("external_user_id"),
-                    result.getString("raw_profile_hash")
-            );
+                    result.getString("raw_profile_hash"));
             assertThat(result.next()).isFalse();
             return fact;
         }
@@ -708,7 +673,7 @@ class M017BackupRestoreIT {
 
     private static void createWorkspaceFact(PostgreSQLContainer container) throws SQLException {
         try (Connection connection = connection(container);
-             PreparedStatement update = connection.prepareStatement("""
+                PreparedStatement update = connection.prepareStatement("""
                      UPDATE yumpoo.workspace
                         SET id='00000000-0000-4000-8000-000000000502',
                             name='M2-02 MAIN Restore Workspace',
@@ -721,8 +686,7 @@ class M017BackupRestoreIT {
                       WHERE company_id='00000000-0000-4000-8000-000000000001'
                         AND code='MAIN' AND sort_order=0 AND status='ACTIVE'
                      """)) {
-            OffsetDateTime observedAt = OffsetDateTime.ofInstant(
-                    Instant.parse("2026-08-20T05:00:00Z"), ZoneOffset.UTC);
+            OffsetDateTime observedAt = OffsetDateTime.ofInstant(Instant.parse("2026-08-20T05:00:00Z"), ZoneOffset.UTC);
             update.setObject(1, observedAt);
             update.setObject(2, observedAt.plusHours(1));
             assertThat(update.executeUpdate()).isOne();
@@ -731,8 +695,8 @@ class M017BackupRestoreIT {
 
     private static WorkspaceFact readWorkspaceFact(PostgreSQLContainer container) throws SQLException {
         try (Connection connection = connection(container);
-             Statement statement = connection.createStatement();
-             ResultSet result = statement.executeQuery("""
+                Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("""
                      SELECT id, company_id, code, name, description, sort_order,
                             status, row_version, created_by_user_id, updated_by_user_id
                      FROM yumpoo.workspace
@@ -749,16 +713,14 @@ class M017BackupRestoreIT {
                     result.getString("status"),
                     result.getLong("row_version"),
                     result.getObject("created_by_user_id", UUID.class),
-                    result.getObject("updated_by_user_id", UUID.class)
-            );
+                    result.getObject("updated_by_user_id", UUID.class));
             assertThat(result.next()).isFalse();
             return fact;
         }
     }
 
     private static void createProjectContentFact(PostgreSQLContainer container) throws SQLException {
-        OffsetDateTime createdAt = OffsetDateTime.ofInstant(
-                Instant.parse("2026-08-20T07:00:00Z"), ZoneOffset.UTC);
+        OffsetDateTime createdAt = OffsetDateTime.ofInstant(Instant.parse("2026-08-20T07:00:00Z"), ZoneOffset.UTC);
         try (Connection connection = connection(container)) {
             connection.setAutoCommit(false);
             try (PreparedStatement project = connection.prepareStatement("""
@@ -874,7 +836,9 @@ class M017BackupRestoreIT {
                         '00000000-0000-4000-8000-000000000802','OPEN','PROJECT_OWNER_MISSING',
                         '00000000-0000-4000-8000-000000000809',?,2,?,?)
                     """)) {
-                issue.setObject(1,createdAt); issue.setObject(2,createdAt); issue.setObject(3,createdAt);
+                issue.setObject(1, createdAt);
+                issue.setObject(2, createdAt);
+                issue.setObject(3, createdAt);
                 assertThat(issue.executeUpdate()).isOne();
             }
             try (PreparedStatement content = connection.prepareStatement("""
@@ -889,9 +853,9 @@ class M017BackupRestoreIT {
                         '00000000-0000-4000-8000-000000000102')
                     """)) {
                 String[][] blueprints = {
-                        {"00000000-0000-4000-8000-000000000804", "REQUIREMENTS", "需求", "BRIGHT_BLUE", "10", "false"},
-                        {"00000000-0000-4000-8000-000000000805", "TASKS", "任务", "BRIGHT_GREEN", "20", "true"},
-                        {"00000000-0000-4000-8000-000000000806", "DEFECTS", "缺陷", "DARK_RED", "30", "false"}
+                    {"00000000-0000-4000-8000-000000000804", "REQUIREMENTS", "需求", "BRIGHT_BLUE", "10", "false"},
+                    {"00000000-0000-4000-8000-000000000805", "TASKS", "任务", "BRIGHT_GREEN", "20", "true"},
+                    {"00000000-0000-4000-8000-000000000806", "DEFECTS", "缺陷", "DARK_RED", "30", "false"}
                 };
                 for (String[] blueprint : blueprints) {
                     content.setObject(1, UUID.fromString(blueprint[0]));
@@ -960,30 +924,62 @@ class M017BackupRestoreIT {
                         '00000000-0000-4000-8000-000000000102')
                     """)) {
                 Object[][] facts = {
-                        {UUID.fromString("00000000-0000-4000-8000-000000000815"), 1L,
-                                "M2_04_RESTORE-1", "恢复工作项一", "NOT_STARTED", "TODO",
-                                "500000000000000000000000000000000000000", "MEDIUM",
-                                "333333333333333333333333333333333333333",
-                                UUID.fromString("00000000-0000-4000-8000-000000000102"),
-                                "保留纯文本描述", "保留纯文本备注", LocalDate.parse("2026-08-20"),
-                                LocalDate.parse("2026-08-22"), LocalDate.parse("2026-08-23"), 0L},
-                        {UUID.fromString("00000000-0000-4000-8000-000000000816"), 2L,
-                                "M2_04_RESTORE-2", "恢复工作项二", "DONE", "DONE",
-                                "500000000000000000000000000000000000000", "HIGH",
-                                "666666666666666666666666666666666666666",
-                                null, "第二项描述", null, null, null,
-                                LocalDate.parse("2026-08-24"), 4L}
+                    {
+                        UUID.fromString("00000000-0000-4000-8000-000000000815"),
+                        1L,
+                        "M2_04_RESTORE-1",
+                        "恢复工作项一",
+                        "NOT_STARTED",
+                        "TODO",
+                        "500000000000000000000000000000000000000",
+                        "MEDIUM",
+                        "333333333333333333333333333333333333333",
+                        UUID.fromString("00000000-0000-4000-8000-000000000102"),
+                        "保留纯文本描述",
+                        "保留纯文本备注",
+                        LocalDate.parse("2026-08-20"),
+                        LocalDate.parse("2026-08-22"),
+                        LocalDate.parse("2026-08-23"),
+                        0L
+                    },
+                    {
+                        UUID.fromString("00000000-0000-4000-8000-000000000816"),
+                        2L,
+                        "M2_04_RESTORE-2",
+                        "恢复工作项二",
+                        "DONE",
+                        "DONE",
+                        "500000000000000000000000000000000000000",
+                        "HIGH",
+                        "666666666666666666666666666666666666666",
+                        null,
+                        "第二项描述",
+                        null,
+                        null,
+                        null,
+                        LocalDate.parse("2026-08-24"),
+                        4L
+                    }
                 };
                 for (Object[] fact : facts) {
-                    workItem.setObject(1, fact[0]); workItem.setObject(2, fact[1]);
-                    workItem.setObject(3, fact[2]); workItem.setObject(4, fact[3]);
-                    workItem.setObject(5, fact[4]); workItem.setObject(6, fact[5]);
-                    workItem.setObject(7, fact[6]); workItem.setObject(8, fact[8]);
-                    workItem.setObject(9, fact[7]); workItem.setObject(10, fact[9]);
-                    workItem.setObject(11, fact[10]); workItem.setObject(12, fact[11]);
-                    workItem.setObject(13, fact[12]); workItem.setObject(14, fact[13]);
-                    workItem.setObject(15, fact[14]); workItem.setObject(16, fact[15]);
-                    workItem.setObject(17, createdAt); workItem.setObject(18, createdAt.plusHours(1));
+                    workItem.setObject(1, fact[0]);
+                    workItem.setObject(2, fact[1]);
+                    workItem.setObject(3, fact[2]);
+                    workItem.setObject(4, fact[3]);
+                    workItem.setObject(5, fact[4]);
+                    workItem.setObject(6, fact[5]);
+                    workItem.setObject(7, fact[6]);
+                    workItem.setObject(8, fact[8]);
+                    workItem.setObject(9, fact[7]);
+                    workItem.setObject(10, fact[9]);
+                    workItem.setObject(11, fact[10]);
+                    workItem.setObject(12, fact[11]);
+                    workItem.setObject(13, fact[12]);
+                    workItem.setObject(14, fact[13]);
+                    workItem.setObject(15, fact[14]);
+                    workItem.setObject(16, fact[15]);
+                    workItem.setObject(17, createdAt);
+                    workItem.setObject(18, createdAt.plusHours(1));
                     workItem.addBatch();
                 }
                 assertThat(workItem.executeBatch()).hasSize(2);
@@ -1094,12 +1090,10 @@ class M017BackupRestoreIT {
         }
     }
 
-    private static ProjectContentFact readProjectContentFact(
-            PostgreSQLContainer container
-    ) throws SQLException {
+    private static ProjectContentFact readProjectContentFact(PostgreSQLContainer container) throws SQLException {
         try (Connection connection = connection(container);
-             Statement statement = connection.createStatement();
-             ResultSet result = statement.executeQuery("""
+                Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("""
                      SELECT project.id, project.project_code, project.lifecycle,
                             project.row_version, project.archived_at,
                             project.owner_user_id,
@@ -1171,18 +1165,26 @@ class M017BackupRestoreIT {
                      """)) {
             assertThat(result.next()).isTrue();
             ProjectContentFact fact = new ProjectContentFact(
-                    result.getObject("id", UUID.class), result.getString("project_code"),
-                    result.getString("lifecycle"), result.getLong("row_version"),
+                    result.getObject("id", UUID.class),
+                    result.getString("project_code"),
+                    result.getString("lifecycle"),
+                    result.getLong("row_version"),
                     result.getObject("archived_at", OffsetDateTime.class),
                     result.getObject("owner_user_id", UUID.class),
-                    result.getString("membership_status"), result.getString("membership_facts"),
-                    result.getString("issue_type"), result.getString("target_type"),
-                    result.getString("issue_status"), result.getLong("issue_version"),
-                    result.getLong("work_item_sequence"), result.getLong("label_catalog_version"),
+                    result.getString("membership_status"),
+                    result.getString("membership_facts"),
+                    result.getString("issue_type"),
+                    result.getString("target_type"),
+                    result.getString("issue_status"),
+                    result.getLong("issue_version"),
+                    result.getLong("work_item_sequence"),
+                    result.getLong("label_catalog_version"),
                     result.getLong("content_catalog_version"),
-                    result.getString("status_labels"), result.getString("priority_labels"),
+                    result.getString("status_labels"),
+                    result.getString("priority_labels"),
                     result.getString("rank_lanes"),
-                    result.getString("work_items"), result.getString("contents"));
+                    result.getString("work_items"),
+                    result.getString("contents"));
             assertThat(result.next()).isFalse();
             return fact;
         }
@@ -1190,8 +1192,8 @@ class M017BackupRestoreIT {
 
     private static String readAdminOverrideFact(PostgreSQLContainer container) throws SQLException {
         try (Connection connection = connection(container);
-             Statement statement = connection.createStatement();
-             ResultSet result = statement.executeQuery("""
+                Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("""
                      SELECT action || ':' || target_type || ':' || target_id || ':' || reason || ':'
                             || result || ':' || blocker_counts::text || ':' || before_snapshot::text
                             || ':' || after_snapshot::text AS fact
@@ -1207,8 +1209,8 @@ class M017BackupRestoreIT {
 
     private static String readWorkItemUpdateFact(PostgreSQLContainer container) throws SQLException {
         try (Connection connection = connection(container);
-             Statement statement = connection.createStatement();
-             ResultSet result = statement.executeQuery("""
+                Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("""
                      SELECT concat_ws(':', coalesce(update_record.body_html, '<NULL>'),
                             coalesce(update_record.body_text, '<NULL>'), update_record.status,
                             update_record.parent_update_id, update_record.pinned_at, update_record.pinned_by_user_id, update_record.row_version,
@@ -1228,12 +1230,10 @@ class M017BackupRestoreIT {
         }
     }
 
-    private static String readWorkItemStatusEventFact(
-            PostgreSQLContainer container
-    ) throws SQLException {
+    private static String readWorkItemStatusEventFact(PostgreSQLContainer container) throws SQLException {
         try (Connection connection = connection(container);
-             Statement statement = connection.createStatement();
-             ResultSet result = statement.executeQuery("""
+                Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("""
                      SELECT event_type || ':' || event_version || ':' || aggregate_type || ':'
                             || aggregate_id || ':' || aggregate_version || ':' || payload_json::text
                             || ':' || status || ':' || attempt_count AS fact
@@ -1247,12 +1247,10 @@ class M017BackupRestoreIT {
         }
     }
 
-    private static SessionSecurityFact readSessionSecurityFact(
-            PostgreSQLContainer container
-    ) throws SQLException {
+    private static SessionSecurityFact readSessionSecurityFact(PostgreSQLContainer container) throws SQLException {
         try (Connection connection = connection(container);
-             Statement statement = connection.createStatement();
-             ResultSet result = statement.executeQuery("""
+                Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("""
                      SELECT status, session_token_fingerprint, session_key_version,
                             csrf_token_fingerprint, csrf_key_version,
                             issued_authorization_version, revoke_reason, purge_after
@@ -1268,19 +1266,16 @@ class M017BackupRestoreIT {
                     result.getString("csrf_key_version"),
                     result.getLong("issued_authorization_version"),
                     result.getString("revoke_reason"),
-                    result.getObject("purge_after", OffsetDateTime.class)
-            );
+                    result.getObject("purge_after", OffsetDateTime.class));
             assertThat(result.next()).isFalse();
             return fact;
         }
     }
 
-    private static DirectorySyncFact readDirectorySyncFact(
-            PostgreSQLContainer container
-    ) throws SQLException {
+    private static DirectorySyncFact readDirectorySyncFact(PostgreSQLContainer container) throws SQLException {
         try (Connection connection = connection(container);
-             Statement statement = connection.createStatement();
-             ResultSet result = statement.executeQuery("""
+                Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("""
                      SELECT run.status, run.cursor_termination_mode,
                             run.discovered_count, run.unchanged_count,
                             item.external_user_id, item.result, item.profile_hash
@@ -1296,8 +1291,7 @@ class M017BackupRestoreIT {
                     result.getInt("unchanged_count"),
                     result.getString("external_user_id"),
                     result.getString("result"),
-                    result.getString("profile_hash")
-            );
+                    result.getString("profile_hash"));
             assertThat(result.next()).isFalse();
             return fact;
         }
@@ -1305,8 +1299,8 @@ class M017BackupRestoreIT {
 
     private static String postgresVersion(PostgreSQLContainer container) throws SQLException {
         try (Connection connection = connection(container);
-             Statement statement = connection.createStatement();
-             ResultSet result = statement.executeQuery("SHOW server_version")) {
+                Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("SHOW server_version")) {
             assertThat(result.next()).isTrue();
             return result.getString(1);
         }
@@ -1314,8 +1308,8 @@ class M017BackupRestoreIT {
 
     private static int countSyntheticReferences(PostgreSQLContainer container) throws SQLException {
         try (Connection connection = connection(container);
-             Statement statement = connection.createStatement();
-             ResultSet result = statement.executeQuery("SELECT count(*) FROM yumpoo.m017_backup_reference")) {
+                Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("SELECT count(*) FROM yumpoo.m017_backup_reference")) {
             result.next();
             return result.getInt(1);
         }
@@ -1328,9 +1322,7 @@ class M017BackupRestoreIT {
             LocalDate calendarDate,
             String dayType,
             int standardMinutes,
-            long rowVersion
-    ) {
-    }
+            long rowVersion) {}
 
     private record IdentityBindingFact(
             UUID userId,
@@ -1343,9 +1335,7 @@ class M017BackupRestoreIT {
             UUID identityId,
             String provider,
             String externalUserId,
-            String rawProfileHash
-    ) {
-    }
+            String rawProfileHash) {}
 
     private record WorkspaceFact(
             UUID id,
@@ -1357,9 +1347,7 @@ class M017BackupRestoreIT {
             String status,
             long rowVersion,
             UUID createdByUserId,
-            UUID updatedByUserId
-    ) {
-    }
+            UUID updatedByUserId) {}
 
     private record ProjectContentFact(
             UUID projectId,
@@ -1381,9 +1369,7 @@ class M017BackupRestoreIT {
             String priorityLabels,
             String rankLanes,
             String workItems,
-            String contents
-    ) {
-    }
+            String contents) {}
 
     private record SessionSecurityFact(
             String status,
@@ -1393,9 +1379,7 @@ class M017BackupRestoreIT {
             String csrfKeyVersion,
             long issuedAuthorizationVersion,
             String revokeReason,
-            OffsetDateTime purgeAfter
-    ) {
-    }
+            OffsetDateTime purgeAfter) {}
 
     private record DirectorySyncFact(
             String status,
@@ -1404,35 +1388,26 @@ class M017BackupRestoreIT {
             int unchangedCount,
             String externalUserId,
             String result,
-            String profileHash
-    ) {
-    }
+            String profileHash) {}
 
     private static List<PublishedBlob> readSyntheticReferences(PostgreSQLContainer container) throws SQLException {
         List<PublishedBlob> records = new ArrayList<>();
         try (Connection connection = connection(container);
-             Statement statement = connection.createStatement();
-             ResultSet result = statement.executeQuery("""
+                Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("""
                      SELECT storage_key, size_bytes, sha256
                      FROM yumpoo.m017_backup_reference ORDER BY business_key
                      """)) {
             while (result.next()) {
                 records.add(new PublishedBlob(
-                        result.getString("storage_key"),
-                        result.getLong("size_bytes"),
-                        result.getString("sha256")
-                ));
+                        result.getString("storage_key"), result.getLong("size_bytes"), result.getString("sha256")));
             }
         }
         return List.copyOf(records);
     }
 
     private static Connection connection(PostgreSQLContainer container) throws SQLException {
-        return DriverManager.getConnection(
-                container.getJdbcUrl(),
-                container.getUsername(),
-                container.getPassword()
-        );
+        return DriverManager.getConnection(container.getJdbcUrl(), container.getUsername(), container.getPassword());
     }
 
     private static List<String> orphanKeys(Path blobRoot, List<PublishedBlob> references) throws IOException {
@@ -1453,23 +1428,28 @@ class M017BackupRestoreIT {
         Files.writeString(
                 file,
                 "server:\n  address: 127.0.0.1\nspring:\n  datasource:\n    url: ${SPRING_DATASOURCE_URL}\n",
-                StandardCharsets.UTF_8
-        );
+                StandardCharsets.UTF_8);
         return file;
     }
 
     private static Path writeRestoreDescriptor(Path workRoot) throws IOException {
         Path file = workRoot.resolve("secret-recovery.json");
-        M017BackupSet.json().writerWithDefaultPrettyPrinter().writeValue(file.toFile(), Map.of(
-                "schemaVersion", 1,
-                "secretValuesIncluded", false,
-                "requiredSecretVariables", List.of(
-                        "SPRING_DATASOURCE_URL",
-                        "SPRING_DATASOURCE_USERNAME",
-                        "SPRING_DATASOURCE_PASSWORD"
-                ),
-                "recoveryProcess", "Retrieve approved values from the external secret store after restore"
-        ));
+        M017BackupSet.json()
+                .writerWithDefaultPrettyPrinter()
+                .writeValue(
+                        file.toFile(),
+                        Map.of(
+                                "schemaVersion",
+                                1,
+                                "secretValuesIncluded",
+                                false,
+                                "requiredSecretVariables",
+                                List.of(
+                                        "SPRING_DATASOURCE_URL",
+                                        "SPRING_DATASOURCE_USERNAME",
+                                        "SPRING_DATASOURCE_PASSWORD"),
+                                "recoveryProcess",
+                                "Retrieve approved values from the external secret store after restore"));
         return file;
     }
 
@@ -1481,8 +1461,7 @@ class M017BackupRestoreIT {
                     UUID.nameUUIDFromBytes(verifiedAt.toString().getBytes(StandardCharsets.UTF_8)),
                     verifiedAt,
                     true,
-                    day == 30
-            ));
+                    day == 30));
         }
         return M017RetentionPlanner.plan(candidates, ZoneId.of("Asia/Shanghai"));
     }
@@ -1493,19 +1472,29 @@ class M017BackupRestoreIT {
             String sourceCommit,
             M017BackupManifest manifest,
             int restoredReferenceCount,
-            int orphanCount
-    ) throws IOException {
+            int orphanCount)
+            throws IOException {
         Map<String, Object> report = Map.of(
-                "schemaVersion", 1,
-                "milestone", "M0-17",
-                "status", "PASS",
-                "startedAt", startedAt,
-                "completedAt", Instant.now(),
-                "sourceCommit", sourceCommit,
-                "backupSetId", manifest.backupSetId(),
-                "restoredReferenceCount", restoredReferenceCount,
-                "orphanCount", orphanCount,
-                "checks", Map.ofEntries(
+                "schemaVersion",
+                1,
+                "milestone",
+                "M0-17",
+                "status",
+                "PASS",
+                "startedAt",
+                startedAt,
+                "completedAt",
+                Instant.now(),
+                "sourceCommit",
+                sourceCommit,
+                "backupSetId",
+                manifest.backupSetId(),
+                "restoredReferenceCount",
+                restoredReferenceCount,
+                "orphanCount",
+                orphanCount,
+                "checks",
+                Map.ofEntries(
                         Map.entry("postgresCustomDumpCreated", true),
                         Map.entry("manifestExactCoverageVerified", true),
                         Map.entry("payloadHashesVerified", true),
@@ -1517,10 +1506,9 @@ class M017BackupRestoreIT {
                         Map.entry("attachmentBytesReadable", true),
                         Map.entry("attachmentBlobRegistryReconciled", true),
                         Map.entry("orphansReportedWithoutDeletion", true),
-                        Map.entry("retentionDryRunGenerated", true)
-                )
-        );
-        M017BackupSet.json().writerWithDefaultPrettyPrinter()
+                        Map.entry("retentionDryRunGenerated", true)));
+        M017BackupSet.json()
+                .writerWithDefaultPrettyPrinter()
                 .writeValue(outputRoot.resolve("verification-report.json").toFile(), report);
     }
 

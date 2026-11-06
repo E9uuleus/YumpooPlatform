@@ -10,6 +10,4 @@ public record RoleAssignmentSnapshot(
         ManagedPlatformRole role,
         RoleAssignmentStatus status,
         long rowVersion,
-        Instant grantedAt
-) {
-}
+        Instant grantedAt) {}

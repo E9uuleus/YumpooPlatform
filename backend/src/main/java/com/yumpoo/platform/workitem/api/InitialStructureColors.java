@@ -5,8 +5,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 /** Colour overrides for the default project structure, keyed by category, status and priority code; unlisted codes keep their defaults. */
-public record InitialStructureColors(Map<String, String> categories, Map<String, String> statuses,
-        Map<String, String> priorities) {
+public record InitialStructureColors(
+        Map<String, String> categories, Map<String, String> statuses, Map<String, String> priorities) {
     public static final InitialStructureColors DEFAULT = new InitialStructureColors(Map.of(), Map.of(), Map.of());
 
     public InitialStructureColors {

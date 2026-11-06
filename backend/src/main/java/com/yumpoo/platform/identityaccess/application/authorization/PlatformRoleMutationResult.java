@@ -12,6 +12,4 @@ public record PlatformRoleMutationResult(
         long assignmentRowVersion,
         long userRowVersion,
         long authorizationVersion,
-        Instant changedAt
-) {
-}
+        Instant changedAt) {}

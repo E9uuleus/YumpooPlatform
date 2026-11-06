@@ -1,5 +1,8 @@
 package com.yumpoo.platform.audit.infrastructure;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.yumpoo.platform.audit.api.SecurityAuditActor;
 import com.yumpoo.platform.audit.api.SecurityAuditAppendPort;
 import com.yumpoo.platform.audit.api.SecurityAuditDraft;
@@ -8,6 +11,9 @@ import com.yumpoo.platform.audit.api.SecurityAuditQueryPort;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelation;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelationContext;
 import com.yumpoo.platform.testing.JdbcIntegrationTest;
+import java.time.Instant;
+import java.util.Map;
+import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,13 +22,6 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
 
-import java.time.Instant;
-import java.util.Map;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 @JdbcIntegrationTest
 class M110SecurityAuditIT {
 
@@ -30,21 +29,31 @@ class M110SecurityAuditIT {
 
     @Autowired
     private SecurityAuditAppendPort appendPort;
+
     @Autowired
     private SecurityAuditQueryPort queryPort;
+
     @Autowired
     private PlatformTransactionManager transactionManager;
+
     @Autowired
     private JdbcClient jdbcClient;
+
     @Autowired
     private ObjectMapper objectMapper;
 
     @AfterEach
     void cleanUp() {
-        jdbcClient.sql("DROP TRIGGER IF EXISTS m110_fail_audit ON yumpoo.security_audit_event").update();
+        jdbcClient
+                .sql("DROP TRIGGER IF EXISTS m110_fail_audit ON yumpoo.security_audit_event")
+                .update();
         jdbcClient.sql("DROP FUNCTION IF EXISTS yumpoo.m110_fail_audit()").update();
-        jdbcClient.sql("DELETE FROM yumpoo.security_audit_event WHERE fact_key LIKE 'm110:%'").update();
-        jdbcClient.sql("DELETE FROM yumpoo.identity_user WHERE display_name = 'M1-10 Rollback Probe'").update();
+        jdbcClient
+                .sql("DELETE FROM yumpoo.security_audit_event WHERE fact_key LIKE 'm110:%'")
+                .update();
+        jdbcClient
+                .sql("DELETE FROM yumpoo.identity_user WHERE display_name = 'M1-10 Rollback Probe'")
+                .update();
     }
 
     @Test
@@ -58,7 +67,9 @@ class M110SecurityAuditIT {
         assertThat(page.totalElements()).isEqualTo(2);
         assertThat(page.totalPages()).isEqualTo(2);
         assertThat(page.items()).extracting(event -> event.id()).containsExactly(second);
-        assertThat(queryPort.findByRequestId(UUID.randomUUID(), "m110-request", 0, 100).items())
+        assertThat(queryPort
+                        .findByRequestId(UUID.randomUUID(), "m110-request", 0, 100)
+                        .items())
                 .isEmpty();
     }
 
@@ -71,8 +82,8 @@ class M110SecurityAuditIT {
                         FROM yumpoo.security_audit_event event
                         WHERE fact_key = 'm110:sensitive-scan'
                         """).query(String.class).single();
-        assertThat(persisted).doesNotContain(
-                "Cookie", "csrf", "wecom-secret", "13800000000", "raw-ip", "exception-message");
+        assertThat(persisted)
+                .doesNotContain("Cookie", "csrf", "wecom-secret", "13800000000", "raw-ip", "exception-message");
     }
 
     @Test
@@ -88,9 +99,11 @@ class M110SecurityAuditIT {
                 """).update();
         UUID userId = UUID.randomUUID();
 
-        assertThatThrownBy(() -> withContext("m110-rollback", () ->
-                new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
-                    jdbcClient.sql("""
+        assertThatThrownBy(() -> withContext(
+                        "m110-rollback",
+                        () -> new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+                            jdbcClient
+                                    .sql("""
                                     INSERT INTO yumpoo.identity_user (
                                         id, company_id, employment_status, account_status,
                                         display_name, directory_synced_at, authorization_version,
@@ -101,33 +114,52 @@ class M110SecurityAuditIT {
                                         transaction_timestamp(), transaction_timestamp()
                                     )
                                     """)
-                            .param("id", userId).param("companyId", COMPANY_ID).update();
-                    appendPort.append(draft("m110:rollback", Instant.now()));
-                }))).isInstanceOf(RuntimeException.class);
+                                    .param("id", userId)
+                                    .param("companyId", COMPANY_ID)
+                                    .update();
+                            appendPort.append(draft("m110:rollback", Instant.now()));
+                        })))
+                .isInstanceOf(RuntimeException.class);
 
-        assertThat(jdbcClient.sql("SELECT count(*) FROM yumpoo.identity_user WHERE id = :id")
-                .param("id", userId).query(Integer.class).single()).isZero();
+        assertThat(jdbcClient
+                        .sql("SELECT count(*) FROM yumpoo.identity_user WHERE id = :id")
+                        .param("id", userId)
+                        .query(Integer.class)
+                        .single())
+                .isZero();
     }
 
     private UUID append(String factKey, String requestId, Instant occurredAt) {
         final UUID[] result = new UUID[1];
-        withContext(requestId, () -> new TransactionTemplate(transactionManager)
-                .executeWithoutResult(status -> result[0] = appendPort.append(draft(factKey, occurredAt))));
+        withContext(
+                requestId,
+                () -> new TransactionTemplate(transactionManager)
+                        .executeWithoutResult(status -> result[0] = appendPort.append(draft(factKey, occurredAt))));
         return result[0];
     }
 
     private SecurityAuditDraft draft(String factKey, Instant occurredAt) {
         return new SecurityAuditDraft(
-                COMPANY_ID, factKey, "M110_AUDIT_PROBE", SecurityAuditOutcome.SUCCEEDED,
-                SecurityAuditActor.system("M110_TEST"), "USER", factKey,
-                null, objectMapper.valueToTree(Map.of("status", "BEFORE")),
-                objectMapper.valueToTree(Map.of("status", "AFTER")), null,
-                null, "WEB", "m110", occurredAt);
+                COMPANY_ID,
+                factKey,
+                "M110_AUDIT_PROBE",
+                SecurityAuditOutcome.SUCCEEDED,
+                SecurityAuditActor.system("M110_TEST"),
+                "USER",
+                factKey,
+                null,
+                objectMapper.valueToTree(Map.of("status", "BEFORE")),
+                objectMapper.valueToTree(Map.of("status", "AFTER")),
+                null,
+                null,
+                "WEB",
+                "m110",
+                occurredAt);
     }
 
     private void withContext(String requestId, Runnable runnable) {
-        try (RequestCorrelationContext.Scope ignored = RequestCorrelationContext.open(
-                RequestCorrelation.root(requestId))) {
+        try (RequestCorrelationContext.Scope ignored =
+                RequestCorrelationContext.open(RequestCorrelation.root(requestId))) {
             runnable.run();
         }
     }

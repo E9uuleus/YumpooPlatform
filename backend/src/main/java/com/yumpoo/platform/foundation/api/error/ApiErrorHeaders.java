@@ -9,8 +9,7 @@ final class ApiErrorHeaders {
 
     private static final String REQUEST_IN_PROGRESS_RETRY_AFTER_SECONDS = "1";
 
-    private ApiErrorHeaders() {
-    }
+    private ApiErrorHeaders() {}
 
     static void apply(HttpHeaders headers, ApiErrorResponse body) {
         headers.set(RequestIdContext.HEADER_NAME, body.requestId());

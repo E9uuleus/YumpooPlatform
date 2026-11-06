@@ -10,9 +10,7 @@ import java.util.regex.Pattern;
 public record WorkspaceSlug(String value) {
 
     private static final int MAX_LENGTH = 64;
-    private static final Pattern VALID = Pattern.compile(
-            "^[a-z0-9](?:[a-z0-9._@-]{0,62}[a-z0-9])?$"
-    );
+    private static final Pattern VALID = Pattern.compile("^[a-z0-9](?:[a-z0-9._@-]{0,62}[a-z0-9])?$");
     private static final Pattern INVALID_RUN = Pattern.compile("[^a-z0-9._@-]+");
     private static final Pattern INVALID_START = Pattern.compile("^[^a-z0-9]+");
     private static final Pattern INVALID_END = Pattern.compile("[^a-z0-9]+$");
@@ -28,8 +26,8 @@ public record WorkspaceSlug(String value) {
     public static WorkspaceSlug fromExternalUserId(String externalUserId, UUID userId) {
         Objects.requireNonNull(externalUserId, "externalUserId must not be null");
         Objects.requireNonNull(userId, "userId must not be null");
-        String candidate = Normalizer.normalize(externalUserId, Normalizer.Form.NFKC)
-                .toLowerCase(Locale.ROOT);
+        String candidate =
+                Normalizer.normalize(externalUserId, Normalizer.Form.NFKC).toLowerCase(Locale.ROOT);
         candidate = INVALID_RUN.matcher(candidate).replaceAll("-");
         candidate = INVALID_START.matcher(candidate).replaceFirst("");
         candidate = INVALID_END.matcher(candidate).replaceFirst("");

@@ -1,16 +1,16 @@
 package com.yumpoo.platform.identityaccess.api;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 class SessionHttpCookiesTest {
 
     @Test
     void sessionAndCsrfCookiesUseTheHostPrefixContract() {
-        String session = SessionHttpCookies.session("session-value", Duration.ofDays(7)).toString();
+        String session =
+                SessionHttpCookies.session("session-value", Duration.ofDays(7)).toString();
         String csrf = SessionHttpCookies.csrf("csrf-value", Duration.ofDays(7)).toString();
 
         assertThat(session)

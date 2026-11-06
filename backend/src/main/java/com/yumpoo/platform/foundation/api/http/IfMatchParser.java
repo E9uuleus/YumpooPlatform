@@ -1,12 +1,11 @@
 package com.yumpoo.platform.foundation.api.http;
 
+import com.yumpoo.platform.foundation.application.concurrency.StrongEtag;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
-import com.yumpoo.platform.foundation.application.concurrency.StrongEtag;
-import org.springframework.stereotype.Component;
-
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.springframework.stereotype.Component;
 
 /**
  * 只接受双引号包围的单个十进制强 ETag。

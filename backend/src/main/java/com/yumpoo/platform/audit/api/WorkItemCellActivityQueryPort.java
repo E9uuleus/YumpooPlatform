@@ -5,6 +5,11 @@ import java.time.ZoneId;
 import java.util.UUID;
 
 public interface WorkItemCellActivityQueryPort {
-    WorkItemCellActivityPage find(UUID companyId, UUID projectId, UUID workItemId,
-            ZoneId timezone, DayOfWeek weekStartDay, WorkItemCellActivityQuery query);
+    WorkItemCellActivityPage find(
+            UUID companyId,
+            UUID projectId,
+            UUID workItemId,
+            ZoneId timezone,
+            DayOfWeek weekStartDay,
+            WorkItemCellActivityQuery query);
 }

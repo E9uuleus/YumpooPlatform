@@ -1,24 +1,23 @@
 package com.yumpoo.platform.workitem.infrastructure.discussion;
 
+import static com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateModels.UpdateLocator;
+
 import com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateModels.UpdateCursor;
 import com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateRepository;
 import com.yumpoo.platform.workitem.domain.WorkItemUpdate;
 import com.yumpoo.platform.workitem.domain.WorkItemUpdateStatus;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Repository;
-
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.List;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-
-import static com.yumpoo.platform.workitem.application.discussion.WorkItemUpdateModels.UpdateLocator;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Repository;
 
 @Repository
 public class JdbcWorkItemUpdateRepository implements WorkItemUpdateRepository {
@@ -51,30 +50,37 @@ public class JdbcWorkItemUpdateRepository implements WorkItemUpdateRepository {
                     :authorDisplayName, :bodyHtml, :bodyText, :status,
                     :rowVersion, :createdAt, NULL, NULL, NULL, NULL, :parentUpdateId, NULL, NULL
                 )
-                """).param("id", update.id()).param("companyId", update.companyId())
+                """)
+                .param("id", update.id())
+                .param("companyId", update.companyId())
                 .param("projectId", update.projectId())
-                .param("workItemId", update.workItemId()).param("authorUserId", update.authorUserId())
-                .param("authorDisplayName", update.authorDisplayName()).param("bodyHtml", update.bodyHtml())
-                .param("bodyText", update.bodyText()).param("status", update.status().name())
-                .param("parentUpdateId", update.parentUpdateId()).param("rowVersion", update.rowVersion())
-                .param("createdAt", utc(update.createdAt())).update();
+                .param("workItemId", update.workItemId())
+                .param("authorUserId", update.authorUserId())
+                .param("authorDisplayName", update.authorDisplayName())
+                .param("bodyHtml", update.bodyHtml())
+                .param("bodyText", update.bodyText())
+                .param("status", update.status().name())
+                .param("parentUpdateId", update.parentUpdateId())
+                .param("rowVersion", update.rowVersion())
+                .param("createdAt", utc(update.createdAt()))
+                .update();
         if (inserted != 1) return false;
         insertMentions(update, mentionedDisplayNames, update.createdAt());
         return true;
     }
 
     @Override
-    public List<WorkItemUpdate> findOlderWindow(UUID companyId, UUID workItemId,
-            UpdateCursor before, int limit) {
+    public List<WorkItemUpdate> findOlderWindow(UUID companyId, UUID workItemId, UpdateCursor before, int limit) {
         String boundary = before == null ? "" : " AND (created_at, id) < (:createdAt, :cursorId)";
         JdbcClient.StatementSpec statement = jdbc.sql("SELECT " + COLUMNS
                         + " FROM yumpoo.work_item_update WHERE company_id=:companyId"
                         + " AND work_item_id=:workItemId AND parent_update_id IS NULL AND status<>'DELETED'" + boundary
                         + " ORDER BY created_at DESC, id DESC LIMIT :limit")
-                .param("companyId", companyId).param("workItemId", workItemId).param("limit", limit);
+                .param("companyId", companyId)
+                .param("workItemId", workItemId)
+                .param("limit", limit);
         if (before != null) {
-            statement = statement.param("createdAt", utc(before.createdAt()))
-                    .param("cursorId", before.id());
+            statement = statement.param("createdAt", utc(before.createdAt())).param("cursorId", before.id());
         }
         return statement.query(JdbcWorkItemUpdateRepository::map).list();
     }
@@ -82,28 +88,36 @@ public class JdbcWorkItemUpdateRepository implements WorkItemUpdateRepository {
     @Override
     public List<WorkItemUpdate> findPinned(UUID companyId, UUID workItemId) {
         return jdbc.sql("SELECT " + COLUMNS + " FROM yumpoo.work_item_update WHERE company_id=:companyId"
-                + " AND work_item_id=:workItemId AND parent_update_id IS NULL AND status<>'DELETED'"
-                + " AND pinned_at IS NOT NULL ORDER BY pinned_at DESC, id DESC")
-                .param("companyId", companyId).param("workItemId", workItemId)
-                .query(JdbcWorkItemUpdateRepository::map).list();
+                        + " AND work_item_id=:workItemId AND parent_update_id IS NULL AND status<>'DELETED'"
+                        + " AND pinned_at IS NOT NULL ORDER BY pinned_at DESC, id DESC")
+                .param("companyId", companyId)
+                .param("workItemId", workItemId)
+                .query(JdbcWorkItemUpdateRepository::map)
+                .list();
     }
 
     @Override
     public List<WorkItemUpdate> findReplies(UUID companyId, UUID parentUpdateId, UpdateCursor after, int limit) {
         String boundary = after == null ? "" : " AND (created_at, id) > (:createdAt, :cursorId)";
         JdbcClient.StatementSpec statement = jdbc.sql("SELECT " + COLUMNS
-                + " FROM yumpoo.work_item_update WHERE company_id=:companyId AND parent_update_id=:parentUpdateId"
-                + " AND status<>'DELETED'" + boundary + " ORDER BY created_at, id LIMIT :limit")
-                .param("companyId", companyId).param("parentUpdateId", parentUpdateId).param("limit", limit);
-        if (after != null) statement = statement.param("createdAt", utc(after.createdAt())).param("cursorId", after.id());
+                        + " FROM yumpoo.work_item_update WHERE company_id=:companyId AND parent_update_id=:parentUpdateId"
+                        + " AND status<>'DELETED'" + boundary + " ORDER BY created_at, id LIMIT :limit")
+                .param("companyId", companyId)
+                .param("parentUpdateId", parentUpdateId)
+                .param("limit", limit);
+        if (after != null)
+            statement = statement.param("createdAt", utc(after.createdAt())).param("cursorId", after.id());
         return statement.query(JdbcWorkItemUpdateRepository::map).list();
     }
 
     @Override
     public long countReplies(UUID companyId, UUID parentUpdateId) {
         return jdbc.sql("SELECT count(*) FROM yumpoo.work_item_update WHERE company_id=:companyId"
-                + " AND parent_update_id=:parentUpdateId AND status<>'DELETED'")
-                .param("companyId", companyId).param("parentUpdateId", parentUpdateId).query(Long.class).single();
+                        + " AND parent_update_id=:parentUpdateId AND status<>'DELETED'")
+                .param("companyId", companyId)
+                .param("parentUpdateId", parentUpdateId)
+                .query(Long.class)
+                .single();
     }
 
     @Override
@@ -116,9 +130,11 @@ public class JdbcWorkItemUpdateRepository implements WorkItemUpdateRepository {
                 WHERE company_id=:companyId AND work_item_id IN (:workItemIds)
                   AND parent_update_id IS NULL AND status<>'DELETED'
                 GROUP BY work_item_id
-                """).param("companyId", companyId).param("workItemIds", workItemIds)
-                .query((rs, row) -> Map.entry(rs.getObject("work_item_id", UUID.class),
-                        rs.getLong("discussion_count"))).list()
+                """)
+                .param("companyId", companyId)
+                .param("workItemIds", workItemIds)
+                .query((rs, row) -> Map.entry(rs.getObject("work_item_id", UUID.class), rs.getLong("discussion_count")))
+                .list()
                 .forEach(entry -> counts.put(entry.getKey(), entry.getValue()));
         return Map.copyOf(counts);
     }
@@ -126,12 +142,16 @@ public class JdbcWorkItemUpdateRepository implements WorkItemUpdateRepository {
     @Override
     public boolean pin(WorkItemUpdate update, long expectedVersion) {
         return jdbc.sql("UPDATE yumpoo.work_item_update SET pinned_at=:pinnedAt, pinned_by_user_id=:actor,"
-                + " row_version=:version WHERE company_id=:companyId AND id=:id AND row_version=:expected"
-                + " AND status<>'DELETED' AND parent_update_id IS NULL")
-                .param("pinnedAt", update.pinnedAt() == null ? null : utc(update.pinnedAt()))
-                .param("actor", update.pinnedByUserId()).param("version", update.rowVersion())
-                .param("companyId", update.companyId()).param("id", update.id())
-                .param("expected", expectedVersion).update() == 1;
+                                + " row_version=:version WHERE company_id=:companyId AND id=:id AND row_version=:expected"
+                                + " AND status<>'DELETED' AND parent_update_id IS NULL")
+                        .param("pinnedAt", update.pinnedAt() == null ? null : utc(update.pinnedAt()))
+                        .param("actor", update.pinnedByUserId())
+                        .param("version", update.rowVersion())
+                        .param("companyId", update.companyId())
+                        .param("id", update.id())
+                        .param("expected", expectedVersion)
+                        .update()
+                == 1;
     }
 
     @Override
@@ -142,10 +162,15 @@ public class JdbcWorkItemUpdateRepository implements WorkItemUpdateRepository {
                 FROM yumpoo.work_item_update discussion
                 JOIN yumpoo.work_item item ON item.id=discussion.work_item_id
                 WHERE discussion.company_id=:companyId AND discussion.id=:updateId
-                """).param("companyId", companyId).param("updateId", updateId)
-                .query((rs, row) -> new UpdateLocator(rs.getObject("company_id", UUID.class),
-                        rs.getObject("project_id", UUID.class), rs.getObject("content_id", UUID.class),
-                        rs.getObject("work_item_id", UUID.class), rs.getObject("id", UUID.class)))
+                """)
+                .param("companyId", companyId)
+                .param("updateId", updateId)
+                .query((rs, row) -> new UpdateLocator(
+                        rs.getObject("company_id", UUID.class),
+                        rs.getObject("project_id", UUID.class),
+                        rs.getObject("content_id", UUID.class),
+                        rs.getObject("work_item_id", UUID.class),
+                        rs.getObject("id", UUID.class)))
                 .optional();
     }
 
@@ -153,16 +178,20 @@ public class JdbcWorkItemUpdateRepository implements WorkItemUpdateRepository {
     public Optional<WorkItemUpdate> find(UUID companyId, UUID updateId) {
         return jdbc.sql("SELECT " + COLUMNS + " FROM yumpoo.work_item_update "
                         + "WHERE company_id=:companyId AND id=:updateId")
-                .param("companyId", companyId).param("updateId", updateId)
-                .query(JdbcWorkItemUpdateRepository::map).optional();
+                .param("companyId", companyId)
+                .param("updateId", updateId)
+                .query(JdbcWorkItemUpdateRepository::map)
+                .optional();
     }
 
     @Override
     public Optional<WorkItemUpdate> lock(UUID companyId, UUID updateId) {
         return jdbc.sql("SELECT " + COLUMNS + " FROM yumpoo.work_item_update "
                         + "WHERE company_id=:companyId AND id=:updateId FOR UPDATE")
-                .param("companyId", companyId).param("updateId", updateId)
-                .query(JdbcWorkItemUpdateRepository::map).optional();
+                .param("companyId", companyId)
+                .param("updateId", updateId)
+                .query(JdbcWorkItemUpdateRepository::map)
+                .optional();
     }
 
     @Override
@@ -173,16 +202,18 @@ public class JdbcWorkItemUpdateRepository implements WorkItemUpdateRepository {
                 FROM yumpoo.work_item_update_mention
                 WHERE company_id=:companyId AND update_id=:updateId
                 ORDER BY mentioned_user_id
-                """).param("companyId", companyId).param("updateId", updateId)
-                .query((rs, row) -> Map.entry(rs.getObject("mentioned_user_id", UUID.class),
-                        rs.getString("mentioned_display_name"))).list()
+                """)
+                .param("companyId", companyId)
+                .param("updateId", updateId)
+                .query((rs, row) -> Map.entry(
+                        rs.getObject("mentioned_user_id", UUID.class), rs.getString("mentioned_display_name")))
+                .list()
                 .forEach(entry -> result.put(entry.getKey(), entry.getValue()));
         return Map.copyOf(result);
     }
 
     @Override
-    public boolean update(WorkItemUpdate update, Map<UUID, String> mentionedDisplayNames,
-            long expectedVersion) {
+    public boolean update(WorkItemUpdate update, Map<UUID, String> mentionedDisplayNames, long expectedVersion) {
         int changed = jdbc.sql("""
                 UPDATE yumpoo.work_item_update
                 SET body_html=:bodyHtml, body_text=:bodyText, status=:status,
@@ -190,15 +221,22 @@ public class JdbcWorkItemUpdateRepository implements WorkItemUpdateRepository {
                     row_version=:rowVersion
                 WHERE company_id=:companyId AND id=:updateId
                   AND row_version=:expectedVersion AND status<>'DELETED'
-                """).param("bodyHtml", update.bodyHtml()).param("bodyText", update.bodyText())
-                .param("status", update.status().name()).param("editedAt", utc(update.editedAt()))
-                .param("editedByUserId", update.editedByUserId()).param("rowVersion", update.rowVersion())
-                .param("companyId", update.companyId()).param("updateId", update.id())
-                .param("expectedVersion", expectedVersion).update();
+                """)
+                .param("bodyHtml", update.bodyHtml())
+                .param("bodyText", update.bodyText())
+                .param("status", update.status().name())
+                .param("editedAt", utc(update.editedAt()))
+                .param("editedByUserId", update.editedByUserId())
+                .param("rowVersion", update.rowVersion())
+                .param("companyId", update.companyId())
+                .param("updateId", update.id())
+                .param("expectedVersion", expectedVersion)
+                .update();
         if (changed != 1) return false;
-        jdbc.sql("DELETE FROM yumpoo.work_item_update_mention "
-                        + "WHERE company_id=:companyId AND update_id=:updateId")
-                .param("companyId", update.companyId()).param("updateId", update.id()).update();
+        jdbc.sql("DELETE FROM yumpoo.work_item_update_mention " + "WHERE company_id=:companyId AND update_id=:updateId")
+                .param("companyId", update.companyId())
+                .param("updateId", update.id())
+                .update();
         insertMentions(update, mentionedDisplayNames, update.editedAt());
         return true;
     }
@@ -212,37 +250,55 @@ public class JdbcWorkItemUpdateRepository implements WorkItemUpdateRepository {
                     pinned_at=NULL, pinned_by_user_id=NULL, row_version=:rowVersion
                 WHERE company_id=:companyId AND id=:updateId
                   AND row_version=:expectedVersion AND status<>'DELETED'
-                """).param("status", update.status().name()).param("deletedAt", utc(update.deletedAt()))
-                .param("deletedByUserId", update.deletedByUserId())
-                .param("rowVersion", update.rowVersion()).param("companyId", update.companyId())
-                .param("updateId", update.id()).param("expectedVersion", expectedVersion)
-                .update() == 1;
+                """)
+                        .param("status", update.status().name())
+                        .param("deletedAt", utc(update.deletedAt()))
+                        .param("deletedByUserId", update.deletedByUserId())
+                        .param("rowVersion", update.rowVersion())
+                        .param("companyId", update.companyId())
+                        .param("updateId", update.id())
+                        .param("expectedVersion", expectedVersion)
+                        .update()
+                == 1;
     }
 
-    private void insertMentions(WorkItemUpdate update, Map<UUID, String> mentionedDisplayNames,
-            Instant createdAt) {
+    private void insertMentions(WorkItemUpdate update, Map<UUID, String> mentionedDisplayNames, Instant createdAt) {
         for (Map.Entry<UUID, String> mention : mentionedDisplayNames.entrySet()) {
             jdbc.sql("""
                     INSERT INTO yumpoo.work_item_update_mention (
                         update_id, company_id, mentioned_user_id, mentioned_display_name, created_at
                     ) VALUES (:updateId, :companyId, :userId, :displayName, :createdAt)
-                    """).param("updateId", update.id()).param("companyId", update.companyId())
-                    .param("userId", mention.getKey()).param("displayName", mention.getValue())
-                    .param("createdAt", utc(createdAt)).update();
+                    """)
+                    .param("updateId", update.id())
+                    .param("companyId", update.companyId())
+                    .param("userId", mention.getKey())
+                    .param("displayName", mention.getValue())
+                    .param("createdAt", utc(createdAt))
+                    .update();
         }
     }
 
     private static WorkItemUpdate map(ResultSet rs, int row) throws SQLException {
-        return new WorkItemUpdate(rs.getObject("id", UUID.class),
-                rs.getObject("company_id", UUID.class), rs.getObject("project_id", UUID.class),
-                rs.getObject("content_id", UUID.class), rs.getObject("work_item_id", UUID.class),
-                rs.getObject("author_user_id", UUID.class), rs.getString("author_display_name"),
-                rs.getString("body_html"), rs.getString("body_text"),
+        return new WorkItemUpdate(
+                rs.getObject("id", UUID.class),
+                rs.getObject("company_id", UUID.class),
+                rs.getObject("project_id", UUID.class),
+                rs.getObject("content_id", UUID.class),
+                rs.getObject("work_item_id", UUID.class),
+                rs.getObject("author_user_id", UUID.class),
+                rs.getString("author_display_name"),
+                rs.getString("body_html"),
+                rs.getString("body_text"),
                 WorkItemUpdateStatus.valueOf(rs.getString("status")),
-                rs.getLong("row_version"), instant(rs, "created_at"), nullableInstant(rs, "edited_at"),
-                rs.getObject("edited_by_user_id", UUID.class), nullableInstant(rs, "deleted_at"),
-                rs.getObject("deleted_by_user_id", UUID.class), rs.getObject("parent_update_id", UUID.class),
-                nullableInstant(rs, "pinned_at"), rs.getObject("pinned_by_user_id", UUID.class));
+                rs.getLong("row_version"),
+                instant(rs, "created_at"),
+                nullableInstant(rs, "edited_at"),
+                rs.getObject("edited_by_user_id", UUID.class),
+                nullableInstant(rs, "deleted_at"),
+                rs.getObject("deleted_by_user_id", UUID.class),
+                rs.getObject("parent_update_id", UUID.class),
+                nullableInstant(rs, "pinned_at"),
+                rs.getObject("pinned_by_user_id", UUID.class));
     }
 
     private static Instant instant(ResultSet rs, String field) throws SQLException {

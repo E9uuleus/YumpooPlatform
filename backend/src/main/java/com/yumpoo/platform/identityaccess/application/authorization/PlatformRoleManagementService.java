@@ -11,27 +11,25 @@ import com.yumpoo.platform.foundation.application.idempotency.IdempotencyExecuti
 import com.yumpoo.platform.foundation.application.idempotency.IdempotencyScope;
 import com.yumpoo.platform.foundation.application.idempotency.IdempotentCommandExecutor;
 import com.yumpoo.platform.foundation.application.idempotency.StoredCommandResult;
-import com.yumpoo.platform.identityaccess.application.session.SessionRevocationService;
 import com.yumpoo.platform.identityaccess.application.audit.IdentitySecurityAuditRecorder;
+import com.yumpoo.platform.identityaccess.application.session.SessionRevocationService;
 import com.yumpoo.platform.identityaccess.application.session.SessionRevocationTarget;
 import com.yumpoo.platform.identityaccess.domain.session.SessionRevocationReason;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.ObjectMapper;
-
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.UUID;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 @Service
-public class PlatformRoleManagementService
-        implements PlatformRoleManagementUseCase, PlatformRoleMaintenanceUseCase {
+public class PlatformRoleManagementService implements PlatformRoleManagementUseCase, PlatformRoleMaintenanceUseCase {
 
     static final Duration RECENT_AUTHENTICATION_WINDOW = Duration.ofMinutes(15);
     public static final String ROLE_GRANTED_EVENT = "identity.platform_role_granted";
@@ -57,8 +55,7 @@ public class PlatformRoleManagementService
             IdempotentCommandExecutor idempotentCommandExecutor,
             ObjectMapper objectMapper,
             Clock clock,
-            IdentitySecurityAuditRecorder auditRecorder
-    ) {
+            IdentitySecurityAuditRecorder auditRecorder) {
         this.repository = repository;
         this.availabilityCoordinator = availabilityCoordinator;
         this.sessionRevocationService = sessionRevocationService;
@@ -71,17 +68,23 @@ public class PlatformRoleManagementService
 
     @Override
     public IdempotencyExecutionResult changeTier(ChangePlatformRoleTierCommand command) {
-        return idempotentCommandExecutor.execute(new IdempotencyCommand(
-                new IdempotencyScope(command.actor().userId(), "PUT", "changeMemberPlatformRole", command.idempotencyKey()),
-                command.requestHash()), () -> {
-            PlatformRoleChangeResult result = executeChangeTier(command);
-            try {
-                return new StoredCommandResult(200, objectMapper.writeValueAsString(result),
-                        result.userId(), StrongEtag.format(result.userRowVersion()));
-            } catch (JacksonException exception) {
-                throw new IllegalStateException("platform role result serialization failed", exception);
-            }
-        });
+        return idempotentCommandExecutor.execute(
+                new IdempotencyCommand(
+                        new IdempotencyScope(
+                                command.actor().userId(), "PUT", "changeMemberPlatformRole", command.idempotencyKey()),
+                        command.requestHash()),
+                () -> {
+                    PlatformRoleChangeResult result = executeChangeTier(command);
+                    try {
+                        return new StoredCommandResult(
+                                200,
+                                objectMapper.writeValueAsString(result),
+                                result.userId(),
+                                StrongEtag.format(result.userRowVersion()));
+                    } catch (JacksonException exception) {
+                        throw new IllegalStateException("platform role result serialization failed", exception);
+                    }
+                });
     }
 
     private PlatformRoleChangeResult executeChangeTier(ChangePlatformRoleTierCommand command) {
@@ -97,47 +100,63 @@ public class PlatformRoleManagementService
         MemberRoleTier previous = MemberRoleTier.of(target);
         Instant now = clock.instant();
         if (previous == command.role()) {
-            return new PlatformRoleChangeResult(target.userId(), previous, previous,
-                    target.rowVersion(), target.authorizationVersion(), now);
+            return new PlatformRoleChangeResult(
+                    target.userId(), previous, previous, target.rowVersion(), target.authorizationVersion(), now);
         }
         if (command.role().ordinal() > previous.ordinal() && !target.available()) {
             throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION, "只能提升在职且启用的用户角色");
         }
-        availabilityCoordinator.protectLastAvailable(before,
-                previous == MemberRoleTier.APP_MANAGER && target.available());
+        availabilityCoordinator.protectLastAvailable(
+                before, previous == MemberRoleTier.APP_MANAGER && target.available());
         EventActor actor = EventActor.adminOverride(actorUser.userId(), command.reasonReference());
         var revoked = repository.findActiveAssignments(command.companyId(), target.userId()).stream()
-                .map(assignment -> repository.revoke(assignment, actorUser.userId(), command.reasonReference(), now)).toList();
-        RoleAssignmentSnapshot granted = command.role() == MemberRoleTier.COMPANY_MEMBER ? null
-                : repository.grant(UUID.randomUUID(), command.companyId(), target.userId(),
-                        ManagedPlatformRole.valueOf(command.role().name()), "USER", actorUser.userId(),
-                        null, command.reasonReference(), now);
-        RoleUserSnapshot changed = repository.incrementAuthorizationVersion(
-                command.companyId(), target.userId(), target.rowVersion());
-        revoked.forEach(assignment -> publishRoleEvent(ROLE_REVOKED_EVENT,
-                result(assignment, changed, now), command.reasonReference(), actor));
+                .map(assignment -> repository.revoke(assignment, actorUser.userId(), command.reasonReference(), now))
+                .toList();
+        RoleAssignmentSnapshot granted = command.role() == MemberRoleTier.COMPANY_MEMBER
+                ? null
+                : repository.grant(
+                        UUID.randomUUID(),
+                        command.companyId(),
+                        target.userId(),
+                        ManagedPlatformRole.valueOf(command.role().name()),
+                        "USER",
+                        actorUser.userId(),
+                        null,
+                        command.reasonReference(),
+                        now);
+        RoleUserSnapshot changed =
+                repository.incrementAuthorizationVersion(command.companyId(), target.userId(), target.rowVersion());
+        revoked.forEach(assignment -> publishRoleEvent(
+                ROLE_REVOKED_EVENT, result(assignment, changed, now), command.reasonReference(), actor));
         if (granted != null) {
             publishRoleEvent(ROLE_GRANTED_EVENT, result(granted, changed, now), command.reasonReference(), actor);
         }
         revokeSessions(changed, actor);
-        auditRecorder.succeeded(command.companyId(), "role-tier:" + target.userId() + ":" + changed.rowVersion(),
-                "PLATFORM_ROLE_TIER_CHANGED", actor, roleNames(actorUser), "USER", target.userId(),
-                command.reasonReference(), Map.of("role", previous.name()),
+        auditRecorder.succeeded(
+                command.companyId(),
+                "role-tier:" + target.userId() + ":" + changed.rowVersion(),
+                "PLATFORM_ROLE_TIER_CHANGED",
+                actor,
+                roleNames(actorUser),
+                "USER",
+                target.userId(),
+                command.reasonReference(),
+                Map.of("role", previous.name()),
                 Map.of("role", command.role().name(), "authorizationVersion", changed.authorizationVersion()),
-                command.idempotencyKey(), null, null);
+                command.idempotencyKey(),
+                null,
+                null);
         availabilityCoordinator.reconcile(before, "ROLE_TIER_CHANGED", target.userId(), actor);
-        return new PlatformRoleChangeResult(target.userId(), command.role(), previous,
-                changed.rowVersion(), changed.authorizationVersion(), now);
+        return new PlatformRoleChangeResult(
+                target.userId(), command.role(), previous, changed.rowVersion(), changed.authorizationVersion(), now);
     }
 
     @Override
     public IdempotencyExecutionResult grant(GrantPlatformRoleCommand command) {
         IdempotencyCommand idempotency = new IdempotencyCommand(
                 new IdempotencyScope(
-                        command.actor().userId(), "POST", grantRouteKey(command.role()),
-                        command.idempotencyKey()),
-                command.requestHash()
-        );
+                        command.actor().userId(), "POST", grantRouteKey(command.role()), command.idempotencyKey()),
+                command.requestHash());
         return idempotentCommandExecutor.execute(idempotency, () -> {
             PlatformRoleMutationResult result = executeGrant(command);
             return stored(result, 201);
@@ -148,10 +167,11 @@ public class PlatformRoleManagementService
     public IdempotencyExecutionResult revoke(RevokePlatformRoleCommand command) {
         IdempotencyCommand idempotency = new IdempotencyCommand(
                 new IdempotencyScope(
-                        command.actor().userId(), "DELETE", revokeRouteKey(command.expectedRole()),
+                        command.actor().userId(),
+                        "DELETE",
+                        revokeRouteKey(command.expectedRole()),
                         command.idempotencyKey()),
-                command.requestHash()
-        );
+                command.requestHash());
         return idempotentCommandExecutor.execute(idempotency, () -> {
             PlatformRoleMutationResult result = executeRevoke(command);
             return stored(result, 200);
@@ -161,36 +181,21 @@ public class PlatformRoleManagementService
     @Override
     @Transactional
     public MaintenanceRoleActor ensureAvailableAppManager(
-            UUID companyId,
-            UUID preferredTargetUserId,
-            String reasonReference
-    ) {
+            UUID companyId, UUID preferredTargetUserId, String reasonReference) {
         AvailabilitySnapshot before = availabilityCoordinator.lock(companyId);
         if (before.availableCount() > 0) {
-            RoleUserSnapshot existing = repository.findAvailableAppManager(companyId)
-                    .orElseThrow(() -> new IllegalStateException(
-                            "APP_MANAGER availability count is inconsistent"
-                    ));
-            return new MaintenanceRoleActor(
-                    existing.userId(),
-                    existing.authorizationVersion()
-            );
+            RoleUserSnapshot existing = repository
+                    .findAvailableAppManager(companyId)
+                    .orElseThrow(() -> new IllegalStateException("APP_MANAGER availability count is inconsistent"));
+            return new MaintenanceRoleActor(existing.userId(), existing.authorizationVersion());
         }
 
-        MaintenanceRoleMode mode = before.state().lifecycleStatus()
-                == GovernanceLifecycleStatus.UNINITIALIZED
+        MaintenanceRoleMode mode = before.state().lifecycleStatus() == GovernanceLifecycleStatus.UNINITIALIZED
                 ? MaintenanceRoleMode.BOOTSTRAP
                 : MaintenanceRoleMode.BREAK_GLASS;
-        PlatformRoleMutationResult restored = execute(new MaintenanceRoleCommand(
-                companyId,
-                preferredTargetUserId,
-                mode,
-                reasonReference
-        ));
-        return new MaintenanceRoleActor(
-                restored.userId(),
-                restored.authorizationVersion()
-        );
+        PlatformRoleMutationResult restored =
+                execute(new MaintenanceRoleCommand(companyId, preferredTargetUserId, mode, reasonReference));
+        return new MaintenanceRoleActor(restored.userId(), restored.authorizationVersion());
     }
 
     @Override
@@ -199,57 +204,76 @@ public class PlatformRoleManagementService
         AvailabilitySnapshot before = availabilityCoordinator.lock(command.companyId());
         RoleUserSnapshot target = requireTarget(command.companyId(), command.targetUserId());
         if (!target.available()) {
-            throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION,
-                    "维护目标必须是在职且启用的用户");
+            throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION, "维护目标必须是在职且启用的用户");
         }
-        if (repository.findActiveAssignment(command.companyId(), command.targetUserId(),
-                ManagedPlatformRole.APP_MANAGER).isPresent()) {
-            throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION,
-                    "目标已经拥有 APP_MANAGER");
+        if (repository
+                .findActiveAssignment(command.companyId(), command.targetUserId(), ManagedPlatformRole.APP_MANAGER)
+                .isPresent()) {
+            throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION, "目标已经拥有 APP_MANAGER");
         }
         switch (command.mode()) {
             case BOOTSTRAP -> {
                 if (before.state().lifecycleStatus() != GovernanceLifecycleStatus.UNINITIALIZED
                         || repository.hasAppManagerHistory(command.companyId())) {
-                    throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION,
-                            "首管引导已永久关闭");
+                    throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION, "首管引导已永久关闭");
                 }
             }
             case BREAK_GLASS -> {
                 if (before.state().lifecycleStatus() == GovernanceLifecycleStatus.UNINITIALIZED
                         || before.availableCount() != 0) {
-                    throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION,
-                            "仅在已初始化且没有可用 APP_MANAGER 时允许紧急恢复");
+                    throw new ApplicationException(
+                            StandardErrorCode.INVALID_STATE_TRANSITION, "仅在已初始化且没有可用 APP_MANAGER 时允许紧急恢复");
                 }
             }
         }
 
         Instant now = clock.instant();
         EventActor actor = EventActor.system(command.mode().systemCode());
-        for (RoleAssignmentSnapshot assignment : repository.findActiveAssignments(command.companyId(), target.userId())) {
-            RoleAssignmentSnapshot revoked = repository.revokeBySystem(
-                    assignment, command.mode().systemCode(), command.reasonReference(), now);
+        for (RoleAssignmentSnapshot assignment :
+                repository.findActiveAssignments(command.companyId(), target.userId())) {
+            RoleAssignmentSnapshot revoked =
+                    repository.revokeBySystem(assignment, command.mode().systemCode(), command.reasonReference(), now);
             publishRoleEvent(ROLE_REVOKED_EVENT, result(revoked, target, now), command.reasonReference(), actor);
         }
         PlatformRoleMutationResult result = grantLocked(
-                command.companyId(), target, ManagedPlatformRole.APP_MANAGER,
-                "SYSTEM", null, command.mode().systemCode(), command.reasonReference(), actor, now);
+                command.companyId(),
+                target,
+                ManagedPlatformRole.APP_MANAGER,
+                "SYSTEM",
+                null,
+                command.mode().systemCode(),
+                command.reasonReference(),
+                actor,
+                now);
         if (command.mode() == MaintenanceRoleMode.BOOTSTRAP) {
             availabilityCoordinator.initializeAvailable(command.companyId());
         } else {
-            availabilityCoordinator.restoreAvailable(
-                    before, "BREAK_GLASS", command.targetUserId(), actor);
+            availabilityCoordinator.restoreAvailable(before, "BREAK_GLASS", command.targetUserId(), actor);
         }
         auditRecorder.succeeded(
-                command.companyId(), "role:" + result.assignmentId() + ":" + result.assignmentRowVersion(),
+                command.companyId(),
+                "role:" + result.assignmentId() + ":" + result.assignmentRowVersion(),
                 command.mode() == MaintenanceRoleMode.BOOTSTRAP
-                        ? "APP_MANAGER_BOOTSTRAPPED" : "APP_MANAGER_BREAK_GLASS_GRANTED",
-                actor, Set.of(), "PLATFORM_ROLE_ASSIGNMENT", result.assignmentId(),
-                command.reasonReference(), null,
-                Map.of("userId", result.userId(), "role", result.role().name(),
-                        "status", result.status().name(),
-                        "authorizationVersion", result.authorizationVersion()),
-                result.assignmentId(), null, null);
+                        ? "APP_MANAGER_BOOTSTRAPPED"
+                        : "APP_MANAGER_BREAK_GLASS_GRANTED",
+                actor,
+                Set.of(),
+                "PLATFORM_ROLE_ASSIGNMENT",
+                result.assignmentId(),
+                command.reasonReference(),
+                null,
+                Map.of(
+                        "userId",
+                        result.userId(),
+                        "role",
+                        result.role().name(),
+                        "status",
+                        result.status().name(),
+                        "authorizationVersion",
+                        result.authorizationVersion()),
+                result.assignmentId(),
+                null,
+                null);
         return result;
     }
 
@@ -269,22 +293,31 @@ public class PlatformRoleManagementService
         RoleUserSnapshot appManager = requireTarget(command.companyId(), command.appManagerUserId());
         RoleUserSnapshot companyAdmin = requireTarget(command.companyId(), command.companyAdminUserId());
         if (!appManager.available() || !companyAdmin.available()) {
-            throw new ApplicationException(
-                    StandardErrorCode.INVALID_STATE_TRANSITION,
-                    "首次引导目标必须是在职且启用的用户"
-            );
+            throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION, "首次引导目标必须是在职且启用的用户");
         }
 
         Instant now = clock.instant();
         EventActor actor = EventActor.system(INITIAL_BOOTSTRAP_SYSTEM);
         PlatformRoleMutationResult appManagerResult = grantLocked(
-                command.companyId(), appManager, ManagedPlatformRole.APP_MANAGER,
-                "SYSTEM", null, INITIAL_BOOTSTRAP_SYSTEM,
-                command.reasonReference(), actor, now);
+                command.companyId(),
+                appManager,
+                ManagedPlatformRole.APP_MANAGER,
+                "SYSTEM",
+                null,
+                INITIAL_BOOTSTRAP_SYSTEM,
+                command.reasonReference(),
+                actor,
+                now);
         PlatformRoleMutationResult companyAdminResult = grantLocked(
-                command.companyId(), companyAdmin, ManagedPlatformRole.COMPANY_ADMIN,
-                "SYSTEM", null, INITIAL_BOOTSTRAP_SYSTEM,
-                command.reasonReference(), actor, now);
+                command.companyId(),
+                companyAdmin,
+                ManagedPlatformRole.COMPANY_ADMIN,
+                "SYSTEM",
+                null,
+                INITIAL_BOOTSTRAP_SYSTEM,
+                command.reasonReference(),
+                actor,
+                now);
         availabilityCoordinator.initializeAvailable(command.companyId());
 
         recordInitialRoleBootstrap(appManagerResult, command.reasonReference(), actor);
@@ -303,28 +336,21 @@ public class PlatformRoleManagementService
                 Map.of(
                         "directoryRunId", command.directoryRunId(),
                         "appManagerAssignmentId", appManagerResult.assignmentId(),
-                        "companyAdminAssignmentId", companyAdminResult.assignmentId()
-                ),
+                        "companyAdminAssignmentId", companyAdminResult.assignmentId()),
                 command.directoryRunId(),
                 null,
-                null
-        );
-        return new InitialRoleBootstrapResult(
-                appManagerResult.assignmentId(),
-                companyAdminResult.assignmentId()
-        );
+                null);
+        return new InitialRoleBootstrapResult(appManagerResult.assignmentId(), companyAdminResult.assignmentId());
     }
 
     private void recordInitialRoleBootstrap(
-            PlatformRoleMutationResult result,
-            String reasonReference,
-            EventActor actor
-    ) {
+            PlatformRoleMutationResult result, String reasonReference, EventActor actor) {
         auditRecorder.succeeded(
                 result.companyId(),
                 "role:" + result.assignmentId() + ":" + result.assignmentRowVersion(),
                 result.role() == ManagedPlatformRole.APP_MANAGER
-                        ? "APP_MANAGER_BOOTSTRAPPED" : "COMPANY_ADMIN_BOOTSTRAPPED",
+                        ? "APP_MANAGER_BOOTSTRAPPED"
+                        : "COMPANY_ADMIN_BOOTSTRAPPED",
                 actor,
                 Set.of(),
                 "PLATFORM_ROLE_ASSIGNMENT",
@@ -333,22 +359,17 @@ public class PlatformRoleManagementService
                 null,
                 Map.of(
                         "role", result.role().name(),
-                        "assignmentId", result.assignmentId()
-                ),
+                        "assignmentId", result.assignmentId()),
                 result.assignmentId(),
                 null,
-                null
-        );
+                null);
     }
 
     private void requireInitialBootstrapOpen(AvailabilitySnapshot state, UUID companyId) {
         if (state.state().lifecycleStatus() != GovernanceLifecycleStatus.UNINITIALIZED
                 || repository.hasAppManagerHistory(companyId)
                 || repository.hasAnyRoleHistory(companyId)) {
-            throw new ApplicationException(
-                    StandardErrorCode.INVALID_STATE_TRANSITION,
-                    "首次身份引导已永久关闭"
-            );
+            throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION, "首次身份引导已永久关闭");
         }
     }
 
@@ -360,25 +381,46 @@ public class PlatformRoleManagementService
             throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
         }
         if (!target.available()) {
-            throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION,
-                    "只能向在职且启用的用户授予角色");
+            throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION, "只能向在职且启用的用户授予角色");
         }
-        if (!repository.findActiveAssignments(command.companyId(), command.targetUserId()).isEmpty()) {
-            throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION,
-                    "目标已拥有平台角色，请使用更改角色");
+        if (!repository
+                .findActiveAssignments(command.companyId(), command.targetUserId())
+                .isEmpty()) {
+            throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION, "目标已拥有平台角色，请使用更改角色");
         }
         EventActor actor = EventActor.adminOverride(actorUser.userId(), command.reasonReference());
         PlatformRoleMutationResult result = grantLocked(
-                command.companyId(), target, command.role(), "USER", actorUser.userId(), null,
-                command.reasonReference(), actor, clock.instant());
+                command.companyId(),
+                target,
+                command.role(),
+                "USER",
+                actorUser.userId(),
+                null,
+                command.reasonReference(),
+                actor,
+                clock.instant());
         auditRecorder.succeeded(
-                command.companyId(), "role:" + result.assignmentId() + ":" + result.assignmentRowVersion(),
-                "PLATFORM_ROLE_GRANTED", actor, roleNames(actorUser),
-                "PLATFORM_ROLE_ASSIGNMENT", result.assignmentId(), command.reasonReference(),
-                null, Map.of("userId", result.userId(), "role", result.role().name(),
-                        "status", result.status().name(),
-                        "authorizationVersion", result.authorizationVersion()),
-                command.idempotencyKey(), null, null);
+                command.companyId(),
+                "role:" + result.assignmentId() + ":" + result.assignmentRowVersion(),
+                "PLATFORM_ROLE_GRANTED",
+                actor,
+                roleNames(actorUser),
+                "PLATFORM_ROLE_ASSIGNMENT",
+                result.assignmentId(),
+                command.reasonReference(),
+                null,
+                Map.of(
+                        "userId",
+                        result.userId(),
+                        "role",
+                        result.role().name(),
+                        "status",
+                        result.status().name(),
+                        "authorizationVersion",
+                        result.authorizationVersion()),
+                command.idempotencyKey(),
+                null,
+                null);
         availabilityCoordinator.reconcile(before, "ROLE_GRANTED", target.userId(), actor);
         return result;
     }
@@ -386,8 +428,8 @@ public class PlatformRoleManagementService
     private PlatformRoleMutationResult executeRevoke(RevokePlatformRoleCommand command) {
         AvailabilitySnapshot before = availabilityCoordinator.lock(command.companyId());
         RoleUserSnapshot actorUser = requireAuthorizedActor(command.companyId(), command.actor());
-        RoleAssignmentSnapshot assignment = repository.lockAssignment(
-                        command.companyId(), command.assignmentId(), command.expectedRole())
+        RoleAssignmentSnapshot assignment = repository
+                .lockAssignment(command.companyId(), command.assignmentId(), command.expectedRole())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
         if (assignment.rowVersion() != command.expectedAssignmentRowVersion()) {
             throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
@@ -396,28 +438,40 @@ public class PlatformRoleManagementService
             throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
         }
         RoleUserSnapshot target = requireTarget(command.companyId(), assignment.userId());
-        boolean removesAvailableManager = assignment.role() == ManagedPlatformRole.APP_MANAGER
-                && target.available();
+        boolean removesAvailableManager = assignment.role() == ManagedPlatformRole.APP_MANAGER && target.available();
         availabilityCoordinator.protectLastAvailable(before, removesAvailableManager);
 
         Instant now = clock.instant();
-        RoleAssignmentSnapshot revoked = repository.revoke(
-                assignment, actorUser.userId(), command.reasonReference(), now);
-        RoleUserSnapshot changedUser = repository.incrementAuthorizationVersion(
-                command.companyId(), target.userId(), target.rowVersion());
+        RoleAssignmentSnapshot revoked =
+                repository.revoke(assignment, actorUser.userId(), command.reasonReference(), now);
+        RoleUserSnapshot changedUser =
+                repository.incrementAuthorizationVersion(command.companyId(), target.userId(), target.rowVersion());
         EventActor actor = EventActor.adminOverride(actorUser.userId(), command.reasonReference());
         PlatformRoleMutationResult result = result(revoked, changedUser, now);
         publishRoleEvent(ROLE_REVOKED_EVENT, result, command.reasonReference(), actor);
         revokeSessions(changedUser, actor);
         auditRecorder.succeeded(
-                command.companyId(), "role:" + result.assignmentId() + ":" + result.assignmentRowVersion(),
-                "PLATFORM_ROLE_REVOKED", actor, roleNames(actorUser),
-                "PLATFORM_ROLE_ASSIGNMENT", result.assignmentId(), command.reasonReference(),
+                command.companyId(),
+                "role:" + result.assignmentId() + ":" + result.assignmentRowVersion(),
+                "PLATFORM_ROLE_REVOKED",
+                actor,
+                roleNames(actorUser),
+                "PLATFORM_ROLE_ASSIGNMENT",
+                result.assignmentId(),
+                command.reasonReference(),
                 Map.of("userId", result.userId(), "role", result.role().name(), "status", "ACTIVE"),
-                Map.of("userId", result.userId(), "role", result.role().name(),
-                        "status", result.status().name(),
-                        "authorizationVersion", result.authorizationVersion()),
-                command.idempotencyKey(), null, null);
+                Map.of(
+                        "userId",
+                        result.userId(),
+                        "role",
+                        result.role().name(),
+                        "status",
+                        result.status().name(),
+                        "authorizationVersion",
+                        result.authorizationVersion()),
+                command.idempotencyKey(),
+                null,
+                null);
         availabilityCoordinator.reconcile(before, "ROLE_REVOKED", target.userId(), actor);
         return result;
     }
@@ -431,13 +485,19 @@ public class PlatformRoleManagementService
             String systemCode,
             String reasonReference,
             EventActor actor,
-            Instant now
-    ) {
+            Instant now) {
         RoleAssignmentSnapshot assignment = repository.grant(
-                UUID.randomUUID(), companyId, target.userId(), role,
-                actorType, actorUserId, systemCode, reasonReference, now);
-        RoleUserSnapshot changedUser = repository.incrementAuthorizationVersion(
-                companyId, target.userId(), target.rowVersion());
+                UUID.randomUUID(),
+                companyId,
+                target.userId(),
+                role,
+                actorType,
+                actorUserId,
+                systemCode,
+                reasonReference,
+                now);
+        RoleUserSnapshot changedUser =
+                repository.incrementAuthorizationVersion(companyId, target.userId(), target.rowVersion());
         PlatformRoleMutationResult result = result(assignment, changedUser, now);
         publishRoleEvent(ROLE_GRANTED_EVENT, result, reasonReference, actor);
         revokeSessions(changedUser, actor);
@@ -448,10 +508,14 @@ public class PlatformRoleManagementService
         Instant now = clock.instant();
         if (actor.authenticatedAt().isBefore(now.minus(RECENT_AUTHENTICATION_WINDOW))
                 || actor.authenticatedAt().isAfter(now)) {
-            throw new ApplicationException(StandardErrorCode.ACCESS_DENIED,
-                    "最近认证已过期，请重新认证后再试", java.util.List.of(), "RECENT_AUTHENTICATION_REQUIRED");
+            throw new ApplicationException(
+                    StandardErrorCode.ACCESS_DENIED,
+                    "最近认证已过期，请重新认证后再试",
+                    java.util.List.of(),
+                    "RECENT_AUTHENTICATION_REQUIRED");
         }
-        RoleUserSnapshot user = repository.lockUser(companyId, actor.userId())
+        RoleUserSnapshot user = repository
+                .lockUser(companyId, actor.userId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.ACCESS_DENIED));
         if (!user.available()
                 || user.authorizationVersion() != actor.sessionAuthorizationVersion()
@@ -462,7 +526,8 @@ public class PlatformRoleManagementService
     }
 
     private RoleUserSnapshot requireTarget(UUID companyId, UUID targetUserId) {
-        return repository.lockUser(companyId, targetUserId)
+        return repository
+                .lockUser(companyId, targetUserId)
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
     }
 
@@ -472,16 +537,11 @@ public class PlatformRoleManagementService
                         user.userId(), user.companyId(),
                         user.authorizationVersion(), user.rowVersion()),
                 SessionRevocationReason.AUTHORIZATION_CHANGED,
-                actor
-        );
+                actor);
     }
 
     private void publishRoleEvent(
-            String eventType,
-            PlatformRoleMutationResult result,
-            String reasonReference,
-            EventActor actor
-    ) {
+            String eventType, PlatformRoleMutationResult result, String reasonReference, EventActor actor) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("assignmentId", result.assignmentId());
         payload.put("userId", result.userId());
@@ -491,22 +551,28 @@ public class PlatformRoleManagementService
         payload.put("reasonReference", reasonReference);
         payload.put("authorizationVersion", result.authorizationVersion());
         eventPort.append(new EventDraft(
-                eventType, 1, "PlatformRoleAssignment", result.assignmentId(),
+                eventType,
+                1,
+                "PlatformRoleAssignment",
+                result.assignmentId(),
                 result.assignmentRowVersion(),
-                result.companyId(), actor,
-                objectMapper.valueToTree(payload)
-        ));
+                result.companyId(),
+                actor,
+                objectMapper.valueToTree(payload)));
     }
 
     private PlatformRoleMutationResult result(
-            RoleAssignmentSnapshot assignment,
-            RoleUserSnapshot user,
-            Instant changedAt
-    ) {
+            RoleAssignmentSnapshot assignment, RoleUserSnapshot user, Instant changedAt) {
         return new PlatformRoleMutationResult(
-                assignment.assignmentId(), assignment.companyId(), assignment.userId(),
-                assignment.role(), assignment.status(),
-                assignment.rowVersion(), user.rowVersion(), user.authorizationVersion(), changedAt);
+                assignment.assignmentId(),
+                assignment.companyId(),
+                assignment.userId(),
+                assignment.role(),
+                assignment.status(),
+                assignment.rowVersion(),
+                user.rowVersion(),
+                user.authorizationVersion(),
+                changedAt);
     }
 
     private StoredCommandResult stored(PlatformRoleMutationResult result, int status) {
@@ -515,8 +581,7 @@ public class PlatformRoleManagementService
                     status,
                     objectMapper.writeValueAsString(result),
                     result.assignmentId(),
-                    StrongEtag.format(result.assignmentRowVersion())
-            );
+                    StrongEtag.format(result.assignmentRowVersion()));
         } catch (JacksonException exception) {
             throw new IllegalStateException("platform role result serialization failed", exception);
         }

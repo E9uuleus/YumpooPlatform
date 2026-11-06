@@ -3,14 +3,13 @@ package com.yumpoo.platform.administration.application;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.SafeBlocker;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 @Component
 public final class ProjectArchiveBlockerCollector {
@@ -25,8 +24,8 @@ public final class ProjectArchiveBlockerCollector {
         this(providers, DECLARED_SOURCES);
     }
 
-    ProjectArchiveBlockerCollector(List<ProjectArchiveBlockerProvider> providers,
-            Set<ProjectArchiveBlockerSource> declaredSources) {
+    ProjectArchiveBlockerCollector(
+            List<ProjectArchiveBlockerProvider> providers, Set<ProjectArchiveBlockerSource> declaredSources) {
         Map<ProjectArchiveBlockerSource, ProjectArchiveBlockerProvider> indexed =
                 new EnumMap<>(ProjectArchiveBlockerSource.class);
         for (ProjectArchiveBlockerProvider provider : providers) {
@@ -42,8 +41,11 @@ public final class ProjectArchiveBlockerCollector {
     }
 
     public List<SafeBlocker> collect(UUID companyId, UUID projectId) {
-        return declaredSources.stream().sorted().map(source -> report(source, companyId, projectId))
-                .filter(blocker -> blocker.count() > 0).toList();
+        return declaredSources.stream()
+                .sorted()
+                .map(source -> report(source, companyId, projectId))
+                .filter(blocker -> blocker.count() > 0)
+                .toList();
     }
 
     private SafeBlocker report(ProjectArchiveBlockerSource source, UUID companyId, UUID projectId) {
@@ -61,7 +63,7 @@ public final class ProjectArchiveBlockerCollector {
     }
 
     private static ApplicationException unavailable() {
-        return ApplicationException.withReason(StandardErrorCode.DEPENDENCY_UNAVAILABLE,
-                "ARCHIVE_BLOCKER_DEPENDENCY_UNAVAILABLE");
+        return ApplicationException.withReason(
+                StandardErrorCode.DEPENDENCY_UNAVAILABLE, "ARCHIVE_BLOCKER_DEPENDENCY_UNAVAILABLE");
     }
 }

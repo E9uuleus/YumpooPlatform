@@ -1,20 +1,19 @@
 package com.yumpoo.platform.foundation.infrastructure.deployment;
 
-import org.springframework.core.env.Environment;
-
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.FileStore;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.HashSet;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.Base64;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import org.springframework.core.env.Environment;
 
 final class DeploymentPreflight {
 
@@ -25,13 +24,8 @@ final class DeploymentPreflight {
     private static final String PATH_INVALID = "PATH_INVALID";
     private static final String SECRET_INVALID = "SECRET_INVALID";
     private static final int MINIMUM_SECRET_CODE_POINTS = 16;
-    private static final Set<String> INSECURE_SECRET_MARKERS = Set.of(
-            "change-me",
-            "changeme",
-            "placeholder",
-            "password",
-            "secret-key"
-    );
+    private static final Set<String> INSECURE_SECRET_MARKERS =
+            Set.of("change-me", "changeme", "placeholder", "password", "secret-key");
 
     private final DeploymentProperties properties;
     private final Environment environment;
@@ -72,7 +66,8 @@ final class DeploymentPreflight {
     }
 
     private void validatePublicOrigin() {
-        String raw = required(properties.getPublicBaseUrl(), "yumpoo.deployment.public-base-url", PUBLIC_ORIGIN_INVALID);
+        String raw =
+                required(properties.getPublicBaseUrl(), "yumpoo.deployment.public-base-url", PUBLIC_ORIGIN_INVALID);
         try {
             URI uri = new URI(raw);
             String path = uri.getRawPath();
@@ -91,14 +86,10 @@ final class DeploymentPreflight {
     }
 
     private void validateDatabase() {
-        JdbcTarget application = jdbcTarget(
-                requiredEnvironment("spring.datasource.url", DATABASE_INVALID),
-                "spring.datasource.url"
-        );
-        JdbcTarget migration = jdbcTarget(
-                requiredEnvironment("spring.flyway.url", DATABASE_INVALID),
-                "spring.flyway.url"
-        );
+        JdbcTarget application =
+                jdbcTarget(requiredEnvironment("spring.datasource.url", DATABASE_INVALID), "spring.datasource.url");
+        JdbcTarget migration =
+                jdbcTarget(requiredEnvironment("spring.flyway.url", DATABASE_INVALID), "spring.flyway.url");
         if (!application.equals(migration)) {
             fail(DATABASE_INVALID, "spring.flyway.url");
         }
@@ -127,10 +118,7 @@ final class DeploymentPreflight {
     }
 
     private void validateSessionSecurity() {
-        String currentVersion = requiredEnvironment(
-                "yumpoo.session.current-key-version",
-                SECRET_INVALID
-        );
+        String currentVersion = requiredEnvironment("yumpoo.session.current-key-version", SECRET_INVALID);
         if (!currentVersion.matches("[A-Za-z0-9._-]{1,32}")) {
             fail(SECRET_INVALID, "yumpoo.session.current-key-version");
         }
@@ -181,16 +169,14 @@ final class DeploymentPreflight {
                 readableRoot(properties.getSecretsRoot(), "yumpoo.deployment.secrets-root"),
                 writableRoot(properties.getAttachmentRoot(), "yumpoo.deployment.attachment-root"),
                 writableRoot(properties.getUploadTempRoot(), "yumpoo.deployment.upload-temp-root"),
-                writableRoot(properties.getLogRoot(), "yumpoo.deployment.log-root")
-        );
+                writableRoot(properties.getLogRoot(), "yumpoo.deployment.log-root"));
         List<Path> all = List.of(
                 paths.releaseRoot(),
                 paths.configRoot(),
                 paths.secretsRoot(),
                 paths.attachmentRoot(),
                 paths.uploadTempRoot(),
-                paths.logRoot()
-        );
+                paths.logRoot());
         if (new HashSet<>(all).size() != all.size()) {
             fail(PATH_INVALID, "yumpoo.deployment.*-root");
         }
@@ -215,8 +201,10 @@ final class DeploymentPreflight {
         String logFile = requiredEnvironment("logging.file.name", PATH_INVALID);
         try {
             Path file = Path.of(logFile).toAbsolutePath().normalize();
-            if (!Path.of(logFile).isAbsolute() || !file.getParent().toRealPath().startsWith(paths.logRoot())
-                    || Files.isSymbolicLink(file) || Files.exists(file) && !file.toRealPath().startsWith(paths.logRoot())) {
+            if (!Path.of(logFile).isAbsolute()
+                    || !file.getParent().toRealPath().startsWith(paths.logRoot())
+                    || Files.isSymbolicLink(file)
+                    || Files.exists(file) && !file.toRealPath().startsWith(paths.logRoot())) {
                 fail(PATH_INVALID, "logging.file.name");
             }
         } catch (IOException | java.nio.file.InvalidPathException exception) {
@@ -302,6 +290,5 @@ final class DeploymentPreflight {
         throw new DeploymentValidationException(code, propertyName);
     }
 
-    private record JdbcTarget(String host, int port, String database) {
-    }
+    private record JdbcTarget(String host, int port, String database) {}
 }

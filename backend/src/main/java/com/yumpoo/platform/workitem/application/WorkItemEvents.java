@@ -1,12 +1,14 @@
 package com.yumpoo.platform.workitem.application;
 
+import static com.yumpoo.platform.workitem.application.WorkItemModels.*;
+import static com.yumpoo.platform.workitem.application.WorkItemRelationRepository.ParentChildRelation;
+
 import com.yumpoo.platform.foundation.application.event.EventActor;
 import com.yumpoo.platform.foundation.application.event.EventDraft;
 import com.yumpoo.platform.foundation.application.event.TransactionalEventPort;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.workitem.domain.WorkItem;
 import com.yumpoo.platform.workitem.domain.WorkItemRankPlacement;
-import tools.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -16,9 +18,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
-
-import static com.yumpoo.platform.workitem.application.WorkItemModels.*;
-import static com.yumpoo.platform.workitem.application.WorkItemRelationRepository.ParentChildRelation;
+import tools.jackson.databind.ObjectMapper;
 
 @Component
 public class WorkItemEvents {
@@ -55,13 +55,18 @@ public class WorkItemEvents {
         payload.put("rightWorkItemId", relation.childWorkItemId());
         payload.put("leftProjectId", relation.projectId());
         payload.put("rightProjectId", relation.projectId());
-        events.append(new EventDraft(RELATION_CREATED, 1, "WorkItemRelation", relation.id(), 0,
-                relation.companyId(), EventActor.user(actor.userId()),
+        events.append(new EventDraft(
+                RELATION_CREATED,
+                1,
+                "WorkItemRelation",
+                relation.id(),
+                0,
+                relation.companyId(),
+                EventActor.user(actor.userId()),
                 objectMapper.valueToTree(payload)));
     }
 
-    void appendFieldsChanged(WorkItem before, WorkItem item, CurrentActor actor,
-            List<String> changedFields) {
+    void appendFieldsChanged(WorkItem before, WorkItem item, CurrentActor actor, List<String> changedFields) {
         Map<String, Object> payload = commonEventPayload(item);
         payload.put("previousTitle", before.title());
         payload.put("previousPriority", before.priority());
@@ -94,14 +99,21 @@ public class WorkItemEvents {
         payload.put("itemNo", after.itemNo());
         payload.put("previousAssigneeUserIds", before.assigneeUserIds());
         payload.put("assigneeUserIds", after.assigneeUserIds());
-        payload.put("addedUserIds", after.assigneeUserIds().stream().filter(id -> !before.assigneeUserIds().contains(id)).toList());
-        payload.put("removedUserIds", before.assigneeUserIds().stream().filter(id -> !after.assigneeUserIds().contains(id)).toList());
+        payload.put(
+                "addedUserIds",
+                after.assigneeUserIds().stream()
+                        .filter(id -> !before.assigneeUserIds().contains(id))
+                        .toList());
+        payload.put(
+                "removedUserIds",
+                before.assigneeUserIds().stream()
+                        .filter(id -> !after.assigneeUserIds().contains(id))
+                        .toList());
         payload.put("rowVersion", after.rowVersion());
         append(ASSIGNEES_CHANGED, after, actor, payload);
     }
 
-    void appendStatusChanged(WorkItem before, WorkItem after,
-            CurrentActor actor, String resolution) {
+    void appendStatusChanged(WorkItem before, WorkItem after, CurrentActor actor, String resolution) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("workItemId", after.id());
         payload.put("projectId", after.projectId());
@@ -117,8 +129,7 @@ public class WorkItemEvents {
         append(STATUS_CHANGED, after, actor, payload);
     }
 
-    void appendRankChanged(WorkItem item, CurrentActor actor,
-            WorkItemRankPlacement placement, UUID anchorWorkItemId) {
+    void appendRankChanged(WorkItem item, CurrentActor actor, WorkItemRankPlacement placement, UUID anchorWorkItemId) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("workItemId", item.id());
         payload.put("projectId", item.projectId());
@@ -179,28 +190,33 @@ public class WorkItemEvents {
         return payload;
     }
 
-    void append(String eventType, WorkItem item, CurrentActor actor,
-            Map<String, Object> payload) {
+    void append(String eventType, WorkItem item, CurrentActor actor, Map<String, Object> payload) {
         int schemaVersion = Set.of(CREATED, FIELDS_CHANGED, STATUS_CHANGED, DELETED, RESTORED)
-                .contains(eventType) ? 2 : 1;
-        events.append(new EventDraft(eventType, schemaVersion, "WorkItem", item.id(), item.rowVersion(),
-                item.companyId(), EventActor.user(actor.userId()), objectMapper.valueToTree(payload)));
+                        .contains(eventType)
+                ? 2
+                : 1;
+        events.append(new EventDraft(
+                eventType,
+                schemaVersion,
+                "WorkItem",
+                item.id(),
+                item.rowVersion(),
+                item.companyId(),
+                EventActor.user(actor.userId()),
+                objectMapper.valueToTree(payload)));
     }
 
     static List<String> changed(WorkItem before, WorkItem after) {
         List<String> fields = new ArrayList<>();
         if (!before.title().equals(after.title())) fields.add("title");
         if (!Objects.equals(before.priority(), after.priority())) fields.add("priority");
-        if (!before.assigneeUserIds().equals(after.assigneeUserIds()))
-            fields.add("assigneeUserId");
+        if (!before.assigneeUserIds().equals(after.assigneeUserIds())) fields.add("assigneeUserId");
         if (!Objects.equals(before.description(), after.description())) fields.add("description");
         if (!Objects.equals(before.notes(), after.notes())) fields.add("notes");
-        if (!Objects.equals(before.timelineStartDate(), after.timelineStartDate()))
-            fields.add("timelineStartDate");
-        if (!Objects.equals(before.timelineEndDate(), after.timelineEndDate()))
-            fields.add("timelineEndDate");
-        if (!Objects.equals(before.dueDate(), after.dueDate())
-                || !Objects.equals(before.dueTime(), after.dueTime())) fields.add("dueDate");
+        if (!Objects.equals(before.timelineStartDate(), after.timelineStartDate())) fields.add("timelineStartDate");
+        if (!Objects.equals(before.timelineEndDate(), after.timelineEndDate())) fields.add("timelineEndDate");
+        if (!Objects.equals(before.dueDate(), after.dueDate()) || !Objects.equals(before.dueTime(), after.dueTime()))
+            fields.add("dueDate");
         return List.copyOf(fields);
     }
 

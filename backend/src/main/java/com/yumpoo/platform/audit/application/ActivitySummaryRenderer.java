@@ -29,8 +29,9 @@ public class ActivitySummaryRenderer {
             case "CONTENT_RESTORED" -> "恢复了事项集合 " + ref;
             case "CONNECT_COLUMN_CREATED" -> "添加了连接列「" + text(parameters, "name", "连接列") + "」";
             case "CONNECT_COLUMN_UPDATED" -> "修改了连接列「" + text(parameters, "name", "连接列") + "」";
-            case "CONNECT_COLUMN_DELETED" -> "删除了连接列「" + text(parameters, "name", "连接列") + "」，解除了 "
-                    + parameters.path("removedConnectionCount").asLong() + " 个连接";
+            case "CONNECT_COLUMN_DELETED" ->
+                "删除了连接列「" + text(parameters, "name", "连接列") + "」，解除了 "
+                        + parameters.path("removedConnectionCount").asLong() + " 个连接";
             case "CONNECTION_CREATED_SOURCE" -> "在「" + text(parameters, "columnName", "连接列") + "」中连接了其他项目的工作项";
             case "CONNECTION_CREATED_TARGET" -> "从其他项目连接了此工作项";
             case "CONNECTION_CREATED_TARGET_NEW" -> "从其他项目新建并连接了此工作项";
@@ -38,12 +39,10 @@ public class ActivitySummaryRenderer {
             case "CONNECTION_DELETED_TARGET" -> "解除了来自其他项目的连接";
             case "WORK_ITEM_CREATED" -> "创建了事项 " + ref;
             case "WORK_ITEM_FIELDS_CHANGED" -> "更新了事项 " + ref;
-            case "WORK_ITEM_ASSIGNEES_CHANGED" -> "更新了事项 " + ref + " 的处理人"
-                    + assigneeChanges(parameters);
+            case "WORK_ITEM_ASSIGNEES_CHANGED" -> "更新了事项 " + ref + " 的处理人" + assigneeChanges(parameters);
             case "WORK_ITEM_ASSIGNED" -> "将事项 " + ref + " 指派给 " + person;
             case "WORK_ITEM_UNASSIGNED" -> "取消了事项 " + ref + " 的指派";
-            case "WORK_ITEM_STATUS_CHANGED" -> "将事项 " + ref + " 的状态改为 "
-                    + text(parameters, "toStatus", "新状态");
+            case "WORK_ITEM_STATUS_CHANGED" -> "将事项 " + ref + " 的状态改为 " + text(parameters, "toStatus", "新状态");
             case "WORK_ITEM_RANK_CHANGED" -> "调整了事项 " + ref + " 的顺序";
             case "WORK_ITEM_DELETED" -> "删除了事项 " + ref;
             case "WORK_ITEM_RESTORED" -> "恢复了事项 " + ref;
@@ -54,7 +53,8 @@ public class ActivitySummaryRenderer {
             case "WORK_ITEM_PARENT_CHANGED" -> "更换事项父项";
             case "WORK_ITEM_UPDATE_PUBLISHED" -> "在事项 " + ref + " 发布了动态";
             case "WORK_ITEM_UPDATE_EDITED" -> "编辑了事项 " + ref + " 的动态";
-            case "WORK_ITEM_UPDATE_PIN_CHANGED" -> (parameters.path("pinned").asBoolean() ? "置顶了" : "取消置顶了") + "事项 " + ref + " 的评论";
+            case "WORK_ITEM_UPDATE_PIN_CHANGED" ->
+                (parameters.path("pinned").asBoolean() ? "置顶了" : "取消置顶了") + "事项 " + ref + " 的评论";
             case "WORK_ITEM_UPDATE_DELETED" -> "删除了事项 " + ref + " 的动态";
             case "TIME_TRACKING_STARTED" -> "开始计时：" + ref;
             case "TIME_TRACKING_STOPPED" -> "停止计时：" + ref;

@@ -50,6 +50,8 @@ scripts/                文档链接与 Agent Note 校验
 
 `docs/` 用于本地文档与原型导出，受 Git 忽略规则保护，不随仓库分发。
 
+后端代码由 Spotless 统一格式，提交前运行 `.\backend\mvnw.cmd -f backend/pom.xml spotless:apply`。
+
 ## 本地运行
 
 ### 1. 获取代码与安装依赖

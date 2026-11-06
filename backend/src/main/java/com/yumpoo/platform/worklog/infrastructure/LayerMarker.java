@@ -5,6 +5,5 @@ package com.yumpoo.platform.worklog.infrastructure;
  */
 final class LayerMarker {
 
-    private LayerMarker() {
-    }
+    private LayerMarker() {}
 }

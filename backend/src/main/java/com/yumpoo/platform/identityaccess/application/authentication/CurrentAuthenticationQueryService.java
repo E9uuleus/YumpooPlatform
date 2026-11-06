@@ -15,17 +15,14 @@ public class CurrentAuthenticationQueryService {
     private final CompanyConfigurationQuery companyQuery;
 
     public CurrentAuthenticationQueryService(
-            AuthenticationUserRepository userRepository,
-            CompanyConfigurationQuery companyQuery
-    ) {
+            AuthenticationUserRepository userRepository, CompanyConfigurationQuery companyQuery) {
         this.userRepository = userRepository;
         this.companyQuery = companyQuery;
     }
 
     public CurrentAuthenticationView current(AuthenticatedSession authenticatedSession) {
-        AuthenticationUser user = userRepository.findByUserId(
-                        authenticatedSession.user().userId()
-                )
+        AuthenticationUser user = userRepository
+                .findByUserId(authenticatedSession.user().userId())
                 .filter(AuthenticationUser::loginEligible)
                 .orElseThrow(CurrentAuthenticationQueryService::authenticationRequired);
         var company = companyQuery.current();
@@ -33,10 +30,7 @@ public class CurrentAuthenticationQueryService {
             throw authenticationRequired();
         }
         return new CurrentAuthenticationView(
-                user,
-                company,
-                authenticatedSession.session().clientType().name()
-        );
+                user, company, authenticatedSession.session().clientType().name());
     }
 
     private static ApplicationException authenticationRequired() {

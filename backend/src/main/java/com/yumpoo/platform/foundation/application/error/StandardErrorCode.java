@@ -4,7 +4,6 @@ package com.yumpoo.platform.foundation.application.error;
  * 跨模块稳定错误码。异常消息只允许保存可安全返回给调用方的内容。
  */
 public enum StandardErrorCode {
-
     MALFORMED_REQUEST("请求格式不正确", false),
     AUTHENTICATION_REQUIRED("登录状态无效，请重新登录", false),
     ACCOUNT_DISABLED("账号已停用，请联系管理员", false),

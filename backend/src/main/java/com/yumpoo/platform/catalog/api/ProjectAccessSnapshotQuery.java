@@ -1,7 +1,6 @@
 package com.yumpoo.platform.catalog.api;
 
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
-
 import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
@@ -19,6 +18,5 @@ public interface ProjectAccessSnapshotQuery {
 
     Optional<ProjectAccessSnapshot> findVisible(CurrentActor actor, UUID projectId);
 
-    Map<UUID, ProjectAccessSnapshot> findVisible(CurrentActor actor,
-            Collection<UUID> projectIds);
+    Map<UUID, ProjectAccessSnapshot> findVisible(CurrentActor actor, Collection<UUID> projectIds);
 }

@@ -1,5 +1,12 @@
 package com.yumpoo.platform.administration.api;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
 import com.yumpoo.platform.audit.api.ActivityPage;
 import com.yumpoo.platform.audit.api.ActivityQueryPort;
 import com.yumpoo.platform.audit.api.WorkItemCellActivityFacets;
@@ -7,32 +14,21 @@ import com.yumpoo.platform.audit.api.WorkItemCellActivityPage;
 import com.yumpoo.platform.audit.api.WorkItemCellActivityQueryPort;
 import com.yumpoo.platform.catalog.api.ProjectAccessSnapshot;
 import com.yumpoo.platform.catalog.api.ProjectAccessSnapshotQuery;
-import com.yumpoo.platform.foundation.application.error.ApplicationException;
-import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.CurrentActorProvider;
 import com.yumpoo.platform.identityaccess.api.PlatformRoleCode;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
 import com.yumpoo.platform.organization.api.CompanyConfigurationSnapshot;
 import com.yumpoo.platform.workitem.api.WorkItemActivitySourceQuery;
-import org.junit.jupiter.api.Test;
-
-import java.time.Instant;
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
 import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import org.junit.jupiter.api.Test;
 
 class ActivityControllerTest {
     private static final UUID COMPANY = UUID.randomUUID();
@@ -42,46 +38,53 @@ class ActivityControllerTest {
 
     @Test
     void companyAdminCanReadArchivedProjectWithoutWriteCapability() {
-        CurrentActor actor = new CurrentActor(UUID.randomUUID(), COMPANY, 1,
-                Set.of(PlatformRoleCode.COMPANY_ADMIN));
+        CurrentActor actor = new CurrentActor(UUID.randomUUID(), COMPANY, 1, Set.of(PlatformRoleCode.COMPANY_ADMIN));
         Fixture fixture = fixture(actor);
-        when(fixture.access.findVisible(actor, PROJECT)).thenReturn(Optional.of(
-                project(ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED,
+        when(fixture.access.findVisible(actor, PROJECT))
+                .thenReturn(Optional.of(project(
+                        ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED,
                         ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY,
                         OptionalLong.empty())));
         when(fixture.activity.findProject(eq(COMPANY), eq(PROJECT), any()))
                 .thenReturn(new ActivityPage(List.of(), null, CUTOVER));
 
-        ActivityPage page = fixture.controller.project(PROJECT, null, null, null, null,
-                null, null).getBody();
+        ActivityPage page = fixture.controller
+                .project(PROJECT, null, null, null, null, null, null)
+                .getBody();
         assertThat(page).isNotNull();
         assertThat(page.historyStartedAt()).isEqualTo(CUTOVER);
     }
 
     @Test
     void appManagerWithoutProjectMembershipCanReadActivity() {
-        CurrentActor actor = new CurrentActor(UUID.randomUUID(), COMPANY, 1,
-                Set.of(PlatformRoleCode.APP_MANAGER));
+        CurrentActor actor = new CurrentActor(UUID.randomUUID(), COMPANY, 1, Set.of(PlatformRoleCode.APP_MANAGER));
         Fixture fixture = fixture(actor);
-        when(fixture.access.findVisible(actor, PROJECT)).thenReturn(Optional.of(
-                project(ProjectAccessSnapshot.ProjectLifecycle.ACTIVE,
-                        ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY, OptionalLong.empty())));
+        when(fixture.access.findVisible(actor, PROJECT))
+                .thenReturn(Optional.of(project(
+                        ProjectAccessSnapshot.ProjectLifecycle.ACTIVE,
+                        ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY,
+                        OptionalLong.empty())));
         when(fixture.activity.findProject(eq(COMPANY), eq(PROJECT), any()))
                 .thenReturn(new ActivityPage(List.of(), null, CUTOVER));
         assertThat(actor.hasRole(PlatformRoleCode.COMPANY_ADMIN)).isTrue();
-        assertThat(fixture.controller.project(PROJECT, null, null, null, null, null, null).getBody()).isNotNull();
+        assertThat(fixture.controller
+                        .project(PROJECT, null, null, null, null, null, null)
+                        .getBody())
+                .isNotNull();
     }
 
     @Test
     void softDeletedWorkItemUsesIncludingDeletedLocatorThenCurrentProjectAcl() {
         CurrentActor actor = new CurrentActor(UUID.randomUUID(), COMPANY, 1, Set.of());
         Fixture fixture = fixture(actor);
-        when(fixture.workItems.findIncludingDeleted(COMPANY, ITEM)).thenReturn(Optional.of(
-                new WorkItemActivitySourceQuery.WorkItemActivityReference(ITEM, PROJECT,
-                        UUID.randomUUID(), "YMP-20", "已删除事项")));
-        when(fixture.access.findVisible(actor, PROJECT)).thenReturn(Optional.of(project(
-                ProjectAccessSnapshot.ProjectLifecycle.ACTIVE,
-                ProjectAccessSnapshot.ActorProjectAccess.MEMBER, OptionalLong.of(3))));
+        when(fixture.workItems.findIncludingDeleted(COMPANY, ITEM))
+                .thenReturn(Optional.of(new WorkItemActivitySourceQuery.WorkItemActivityReference(
+                        ITEM, PROJECT, UUID.randomUUID(), "YMP-20", "已删除事项")));
+        when(fixture.access.findVisible(actor, PROJECT))
+                .thenReturn(Optional.of(project(
+                        ProjectAccessSnapshot.ProjectLifecycle.ACTIVE,
+                        ProjectAccessSnapshot.ActorProjectAccess.MEMBER,
+                        OptionalLong.of(3))));
         when(fixture.activity.findWorkItem(eq(COMPANY), eq(PROJECT), eq(ITEM), any()))
                 .thenReturn(new ActivityPage(List.of(), null, CUTOVER));
 
@@ -93,16 +96,24 @@ class ActivityControllerTest {
     void cellActivityUsesCompanyCalendarAndNoStore() {
         CurrentActor actor = new CurrentActor(UUID.randomUUID(), COMPANY, 1, Set.of());
         Fixture fixture = fixture(actor);
-        when(fixture.workItems.findIncludingDeleted(COMPANY, ITEM)).thenReturn(Optional.of(
-                new WorkItemActivitySourceQuery.WorkItemActivityReference(ITEM, PROJECT,
-                        UUID.randomUUID(), "YMP-20", "事项")));
-        when(fixture.access.findVisible(actor, PROJECT)).thenReturn(Optional.of(project(
-                ProjectAccessSnapshot.ProjectLifecycle.ACTIVE,
-                ProjectAccessSnapshot.ActorProjectAccess.MEMBER, OptionalLong.of(3))));
-        WorkItemCellActivityPage page = new WorkItemCellActivityPage(List.of(), null, CUTOVER,
-                new WorkItemCellActivityFacets(List.of(), List.of(), List.of()));
-        when(fixture.cellActivity.find(eq(COMPANY), eq(PROJECT), eq(ITEM),
-                eq(ZoneId.of("Asia/Shanghai")), eq(DayOfWeek.MONDAY), any())).thenReturn(page);
+        when(fixture.workItems.findIncludingDeleted(COMPANY, ITEM))
+                .thenReturn(Optional.of(new WorkItemActivitySourceQuery.WorkItemActivityReference(
+                        ITEM, PROJECT, UUID.randomUUID(), "YMP-20", "事项")));
+        when(fixture.access.findVisible(actor, PROJECT))
+                .thenReturn(Optional.of(project(
+                        ProjectAccessSnapshot.ProjectLifecycle.ACTIVE,
+                        ProjectAccessSnapshot.ActorProjectAccess.MEMBER,
+                        OptionalLong.of(3))));
+        WorkItemCellActivityPage page = new WorkItemCellActivityPage(
+                List.of(), null, CUTOVER, new WorkItemCellActivityFacets(List.of(), List.of(), List.of()));
+        when(fixture.cellActivity.find(
+                        eq(COMPANY),
+                        eq(PROJECT),
+                        eq(ITEM),
+                        eq(ZoneId.of("Asia/Shanghai")),
+                        eq(DayOfWeek.MONDAY),
+                        any()))
+                .thenReturn(page);
 
         var response = fixture.controller.cellActivity(ITEM, null, 25, null, null, null);
 
@@ -118,19 +129,28 @@ class ActivityControllerTest {
         WorkItemCellActivityQueryPort cellActivity = mock(WorkItemCellActivityQueryPort.class);
         CompanyConfigurationQuery company = mock(CompanyConfigurationQuery.class);
         when(actors.requiredActive()).thenReturn(actor);
-        when(company.current()).thenReturn(new CompanyConfigurationSnapshot(COMPANY, "测试公司",
-                ZoneId.of("Asia/Shanghai"), DayOfWeek.MONDAY, 480, 1));
-        return new Fixture(new ActivityController(actors, access, workItems, activity,
-                cellActivity, company), access, workItems, activity, cellActivity);
+        when(company.current())
+                .thenReturn(new CompanyConfigurationSnapshot(
+                        COMPANY, "测试公司", ZoneId.of("Asia/Shanghai"), DayOfWeek.MONDAY, 480, 1));
+        return new Fixture(
+                new ActivityController(actors, access, workItems, activity, cellActivity, company),
+                access,
+                workItems,
+                activity,
+                cellActivity);
     }
 
-    private static ProjectAccessSnapshot project(ProjectAccessSnapshot.ProjectLifecycle lifecycle,
-            ProjectAccessSnapshot.ActorProjectAccess access, OptionalLong membershipVersion) {
+    private static ProjectAccessSnapshot project(
+            ProjectAccessSnapshot.ProjectLifecycle lifecycle,
+            ProjectAccessSnapshot.ActorProjectAccess access,
+            OptionalLong membershipVersion) {
         return new ProjectAccessSnapshot(PROJECT, COMPANY, lifecycle, access, 2, membershipVersion);
     }
 
-    private record Fixture(ActivityController controller, ProjectAccessSnapshotQuery access,
-            WorkItemActivitySourceQuery workItems, ActivityQueryPort activity,
-            WorkItemCellActivityQueryPort cellActivity) {
-    }
+    private record Fixture(
+            ActivityController controller,
+            ProjectAccessSnapshotQuery access,
+            WorkItemActivitySourceQuery workItems,
+            ActivityQueryPort activity,
+            WorkItemCellActivityQueryPort cellActivity) {}
 }

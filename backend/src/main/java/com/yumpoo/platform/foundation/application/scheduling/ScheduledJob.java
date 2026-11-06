@@ -4,6 +4,10 @@ import java.util.UUID;
 
 public interface ScheduledJob {
     String code();
-    default boolean available() { return true; }
+
+    default boolean available() {
+        return true;
+    }
+
     ScheduledJobResult run(UUID companyId, String triggerKey, String requestId);
 }

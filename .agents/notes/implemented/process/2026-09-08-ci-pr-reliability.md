@@ -10,7 +10,7 @@ Status: implemented
 
 ## Decision
 
-`tools/ci/plan.mjs` 与 `run.mjs` 提供平铺的 `ci:contracts/static/backend/portable/windows` 和统一 `pnpm run ci` 入口。里程碑检查与 `evidence/` 已退役，只保留当前打包、冒烟、交接包、部署配置不变量和契约检查；现有前端、桌面与后端行为回归继续运行。后端 `clean verify` 保留业务、安全、架构、数据库迁移和备份恢复集成测试，96 MiB 堆的附件探针另行执行。
+`tools/ci/plan.mjs` 与 `run.mjs` 提供平铺的 `ci:contracts/static/backend/portable/windows` 和统一 `pnpm run ci` 入口。里程碑检查与 `evidence/` 已退役，只保留当前打包、冒烟、交接包、部署配置不变量和契约检查；现有前端、桌面与后端行为回归继续运行。Java 生产代码和测试一次性采用 palantir-java-format，避免在后续功能改动中夹带旧代码的格式变化。后端先执行 `spotless:check`，再以 `clean verify` 保留业务、安全、架构、数据库迁移和备份恢复集成测试，96 MiB 堆的附件探针另行执行。
 
 历史 SQL、M2-23 冻结清单及既有 OpenAPI 精确例外对照 PR 基线不可改写，归档 Note 继续由原 manifest 门禁保护。当前 OpenAPI 和完整事件目录是现行规范，兼容基线从目标提交临时提取。已有例外仅匹配原始精确哈希对，不授权后续规范；类别专项不再要求每次正常迭代追加“旧历史 → 当前”的哈希链。恢复请求枚举缩减和响应枚举扩展检测，没有增加或批准例外。本决策部分替代[类别重构闸门](2026-09-02-content-category-openapi-breaking-change.md)的当前哈希维护要求，保留其精确授权与审计理由。
 

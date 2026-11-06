@@ -14,8 +14,7 @@ public record ExternalIdentity(
         ProfileHash rawProfileHash,
         Instant lastSeenAt,
         Instant createdAt,
-        Instant updatedAt
-) {
+        Instant updatedAt) {
 
     public ExternalIdentity {
         Objects.requireNonNull(id, "id must not be null");
@@ -33,9 +32,7 @@ public record ExternalIdentity(
                 || externalUserId.length() > 256) {
             throw new IllegalArgumentException("externalUserId is invalid");
         }
-        if (updatedAt.isBefore(createdAt)
-                || lastSeenAt.isBefore(createdAt)
-                || lastSeenAt.isAfter(updatedAt)) {
+        if (updatedAt.isBefore(createdAt) || lastSeenAt.isBefore(createdAt) || lastSeenAt.isAfter(updatedAt)) {
             throw new IllegalArgumentException("external identity timestamps are inconsistent");
         }
     }

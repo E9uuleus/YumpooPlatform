@@ -8,7 +8,6 @@ import com.yumpoo.platform.filestorage.application.SealedUpload;
 import com.yumpoo.platform.filestorage.application.UploadIncompleteException;
 import com.yumpoo.platform.filestorage.application.UploadRejectedException;
 import com.yumpoo.platform.filestorage.domain.AttachmentRejectedCode;
-
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -18,31 +17,29 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.FileStore;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
-import java.nio.file.Path;
 import java.nio.file.NoSuchFileException;
-import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
+import java.util.Comparator;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Objects;
 import java.util.OptionalLong;
-import java.util.List;
-import java.util.Comparator;
-import java.time.Instant;
-import java.util.stream.Stream;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 /** 本机隔离目录和内容寻址正式目录适配器。 */
 public final class LocalFileQuarantineStorage implements QuarantineStorage {
 
     private static final HexFormat HEX = HexFormat.of();
-    private static final Pattern STORAGE_KEY = Pattern.compile(
-            "^sha256/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64}$"
-    );
+    private static final Pattern STORAGE_KEY = Pattern.compile("^sha256/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64}$");
 
     private final Path quarantineRoot;
     private final Path blobRoot;
@@ -58,27 +55,20 @@ public final class LocalFileQuarantineStorage implements QuarantineStorage {
     }
 
     @Override
-    public SealedUpload receive(
-            UUID uploadId,
-            InputStream source,
-            OptionalLong contentLength
-    ) throws IOException {
+    public SealedUpload receive(UUID uploadId, InputStream source, OptionalLong contentLength) throws IOException {
         return receive(uploadId, source, contentLength, AttachmentUploadPolicy.MAX_BYTES);
     }
 
     @Override
-    public SealedUpload receive(
-            UUID uploadId,
-            InputStream source,
-            OptionalLong contentLength,
-            long reservationLimit
-    ) throws IOException {
+    public SealedUpload receive(UUID uploadId, InputStream source, OptionalLong contentLength, long reservationLimit)
+            throws IOException {
         return receive(uploadId, source, contentLength, reservationLimit, mutation -> mutation.run());
     }
 
     @Override
-    public SealedUpload receive(UUID uploadId, InputStream source, OptionalLong contentLength,
-            long reservationLimit, MutationGuard guard) throws IOException {
+    public SealedUpload receive(
+            UUID uploadId, InputStream source, OptionalLong contentLength, long reservationLimit, MutationGuard guard)
+            throws IOException {
         Objects.requireNonNull(uploadId, "uploadId must not be null");
         Objects.requireNonNull(source, "source must not be null");
         Objects.requireNonNull(contentLength, "contentLength must not be null");
@@ -102,7 +92,8 @@ public final class LocalFileQuarantineStorage implements QuarantineStorage {
             guard.run(() -> {
                 if (Files.exists(sealed, LinkOption.NOFOLLOW_LINKS)) throw new UploadIncompleteException();
                 Files.deleteIfExists(part);
-                opened.set(FileChannel.open(part, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS));
+                opened.set(FileChannel.open(
+                        part, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS));
             });
             try (FileChannel channel = opened.get()) {
                 byte[] buffer = new byte[AttachmentUploadPolicy.BUFFER_BYTES];
@@ -145,8 +136,9 @@ public final class LocalFileQuarantineStorage implements QuarantineStorage {
             FileChannel channel = opened.get();
             if (channel != null && channel.isOpen()) channel.close();
             if (!sealedSuccessfully) {
-                try { guard.run(() -> Files.deleteIfExists(part)); }
-                catch (IOException | RuntimeException lostLease) {
+                try {
+                    guard.run(() -> Files.deleteIfExists(part));
+                } catch (IOException | RuntimeException lostLease) {
                     // A newer upload lease or project purge may already own this path.
                 }
             }
@@ -172,11 +164,7 @@ public final class LocalFileQuarantineStorage implements QuarantineStorage {
         prepareParent(blobRoot, destination.getParent());
 
         if (Files.exists(destination, LinkOption.NOFOLLOW_LINKS)) {
-            PublishedBlob existing = new PublishedBlob(
-                    storageKey,
-                    upload.sizeBytes(),
-                    upload.sha256()
-            );
+            PublishedBlob existing = new PublishedBlob(storageKey, upload.sizeBytes(), upload.sha256());
             if (!verify(existing)) {
                 throw new IOException("existing blob failed integrity verification");
             }
@@ -202,13 +190,8 @@ public final class LocalFileQuarantineStorage implements QuarantineStorage {
             throw new IOException("published blob is unavailable");
         }
         return new BufferedInputStream(
-                Files.newInputStream(
-                        path,
-                        StandardOpenOption.READ,
-                        LinkOption.NOFOLLOW_LINKS
-                ),
-                AttachmentUploadPolicy.BUFFER_BYTES
-        );
+                Files.newInputStream(path, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS),
+                AttachmentUploadPolicy.BUFFER_BYTES);
     }
 
     @Override
@@ -226,11 +209,7 @@ public final class LocalFileQuarantineStorage implements QuarantineStorage {
             return BlobVerification.SIZE_MISMATCH;
         }
         MessageDigest digest = sha256Digest();
-        try (InputStream input = Files.newInputStream(
-                path,
-                StandardOpenOption.READ,
-                LinkOption.NOFOLLOW_LINKS
-        )) {
+        try (InputStream input = Files.newInputStream(path, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
             byte[] buffer = new byte[AttachmentUploadPolicy.BUFFER_BYTES];
             int read;
             while ((read = input.read(buffer)) != -1) {
@@ -238,9 +217,10 @@ public final class LocalFileQuarantineStorage implements QuarantineStorage {
             }
         }
         return MessageDigest.isEqual(
-                HEX.formatHex(digest.digest()).getBytes(java.nio.charset.StandardCharsets.US_ASCII),
-                blob.sha256().getBytes(java.nio.charset.StandardCharsets.US_ASCII)
-        ) ? BlobVerification.VERIFIED : BlobVerification.HASH_MISMATCH;
+                        HEX.formatHex(digest.digest()).getBytes(java.nio.charset.StandardCharsets.US_ASCII),
+                        blob.sha256().getBytes(java.nio.charset.StandardCharsets.US_ASCII))
+                ? BlobVerification.VERIFIED
+                : BlobVerification.HASH_MISMATCH;
     }
 
     @Override
@@ -269,38 +249,40 @@ public final class LocalFileQuarantineStorage implements QuarantineStorage {
 
     @Override
     public List<StorageEntry> listTemporary(String afterKey, int limit) throws IOException {
-        try (Stream<Path> entries=Files.list(quarantineRoot)) {
-            return entries.map(path->entry(quarantineRoot,path,false))
+        try (Stream<Path> entries = Files.list(quarantineRoot)) {
+            return entries.map(path -> entry(quarantineRoot, path, false))
                     .sorted(Comparator.comparing(StorageEntry::key))
-                    .filter(value->afterKey==null||value.key().compareTo(afterKey)>0)
-                    .limit(limit).toList();
+                    .filter(value -> afterKey == null || value.key().compareTo(afterKey) > 0)
+                    .limit(limit)
+                    .toList();
         }
     }
 
     @Override
     public List<StorageEntry> listPublished(String afterKey, int limit) throws IOException {
-        try (Stream<Path> entries=Files.walk(blobRoot)) {
-            return entries.filter(path->!path.equals(blobRoot))
-                    .map(path->entry(blobRoot,path,true))
-                    .filter(value->value.regularFile()||value.unsafeEntry())
+        try (Stream<Path> entries = Files.walk(blobRoot)) {
+            return entries.filter(path -> !path.equals(blobRoot))
+                    .map(path -> entry(blobRoot, path, true))
+                    .filter(value -> value.regularFile() || value.unsafeEntry())
                     .sorted(Comparator.comparing(StorageEntry::key))
-                    .filter(value->afterKey==null||value.key().compareTo(afterKey)>0)
-                    .limit(limit).toList();
+                    .filter(value -> afterKey == null || value.key().compareTo(afterKey) > 0)
+                    .limit(limit)
+                    .toList();
         }
     }
 
     @Override
     public boolean deleteTemporary(String key) throws IOException {
-        if(key==null||!key.matches("^[0-9a-fA-F-]{36}\\.(part|sealed)$")) return false;
-        Path target=requireContained(quarantineRoot,quarantineRoot.resolve(key));
-        if(Files.isSymbolicLink(target)||!Files.isRegularFile(target,LinkOption.NOFOLLOW_LINKS)) return false;
+        if (key == null || !key.matches("^[0-9a-fA-F-]{36}\\.(part|sealed)$")) return false;
+        Path target = requireContained(quarantineRoot, quarantineRoot.resolve(key));
+        if (Files.isSymbolicLink(target) || !Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)) return false;
         return Files.deleteIfExists(target);
     }
 
     @Override
     public boolean deletePublished(String storageKey) throws IOException {
-        Path target=resolveStorageKey(storageKey);
-        if(Files.isSymbolicLink(target)||!Files.isRegularFile(target,LinkOption.NOFOLLOW_LINKS)) return false;
+        Path target = resolveStorageKey(storageKey);
+        if (Files.isSymbolicLink(target) || !Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)) return false;
         return Files.deleteIfExists(target);
     }
 
@@ -324,25 +306,32 @@ public final class LocalFileQuarantineStorage implements QuarantineStorage {
 
     private static void purgeFile(Path target) throws IOException {
         BasicFileAttributes attributes;
-        try { attributes = Files.readAttributes(target, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS); }
-        catch (NoSuchFileException missing) { return; }
+        try {
+            attributes = Files.readAttributes(target, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+        } catch (NoSuchFileException missing) {
+            return;
+        }
         if (attributes.isSymbolicLink() || !attributes.isRegularFile()) {
             throw new IOException("project purge cannot remove an unsafe storage entry");
         }
         Files.deleteIfExists(target);
     }
 
-    private static StorageEntry entry(Path root,Path path,boolean published) {
-        String key=root.relativize(path).toString().replace('\\','/');
+    private static StorageEntry entry(Path root, Path path, boolean published) {
+        String key = root.relativize(path).toString().replace('\\', '/');
         try {
-            boolean symbolic=Files.isSymbolicLink(path);
-            boolean regular=Files.isRegularFile(path,LinkOption.NOFOLLOW_LINKS);
-            boolean malformed=published&&regular&&!STORAGE_KEY.matcher(key).matches();
-            return new StorageEntry(key,Files.getLastModifiedTime(path,LinkOption.NOFOLLOW_LINKS).toInstant(),
-                    regular?Files.size(path):0,regular,
-                    symbolic||malformed||(!regular&&!Files.isDirectory(path,LinkOption.NOFOLLOW_LINKS)));
-        } catch(IOException failure) {
-            return new StorageEntry(key,Instant.EPOCH,0,false,true);
+            boolean symbolic = Files.isSymbolicLink(path);
+            boolean regular = Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS);
+            boolean malformed =
+                    published && regular && !STORAGE_KEY.matcher(key).matches();
+            return new StorageEntry(
+                    key,
+                    Files.getLastModifiedTime(path, LinkOption.NOFOLLOW_LINKS).toInstant(),
+                    regular ? Files.size(path) : 0,
+                    regular,
+                    symbolic || malformed || (!regular && !Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)));
+        } catch (IOException failure) {
+            return new StorageEntry(key, Instant.EPOCH, 0, false, true);
         }
     }
 
@@ -355,14 +344,10 @@ public final class LocalFileQuarantineStorage implements QuarantineStorage {
             throw new IOException("storage key format is invalid");
         }
         String sha256 = storageKey.substring(storageKey.length() - 64);
-        if (!storageKey.startsWith("sha256/" + sha256.substring(0, 2)
-                + "/" + sha256.substring(2, 4) + "/")) {
+        if (!storageKey.startsWith("sha256/" + sha256.substring(0, 2) + "/" + sha256.substring(2, 4) + "/")) {
             throw new IOException("storage key fan-out does not match digest");
         }
-        return requireContained(
-                blobRoot,
-                blobRoot.resolve(storageKey.replace('/', java.io.File.separatorChar))
-        );
+        return requireContained(blobRoot, blobRoot.resolve(storageKey.replace('/', java.io.File.separatorChar)));
     }
 
     private static String storageKey(String sha256) {

@@ -11,8 +11,8 @@ public final class OAuthAttemptHasher {
     public OAuthAttemptHash hash(OAuthAttemptToken token) {
         Objects.requireNonNull(token, "token must not be null");
         try {
-            byte[] digest = MessageDigest.getInstance("SHA-256")
-                    .digest(token.value().getBytes(StandardCharsets.US_ASCII));
+            byte[] digest =
+                    MessageDigest.getInstance("SHA-256").digest(token.value().getBytes(StandardCharsets.US_ASCII));
             return new OAuthAttemptHash(HexFormat.of().formatHex(digest));
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 is unavailable", exception);

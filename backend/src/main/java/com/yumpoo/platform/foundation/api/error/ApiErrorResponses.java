@@ -3,39 +3,43 @@ package com.yumpoo.platform.foundation.api.error;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.FieldViolation;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
-
 import java.util.Comparator;
 import java.util.List;
 
 final class ApiErrorResponses {
 
-    private ApiErrorResponses() {
-    }
+    private ApiErrorResponses() {}
 
     static ApiErrorResponse from(ApplicationException exception, String requestId) {
         ApiErrorResponse response = create(
                 exception.errorCode(),
                 exception.getMessage(),
                 requestId,
-                exception.fieldViolations().stream().map(ApiErrorResponses::from).toList(),
+                exception.fieldViolations().stream()
+                        .map(ApiErrorResponses::from)
+                        .toList(),
                 exception.reason(),
                 exception.blockers().stream()
                         .map(blocker -> new ApiErrorDetails.ApiBlocker(blocker.code(), blocker.count()))
-                        .toList()
-        );
+                        .toList());
         if (exception.safeDetails().isEmpty()) return response;
-        return new ApiErrorResponse(response.code(), response.message(), response.requestId(),
-                response.retryable(), response.fieldErrors(), new ApiErrorDetails(exception.reason(),
-                response.details().blockers(), exception.safeDetails()));
+        return new ApiErrorResponse(
+                response.code(),
+                response.message(),
+                response.requestId(),
+                response.retryable(),
+                response.fieldErrors(),
+                new ApiErrorDetails(exception.reason(), response.details().blockers(), exception.safeDetails()));
     }
 
     static ApiErrorResponse create(
-            StandardErrorCode code,
-            String message,
-            String requestId,
-            List<ApiFieldError> fieldErrors
-    ) {
+            StandardErrorCode code, String message, String requestId, List<ApiFieldError> fieldErrors) {
         return create(code, message, requestId, fieldErrors, null, List.of());
+    }
+
+    static ApiErrorResponse create(
+            StandardErrorCode code, String message, String requestId, List<ApiFieldError> fieldErrors, String reason) {
+        return create(code, message, requestId, fieldErrors, reason, List.of());
     }
 
     static ApiErrorResponse create(
@@ -43,13 +47,7 @@ final class ApiErrorResponses {
             String message,
             String requestId,
             List<ApiFieldError> fieldErrors,
-            String reason
-    ) {
-        return create(code, message, requestId, fieldErrors, reason, List.of());
-    }
-
-    static ApiErrorResponse create(StandardErrorCode code, String message, String requestId,
-            List<ApiFieldError> fieldErrors, String reason,
+            String reason,
             List<ApiErrorDetails.ApiBlocker> blockers) {
         List<ApiFieldError> stableFieldErrors = fieldErrors.stream()
                 .sorted(Comparator.comparing(ApiFieldError::field).thenComparing(ApiFieldError::code))
@@ -61,8 +59,8 @@ final class ApiErrorResponses {
                 code.retryable(),
                 stableFieldErrors,
                 reason == null && blockers.isEmpty()
-                        ? ApiErrorDetails.EMPTY : new ApiErrorDetails(reason, List.copyOf(blockers))
-        );
+                        ? ApiErrorDetails.EMPTY
+                        : new ApiErrorDetails(reason, List.copyOf(blockers)));
     }
 
     private static ApiFieldError from(FieldViolation violation) {

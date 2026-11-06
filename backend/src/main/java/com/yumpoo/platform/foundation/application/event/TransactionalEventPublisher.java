@@ -3,13 +3,12 @@ package com.yumpoo.platform.foundation.application.event;
 import com.yumpoo.platform.foundation.application.outbox.OutboxStorePort;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelation;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelationContext;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.Clock;
 import java.time.Instant;
 import java.util.UUID;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class TransactionalEventPublisher implements TransactionalEventPort {
@@ -43,8 +42,7 @@ public class TransactionalEventPublisher implements TransactionalEventPort {
                 correlation.requestId(),
                 correlation.correlationId(),
                 correlation.causationId(),
-                draft.payload()
-        );
+                draft.payload());
         storePort.append(event);
         return event;
     }

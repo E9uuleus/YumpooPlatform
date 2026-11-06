@@ -33,7 +33,7 @@ import { useWorkItemInlineCreate } from './useWorkItemInlineCreate'
 import WorkItemUpdatedCell from './WorkItemUpdatedCell.vue'
 import WorkItemTableSkeleton from './WorkItemTableSkeleton.vue'
 import WorkItemKanbanSkeleton from './WorkItemKanbanSkeleton.vue'
-import { ArrowDown, Box, Filter as FilterIcon, Hide, Plus, Search, Sort, Upload, User } from '@element-plus/icons-vue'
+import { ArrowDown, Box, Hide, Plus, Search, Sort, Upload } from '@element-plus/icons-vue'
 import {
   HideCompletedEffect,
   WorkItemViewType,
@@ -43,7 +43,6 @@ import {
   ProjectLifecycle,
   ProjectMembershipStatus,
   ProjectMembershipStatusFilter,
-  ListProjectWorkItemFilterOptionsFieldEnum,
   readCsrfToken,
   type ProjectContentCatalog,
   type ProjectDetail,
@@ -60,7 +59,6 @@ import {
   ElDropdownItem,
   ElDropdownMenu,
   ElDrawer,
-  ElDatePicker,
   ElCheckbox,
   ElIcon,
   ElInput,
@@ -93,11 +91,12 @@ import WorkItemDueDateCell from './WorkItemDueDateCell.vue'
 import type { DueDateValue } from './workItemDueDate'
 import { useProjectTableScrollLayout } from './useProjectTableScrollLayout'
 import { useWorkItemPresentation } from './workItemPresentation'
-import { workItemLabelColorValue } from './workItemLabelColors'
+import WorkItemFilterPopover from './WorkItemFilterPopover.vue'
+import WorkItemAssigneeFilterPopover from './WorkItemAssigneeFilterPopover.vue'
+import { useWorkItemFilters } from './useWorkItemFilters'
 import WorkItemAssigneePicker from './WorkItemAssigneePicker.vue'
-import { workItemAssignees, workItemAssigneeIds } from './workItemAssignees'
+import { workItemAssignees } from './workItemAssignees'
 import YpAssigneeStack from '../yp/YpAssigneeStack.vue'
-import YpAssignee from '../../components/yp/YpAssignee.vue'
 import YpPriorityBadge from '../../components/yp/YpPriorityBadge.vue'
 import WorkItemGroupingPopover from './WorkItemGroupingPopover.vue'
 import WorkItemTableSettingsMenu from './WorkItemTableSettingsMenu.vue'
@@ -254,11 +253,6 @@ const loadingMoreError = ref<ApiProblem>()
 const editingCell = ref('')
 const createDisabled = computed(() => creatingTop.value || Boolean(editingCell.value) || tableSorting.value)
 const editingNames = ref(new Set<string>())
-const assigneeSearch = ref('')
-const assigneeMatches = ref<ProjectMember[]>()
-const filterOptionCounts = ref(new Map<string, number>())
-const filterOptionsLoading = ref(false)
-let filterOptionsRequestId = 0
 const cellPopoverBusy = reactive<Record<string, boolean>>({})
 const { openCell, setCellOpen, closeCell } = useWorkItemCellPopover()
 const labelPopoverContentRefs = new Map<string, LabelPopoverContentHandle>()
@@ -325,10 +319,6 @@ function tableCellClassName({
   return classes.join(' ')
 }
 
-const filters = reactive({
-  assignees: new Set<string>(), statuses: new Set<string>(), priorities: new Set<string>(),
-  contents: new Set<string>(), dueRange: [] as Date[], updatedAfter: null as Date | null,
-})
 interface SortRule { field: string; direction: 'ASC' | 'DESC' }
 const sortRules = ref<SortRule[]>([])
 const savingSortOrder = ref(false)
@@ -368,7 +358,6 @@ const columnWidths = reactive<Record<BuiltInColumnKey, number>>(Object.fromEntri
 const hiddenColumns = ref(new Set<BuiltInColumnKey>())
 let loadRevision = 0
 let searchTimer: number | undefined
-let memberSearchTimer: number | undefined
 let tableObserver: IntersectionObserver | undefined
 let kanbanObserver: IntersectionObserver | undefined
 let activeController: AbortController | undefined
@@ -399,13 +388,6 @@ const restorableColumns = computed(() => [...columns, ...connect.columns].filter
 const collapsedColumns = ref(new Set<ColumnKey>())
 const columnSettingsKind = ref<'status' | 'priority' | 'content'>()
 const columnSettingsAnchor = ref<HTMLElement>()
-const assigneeFilterOpen = ref(false)
-const filterPopoverOpen = ref(false)
-const activeFilterCount = computed(() => filters.assignees.size + filters.statuses.size + filters.priorities.size
-  + filters.contents.size + (filters.dueRange.length ? 1 : 0) + (filters.updatedAfter ? 1 : 0))
-/** 已生效的搜索或筛选（以视图查询为准，输入中的搜索词不算）；「隐藏已完成」的隐式状态条件不算。 */
-const explicitFilterActive = computed(() => ['q', 'assignee', 'status', 'priority', 'content', 'dueFrom', 'updatedAfter']
-  .some(key => route.query[key] !== undefined))
 const groupFieldByColumn: Partial<Record<BuiltInColumnKey, GroupField>> = {
   assignee: 'ASSIGNEE', status: 'STATUS', priority: 'PRIORITY', content: 'CONTENT', dueDate: 'DUE_DATE',
 }
@@ -494,12 +476,6 @@ const PAGE_SKELETON_TOOLBAR = [104, 72, 64, 60, 56, 88]
 const skeletonColumns = computed(() => visibleColumns.value.map(item => ({ key: item.key, width: columnWidth(item.key), collapsed: isColumnCollapsed(item.key) })))
 const skeletonRowHeight = computed(() => heightOption(tableViewSettings.value.rowHeight).row)
 const hasExplicitSort = computed(() => sortRules.value.length > 0)
-const filteredMembers = computed(() => {
-  const query = assigneeSearch.value.trim().toLocaleLowerCase()
-  return query
-    ? (assigneeMatches.value ?? activeMembers.value.filter(item => item.displayName.toLocaleLowerCase().includes(query)))
-    : activeMembers.value
-})
 
 const contentsById = computed(() => new Map((catalog.value?.items ?? []).map(item => [item.id, item])))
 const activeContents = computed(() => (catalog.value?.items ?? []).filter(item => item.active))
@@ -511,6 +487,11 @@ const priorityOptions = computed(() => [...(labelCatalog.value?.priorities ?? []
 const { contentName, contentLabel, statusLabel, labelCellStyle, getStatusCellStyle, getPriorityCellStyle,
   getStatusTone, getPriorityPresentation, formatDate } = useWorkItemPresentation({ contentsById, workflowStatuses, priorityOptions })
 const activeMembers = computed(() => members.value.filter(item => item.membershipStatus === ProjectMembershipStatus.Active))
+const filter = useWorkItemFilters({
+  route, projectId, searchInput, activeMembers, tableItems, tableSource, error, listRequest, syncUrl,
+  getRevision: () => loadRevision, getSignal: () => activeController?.signal ?? null,
+})
+const { filters, assigneeFilterOpen, filterPopoverOpen, explicitFilterActive, loadFilterOptions, invalidateFilterOptions, filterRequest } = filter
 const canCreate = computed(() => Boolean(project.value
   && projectWritable(project.value)
   && activeContents.value.length
@@ -630,7 +611,7 @@ watch(() => unfinishedStatusCodes.value?.join(','), () => void resetCurrentData(
 const groupingSwitching = ref(false)
 const { horizontalPageScrollbar, verticalPageScrollbar, horizontalOverflow, horizontalScrollExtent, verticalScrollExtent,
   pageScrollbarLeft, horizontalPageScrollbarStyle, verticalPageScrollbarStyle, onHorizontalPageScroll, onVerticalPageScroll,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- ProjectOverviewView.spec.ts 通过组件实例同步滚动条。
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- ProjectWorkItems.detail.spec.ts 通过组件实例同步滚动条。
   syncPageScrollbars,
   resolveTableScrollElement, schedulePageScrollbarSync, scheduleResponsiveTableLayout, flushResponsiveTableLayout,
 } = useProjectTableScrollLayout({
@@ -1102,84 +1083,6 @@ function scheduleSearch(): void {
   searchTimer = window.setTimeout(() => void syncUrl(), 300)
 }
 
-function scheduleMemberSearch(): void {
-  if (memberSearchTimer) window.clearTimeout(memberSearchTimer)
-  const query = assigneeSearch.value.trim()
-  assigneeMatches.value = undefined
-  if (!query) return
-  const requestedProjectId = projectId.value
-  memberSearchTimer = window.setTimeout(async () => {
-    try {
-      const result = await projectsApi.listProjectMembers({
-        projectId: requestedProjectId,
-        status: ProjectMembershipStatusFilter.Active,
-        q: query,
-        page: 0,
-        size: 100,
-      }, { signal: activeController?.signal ?? null })
-      if (requestedProjectId === projectId.value && query === assigneeSearch.value.trim())
-        assigneeMatches.value = result.items
-    } catch (reason) {
-      if (!(reason instanceof DOMException && reason.name === 'AbortError'))
-        assigneeMatches.value = activeMembers.value.filter(item => item.displayName
-          .toLocaleLowerCase().includes(query.toLocaleLowerCase()))
-    }
-  }, 250)
-}
-
-function toggleSet<T>(set: Set<T>, value: T, checked: boolean): void {
-  const next = new Set(set)
-  if (checked) next.add(value); else next.delete(value)
-  if (set === filters.assignees) filters.assignees = next as Set<string>
-  else if (set === filters.statuses) filters.statuses = next as Set<string>
-  else if (set === filters.priorities) filters.priorities = next as Set<string>
-  else filters.contents = next as Set<string>
-  void syncUrl()
-}
-
-function countBy(field: 'statusCode' | 'priority' | 'contentId' | 'assigneeUserId', value: string | null): number {
-  const apiField = ({ statusCode: 'STATUS', priority: 'PRIORITY', contentId: 'CONTENT', assigneeUserId: 'ASSIGNEE' } as const)[field]
-  return filterOptionCounts.value.get(`${apiField}:${value ?? '__NULL__'}`)
-    ?? tableItems.value.filter(item => field === 'assigneeUserId' ? workItemAssigneeIds(item).includes(value ?? '') : item[field] === value).length
-}
-
-async function loadFilterOptions(): Promise<void> {
-  if (filterOptionsLoading.value) return
-  filterOptionsLoading.value = true
-  const requestId = ++filterOptionsRequestId
-  const revision = loadRevision
-  const current = () => requestId === filterOptionsRequestId && revision === loadRevision
-  const fields = [ListProjectWorkItemFilterOptionsFieldEnum.Assignee,
-    ListProjectWorkItemFilterOptionsFieldEnum.Status,
-    ListProjectWorkItemFilterOptionsFieldEnum.Priority,
-    ListProjectWorkItemFilterOptionsFieldEnum.Content]
-  try {
-    const base = listRequest(null)
-    const { view: _view, limit: _limit, ...context } = base
-    void _view; void _limit
-    /** 「不显示」的隐式状态条件只作用于表格行；状态计数仍覆盖全部状态，否则已完成状态的数量显示为空。 */
-    const { status: _implicitStatus, ...withoutStatus } = context
-    void _implicitStatus
-    const pages = await Promise.all(fields.map(field => tableSource.listProjectWorkItemFilterOptions({
-      ...(field === ListProjectWorkItemFilterOptionsFieldEnum.Status && !filters.statuses.size ? withoutStatus : context),
-      projectId: projectId.value, field, limit: 100, countSubitems: true,
-    }, { signal: activeController?.signal ?? null })))
-    const next = new Map<string, number>()
-    if (!current()) return
-    pages.forEach((page, index) => page.items.forEach(option => next.set(`${fields[index]}:${option.value}`, option.count)))
-    filterOptionCounts.value = next
-  } catch (reason) {
-    if (!current() || (reason instanceof DOMException && reason.name === 'AbortError')) return
-    const problem = await toApiProblem(reason)
-    if (current()) error.value = problem
-  } finally { if (requestId === filterOptionsRequestId) filterOptionsLoading.value = false }
-}
-
-function invalidateFilterOptions() {
-  filterOptionsRequestId++
-  filterOptionsLoading.value = false
-}
-
 async function loadMembers(requestedProjectId: string, revision: number): Promise<void> {
   const loaded: ProjectMember[] = []
   let page = 0
@@ -1197,19 +1100,6 @@ async function loadMembers(requestedProjectId: string, revision: number): Promis
     page += 1
   }
   members.value = loaded
-}
-
-/** 用户设置的搜索与筛选（不含状态）；状态由各请求按场景补上。 */
-function filterRequest() {
-  return {
-    ...(searchInput.value.trim() ? { q: searchInput.value.trim() } : {}),
-    ...(filters.priorities.size ? { priority: filters.priorities } : {}),
-    ...(filters.assignees.size ? { assigneeUserId: filters.assignees } : {}),
-    ...(filters.contents.size ? { contentId: filters.contents } : {}),
-    ...(filters.dueRange[0] ? { dueFrom: filters.dueRange[0] } : {}),
-    ...(filters.dueRange[1] ? { dueTo: filters.dueRange[1] } : {}),
-    ...(filters.updatedAfter ? { updatedAfter: filters.updatedAfter } : {}),
-  }
 }
 
 function listRequest(cursor?: string | null) {
@@ -2029,12 +1919,6 @@ function tableRowStyle(context: { row: ProjectWorkItemListItem; rowIndex: number
   return color ? { ...style, '--work-item-condition-row-bg': color } : style
 }
 
-function clearFilters(): void {
-  filters.assignees = new Set(); filters.statuses = new Set(); filters.priorities = new Set(); filters.contents = new Set()
-  filters.dueRange = []; filters.updatedAfter = null
-  void syncUrl()
-}
-
 async function resetCurrentData(): Promise<void> {
   invalidateFilterOptions()
   clearSelection()
@@ -2121,7 +2005,6 @@ watch([() => route.query.workItemId, () => route.query.tab], ([value, tab], [pre
     detail.value = undefined
   }
 }, { immediate: true })
-watch(assigneeSearch, scheduleMemberSearch)
 watch(isResizingDrawer, value => { if (!embedded.value) document.body.classList.toggle('yp-work-items-drawer-resizing', value) }, { flush: 'sync' })
 watch([displayTableItems, () => [...grouping.collapsed.value].join('|'), groupCountsReady], () => {
   schedulePageScrollbarSync()
@@ -2184,7 +2067,6 @@ onBeforeUnmount(() => {
   columnFlip.cancel()
   groupObserver?.disconnect()
   activeController?.abort(); if (searchTimer) window.clearTimeout(searchTimer)
-  if (memberSearchTimer) window.clearTimeout(memberSearchTimer)
   tableObserver?.disconnect(); kanbanObserver?.disconnect()
   document.removeEventListener('pointerdown', onDocumentPointerDown)
   clearTablePointerTracking()
@@ -2387,90 +2269,11 @@ onBeforeUnmount(() => {
             </button>
           </div>
 
-          <el-popover v-model:visible="assigneeFilterOpen" placement="bottom-start" :width="360" trigger="click" popper-class="work-items-popover work-item-view-control" @show="loadFilterOptions">
-            <template #reference>
-              <button class="toolbar-button" :class="{ active: filters.assignees.size }">
-                <el-icon><user /></el-icon><span>处理人</span>
-                <span v-if="filters.assignees.size" class="toolbar-count">{{ filters.assignees.size }}</span>
-              </button>
-            </template>
-            <div class="popover-stack">
-              <el-input v-model="assigneeSearch" clearable autofocus placeholder="搜索项目成员" />
-              <button
-                v-for="member in filteredMembers"
-                :key="member.userId"
-                class="popover-option"
-                @click="toggleSet(filters.assignees, member.userId, !filters.assignees.has(member.userId))"
-              >
-                <el-checkbox :model-value="filters.assignees.has(member.userId)" @click.stop />
-                <yp-assignee :user-id="member.userId" :display-name="member.displayName" />
-                <span class="option-count">{{ countBy('assigneeUserId', member.userId) }}</span>
-              </button>
-            </div>
-          </el-popover>
-
-          <el-popover v-model:visible="filterPopoverOpen" placement="bottom-start" :width="760" trigger="click" popper-class="work-items-popover work-items-filter-popover" @show="loadFilterOptions">
-            <template #reference>
-              <button class="toolbar-button" :class="{ active: activeFilterCount }">
-                <el-icon><filter-icon /></el-icon><span>筛选</span><span v-if="activeFilterCount" class="toolbar-button__count">{{ activeFilterCount }}</span>
-              </button>
-            </template>
-            <div class="filter-popover">
-              <header class="filter-popover__header">
-                <strong>快速筛选</strong>
-                <span v-if="activeFilterCount" class="filter-popover__count" :aria-label="`已选 ${activeFilterCount} 个条件`">{{ activeFilterCount }}</span>
-                <button class="text-button filter-popover__clear" :disabled="!activeFilterCount" @click="clearFilters">清除全部</button>
-              </header>
-              <div class="filter-columns">
-                <section class="filter-section">
-                  <h4>处理人<small v-if="filters.assignees.size">已选 {{ filters.assignees.size }}</small></h4>
-                  <div class="filter-section__values">
-                    <button v-for="member in activeMembers" :key="member.userId" class="filter-value" :aria-pressed="filters.assignees.has(member.userId)" @click="toggleSet(filters.assignees, member.userId, !filters.assignees.has(member.userId))">
-                      <yp-assignee class="filter-value__label" :user-id="member.userId" :display-name="member.displayName" />
-                      <small :class="{ 'filter-value__count--zero': !countBy('assigneeUserId', member.userId) }">{{ countBy('assigneeUserId', member.userId) }}</small>
-                    </button>
-                  </div>
-                </section>
-                <section class="filter-section">
-                  <h4>状态<small v-if="filters.statuses.size">已选 {{ filters.statuses.size }}</small></h4>
-                  <div class="filter-section__values">
-                    <button v-for="status in workflowStatuses" :key="status.statusCode" class="filter-value" :aria-pressed="filters.statuses.has(status.statusCode)" @click="toggleSet(filters.statuses, status.statusCode, !filters.statuses.has(status.statusCode))">
-                      <span class="filter-swatch" :style="{ background: workItemLabelColorValue(status.colorToken) }" aria-hidden="true" />
-                      <span class="filter-value__label">{{ status.displayName }}</span><small :class="{ 'filter-value__count--zero': !countBy('statusCode', status.statusCode) }">{{ countBy('statusCode', status.statusCode) }}</small>
-                    </button>
-                  </div>
-                </section>
-                <section class="filter-section">
-                  <h4>优先级<small v-if="filters.priorities.size">已选 {{ filters.priorities.size }}</small></h4>
-                  <div class="filter-section__values">
-                    <button v-for="priority in priorityOptions" :key="priority.code" class="filter-value" :aria-pressed="filters.priorities.has(priority.code)" @click="toggleSet(filters.priorities, priority.code, !filters.priorities.has(priority.code))">
-                      <span class="filter-swatch" :style="{ background: workItemLabelColorValue(priority.colorToken) }" aria-hidden="true" />
-                      <span class="filter-value__label">{{ priority.displayName }}</span><small :class="{ 'filter-value__count--zero': !countBy('priority', priority.code) }">{{ countBy('priority', priority.code) }}</small>
-                    </button>
-                  </div>
-                </section>
-                <section class="filter-section">
-                  <h4>工作项类别<small v-if="filters.contents.size">已选 {{ filters.contents.size }}</small></h4>
-                  <div class="filter-section__values">
-                    <button v-for="content in catalog?.items ?? []" :key="content.id" class="filter-value" :aria-pressed="filters.contents.has(content.id)" @click="toggleSet(filters.contents, content.id, !filters.contents.has(content.id))">
-                      <span class="filter-swatch" :style="{ background: workItemLabelColorValue(content.colorToken) }" aria-hidden="true" />
-                      <span class="filter-value__label">{{ content.name }}</span><small :class="{ 'filter-value__count--zero': !countBy('contentId', content.id) }">{{ countBy('contentId', content.id) }}</small>
-                    </button>
-                  </div>
-                </section>
-              </div>
-              <div class="filter-dates">
-                <div class="filter-field">
-                  <span class="filter-field-label">截止日期</span>
-                  <el-date-picker v-model="filters.dueRange" type="daterange" start-placeholder="开始日期" end-placeholder="结束日期" @change="syncUrl" />
-                </div>
-                <div class="filter-field">
-                  <span class="filter-field-label">最后更新时间</span>
-                  <el-date-picker v-model="filters.updatedAfter" type="date" aria-label="最后更新时间晚于" placeholder="选择日期之后" @change="syncUrl" />
-                </div>
-              </div>
-            </div>
-          </el-popover>
+          <work-item-assignee-filter-popover :filter="filter" />
+          <work-item-filter-popover
+            :filter="filter" :active-members="activeMembers" :workflow-statuses="workflowStatuses"
+            :priority-options="priorityOptions" :catalog="catalog"
+          />
 
           <el-popover placement="bottom-start" :width="420" trigger="click" :disabled="selectedView === 'kanban' || savingSortOrder" popper-class="work-items-popover work-item-view-control">
             <template #reference>
@@ -3559,7 +3362,6 @@ onBeforeUnmount(() => {
 .toolbar-button:disabled, :deep(.grouping-toolbar-button:disabled), :deep(.table-settings-toolbar-button:disabled) { color: var(--yp-text-disabled); cursor: not-allowed; }
 :deep(.table-settings-toolbar-button) { width: 36px; justify-content: center; padding: 0; }
 :deep(.table-settings-toolbar-button--unsaved) { width: auto; padding: 0 var(--yp-space-3); }
-.toolbar-count { min-width: 18px; padding: 1px 5px; border-radius: var(--yp-radius-pill); color: var(--yp-priority-foreground); background: var(--yp-action-primary); font-size: 11px; }
 /* 主操作底色不随主题变化；--yp-text-inverse 在深色主题是深色，文字固定用蓝底前景色。 */
 .toolbar-create-group { display: inline-flex; height: 32px; flex: 0 0 auto; border-radius: var(--yp-radius-md); background: var(--yp-action-primary); box-shadow: 0 1px 2px color-mix(in srgb, var(--yp-action-primary) 35%, transparent); }
 .toolbar-create-group.is-disabled { opacity: .6; box-shadow: none; }
@@ -3577,71 +3379,15 @@ onBeforeUnmount(() => {
 .toolbar-search > .toolbar-button { width: 100%; }
 .toolbar-search--expanded { width: min(360px, 40vw); }
 
-.popover-stack, .sort-popover, .filter-popover, .date-editor { display: grid; gap: var(--yp-space-3); }
-.popover-option, .filter-value, .text-button, .popover-add {
+.sort-popover, .date-editor { display: grid; gap: var(--yp-space-3); }
+.text-button, .popover-add {
   display: flex; align-items: center; gap: var(--yp-space-2); width: 100%; padding: 7px 8px; border: 0;
   border-radius: var(--yp-radius-sm); color: var(--yp-text-primary); background: transparent; text-align: left; cursor: pointer;
 }
-.popover-option:hover, .filter-value:hover, .popover-add:hover { background: var(--yp-bg-hover); }
-.option-count, .filter-value small { margin-left: auto; color: var(--yp-text-muted); }
+.popover-add:hover { background: var(--yp-bg-hover); }
 .empty-avatar { display: inline-grid; width: 28px; height: 28px; place-items: center; border: 1px dashed var(--yp-border-default); border-radius: 50%; }
-.filter-popover > header, .sort-popover > header { display: flex; align-items: center; justify-content: space-between; }
+.sort-popover > header { display: flex; align-items: center; justify-content: space-between; }
 .text-button { width: auto; color: var(--yp-action-primary); }
-.toolbar-button__count {
-  display: inline-grid; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; place-items: center;
-  border-radius: var(--yp-radius-pill); background: var(--yp-action-primary); color: var(--yp-on-solid);
-  font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1;
-}
-.filter-popover {
-  gap: var(--yp-space-4); min-width: 0; max-height: min(720px, calc(100dvh - 96px));
-  overflow: hidden auto; padding: 0 var(--yp-space-5) var(--yp-space-5);
-}
-.filter-popover__header {
-  position: sticky; z-index: 1; top: 0; display: flex; align-items: center; gap: var(--yp-space-2);
-  margin: 0 calc(-1 * var(--yp-space-5)); padding: var(--yp-space-4) var(--yp-space-5) var(--yp-space-3);
-   background: var(--yp-bg-raised);
-}
-.filter-popover__header strong { color: var(--yp-text-primary); font-size: 15px; font-weight: 600; }
-.filter-popover__count {
-  display: inline-grid; min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; place-items: center;
-  border-radius: var(--yp-radius-pill); background: var(--yp-action-primary); color: var(--yp-on-solid);
-  font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums;
-}
-.filter-popover__clear { margin-left: auto; padding: 4px 8px; }
-.filter-popover__clear:disabled { color: var(--yp-text-muted); background: transparent; cursor: default; }
-.filter-section { display: grid; align-content: start; gap: 4px; min-width: 0; }
-.filter-section h4 {
-  display: flex; align-items: baseline; justify-content: space-between; gap: var(--yp-space-2);
-  margin: 0 0 var(--yp-space-2); color: var(--yp-text-secondary); font-size: 12px; font-weight: 600; letter-spacing: .02em;
-}
-.filter-section h4 small { color: var(--yp-action-primary); font-size: 12px; font-weight: 500; letter-spacing: 0; }
-.filter-section__values { display: grid; align-content: start; gap: 4px; max-height: 248px; overflow: hidden auto; }
-.filter-columns {
-  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--yp-space-4) var(--yp-space-4); min-width: 0;
-  padding-top: var(--yp-space-4);
-}
-.filter-value {
-  min-width: 0; min-height: 32px; gap: 8px; padding: 5px 10px; background: var(--yp-bg-sunken);
-  transition: background-color var(--yp-motion-fast) var(--yp-ease-standard);
-}
-.filter-value[aria-pressed='true'] { background: var(--yp-bg-selected-strong); }
-.filter-value[aria-pressed='true'] .filter-value__label { font-weight: 500; }
-.filter-value__label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.filter-swatch { flex: none; width: 8px; height: 8px; border-radius: 50%; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--yp-text-primary) 12%, transparent); }
-.filter-value small { flex: 0 0 auto; color: var(--yp-text-secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
-.filter-value small.filter-value__count--zero { opacity: .55; }
-.filter-dates {
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--yp-space-4) var(--yp-space-5); min-width: 0;
-  padding-top: var(--yp-space-4);
-}
-.filter-field { display: grid; gap: var(--yp-space-2); min-width: 0; }
-.filter-field-label { color: var(--yp-text-secondary); font-size: 12px; font-weight: 600; letter-spacing: .02em; }
-.filter-field :deep(.el-date-editor) { width: 100%; min-width: 0; box-sizing: border-box; }
-:global(.work-items-filter-popover.el-popover) { width: min(760px, calc(100vw - 32px)) !important; box-sizing: border-box; padding: 0; overflow: hidden; }
-@media (max-width: 560px) {
-  .filter-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .filter-dates { grid-template-columns: minmax(0, 1fr); }
-}
 .sort-rule { display: grid; grid-template-columns: 1fr 130px; gap: var(--yp-space-2); }
 .column-option { display: flex; align-items: center; gap: var(--yp-space-2); padding: 5px 0; }
 

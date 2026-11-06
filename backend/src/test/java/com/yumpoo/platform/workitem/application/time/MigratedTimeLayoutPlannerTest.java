@@ -1,33 +1,49 @@
 package com.yumpoo.platform.workitem.application.time;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.yumpoo.platform.workitem.application.time.MigratedTimeLayoutPlanner.DayPlan;
 import com.yumpoo.platform.workitem.application.time.MigratedTimeLayoutPlanner.Existing;
 import com.yumpoo.platform.workitem.application.time.MigratedTimeLayoutPlanner.Outcome;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class MigratedTimeLayoutPlannerTest {
     private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
     private static final LocalDate DAY = LocalDate.of(2026, 10, 20);
     private static final LocalDate TODAY = LocalDate.of(2026, 10, 28);
 
-    private static Instant at(String time) { return DAY.atTime(LocalTime.parse(time)).atZone(ZONE).toInstant(); }
-    private static Existing busy(String from, String to) { return new Existing(at(from), at(to), false); }
-    private static Existing migrated(String from, String to) { return new Existing(at(from), at(to), true); }
+    private static Instant at(String time) {
+        return DAY.atTime(LocalTime.parse(time)).atZone(ZONE).toInstant();
+    }
+
+    private static Existing busy(String from, String to) {
+        return new Existing(at(from), at(to), false);
+    }
+
+    private static Existing migrated(String from, String to) {
+        return new Existing(at(from), at(to), true);
+    }
+
     private static DayPlan plan(int minutes, Existing... sessions) {
         return MigratedTimeLayoutPlanner.plan(DAY, ZONE, TODAY, minutes, 540, 1080, List.of(sessions));
     }
+
     private static List<String> spans(DayPlan plan) {
-        return plan.segments().stream().map(s -> LocalTime.ofInstant(s.startedAt(), ZONE) + "-" + LocalTime.ofInstant(s.stoppedAt(), ZONE)).toList();
+        return plan.segments().stream()
+                .map(s -> LocalTime.ofInstant(s.startedAt(), ZONE) + "-" + LocalTime.ofInstant(s.stoppedAt(), ZONE))
+                .toList();
     }
-    private static List<String> codes(DayPlan plan) { return plan.issues().stream().map(MigratedTimeLayoutPlanner.Issue::code).toList(); }
+
+    private static List<String> codes(DayPlan plan) {
+        return plan.issues().stream().map(MigratedTimeLayoutPlanner.Issue::code).toList();
+    }
 
     @Test
     void startsAtWorkdayStartOnAnEmptyDay() {
@@ -117,9 +133,11 @@ class MigratedTimeLayoutPlannerTest {
         assertThat(future.outcome()).isEqualTo(Outcome.ERROR);
         assertThat(future.segments()).isEmpty();
         assertThat(codes(future)).containsExactly("FUTURE_DATE");
-        assertThat(MigratedTimeLayoutPlanner.plan(TODAY.plusDays(1), ZONE, TODAY, 60, 540, 1080, List.of()).outcome())
+        assertThat(MigratedTimeLayoutPlanner.plan(TODAY.plusDays(1), ZONE, TODAY, 60, 540, 1080, List.of())
+                        .outcome())
                 .isEqualTo(Outcome.ERROR);
-        assertThat(codes(MigratedTimeLayoutPlanner.plan(TODAY.minusDays(1), ZONE, TODAY, 60, 540, 1080, List.of()))).isEmpty();
+        assertThat(codes(MigratedTimeLayoutPlanner.plan(TODAY.minusDays(1), ZONE, TODAY, 60, 540, 1080, List.of())))
+                .isEmpty();
     }
 
     @Test
@@ -136,8 +154,10 @@ class MigratedTimeLayoutPlannerTest {
         var result = MigratedTimeLayoutPlanner.plan(day, zone, day.plusDays(1), 60, 540, 1080, List.of());
 
         assertThat(result.outcome()).isEqualTo(Outcome.IMPORT);
-        assertThat(result.segments()).containsExactly(new MigratedTimeLayoutPlanner.Segment(
-                day.atTime(9, 0).atZone(zone).toInstant(), day.atTime(10, 0).atZone(zone).toInstant()));
+        assertThat(result.segments())
+                .containsExactly(new MigratedTimeLayoutPlanner.Segment(
+                        day.atTime(9, 0).atZone(zone).toInstant(),
+                        day.atTime(10, 0).atZone(zone).toInstant()));
         assertThat(result.issues()).isEmpty();
     }
 
@@ -146,11 +166,15 @@ class MigratedTimeLayoutPlannerTest {
     void usesTheLocalWorkdayEndForWarningsOnDaylightSavingTransitions(String date) {
         var day = LocalDate.parse(date);
         var zone = ZoneId.of("America/New_York");
-        var occupied = new Existing(day.atTime(0, 0).atZone(zone).toInstant(), day.atTime(10, 0).atZone(zone).toInstant(), false);
+        var occupied = new Existing(
+                day.atTime(0, 0).atZone(zone).toInstant(),
+                day.atTime(10, 0).atZone(zone).toInstant(),
+                false);
         var onTime = MigratedTimeLayoutPlanner.plan(day, zone, day.plusDays(1), 480, 540, 1080, List.of(occupied));
         var late = MigratedTimeLayoutPlanner.plan(day, zone, day.plusDays(1), 481, 540, 1080, List.of(occupied));
 
-        assertThat(onTime.segments().getLast().stoppedAt()).isEqualTo(day.atTime(18, 0).atZone(zone).toInstant());
+        assertThat(onTime.segments().getLast().stoppedAt())
+                .isEqualTo(day.atTime(18, 0).atZone(zone).toInstant());
         assertThat(onTime.issues()).isEmpty();
         assertThat(codes(late)).containsExactly("PAST_WORKDAY_END");
     }
@@ -163,16 +187,27 @@ class MigratedTimeLayoutPlannerTest {
         var result = MigratedTimeLayoutPlanner.plan(day, zone, day.plusDays(1), 900, 540, 1440, List.of());
 
         assertThat(result.outcome()).isEqualTo(Outcome.IMPORT);
-        assertThat(result.segments().getLast().stoppedAt()).isEqualTo(day.plusDays(1).atStartOfDay(zone).toInstant());
+        assertThat(result.segments().getLast().stoppedAt())
+                .isEqualTo(day.plusDays(1).atStartOfDay(zone).toInstant());
         assertThat(result.issues()).isEmpty();
-        assertThat(MigratedTimeLayoutPlanner.plan(day, zone, day.plusDays(1), 901, 540, 1440, List.of()).outcome()).isEqualTo(Outcome.ERROR);
+        assertThat(MigratedTimeLayoutPlanner.plan(day, zone, day.plusDays(1), 901, 540, 1440, List.of())
+                        .outcome())
+                .isEqualTo(Outcome.ERROR);
     }
 
     @Test
     void splitHandsTheLaidSegmentsToRowsInFileOrder() {
         var laid = plan(240, busy("10:00", "11:00"), busy("13:00", "14:00")).segments();
         var pieces = MigratedTimeLayoutPlanner.split(laid, List.of(90, 60, 90));
-        assertThat(pieces.stream().map(piece -> piece.stream().map(s -> LocalTime.ofInstant(s.startedAt(), ZONE) + "-" + LocalTime.ofInstant(s.stoppedAt(), ZONE)).toList()).toList())
-                .containsExactly(List.of("09:00-10:00", "11:00-11:30"), List.of("11:30-12:30"), List.of("12:30-13:00", "14:00-15:00"));
+        assertThat(pieces.stream()
+                        .map(piece -> piece.stream()
+                                .map(s -> LocalTime.ofInstant(s.startedAt(), ZONE) + "-"
+                                        + LocalTime.ofInstant(s.stoppedAt(), ZONE))
+                                .toList())
+                        .toList())
+                .containsExactly(
+                        List.of("09:00-10:00", "11:00-11:30"),
+                        List.of("11:30-12:30"),
+                        List.of("12:30-13:00", "14:00-15:00"));
     }
 }

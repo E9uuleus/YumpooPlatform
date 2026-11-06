@@ -3,24 +3,23 @@ package com.yumpoo.platform.organization.infrastructure;
 import com.yumpoo.platform.organization.application.CompanyRepository;
 import com.yumpoo.platform.organization.domain.CalendarDayOverride;
 import com.yumpoo.platform.organization.domain.Company;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
-import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import org.springframework.stereotype.Repository;
-
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.time.DateTimeException;
 import java.time.DayOfWeek;
-import java.time.LocalDate;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Repository;
 
 @Repository
 public class JdbcCompanyRepository implements CompanyRepository {
@@ -62,7 +61,8 @@ public class JdbcCompanyRepository implements CompanyRepository {
 
     @Override
     public Company current() {
-        List<Company> records = jdbcClient.sql(SELECT_CURRENT_COMPANY)
+        List<Company> records = jdbcClient
+                .sql(SELECT_CURRENT_COMPANY)
                 .query(JdbcCompanyRepository::mapCompany)
                 .list();
         if (records.size() != 1) {
@@ -73,24 +73,26 @@ public class JdbcCompanyRepository implements CompanyRepository {
 
     @Override
     public boolean rename(UUID companyId, String displayName, long expectedVersion, Instant now) {
-        return jdbcClient.sql("""
+        return jdbcClient
+                        .sql("""
                         UPDATE yumpoo.company SET display_name = :displayName, row_version = row_version + 1, updated_at = :now
                         WHERE id = :companyId AND row_version = :expected
                         """)
-                .param("companyId", companyId).param("displayName", displayName).param("expected", expectedVersion)
-                .param("now", OffsetDateTime.ofInstant(now, ZoneOffset.UTC)).update() == 1;
+                        .param("companyId", companyId)
+                        .param("displayName", displayName)
+                        .param("expected", expectedVersion)
+                        .param("now", OffsetDateTime.ofInstant(now, ZoneOffset.UTC))
+                        .update()
+                == 1;
     }
 
     @Override
-    public List<CalendarDayOverride> calendarDays(
-            UUID companyId,
-            LocalDate startInclusive,
-            LocalDate endInclusive
-    ) {
+    public List<CalendarDayOverride> calendarDays(UUID companyId, LocalDate startInclusive, LocalDate endInclusive) {
         Objects.requireNonNull(companyId, "companyId must not be null");
         Objects.requireNonNull(startInclusive, "startInclusive must not be null");
         Objects.requireNonNull(endInclusive, "endInclusive must not be null");
-        return jdbcClient.sql(SELECT_CALENDAR_DAYS)
+        return jdbcClient
+                .sql(SELECT_CALENDAR_DAYS)
                 .param("companyId", companyId)
                 .param("startInclusive", startInclusive)
                 .param("endInclusive", endInclusive)
@@ -100,8 +102,14 @@ public class JdbcCompanyRepository implements CompanyRepository {
 
     @Override
     public long calendarYearVersion(UUID companyId, int year) {
-        return jdbcClient.sql("SELECT row_version FROM yumpoo.company_calendar_year WHERE company_id = :companyId AND calendar_year = :year")
-                .param("companyId", companyId).param("year", year).query(Long.class).optional().orElse(0L);
+        return jdbcClient
+                .sql(
+                        "SELECT row_version FROM yumpoo.company_calendar_year WHERE company_id = :companyId AND calendar_year = :year")
+                .param("companyId", companyId)
+                .param("year", year)
+                .query(Long.class)
+                .optional()
+                .orElse(0L);
     }
 
     @Override
@@ -113,25 +121,42 @@ public class JdbcCompanyRepository implements CompanyRepository {
                 UPDATE yumpoo.company_calendar_year SET row_version = row_version + 1, updated_by_user_id = :actor, updated_at = :now
                 WHERE company_id = :companyId AND calendar_year = :year AND row_version = :expected
                 """;
-        var statement = jdbcClient.sql(sql).param("companyId", companyId).param("year", year)
-                .param("actor", actorUserId).param("now", OffsetDateTime.ofInstant(now, ZoneOffset.UTC));
+        var statement = jdbcClient
+                .sql(sql)
+                .param("companyId", companyId)
+                .param("year", year)
+                .param("actor", actorUserId)
+                .param("now", OffsetDateTime.ofInstant(now, ZoneOffset.UTC));
         if (expectedVersion > 0) statement.param("expected", expectedVersion);
         return statement.update() == 1;
     }
 
     @Override
     public void replaceCalendarDays(UUID companyId, int year, List<CalendarDayOverride> days, Instant now) {
-        jdbcClient.sql("DELETE FROM yumpoo.company_calendar_day WHERE company_id = :companyId AND calendar_date BETWEEN :start AND :end")
-                .param("companyId", companyId).param("start", LocalDate.of(year, 1, 1)).param("end", LocalDate.of(year, 12, 31)).update();
+        jdbcClient
+                .sql(
+                        "DELETE FROM yumpoo.company_calendar_day WHERE company_id = :companyId AND calendar_date BETWEEN :start AND :end")
+                .param("companyId", companyId)
+                .param("start", LocalDate.of(year, 1, 1))
+                .param("end", LocalDate.of(year, 12, 31))
+                .update();
         OffsetDateTime timestamp = OffsetDateTime.ofInstant(now, ZoneOffset.UTC);
         if (!days.isEmpty()) {
-            batchJdbc.batchUpdate("""
+            batchJdbc.batchUpdate(
+                    """
                     INSERT INTO yumpoo.company_calendar_day (company_id, calendar_date, day_type, standard_minutes, source, note, row_version, created_at, updated_at)
                     VALUES (:companyId, :date, :dayType, :minutes, :source, :note, 0, :now, :now)
-                    """, days.stream().map(day -> new MapSqlParameterSource()
-                    .addValue("companyId", companyId).addValue("date", day.date()).addValue("dayType", day.dayType().name())
-                    .addValue("minutes", day.standardMinutes(), Types.INTEGER).addValue("source", day.source().name())
-                    .addValue("note", day.note(), Types.VARCHAR).addValue("now", timestamp)).toArray(MapSqlParameterSource[]::new));
+                    """,
+                    days.stream()
+                            .map(day -> new MapSqlParameterSource()
+                                    .addValue("companyId", companyId)
+                                    .addValue("date", day.date())
+                                    .addValue("dayType", day.dayType().name())
+                                    .addValue("minutes", day.standardMinutes(), Types.INTEGER)
+                                    .addValue("source", day.source().name())
+                                    .addValue("note", day.note(), Types.VARCHAR)
+                                    .addValue("now", timestamp))
+                            .toArray(MapSqlParameterSource[]::new));
         }
     }
 
@@ -143,8 +168,7 @@ public class JdbcCompanyRepository implements CompanyRepository {
                     ZoneId.of(resultSet.getString("timezone")),
                     DayOfWeek.valueOf(resultSet.getString("week_start_day")),
                     resultSet.getInt("default_workday_minutes"),
-                    resultSet.getLong("row_version")
-            );
+                    resultSet.getLong("row_version"));
         } catch (DateTimeException | IllegalArgumentException exception) {
             throw new IllegalStateException("Stored Company configuration is invalid", exception);
         }
@@ -159,8 +183,7 @@ public class JdbcCompanyRepository implements CompanyRepository {
                     standardMinutes,
                     CalendarDayOverride.Source.valueOf(resultSet.getString("source")),
                     resultSet.getString("note"),
-                    resultSet.getLong("row_version")
-            );
+                    resultSet.getLong("row_version"));
         } catch (IllegalArgumentException exception) {
             throw new IllegalStateException("Stored Company calendar configuration is invalid", exception);
         }

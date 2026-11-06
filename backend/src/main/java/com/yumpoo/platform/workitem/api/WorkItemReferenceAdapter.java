@@ -2,26 +2,41 @@ package com.yumpoo.platform.workitem.api;
 
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.workitem.application.WorkItemReferenceService;
-import org.springframework.stereotype.Component;
-
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.stereotype.Component;
 
 @Component
 public class WorkItemReferenceAdapter implements WorkItemReferenceQuery {
     private final WorkItemReferenceService service;
     private final com.yumpoo.platform.workitem.application.WorkItemNotificationSourceService notifications;
 
-    public WorkItemReferenceAdapter(WorkItemReferenceService service,
+    public WorkItemReferenceAdapter(
+            WorkItemReferenceService service,
             com.yumpoo.platform.workitem.application.WorkItemNotificationSourceService notifications) {
         this.service = service;
-        this.notifications=notifications;
+        this.notifications = notifications;
     }
 
-    @Override public java.util.Map<UUID,WorkItemReferenceSnapshot> findVisible(CurrentActor actor, java.util.Collection<UUID> ids) {
-        var result=new java.util.HashMap<UUID,WorkItemReferenceSnapshot>();
-        notifications.references(actor,ids).forEach((id,item)->result.put(id,new WorkItemReferenceSnapshot(item.workItemId(),item.projectId(),
-                item.contentId(),item.contentName(),item.contentColorToken(),item.itemNo(),item.title(),item.statusCode(),item.statusCategory(),item.deleted())));
+    @Override
+    public java.util.Map<UUID, WorkItemReferenceSnapshot> findVisible(
+            CurrentActor actor, java.util.Collection<UUID> ids) {
+        var result = new java.util.HashMap<UUID, WorkItemReferenceSnapshot>();
+        notifications
+                .references(actor, ids)
+                .forEach((id, item) -> result.put(
+                        id,
+                        new WorkItemReferenceSnapshot(
+                                item.workItemId(),
+                                item.projectId(),
+                                item.contentId(),
+                                item.contentName(),
+                                item.contentColorToken(),
+                                item.itemNo(),
+                                item.title(),
+                                item.statusCode(),
+                                item.statusCategory(),
+                                item.deleted())));
         return java.util.Map.copyOf(result);
     }
 
@@ -31,14 +46,21 @@ public class WorkItemReferenceAdapter implements WorkItemReferenceQuery {
     }
 
     @Override
-    public Optional<WorkItemReferenceSnapshot> findVisibleIncludingDeleted(CurrentActor actor,
-                                                                            UUID workItemId) {
+    public Optional<WorkItemReferenceSnapshot> findVisibleIncludingDeleted(CurrentActor actor, UUID workItemId) {
         return service.findVisible(actor, workItemId, true).map(WorkItemReferenceAdapter::snapshot);
     }
 
     private static WorkItemReferenceSnapshot snapshot(WorkItemReferenceService.Reference item) {
-        return new WorkItemReferenceSnapshot(item.workItemId(), item.projectId(), item.contentId(),
-                item.contentName(), item.contentColorToken(), item.itemNo(), item.title(), item.statusCode(),
-                item.statusCategory(), item.deleted());
+        return new WorkItemReferenceSnapshot(
+                item.workItemId(),
+                item.projectId(),
+                item.contentId(),
+                item.contentName(),
+                item.contentColorToken(),
+                item.itemNo(),
+                item.title(),
+                item.statusCode(),
+                item.statusCategory(),
+                item.deleted());
     }
 }

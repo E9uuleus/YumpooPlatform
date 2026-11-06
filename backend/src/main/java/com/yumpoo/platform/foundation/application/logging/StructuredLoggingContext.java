@@ -1,9 +1,8 @@
 package com.yumpoo.platform.foundation.application.logging;
 
-import org.slf4j.MDC;
-
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.slf4j.MDC;
 
 /**
  * 对 MDC 字段做可嵌套的保存与恢复，避免线程池复用造成关联信息串线。
@@ -21,8 +20,7 @@ public final class StructuredLoggingContext {
     public static final String CLIENT_TYPE = "clientType";
     public static final String JOB = "job";
 
-    private StructuredLoggingContext() {
-    }
+    private StructuredLoggingContext() {}
 
     public static Scope open(Map<String, ?> values) {
         Map<String, String> previous = new LinkedHashMap<>();
