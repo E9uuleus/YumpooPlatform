@@ -201,12 +201,10 @@ public final class TimeTrackingModels {
             boolean canCreate) {}
 
     public record MySessionRow(
-            Session session,
-            String itemNo,
-            String title,
-            String contentColorToken,
-            boolean archived,
-            boolean itemDeleted) {}
+            Session session, String itemNo, String title, String contentColorToken, boolean archived) {}
+
+    /** One user's sessions on a work item: earliest start, latest stop, or null while any is running. */
+    public record ItemTimeSpan(UUID userId, Instant from, Instant to) {}
 
     public record MyTimeSession(
             TimeTrackingSession session, String projectName, String itemNo, String title, String contentColorToken) {}

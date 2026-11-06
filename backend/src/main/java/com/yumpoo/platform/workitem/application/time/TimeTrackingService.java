@@ -417,7 +417,7 @@ public class TimeTrackingService {
                             }
                             var project = projects.get(row.session().projectId());
                             boolean disclose = project != null;
-                            boolean writable = disclose && canWrite(project) && !row.archived() && !row.itemDeleted();
+                            boolean writable = disclose && canWrite(project) && !row.archived();
                             return new MyTimeSession(
                                     view(row.session(), actor, writable, now, disclose, names, allocated, null, null),
                                     disclose
@@ -659,7 +659,6 @@ public class TimeTrackingService {
                         && !row.session().migratedImport()
                         && (row.session().timeCategory() != null
                                 || !row.archived()
-                                        && !row.itemDeleted()
                                         && projects.containsKey(row.session().projectId())
                                         && canWrite(projects.get(row.session().projectId()))))
                 .map(row -> row.session().id())
@@ -935,6 +934,38 @@ public class TimeTrackingService {
     @Transactional(propagation = Propagation.MANDATORY)
     public int stopRunningForLeavingMember(CurrentActor actor, UUID projectId) {
         return stopRunningInProject(actor, projectId, List.of(actor.userId()));
+    }
+
+    /**
+     * Runs in a work item delete or restore after the project share lock and before the content and item locks, matching
+     * the project, timer_state, work item order of timer writes. Owners are locked in database UUID order, like every path
+     * that locks several users (archival, purge, migrated time import). Returns the owners whose state rows are now locked.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Set<UUID> lockItemTimeOwners(UUID companyId, UUID workItemId) {
+        var owners = new LinkedHashSet<UUID>();
+        timers.itemTimeSpans(companyId, workItemId).forEach(span -> owners.add(span.userId()));
+        owners.forEach(userId -> timers.stateVersion(companyId, userId, true));
+        return owners;
+    }
+
+    /**
+     * Runs after the item's deleted state changed, under the item lock and the owner locks from lockItemTimeOwners. An
+     * owner missing from those locks recorded time on the item between the two reads: the transaction rolls back and the
+     * user retries.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void reallocateItemTime(UUID companyId, UUID projectId, UUID workItemId, Set<UUID> lockedOwners) {
+        var spans = timers.itemTimeSpans(companyId, workItemId);
+        if (spans.stream().anyMatch(span -> !lockedOwners.contains(span.userId())))
+            throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
+        Set<UUID> affected = new TreeSet<>();
+        affected.add(projectId);
+        for (var span : spans) affected.addAll(shares.rebuild(companyId, span.userId(), span.from(), span.to()));
+        for (UUID id : affected) {
+            if (id.equals(projectId)) timers.advanceProjects(companyId, List.of(id));
+            else timers.touchProjects(companyId, List.of(id));
+        }
     }
 
     private int stopRunningInProject(CurrentActor actor, UUID projectId, List<UUID> userIds) {

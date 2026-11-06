@@ -64,6 +64,9 @@ public interface TimeTrackingRepository {
 
     List<MySessionRow> mySessions(UUID companyId, UUID userId, Instant from, Instant to);
 
+    /** Ordered by user_id in database order, the order multi-user timer_state locks use. */
+    List<ItemTimeSpan> itemTimeSpans(UUID companyId, UUID workItemId);
+
     boolean sameSubjectOverlaps(
             UUID companyId, UUID userId, TimeSubject subject, Instant start, Instant stop, UUID excludedId);
 

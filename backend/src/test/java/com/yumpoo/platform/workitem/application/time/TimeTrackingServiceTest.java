@@ -744,8 +744,8 @@ class TimeTrackingServiceTest {
                 null);
         when(fixture.timers.mySessions(eq(fixture.company), eq(fixture.user), any(), any()))
                 .thenReturn(List.of(
-                        new TimeTrackingModels.MySessionRow(migrated, null, null, null, false, false),
-                        new TimeTrackingModels.MySessionRow(learning, null, null, null, false, false)));
+                        new TimeTrackingModels.MySessionRow(migrated, null, null, null, false),
+                        new TimeTrackingModels.MySessionRow(learning, null, null, null, false)));
         var page = fixture.service.mySessions(fixture.actor, TimerFixture.NOW.minusSeconds(86400), TimerFixture.NOW);
         assertThat(page.items()).extracting(item -> item.session().canEdit()).containsExactly(false, true);
     }
@@ -882,7 +882,7 @@ class TimeTrackingServiceTest {
                     null);
             when(timers.find(company, stopped.id())).thenReturn(Optional.of(stopped));
             when(timers.mySessions(eq(company), eq(user), any(), any()))
-                    .thenReturn(List.of(new TimeTrackingModels.MySessionRow(stopped, "1", "原工作项", null, false, false)));
+                    .thenReturn(List.of(new TimeTrackingModels.MySessionRow(stopped, "1", "原工作项", null, false)));
             when(guard.lockForFactWrite(actor, oldProject))
                     .thenReturn(new ProjectFactWriteSnapshot(
                             oldProject,

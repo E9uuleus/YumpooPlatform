@@ -28,6 +28,13 @@
       "classification": "expand",
       "reason": "只把 work_item_timer_state.timer_enabled 的列默认值改为 false，不改已有行。上一版本插入状态行时只写 company_id 与 user_id，回退后读写都不受影响；回退期间尚无状态行的成员首次产生状态行后计时器为关闭，可在计时偏好中重新开启。迁移策略把已有表的 ALTER COLUMN 一律判为破坏性，属经审阅的误报。",
       "agentNote": ".agents/notes/implemented/product/2026-10-15-my-day-timeline-and-timer-opt-out.md"
+    },
+    {
+      "file": "workitem/V90__deleted_item_time_shares.sql",
+      "sha256": "53e4b778410d59a4a1abf1b5070e437441e4e63a7a77d39b657dfe143ce28c13",
+      "classification": "expand",
+      "reason": "只修改派生的 work_item_time_share：删除已删除工作项会话的分摊行，并按剩余行重算并行数，不改会话事实与表结构。上一版本按存储的并行数读取，回退后读写都不受影响；回退期间再次重建的时段会按旧口径重新计入已删除工作项，与回退前行为一致。迁移策略把修改已有数据一律判为破坏性，属经审阅的误报。",
+      "agentNote": ".agents/notes/implemented/architecture/2026-10-14-parallel-time-tracking.md"
     }
   ]
 }
