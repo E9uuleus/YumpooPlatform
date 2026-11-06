@@ -2,6 +2,7 @@ import { enableAutoUnmount, flushPromises } from '@vue/test-utils'
 import { ElMessageBox } from 'element-plus'
 import { nextTick, reactive } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import WorkItemDetailDrawer from './WorkItemDetailDrawer.vue'
 import { state } from './projectWorkItemsTestMocks'
 import { mountView, installWorkItemsTestDefaults, restoreWorkItemsTestGlobals } from './projectWorkItemsTestSupport'
 
@@ -103,13 +104,10 @@ describe('项目级工作项首页 · 详情抽屉与深链', () => {
     const view = wrapper.vm as unknown as {
       detailOpen: boolean
       detail: { id: string } | undefined
-      drawerWidth: number
-      isResizingDrawer: boolean
       selectedRowId: string | undefined
       selectedCellKey: string | undefined
       selectCell: (rowId: string, cellKey: string) => void
       isRowSelected: (rowId: string) => boolean
-      onDrawerResizePointerDown: (event: PointerEvent) => void
       syncPageScrollbars: () => void
       horizontalOverflow: boolean
     }
@@ -224,31 +222,36 @@ describe('项目级工作项首页 · 详情抽屉与深链', () => {
     expect(document.body.querySelector('.drawer-resize-handle')).not.toBeNull()
 
     // 拖动手柄调整抽屉宽度
-    view.onDrawerResizePointerDown({
+    const resize = wrapper.getComponent(WorkItemDetailDrawer).vm as unknown as {
+      drawerWidth: number
+      isResizingDrawer: boolean
+      onDrawerResizePointerDown: (event: PointerEvent) => void
+    }
+    resize.onDrawerResizePointerDown({
       clientX: 500,
       preventDefault: vi.fn(),
       stopPropagation: vi.fn(),
     } as unknown as PointerEvent)
-    expect(view.isResizingDrawer).toBe(true)
+    expect(resize.isResizingDrawer).toBe(true)
     await nextTick()
     expect(document.body.querySelector('.work-items-detail-drawer--resizing')).not.toBeNull()
     window.dispatchEvent(new MouseEvent('pointermove', { clientX: 400 }))
-    expect(view.drawerWidth).toBe(660)
+    expect(resize.drawerWidth).toBe(660)
     expect(document.body.style.getPropertyValue('--yp-work-items-drawer-width')).toBe('660px')
     window.dispatchEvent(new MouseEvent('pointerup'))
-    expect(view.isResizingDrawer).toBe(false)
+    expect(resize.isResizingDrawer).toBe(false)
     await nextTick()
     expect(document.body.querySelector('.work-items-detail-drawer--resizing')).toBeNull()
     expect(document.body.style.getPropertyValue('--yp-work-items-drawer-width')).toBe('660px')
 
     // 抽屉在动态单行布局允许的 480px 下限停止缩窄
-    view.onDrawerResizePointerDown({
+    resize.onDrawerResizePointerDown({
       clientX: 400,
       preventDefault: vi.fn(),
       stopPropagation: vi.fn(),
     } as unknown as PointerEvent)
     window.dispatchEvent(new MouseEvent('pointermove', { clientX: 900 }))
-    expect(view.drawerWidth).toBe(480)
+    expect(resize.drawerWidth).toBe(480)
     window.dispatchEvent(new MouseEvent('pointerup'))
 
     drawer.vm.$emit('close')
