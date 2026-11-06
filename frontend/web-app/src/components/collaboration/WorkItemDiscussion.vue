@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DetailEmptyState from './DetailEmptyState.vue'
 import { useMinuteClock } from '../../composables/useMinuteClock'
 import { useEditor } from '@tiptap/vue-3'
 import {
@@ -653,12 +654,16 @@ onBeforeUnmount(() => {
           />
         </div>
       </discussion-comment-card>
-      <p
+      <div
         v-if="!loading && !loadProblem && !items.length"
         class="discussion__empty"
       >
-        还没有讨论，发布第一条消息吧。
-      </p>
+        <detail-empty-state
+          variant="discussion"
+          title="还没有讨论"
+          :description="canPublish ? '在上方发布第一条更新，@提及同事，或分享文件和图片。' : '这个工作项还没有讨论记录。'"
+        />
+      </div>
     </div>
     <div
       ref="sentinel"
@@ -744,6 +749,7 @@ onBeforeUnmount(() => {
 .discussion__refresh-icon { width: 16px; height: 16px; }
 .discussion__timeline { display: grid; min-width: 0; align-content: start; gap: 12px; }
 .discussion__state { min-height: 24px; text-align: center; color: var(--yp-text-muted); font-size: var(--yp-type-caption-size); }
-.discussion__empty, .discussion__readonly { color: var(--yp-text-secondary); text-align: center; }
+.discussion__empty { padding: var(--yp-space-2) 0; }
+.discussion__readonly { color: var(--yp-text-secondary); text-align: center; }
 .discussion-thread { display: grid; min-width: 0; gap: 16px; padding: 16px; border-top: 1px solid var(--yp-border-subtle); }
 </style>

@@ -56,7 +56,7 @@ export const TOURS: Record<TourId, TourDefinition> = {
         fallback: { target: at('work-item-table'), placement: 'top', description: '有工作项后，按住名称或左侧勾选列上下拖动即可调整顺序；表格按列排序时，需要先清除排序。' },
       },
       { target: at('work-item-quick-add'), placement: 'top-start', title: '快速添加', description: '输入名称按 Enter 创建，Shift+Enter 创建后继续添加下一条；分组时每组底部都可以添加。', since: 2 },
-      { target: at('work-item-discussion'), placement: 'right', title: '讨论与详情', description: '打开工作项详情：编写描述、讨论并 @同事、上传附件、查看活动记录。' },
+      { target: at('work-item-discussion'), placement: 'right', title: '讨论与详情', description: '点这里打开协作讨论，发表更新、@同事或上传附件。切到「详情」后，点「添加描述」插画可以开始编写；「动态」里可以查看修改记录。' },
       { target: at('work-item-timer'), placement: 'left', title: '时长追踪', description: '点击时长打开计时日志，选择「手动添加时长记录」可补记。所选时段有记录时会列出明细。开启计时器后也可用播放按钮计时，多项同时计时会均分时长。', since: 2 },
       { target: at('work-item-column-header'), placement: 'bottom', title: '列头菜单', description: '列头菜单可排序、隐藏列；表头最右侧的“+”可添加跨项目连接列。' },
       {
