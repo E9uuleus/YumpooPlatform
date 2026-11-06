@@ -11,6 +11,7 @@ import com.yumpoo.platform.audit.api.SecurityAuditDraft;
 import com.yumpoo.platform.catalog.api.CompanyProjectQuery;
 import com.yumpoo.platform.catalog.api.MemberProjectQuery;
 import com.yumpoo.platform.catalog.api.ProjectActiveMembershipQuery;
+import com.yumpoo.platform.catalog.api.ProjectDeletionQuery;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.foundation.application.idempotency.*;
@@ -41,6 +42,7 @@ class MigratedTimeImportServiceTest {
     private final TimeTrackingRepository timers = mock(TimeTrackingRepository.class);
     private final TimeShareMaintainer shares = mock(TimeShareMaintainer.class);
     private final CompanyProjectQuery projects = mock(CompanyProjectQuery.class);
+    private final ProjectDeletionQuery deletion = mock(ProjectDeletionQuery.class);
     private final WorkItemRepository items = mock(WorkItemRepository.class);
     private final ProjectActiveMembershipQuery memberships = mock(ProjectActiveMembershipQuery.class);
     private final MinimalUserSnapshotQuery users = mock(MinimalUserSnapshotQuery.class);
@@ -61,6 +63,8 @@ class MigratedTimeImportServiceTest {
                 .thenReturn(List.of(
                         new MemberProjectQuery.Project(project, "交付项目", "P001", "ACTIVE"),
                         new MemberProjectQuery.Project(UUID.randomUUID(), "旧项目", "P002", "ARCHIVED")));
+        when(deletion.lockForProjection(eq(company), any()))
+                .thenAnswer(call -> Optional.of(projectState(call.getArgument(1), "ACTIVE")));
         when(items.findTitles(company, project))
                 .thenReturn(List.of(
                         new WorkItemRepository.WorkItemTitle(itemA, "接口开发", false),
@@ -73,6 +77,7 @@ class MigratedTimeImportServiceTest {
                 timers,
                 shares,
                 projects,
+                deletion,
                 items,
                 memberships,
                 users,
@@ -127,7 +132,7 @@ class MigratedTimeImportServiceTest {
                 .isEqualTo("USER_INVALID");
         verify(timers, never()).save(any());
         verify(timers, never()).stateVersion(any(), any(), eq(true));
-        verifyNoInteractions(audits, shares);
+        verifyNoInteractions(audits, shares, deletion);
     }
 
     @Test
@@ -248,6 +253,40 @@ class MigratedTimeImportServiceTest {
         var saved = ArgumentCaptor.forClass(TimeTrackingModels.Session.class);
         verify(timers, times(1)).save(saved.capture());
         assertThat(saved.getValue().workItemId()).isEqualTo(itemA);
+    }
+
+    @Test
+    void commitShareLocksProjectsBeforeTimerStates() {
+        run(actor, new Request(false, List.of(new Row(member, DAY, "交付项目", "接口开发", 60))));
+
+        var ordered = inOrder(deletion, timers);
+        ordered.verify(deletion).lockForProjection(company, project);
+        ordered.verify(timers).stateVersion(company, member, true);
+        ordered.verify(timers).save(any());
+    }
+
+    @Test
+    void commitSkipsRowsWhoseProjectWasArchivedBeforeItsLock() {
+        when(deletion.lockForProjection(company, project)).thenReturn(Optional.of(projectState(project, "ARCHIVED")));
+        var rows = List.of(
+                new Row(member, DAY, "交付项目", "接口开发", 60),
+                new Row(member, DAY, "交付项目", "不存在", 30),
+                new Row(member, DAY.plusDays(1), "交付项目", "联调测试", 60));
+        var result = json.readTree(run(actor, new Request(false, rows)).responseJson());
+
+        assertThat(result.path("importedDayCount").asInt()).isZero();
+        assertThat(result.path("skippedMinutes").asLong()).isEqualTo(150);
+        assertThat(result.path("skippedRows"))
+                .isEqualTo(json.valueToTree(List.of(
+                        new MigratedTimeImportService.SkippedRow(0, "PROJECT_NOT_FOUND"),
+                        new MigratedTimeImportService.SkippedRow(1, "WORK_ITEM_NOT_FOUND"),
+                        new MigratedTimeImportService.SkippedRow(2, "PROJECT_NOT_FOUND"))));
+        verify(timers, never()).stateVersion(any(), any(), eq(true));
+        verify(timers, never()).save(any());
+    }
+
+    private ProjectDeletionQuery.State projectState(UUID id, String lifecycle) {
+        return new ProjectDeletionQuery.State(id, company, "P001", lifecycle, admin, 1, null, null, null, null);
     }
 
     @Test

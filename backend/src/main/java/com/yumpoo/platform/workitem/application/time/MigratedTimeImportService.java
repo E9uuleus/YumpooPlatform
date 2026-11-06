@@ -10,6 +10,7 @@ import com.yumpoo.platform.audit.api.SecurityAuditOutcome;
 import com.yumpoo.platform.catalog.api.CompanyProjectQuery;
 import com.yumpoo.platform.catalog.api.MemberProjectQuery;
 import com.yumpoo.platform.catalog.api.ProjectActiveMembershipQuery;
+import com.yumpoo.platform.catalog.api.ProjectDeletionQuery;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.FieldViolation;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
@@ -82,6 +83,7 @@ public class MigratedTimeImportService {
     private final TimeTrackingRepository timers;
     private final TimeShareMaintainer shares;
     private final CompanyProjectQuery projects;
+    private final ProjectDeletionQuery deletion;
     private final WorkItemRepository items;
     private final ProjectActiveMembershipQuery memberships;
     private final MinimalUserSnapshotQuery users;
@@ -94,6 +96,7 @@ public class MigratedTimeImportService {
             TimeTrackingRepository timers,
             TimeShareMaintainer shares,
             CompanyProjectQuery projects,
+            ProjectDeletionQuery deletion,
             WorkItemRepository items,
             ProjectActiveMembershipQuery memberships,
             MinimalUserSnapshotQuery users,
@@ -104,6 +107,7 @@ public class MigratedTimeImportService {
         this.timers = timers;
         this.shares = shares;
         this.projects = projects;
+        this.deletion = deletion;
         this.items = items;
         this.memberships = memberships;
         this.users = users;
@@ -132,6 +136,7 @@ public class MigratedTimeImportService {
         List<Row> rows = request.rows();
         var skipped = new ArrayList<SkippedRow>();
         var targets = match(actor, rows, skipped);
+        if (!dryRun) lockProjects(actor, targets, skipped);
         // Matched rows per member-day in file order; members in database id order, the order archive and purge lock
         // timer states in.
         var byUser = new TreeMap<UUID, LinkedHashMap<LocalDate, List<Integer>>>(DATABASE_ORDER);
@@ -279,6 +284,28 @@ public class MigratedTimeImportService {
             targets.put(i, new Target(projectId, found.getFirst().id()));
         }
         return targets;
+    }
+
+    /**
+     * Share-locks the matched projects in the order timer commands do, before any timer state: archive and purge lock the
+     * project first, and the records written later take a key share on it. Rows whose project left ACTIVE or began purging
+     * since the match are skipped.
+     */
+    private void lockProjects(CurrentActor actor, Map<Integer, Target> targets, List<SkippedRow> skipped) {
+        var gone = new HashSet<UUID>();
+        for (UUID projectId :
+                new TreeSet<>(targets.values().stream().map(Target::projectId).toList()))
+            if (deletion.lockForProjection(actor.companyId(), projectId)
+                    .filter(project -> "ACTIVE".equals(project.lifecycle()) && project.purgeStartedAt() == null)
+                    .isEmpty()) gone.add(projectId);
+        if (gone.isEmpty()) return;
+        for (var target = targets.entrySet().iterator(); target.hasNext(); ) {
+            var entry = target.next();
+            if (!gone.contains(entry.getValue().projectId())) continue;
+            skipped.add(new SkippedRow(entry.getKey(), "PROJECT_NOT_FOUND"));
+            target.remove();
+        }
+        skipped.sort(Comparator.comparingInt(SkippedRow::index));
     }
 
     private void write(
