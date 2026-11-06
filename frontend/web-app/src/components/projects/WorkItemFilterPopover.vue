@@ -4,6 +4,7 @@ import { Filter as FilterIcon } from '@element-plus/icons-vue'
 import type { ProjectContentCatalog, ProjectMember, WorkItemPriorityLabel, WorkItemStatusLabel } from '@yumpoo/api-client'
 import YpAssignee from '../yp/YpAssignee.vue'
 import { workItemLabelColorValue } from './workItemLabelColors'
+import './workItemViewOptions.css'
 import type { useWorkItemFilters } from './useWorkItemFilters'
 
 const props = defineProps<{
@@ -148,7 +149,6 @@ const { filterPopoverOpen, activeFilterCount, filters, toggleSet, countBy, loadF
 .filter-value[aria-pressed='true'] { background: var(--yp-bg-selected-strong); }
 .filter-value[aria-pressed='true'] .filter-value__label { font-weight: 500; }
 .filter-value__label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.filter-swatch { flex: none; width: 8px; height: 8px; border-radius: 50%; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--yp-text-primary) 12%, transparent); }
 .filter-value small { flex: 0 0 auto; color: var(--yp-text-secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
 .filter-value small.filter-value__count--zero { opacity: .55; }
 .filter-dates {
