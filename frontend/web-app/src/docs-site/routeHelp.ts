@@ -9,6 +9,7 @@ export const ROUTE_HELP: Record<string, string> = {
   'project-members': 'guide/projects#成员与负责人',
   'project-activity': 'guide/projects#动态',
   'project-settings': 'guide/projects#项目设置',
+  'my-work': 'guide/my-work',
   dashboards: 'guide/dashboards',
   'my-time': 'guide/time-tracking#我的工时',
   'my-time-day': 'guide/time-tracking#我的一天',

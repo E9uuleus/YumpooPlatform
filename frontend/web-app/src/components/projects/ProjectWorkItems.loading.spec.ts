@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WorkItemTableSource } from './workItemTableSource'
 import ProjectOverviewView from './ProjectWorkItems.vue'
 import { state } from './projectWorkItemsTestMocks'
+import { emptyTableSettings } from './workItemTableSettings'
 import { item, mountView, page, project, installWorkItemsTestDefaults, restoreWorkItemsTestGlobals } from './projectWorkItemsTestSupport'
 
 vi.mock('../../onboarding/useOnboarding', async () => (await import('./projectWorkItemsTestMocks')).onboardingModule())
@@ -84,6 +85,20 @@ describe('项目级工作项首页 · 加载、续页与嵌入', () => {
     expect(state.route.query).toEqual({})
     expect(document.body.classList.contains('yp-project-overview-scroll')).toBe(false)
     expect(document.body.classList.contains('yp-work-items-drawer-open')).toBe(false)
+  })
+
+  it('我的工作隐藏工具栏，只读取本人完成定义以外的状态', async () => {
+    let settingsReady!: () => void
+    const pending = new Promise<void>(resolve => { settingsReady = resolve })
+    state.getMyWorkItemTableSettings.mockResolvedValueOnce(pending.then(() => emptyTableSettings()))
+    const wrapper = mountView(undefined, { embeddedProjectId: 'project-1', preferenceScope: 'my-work:one', myWork: true })
+    await flushPromises()
+    expect(wrapper.find('.work-items-toolbar').exists()).toBe(false)
+    expect(state.listProjectWorkItems).not.toHaveBeenCalled()
+    settingsReady()
+    await flushPromises()
+    expect(state.listProjectWorkItems).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: new Set(['BACKLOG']) }), expect.anything())
   })
 
   it('嵌入表格的未完成输入阻止关闭，完成后解除', async () => {

@@ -1,5 +1,5 @@
 export type TourId = 'welcome' | 'project-work-items' | 'workspace' | 'dashboards' | 'inbox' | 'company'
-  | 'my-time' | 'my-day' | 'team' | 'work-calendar'
+  | 'my-time' | 'my-day' | 'team' | 'work-calendar' | 'my-work'
 export type TourPlacement = 'top' | 'top-start' | 'top-end' | 'bottom' | 'bottom-start' | 'bottom-end' | 'left' | 'left-start' | 'right' | 'right-start'
 
 export interface TourStep {
@@ -24,10 +24,10 @@ const at = (name: string) => `[data-tour="${name}"]`
 
 export const TOURS: Record<TourId, TourDefinition> = {
   welcome: {
-    version: 3,
+    version: 4,
     steps: [
       { title: '欢迎来到工作中台', description: '接下来用 1 分钟带你认识首页和主要入口，随时可以按 Esc 退出。' },
-      { target: at('shell-modules'), placement: 'right-start', title: '功能模块', description: '在首页和工作台之间切换；管理员还可进入团队、公司管理与运维。切换时顶部细条表示页面主要内容仍在加载，完成后会自动消失。', since: 3 },
+      { target: at('shell-modules'), placement: 'right-start', title: '功能模块', description: '在首页、工作台、仪表板、我的工时和我的工作之间切换；管理员还可进入团队、公司管理与运维。切换时顶部细条表示页面主要内容仍在加载，完成后会自动消失。', since: 4 },
       { target: at('home-jumps'), placement: 'bottom', title: '快捷入口', description: '直达管理项目、收件箱，或开始计时、记录工时；这里还会按你的角色显示仪表板、团队视图和管理入口。' },
       { target: at('home-tasks'), placement: 'right-start', title: '我的工作项', description: '分配给你、进行中和待开始的工作项都在这里，逾期会标红；点击即可打开所在项目。' },
       { target: at('home-calendar'), placement: 'left-start', title: '工时日历', description: '本月每天记录的工时，达到当天标准工时的日期颜色最深；“查看明细”进入我的工时。', since: 2 },
@@ -68,11 +68,19 @@ export const TOURS: Record<TourId, TourDefinition> = {
       },
     ],
   },
-  workspace: {
-    version: 2,
+  'my-work': {
+    version: 1,
     steps: [
-      { target: at('context-nav'), placement: 'right-start', title: '工作台导航', description: '仪表板、我的工时，进入项目后的「当前项目」入口，以及管理项目、归档项目和你参与的项目列表；项目较多时列表在菜单内纵向滚动，长名称省略显示，悬停可查看全名。窗口较矮时点右下角导航按钮打开完整菜单抽屉。鼠标移到项目上点星标可以置顶，「…」弹出更多项目。「项目」右侧的 + 可以直接创建项目，顶部的搜索按钮可以快速查找项目。', since: 2,
-        fallback: { target: at('context-nav-expand'), placement: 'right-start', description: '点这里展开工作台菜单：仪表板、我的工时、管理项目、归档项目和你参与的项目都在里面。' } },
+      { target: at('my-work-projects'), placement: 'bottom-start', title: '按项目查看我的工作', description: '分配给你、尚未完成的工作项按项目分组，是否完成沿用你在各项目表格中的完成设置。点击项目标题折叠；表格里可直接改名、改状态和其他字段，底部「新建工作项」打开新建窗口，处理人默认是你。' },
+      { title: '工作项详情', description: '点击名称旁的详情按钮打开工作项。左侧可以编辑字段，右侧可以查看详情、协作讨论与动态。' },
+      { target: at('my-work-refresh'), placement: 'bottom-end', title: '刷新', description: '在其他页面或窗口修改后，点这里重新加载。' },
+    ],
+  },
+  workspace: {
+    version: 3,
+    steps: [
+      { target: at('context-nav'), placement: 'right-start', title: '工作台导航', description: '进入项目后的「当前项目」入口，以及管理项目、归档项目和你参与的项目列表；项目较多时列表在菜单内纵向滚动，长名称省略显示，悬停可查看全名。窗口较矮时点右下角导航按钮打开完整菜单抽屉。鼠标移到项目上点星标可以置顶，「…」弹出更多项目。「项目」右侧的 + 可以直接创建项目，顶部的搜索按钮可以快速查找项目。仪表板和我的工时已移到最左侧模块栏。', since: 3,
+        fallback: { target: at('context-nav-expand'), placement: 'right-start', description: '点这里展开工作台菜单：管理项目、归档项目和你参与的项目都在里面。' } },
       { target: at('project-catalog-tabs'), placement: 'bottom-start', title: '最近与内容', description: '打开工作台时默认显示“最近”：你最近打开的项目，可置顶常用项目；“内容”是全部项目目录。' },
       { target: at('project-filter'), placement: 'bottom', title: '搜索与筛选', description: '按名称或编码搜索，按项目状态、最后修改时间、负责人和你的角色筛选。' },
       { target: at('project-create'), placement: 'bottom-end', title: '创建项目', description: '新建一个项目，开始组织工作项与成员。' },
