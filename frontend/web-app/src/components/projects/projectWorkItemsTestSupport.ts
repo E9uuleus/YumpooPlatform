@@ -65,7 +65,7 @@ export function page(items = [item()]): ProjectWorkItemCursorPage {
   return { items, nextCursor: null }
 }
 
-export function mountView(discussion?: { hasDraft: boolean, busy: boolean, discardDraft: () => void }, props: { embeddedProjectId?: string; preferenceScope?: string; source?: WorkItemTableSource } = {}) {
+export function mountView(discussion?: { hasDraft: boolean, busy: boolean, discardDraft: () => void }, props: { embeddedProjectId?: string; preferenceScope?: string; source?: WorkItemTableSource; myWork?: boolean } = {}) {
   return mount(ProjectWorkItems, {
     props,
     global: {

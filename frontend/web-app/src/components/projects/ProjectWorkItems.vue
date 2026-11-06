@@ -41,7 +41,6 @@ import {
   WorkItemRelationRole,
   WorkItemRelationType,
   ProjectActorAccess,
-  ProjectLifecycle,
   ProjectMembershipStatus,
   ProjectMembershipStatusFilter,
   readCsrfToken,
@@ -70,12 +69,15 @@ import {
   ElTable,
   ElTableColumn,
 } from 'element-plus'
-import { computed, nextTick, onBeforeUnmount, onMounted, provide, reactive, ref, watch, type CSSProperties, type DefineComponent } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, reactive, ref, watch, type CSSProperties, type ComponentPublicInstance, type DefineComponent } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter, type LocationQuery } from 'vue-router'
 import type { WorkItemTableSource } from './workItemTableSource'
 import { contentsApi, projectsApi, workItemsApi } from '../../api/client'
 import { isProblemStatus, localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
+import WorkItemCreateDialog from './WorkItemCreateDialog.vue'
+import WorkItemGroupToggle from './WorkItemGroupToggle.vue'
+import { workItemDiscussionAccess } from './workItemDiscussionAccess'
 import WorkItemDetailDrawer from './WorkItemDetailDrawer.vue'
 import WorkItemColumnHeader from './WorkItemColumnHeader.vue'
 import WorkItemColumnExpandButton from './WorkItemColumnExpandButton.vue'
@@ -149,8 +151,16 @@ const props = defineProps<{
   preferenceScope?: string
   source?: WorkItemTableSource
   refreshKey?: number
+  /**
+   * 我的工作内嵌：隐藏工具栏；主表、分组与子项只请求本人完成定义以外的状态，含命中子项的父项按筛选口径展开；
+   * 表格随内容增高；打开详情只抛出 openDetail，新建改为弹窗。
+   */
+  myWork?: boolean
 }>()
-const emit = defineEmits<{ changed: [] }>()
+const emit = defineEmits<{
+  changed: []
+  openDetail: [item: ProjectWorkItemListItem, tab: 'details' | 'discussion' | 'activity']
+}>()
 const embedded = computed(() => Boolean(props.embeddedProjectId))
 const pageRoute = useRoute()
 const embeddedQuery = ref<LocationQuery>({})
@@ -207,6 +217,7 @@ const quickCreating = ref(false)
 const creatingTop = ref(false)
 const importOpen = ref(false)
 const archivedOpen = ref(false)
+const createDialog = ref<{ parent?: ProjectWorkItemListItem }>()
 /** Row whose name cell opens for editing as soon as it renders: the item the toolbar button just created. */
 const autoEditId = ref('')
 const quickRow = ref<HTMLElement>()
@@ -565,7 +576,9 @@ watch(expandedSubitemIds, ids => {
 })
 /** 筛选生效时：含命中子项的主行默认展开；其间的手动展开收起只记在这里，筛选变化时清空，不写入本机展开记录。 */
 const filterToggledIds = ref(new Set<string>())
-const expandedIds = computed(() => explicitFilterActive.value
+/** 我的工作本身就是一个筛选范围，与显式筛选一样默认展开含命中子项的父项。 */
+const filteredExpansion = computed(() => explicitFilterActive.value || Boolean(props.myWork))
+const expandedIds = computed(() => filteredExpansion.value
   ? tableItems.value.filter(item => Boolean(item.matchedSubitemCount) !== filterToggledIds.value.has(item.id)).map(item => item.id)
   : expandedSubitemIds.value)
 const visibleExpandedIds = computed(() => {
@@ -575,15 +588,18 @@ const visibleExpandedIds = computed(() => {
 watch(() => visibleExpandedIds.value.join('|'), () => visibleExpandedIds.value.forEach(id => void loadSubitems(id)))
 const { hideCompleted, hideCompletedEffect } = useHideCompleted()
 function isCompletedRow(item: ProjectWorkItemListItem): boolean {
-  return hideCompleted.value && isCompletedStatus(tableViewSettings.value.completedStatusCodes, item.statusCode, item.statusCategory)
+  return (props.myWork || hideCompleted.value) && isCompletedStatus(tableViewSettings.value.completedStatusCodes, item.statusCode, item.statusCategory)
 }
-/** 「不显示」：主表只请求本人完成定义以外的状态；看板与仪表板内嵌表格不受影响。 */
-const unfinishedStatusCodes = computed(() => !embedded.value && hideCompleted.value
-  && hideCompletedEffect.value === HideCompletedEffect.Hide
+/** 「不显示」与我的工作：主表只请求本人完成定义以外的状态；看板与仪表板内嵌表格不受影响。 */
+const unfinishedStatusCodes = computed(() => props.myWork
+  || (!embedded.value && hideCompleted.value && hideCompletedEffect.value === HideCompletedEffect.Hide)
   ? workflowStatuses.value.filter(status => !isCompletedStatus(tableViewSettings.value.completedStatusCodes,
     status.code, status.statusCategory)).map(status => status.code)
   : null)
-watch(() => unfinishedStatusCodes.value?.join(','), () => void resetCurrentData())
+watch(() => unfinishedStatusCodes.value?.join(','), () => {
+  // 我的工作首次读取标签时，loadWorkspace 正在用这些状态加载首屏及成员。
+  if (!props.myWork || !loading.value) void resetCurrentData()
+})
 const groupingSwitching = ref(false)
 const { horizontalPageScrollbar, verticalPageScrollbar, horizontalOverflow, horizontalScrollExtent, verticalScrollExtent,
   pageScrollbarLeft, horizontalPageScrollbarStyle, verticalPageScrollbarStyle, onHorizontalPageScroll, onVerticalPageScroll,
@@ -648,7 +664,7 @@ const displayTableItems = computed<TableDisplayRow[]>(() => {
     add('heading'); add('columns')
     result.push(...withSubitems(rows.get(group.key) ?? [], group))
     add('load')
-    add('add')
+    if (!props.myWork) add('add')
   })
   return result
 })
@@ -730,18 +746,9 @@ async function changeGrouping(field: GroupField | ''): Promise<void> {
     await nextTick()
   } finally { groupingSwitching.value = false }
 }
-const canPublishDiscussion = computed(() => Boolean(project.value
-  && projectWritable(project.value)
-  && detail.value?.capabilities?.canDiscuss
-  && (project.value.actorAccess === ProjectActorAccess.Owner
-    || project.value.actorAccess === ProjectActorAccess.Member)))
-const discussionReadOnlyReason = computed(() => {
-  if (detail.value?.archived) return '工作项已归档，恢复后可继续编辑和讨论。'
-  if (project.value?.lifecycle === ProjectLifecycle.Archived) return 'Project 已归档，工作项讨论仅可查看。'
-  if (project.value?.endedAt) return '项目已结束，工作项讨论仅可查看。'
-  if (!canPublishDiscussion.value) return '当前角色没有发布讨论的权限。'
-  return undefined
-})
+const discussionAccess = computed(() => workItemDiscussionAccess(project.value, detail.value))
+const canPublishDiscussion = computed(() => discussionAccess.value.canPublish)
+const discussionReadOnlyReason = computed(() => discussionAccess.value.readOnlyReason)
 
 function currentBatchItem(id: string): ProjectWorkItemListItem | undefined {
   return tableItems.value.find(item => item.id === id)
@@ -855,7 +862,8 @@ async function loadSubitems(parentId: string, force = false): Promise<void> {
       const result = await tableSource.listWorkItemSubitems({
         parentWorkItemId: parentId,
         ...filterRequest(),
-        ...(filters.statuses.size ? { status: filters.statuses } : {}),
+        ...(filters.statuses.size ? { status: filters.statuses }
+          : props.myWork && unfinishedStatusCodes.value ? { status: new Set(unfinishedStatusCodes.value) } : {}),
         ...(state.sortRules.length
           ? { sort: state.sortRules.map(rule => `${rule.field},${rule.direction}`) }
           : {}),
@@ -881,7 +889,7 @@ function onTableExpandChange(row: TableDisplayRow,
   expanded: TableDisplayRow[] | boolean): void {
   if (isGroupDisplayRow(row)) return
   const open = Array.isArray(expanded) ? expanded.includes(row) : expanded
-  if (explicitFilterActive.value) {
+  if (filteredExpansion.value) {
     const next = new Set(filterToggledIds.value)
     if (open === Boolean(row.matchedSubitemCount)) next.delete(row.id); else next.add(row.id)
     filterToggledIds.value = next
@@ -904,9 +912,23 @@ function setSubitemTableHandle(id: string, handle: unknown): void {
 
 async function addSubitem(row: ProjectWorkItemListItem): Promise<void> {
   if (!canCreate.value) return
+  if (props.myWork) {
+    createDialog.value = { parent: row }
+    return
+  }
   onTableExpandChange(row, true)
   await nextTick()
   subitemTableHandles.get(row.id)?.openQuick()
+}
+
+function onCreateBelow(item: ProjectWorkItemListItem): void {
+  if (props.myWork) createDialog.value = {}
+  else createBelow(item)
+}
+
+function onMyWorkCreated(parentId: string | undefined): void {
+  createDialog.value = undefined
+  void onRelationsChanged(parentId ? [parentId] : [])
 }
 
 async function beforeRowRemove(row: ProjectWorkItemListItem): Promise<boolean> {
@@ -1332,10 +1354,15 @@ async function loadWorkspace(): Promise<void> {
     project.value = nextProject
     catalog.value = nextCatalog
     labelCatalog.value = nextLabels
+    const requestedStatuses = unfinishedStatusCodes.value?.join(',')
     await Promise.all([
       loadMembers(requestedProjectId, revision),
       selectedView.value === 'kanban' ? loadKanban(revision) : loadTable(null, false, revision),
     ])
+    if (props.myWork && revision === loadRevision && requestedStatuses !== unfinishedStatusCodes.value?.join(',')) {
+      loading.value = false
+      await resetCurrentData()
+    }
     const revealId = route.query.workItemId
     if (revision === loadRevision && typeof revealId === 'string') void revealWorkItem(revealId)
   } catch (reason) {
@@ -1567,6 +1594,10 @@ async function revealWorkItem(workItemId: string): Promise<void> {
 }
 
 async function openDetail(item: ProjectWorkItemListItem, tab: 'details' | 'discussion' | 'activity'): Promise<void> {
+  if (props.myWork) {
+    emit('openDetail', item, tab)
+    return
+  }
   if (detailOpen.value && detail.value?.id === item.id && detailTab.value === tab) return
   if (!await beforeDraftLeave()) return
   selectCell(item.id, tab === 'details' ? 'title' : tab === 'activity' ? 'updatedAt' : 'discussion')
@@ -2150,7 +2181,7 @@ onBeforeUnmount(() => {
 <template>
   <div
     class="project-view-stack project-overview-stack"
-    :class="{ 'work-items-embedded': embedded }"
+    :class="{ 'work-items-embedded': embedded, 'work-items-my-work': myWork }"
   >
     <inline-problem
       v-if="error"
@@ -2284,7 +2315,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div class="work-items-toolbar" aria-label="工作项工具栏" data-work-item-view-control data-tour="work-item-toolbar">
+        <div v-if="!myWork" class="work-items-toolbar" aria-label="工作项工具栏" data-work-item-view-control data-tour="work-item-toolbar">
           <div
             v-if="selectedView === 'table' && canCreate"
             class="toolbar-create-group"
@@ -2443,7 +2474,7 @@ onBeforeUnmount(() => {
               row-key="id"
               class="monday-table work-item-table-base"
               :class="[tableHeightClasses, { 'monday-table--column-dragging': columnDraggingKey, 'monday-table--empty': !displayTableItems.length, 'monday-table--grouped': grouped }]"
-              height="100%"
+              v-bind="myWork ? {} : { height: '100%' }"
               empty-text="当前项目暂无工作项"
               border
               @header-dragend="onHeaderDragEnd"
@@ -2513,7 +2544,7 @@ onBeforeUnmount(() => {
                     :label-catalog="labelCatalog"
                     :completed="isCompletedRow"
                     :selected="item => isRowSelected(item.id)"
-                    :can-create="canCreate"
+                    :can-create="canCreate && !myWork"
                     :editing-cell="Boolean(editingCell) || batchBusy"
                     :before-remove="beforeRowRemove"
                     @duplicate="duplicateRow"
@@ -2569,7 +2600,7 @@ onBeforeUnmount(() => {
                     @open="openDetail($event, 'details')"
                     @add-subitem="addSubitem"
                     @duplicate="duplicateRow($event)"
-                    @create-below="createBelow"
+                    @create-below="onCreateBelow"
                     @moved="onRowMoved"
                     @changed="onRelationsChanged"
                     @removed="onRowRemoved"
@@ -2588,19 +2619,21 @@ onBeforeUnmount(() => {
               >
                 <template #default="scope">
                   <template v-if="isGroupDisplayRow(scope.row)">
-                    <button v-if="scope.row.groupRowKind === 'heading'" type="button" class="work-item-group-toggle"
+                    <work-item-group-toggle
+                      v-if="scope.row.groupRowKind === 'heading'"
+                      :ref="value => setGroupSentinel((scope.row as WorkItemGroupDisplayRow).group.key, (value as ComponentPublicInstance | null)?.$el, true)"
                       data-work-item-view-control
-                      :ref="value => setGroupSentinel((scope.row as WorkItemGroupDisplayRow).group.key, value, true)"
-                      :aria-expanded="!grouping.isCollapsed(scope.row.group.key)"
-                      :aria-label="`${grouping.isCollapsed(scope.row.group.key) ? '展开' : '收起'}分组：${scope.row.group.label}`"
-                      @click.stop="grouping.toggle(scope.row.group.key)">
-                      <svg viewBox="0 0 20 20" width="16" height="16" fill="currentColor" aria-hidden="true" :class="{ expanded: !grouping.isCollapsed(scope.row.group.key) }">
-                        <path d="M12.76 10.56a.77.77 0 0 0 0-1.116L8.397 5.233a.84.84 0 0 0-1.157 0 .77.77 0 0 0 0 1.116l3.785 3.653-3.785 3.652a.77.77 0 0 0 0 1.117.84.84 0 0 0 1.157 0l4.363-4.211Z" />
-                      </svg>
-                      <span class="work-item-group-name">{{ scope.row.group.label }}</span>
+                      :label="scope.row.group.label"
+                      :collapsed="grouping.isCollapsed(scope.row.group.key)"
+                      @toggle="grouping.toggle(scope.row.group.key)"
+                    >
                       <small v-if="groupCountsReady">{{ scope.row.group.count }} 个工作项</small>
-                      <i v-else class="work-item-skeleton work-item-skeleton-block work-item-group-count-skeleton" aria-hidden="true" />
-                    </button>
+                      <i
+                        v-else
+                        class="work-item-skeleton work-item-skeleton-block work-item-group-count-skeleton"
+                        aria-hidden="true"
+                      />
+                    </work-item-group-toggle>
                     <el-checkbox v-else-if="scope.row.groupRowKind === 'columns'" :model-value="groupSelection(scope.row.group).checked"
                       :indeterminate="groupSelection(scope.row.group).mixed" :disabled="!grouping.page(scope.row.group.key).items.length"
                       :aria-label="`选择${scope.row.group.label}已加载工作项`" @change="selectGroupRows(scope.row.group, Boolean($event))" />
@@ -3074,6 +3107,17 @@ onBeforeUnmount(() => {
                   </div>
                 </div>
                 <button
+                  v-else-if="myWork && !tableInitialLoading"
+                  type="button"
+                  class="quick-add monday-quick-add my-work-create-row"
+                  :style="quickGridStyle"
+                  :disabled="!canCreate"
+                  @click="createDialog = {}"
+                >
+                  <span class="monday-quick-lead" aria-hidden="true" />
+                  <span class="my-work-create-row__label"><el-icon aria-hidden="true"><plus /></el-icon>新建工作项</span>
+                </button>
+                <button
                   v-else-if="!grouped && !tableInitialLoading"
                   class="quick-add monday-quick-add"
                   data-tour="work-item-quick-add"
@@ -3184,6 +3228,7 @@ onBeforeUnmount(() => {
     </template>
 
     <work-item-detail-drawer
+      v-if="!myWork"
       ref="detailDrawer"
       v-model:detail-tab="detailTab"
       :model-value="detailOpen"
@@ -3202,6 +3247,21 @@ onBeforeUnmount(() => {
       @restore="restoreArchivedItem"
       @discussion-changed="onDiscussionChanged"
       @description-updated="replaceLightItem($event.id, $event)"
+    />
+
+    <work-item-create-dialog
+      v-if="myWork && project && createDialog"
+      :project="project"
+      :parent="createDialog.parent"
+      :label-catalog="labelCatalog"
+      :content-catalog="catalog"
+      :members="activeMembers"
+      :defaults="createDefaults"
+      :default-content-id="defaultContentId"
+      @close="createDialog = undefined"
+      @created="onMyWorkCreated"
+      @labels-updated="onLabelsUpdated"
+      @contents-updated="onContentsUpdated"
     />
 
     <teleport v-if="!embedded" to="body">
@@ -3247,10 +3307,6 @@ onBeforeUnmount(() => {
   height: 38px; padding: 0 14px 0 10px; border: 0; background: transparent;
   color: var(--yp-text-primary); text-align: left; cursor: pointer;
 }
-.work-item-group-toggle svg { flex: none; transition: transform 140ms ease; }
-.work-item-group-toggle svg.expanded { transform: rotate(90deg); }
-.work-item-group-name { color: var(--work-item-group-accent); font-size: 16px; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.work-item-group-toggle small { flex: none; font-size: 12px; color: var(--yp-text-secondary); font-weight: 400; }
 .work-item-group-load { position: sticky; left: 33px; flex: none; display: flex; width: fit-content; max-width: min(540px, calc(100vw - 200px)); gap: 8px; align-items: center; min-height: 36px; padding: 0 16px; color: var(--yp-text-secondary); font-size: 12px; }
 .work-item-group-load--complete { min-height: 0; height: 0; padding: 0; }
 .work-item-group-load--loading { --work-item-skeleton-accent: transparent; position: relative; left: auto; display: block; width: auto; max-width: none; min-height: 0; padding: 0; }
@@ -3319,7 +3375,6 @@ onBeforeUnmount(() => {
   border: 1px solid var(--yp-monday-grid-border); border-radius: var(--work-item-hierarchy-corner-radius);
   background: var(--work-item-table-cell-bg) !important;
 }
-@media (prefers-reduced-motion: reduce) { .work-item-group-toggle svg { transition: none; } }
 .work-items-home {
   display: flex;
   min-width: 0;
@@ -4613,6 +4668,30 @@ onBeforeUnmount(() => {
 .work-items-embedded .work-items-toolbar { margin: 0; flex: none; }
 .work-items-embedded :deep(.el-scrollbar__bar) { display: block !important; }
 .work-items-embedded :deep(.el-scrollbar__wrap) { overscroll-behavior: auto; }
+
+/* 我的工作：表格随内容增高，由页面统一滚动。 */
+.work-items-my-work.project-overview-stack,
+.work-items-my-work .work-items-home,
+.work-items-my-work .monday-table-surface,
+.work-items-my-work .monday-table-wrapper { height: auto; flex: none; }
+.work-items-my-work .monday-table-surface { min-height: 0; padding-top: 0; }
+.work-items-my-work .monday-table { --work-item-group-accent: inherit; --work-item-quick-add-accent: var(--work-item-group-accent); }
+
+/* 我的工作底部新增：整行可点，悬停整行高亮。 */
+.my-work-create-row::before {
+  position: absolute; top: 0; right: 0; bottom: 0; left: var(--work-item-quick-start);
+  background: var(--yp-bg-hover); content: ''; opacity: 0; pointer-events: none;
+  transition: opacity var(--yp-motion-fast) var(--yp-ease-standard);
+}
+.my-work-create-row:hover:not(:disabled)::before,
+.my-work-create-row:focus-visible::before { opacity: 1; }
+.my-work-create-row__label {
+  position: sticky; z-index: 1; left: var(--work-item-quick-title-left); grid-column: 4;
+  display: inline-flex; align-items: center; gap: 6px; padding-left: 32px;
+  color: var(--yp-text-secondary); font-size: 13px;
+  transition: color var(--yp-motion-fast) var(--yp-ease-standard), transform var(--yp-motion-fast) var(--yp-ease-standard);
+}
+.my-work-create-row:hover:not(:disabled) .my-work-create-row__label { color: var(--yp-action-primary); transform: translateX(2px); }
 .work-item-context-label { font-size: 11px; white-space: nowrap; color: var(--yp-text-secondary); padding: 0 5px; }
 :deep(.monday-table td.monday-column--collapsed > .cell),
 :deep(.monday-table th.monday-column-header--collapsed > .cell) { padding: 0; }
