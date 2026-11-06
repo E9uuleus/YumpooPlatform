@@ -152,7 +152,7 @@ class MigratedTimeImportServiceTest {
                 TimeCategory.MIGRATED,
                 null);
         when(timers.mySessions(eq(company), eq(member), any(), any()))
-                .thenReturn(List.of(new TimeTrackingModels.MySessionRow(old, null, null, null, false, false)));
+                .thenReturn(List.of(new TimeTrackingModels.MySessionRow(old, null, null, null, false)));
         var rows = List.of(new Row(member, DAY, "交付项目", "接口开发", 60), new Row(member, DAY, "交付项目", "联调测试", 30));
         var result = json.readTree(run(actor, new Request(false, rows)).responseJson());
 
@@ -354,7 +354,7 @@ class MigratedTimeImportServiceTest {
 
     private static List<TimeTrackingModels.MySessionRow> rowsOf(TimeTrackingModels.Session... sessions) {
         return java.util.Arrays.stream(sessions)
-                .map(session -> new TimeTrackingModels.MySessionRow(session, null, null, null, false, false))
+                .map(session -> new TimeTrackingModels.MySessionRow(session, null, null, null, false))
                 .toList();
     }
 

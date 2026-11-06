@@ -330,11 +330,11 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
 
     public List<MySessionRow> mySessions(UUID companyId, UUID userId, Instant from, Instant to) {
         return jdbc.sql("""
-            SELECT s.*,w.item_no,w.title,w.archived,w.deleted_at AS item_deleted_at,c.color_token
+            SELECT s.*,w.item_no,w.title,w.archived,c.color_token
             FROM yumpoo.work_item_time_session s
             LEFT JOIN yumpoo.work_item w ON w.company_id=s.company_id AND w.id=s.work_item_id
             LEFT JOIN yumpoo.content c ON c.company_id=w.company_id AND c.id=w.content_id
-            WHERE s.company_id=:c AND s.user_id=:u AND s.deleted_at IS NULL
+            WHERE s.company_id=:c AND s.user_id=:u AND s.deleted_at IS NULL AND (s.work_item_id IS NULL OR w.deleted_at IS NULL)
               AND s.started_at<:to AND (s.stopped_at IS NULL OR s.stopped_at>:from)
             ORDER BY s.started_at,s.id
             """)
@@ -347,8 +347,22 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
                         rs.getString("item_no"),
                         rs.getString("title"),
                         rs.getString("color_token"),
-                        rs.getBoolean("archived"),
-                        rs.getTimestamp("item_deleted_at") != null))
+                        rs.getBoolean("archived")))
+                .list();
+    }
+
+    public List<ItemTimeSpan> itemTimeSpans(UUID companyId, UUID workItemId) {
+        return jdbc.sql("""
+            SELECT user_id,MIN(started_at) AS started_at,
+                   CASE WHEN bool_or(stopped_at IS NULL) THEN NULL ELSE MAX(stopped_at) END AS stopped_at
+            FROM yumpoo.work_item_time_session
+            WHERE company_id=:c AND work_item_id=:w AND deleted_at IS NULL
+            GROUP BY user_id ORDER BY user_id
+            """)
+                .param("c", companyId)
+                .param("w", workItemId)
+                .query((rs, n) -> new ItemTimeSpan(
+                        rs.getObject("user_id", UUID.class), instant(rs, "started_at"), instant(rs, "stopped_at")))
                 .list();
     }
 

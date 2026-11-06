@@ -69,9 +69,12 @@ public class JdbcTimeShareRepository implements TimeShareRepository {
     }
 
     public List<Session> sessions(UUID companyId, UUID userId, Instant from, Instant to) {
+        // Sessions on deleted work items take no share; restoring the item brings them back.
         var query = jdbc.sql(
-                        "SELECT * FROM yumpoo.work_item_time_session WHERE company_id=:c AND user_id=:u AND deleted_at IS NULL AND (stopped_at IS NULL OR stopped_at>started_at) AND (stopped_at IS NULL OR stopped_at>:from)"
-                                + (to == null ? "" : " AND started_at<:to"))
+                        "SELECT s.* FROM yumpoo.work_item_time_session s LEFT JOIN yumpoo.work_item w ON w.company_id=s.company_id AND w.id=s.work_item_id"
+                                + " WHERE s.company_id=:c AND s.user_id=:u AND s.deleted_at IS NULL AND (s.work_item_id IS NULL OR w.deleted_at IS NULL)"
+                                + " AND (s.stopped_at IS NULL OR s.stopped_at>s.started_at) AND (s.stopped_at IS NULL OR s.stopped_at>:from)"
+                                + (to == null ? "" : " AND s.started_at<:to"))
                 .param("c", companyId)
                 .param("u", userId)
                 .param("from", Timestamp.from(from));

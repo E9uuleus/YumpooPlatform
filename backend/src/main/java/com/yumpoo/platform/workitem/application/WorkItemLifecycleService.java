@@ -24,7 +24,7 @@ import com.yumpoo.platform.foundation.application.idempotency.IdempotentCommandE
 import com.yumpoo.platform.foundation.application.idempotency.StoredCommandResult;
 import com.yumpoo.platform.workitem.application.content.ContentRepository;
 import com.yumpoo.platform.workitem.application.label.WorkItemLabelRepository;
-import com.yumpoo.platform.workitem.application.time.TimeTrackingRepository;
+import com.yumpoo.platform.workitem.application.time.TimeTrackingService;
 import com.yumpoo.platform.workitem.domain.Content;
 import com.yumpoo.platform.workitem.domain.ProjectSortKey;
 import com.yumpoo.platform.workitem.domain.WorkItem;
@@ -32,6 +32,8 @@ import com.yumpoo.platform.workitem.domain.WorkItemRankPlacement;
 import java.time.Clock;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -42,7 +44,7 @@ public class WorkItemLifecycleService {
     private final WorkItemLabelRepository labels;
     private final IdempotentCommandExecutor idempotency;
     private final Clock clock;
-    private final TimeTrackingRepository timeTracking;
+    private final TimeTrackingService timeTracking;
     private final WorkItemOrderingService ordering;
     private final WorkItemViews views;
     private final WorkItemEvents workItemEvents;
@@ -54,7 +56,7 @@ public class WorkItemLifecycleService {
             WorkItemLabelRepository labels,
             IdempotentCommandExecutor idempotency,
             Clock clock,
-            TimeTrackingRepository timeTracking,
+            TimeTrackingService timeTracking,
             WorkItemOrderingService ordering,
             WorkItemViews views,
             WorkItemEvents workItemEvents) {
@@ -141,6 +143,7 @@ public class WorkItemLifecycleService {
     private StoredCommandResult delete(Delete command, WorkItemLocator locator, String reason) {
         ProjectFactWriteSnapshot project = writeGuard.lockForFactWrite(command.actor(), locator.projectId());
         requireWritableAccess(project.actorAccess());
+        Set<UUID> timeOwners = timeTracking.lockItemTimeOwners(project.companyId(), command.workItemId());
         Content content = contents.lockForShare(project.companyId(), project.projectId(), locator.contentId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
         WorkItem before = workItems
@@ -158,7 +161,7 @@ public class WorkItemLifecycleService {
                 .softDelete(candidate, command.expectedVersion())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
         workItemEvents.appendDeleted(after, command.actor());
-        timeTracking.advanceProjects(project.companyId(), List.of(project.projectId()));
+        timeTracking.reallocateItemTime(project.companyId(), project.projectId(), after.id(), timeOwners);
         return views.stored(
                 200,
                 views.detail(
@@ -186,6 +189,7 @@ public class WorkItemLifecycleService {
     private StoredCommandResult restore(Restore command, WorkItemLocator locator) {
         ProjectFactWriteSnapshot project = writeGuard.lockForFactWrite(command.actor(), locator.projectId());
         requireWritableAccess(project.actorAccess());
+        Set<UUID> timeOwners = timeTracking.lockItemTimeOwners(project.companyId(), command.workItemId());
         Content content = contents.lockForShare(project.companyId(), project.projectId(), locator.contentId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
         WorkItem snapshot = workItems
@@ -235,7 +239,7 @@ public class WorkItemLifecycleService {
                 .restore(candidate, command.expectedVersion())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
         workItemEvents.appendRestored(after, command.actor());
-        timeTracking.advanceProjects(project.companyId(), List.of(project.projectId()));
+        timeTracking.reallocateItemTime(project.companyId(), project.projectId(), after.id(), timeOwners);
         return views.stored(
                 200,
                 views.detail(

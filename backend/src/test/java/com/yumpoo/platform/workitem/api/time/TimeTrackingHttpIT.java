@@ -465,6 +465,172 @@ class TimeTrackingHttpIT {
     }
 
     @Test
+    void deletedItemNoLongerSharesItsTimeAndComesBackOnRestore() throws Exception {
+        String fill = "/api/v1/me/time-sessions/fill";
+        String day = "/api/v1/me/time-sessions?from=2026-09-01T09:00:00Z&to=2026-09-01T13:00:00Z";
+        String item = "/api/v1/work-items/" + source.itemId();
+        String reason = json.writeValueAsString(Map.of("reason", "移除重复工作项"));
+        ok(mutate("POST", fill, member, fillBody("PARALLEL", source.itemId(), "09:00", "13:00"), null));
+        String etag = ok(get(item, member)).path("etag").asText();
+        var deleted = ok(mutate("DELETE", item, member, reason, etag));
+        assertThat(ok(get(day, member)).path("items")).isEmpty();
+
+        var filled = ok(mutate("POST", fill, member, fillBody("GAPS", target.itemId(), "09:00", "13:00"), null));
+        assertThat(filled.path("createdCount").asInt()).isOne();
+        assertThat(filled.path("skippedDurationMs").asLong()).isZero();
+        var rows = ok(get(day, member)).path("items");
+        assertThat(rows).hasSize(1);
+        var session = rows.get(0).path("session");
+        assertThat(session.path("workItemId").asText())
+                .isEqualTo(target.itemId().toString());
+        assertThat(session.path("allocatedDurationMs").asLong()).isEqualTo(4 * 3600000);
+        var zone = company.current().timezone();
+        var sheet = ok(get(
+                "/api/v1/me/timesheet?from="
+                        + Instant.parse("2026-09-01T09:00:00Z").atZone(zone).toLocalDate() + "&to="
+                        + Instant.parse("2026-09-01T13:00:00Z").atZone(zone).toLocalDate(),
+                member));
+        long total = 0;
+        for (JsonNode entry : sheet.path("entries"))
+            total += entry.path("durationMs").asLong();
+        assertThat(total).isEqualTo(4 * 3600000);
+
+        var restored = ok(mutate(
+                "POST", item + "/restore", member, "", deleted.path("etag").asText()));
+        rows = ok(get(day, member)).path("items");
+        assertThat(rows).hasSize(2);
+        for (JsonNode row : rows)
+            assertThat(row.path("session").path("allocatedDurationMs").asLong()).isEqualTo(2 * 3600000);
+
+        ok(mutate("DELETE", item, member, reason, restored.path("etag").asText()));
+        rows = ok(get(day, member)).path("items");
+        assertThat(rows).hasSize(1);
+        session = rows.get(0).path("session");
+        assertThat(session.path("workItemId").asText())
+                .isEqualTo(target.itemId().toString());
+        assertThat(session.path("allocatedDurationMs").asLong()).isEqualTo(4 * 3600000);
+    }
+
+    @Test
+    void deletingAnItemReallocatesEveryOwnerAndTouchesTheOtherProject() throws Exception {
+        for (Actor actor : List.of(member, owner))
+            for (Project project : List.of(source, target))
+                ok(mutate(
+                        "POST",
+                        "/api/v1/me/time-sessions/fill",
+                        actor,
+                        fillBody("PARALLEL", project.itemId(), "09:00", "10:00"),
+                        null));
+        String history = "/api/v1/work-items/" + target.itemId() + "/time-sessions";
+        var rows = ok(get(history, member)).path("items");
+        assertThat(rows).hasSize(2);
+        for (JsonNode row : rows)
+            assertThat(row.path("allocatedDurationMs").asLong()).isEqualTo(1800000);
+        long previousRevision = revision(target);
+        long previousState = stateVersion();
+
+        String item = "/api/v1/work-items/" + source.itemId();
+        ok(mutate(
+                "DELETE",
+                item,
+                owner,
+                json.writeValueAsString(Map.of("reason", "移除重复工作项")),
+                ok(get(item, owner)).path("etag").asText()));
+        rows = ok(get(history, member)).path("items");
+        assertThat(rows).hasSize(2);
+        for (JsonNode row : rows)
+            assertThat(row.path("allocatedDurationMs").asLong()).isEqualTo(3600000);
+        assertThat(revision(target)).isGreaterThan(previousRevision);
+        assertThat(stateVersion()).isEqualTo(previousState);
+    }
+
+    @Test
+    void deletingAnItemWithARunningTimerGivesTheOtherRunningTimerItsFullRate() throws Exception {
+        ok(timer("start", Map.of("workItemIds", List.of(source.itemId(), target.itemId())), "\"0\""));
+        String summary = "/api/v1/projects/" + target.id() + "/time-tracking-summaries?workItemId=" + target.itemId();
+        assertThat(ok(get(summary, member))
+                        .path("items")
+                        .get(0)
+                        .path("rollupRunningRate")
+                        .asDouble())
+                .isEqualTo(0.5);
+        String item = "/api/v1/work-items/" + source.itemId();
+        ok(mutate(
+                "DELETE",
+                item,
+                member,
+                json.writeValueAsString(Map.of("reason", "移除重复工作项")),
+                ok(get(item, member)).path("etag").asText()));
+        assertThat(ok(get(summary, member))
+                        .path("items")
+                        .get(0)
+                        .path("rollupRunningRate")
+                        .asDouble())
+                .isEqualTo(1.0);
+    }
+
+    @Test
+    void deleteRacingANewTimeOwnerRollsBackWithVersionConflict() throws Exception {
+        ok(mutate(
+                "POST",
+                "/api/v1/me/time-sessions/fill",
+                member,
+                fillBody("PARALLEL", source.itemId(), "09:00", "10:00"),
+                null));
+        String item = "/api/v1/work-items/" + source.itemId();
+        String etag = ok(get(item, member)).path("etag").asText();
+        String reason = json.writeValueAsString(Map.of("reason", "移除重复工作项"));
+        var locked = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            var writer = pool.submit(() -> new TransactionTemplate(transactions).execute(status -> {
+                jdbc.sql("SELECT id FROM yumpoo.work_item WHERE id=:item FOR UPDATE")
+                        .param("item", source.itemId())
+                        .query(UUID.class)
+                        .single();
+                jdbc.sql("""
+                        INSERT INTO yumpoo.work_item_time_session
+                            (id,company_id,project_id,work_item_id,user_id,started_at,stopped_at,source,row_version,migrated)
+                        VALUES (:id,:company,:project,:item,:user,'2026-09-01T11:00:00Z','2026-09-01T12:00:00Z','MANUAL',0,false)
+                        """)
+                        .param("id", UUID.randomUUID())
+                        .param("company", COMPANY)
+                        .param("project", source.id())
+                        .param("item", source.itemId())
+                        .param("user", owner.userId())
+                        .update();
+                locked.countDown();
+                await(release);
+                return null;
+            }));
+            try {
+                await(locked);
+                var deletion = pool.submit(() -> mutate("DELETE", item, member, reason, etag));
+                awaitBlockedLock("yumpoo.work_item", "FOR UPDATE");
+                release.countDown();
+                writer.get(15, TimeUnit.SECONDS);
+                var response = deletion.get(15, TimeUnit.SECONDS);
+                assertThat(response.statusCode()).as(response.body()).isEqualTo(412);
+                assertThat(json.readTree(response.body()).path("code").asText()).isEqualTo("VERSION_CONFLICT");
+            } finally {
+                release.countDown();
+            }
+        }
+        assertThat(jdbc.sql("SELECT deleted_at FROM yumpoo.work_item WHERE id=:item")
+                        .param("item", source.itemId())
+                        .query()
+                        .singleRow()
+                        .get("deleted_at"))
+                .isNull();
+        ok(mutate("DELETE", item, member, reason, etag));
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_time_share WHERE work_item_id=:item")
+                        .param("item", source.itemId())
+                        .query(Long.class)
+                        .single())
+                .isZero();
+    }
+
+    @Test
     void parallelTimersShareTheirDurationAndStopTogetherWithoutInflatingTheTimesheet() throws Exception {
         JsonNode running =
                 ok(timer("start", Map.of("workItemIds", List.of(source.itemId(), target.itemId())), "\"0\""));
