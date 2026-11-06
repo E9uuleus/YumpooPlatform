@@ -11,6 +11,7 @@ import com.yumpoo.platform.audit.api.SecurityAuditDraft;
 import com.yumpoo.platform.catalog.api.CompanyProjectQuery;
 import com.yumpoo.platform.catalog.api.MemberProjectQuery;
 import com.yumpoo.platform.catalog.api.ProjectActiveMembershipQuery;
+import com.yumpoo.platform.catalog.api.ProjectDeletionQuery;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.foundation.application.idempotency.*;
@@ -41,6 +42,7 @@ class MigratedTimeImportServiceTest {
     private final TimeTrackingRepository timers = mock(TimeTrackingRepository.class);
     private final TimeShareMaintainer shares = mock(TimeShareMaintainer.class);
     private final CompanyProjectQuery projects = mock(CompanyProjectQuery.class);
+    private final ProjectDeletionQuery deletion = mock(ProjectDeletionQuery.class);
     private final WorkItemRepository items = mock(WorkItemRepository.class);
     private final ProjectActiveMembershipQuery memberships = mock(ProjectActiveMembershipQuery.class);
     private final MinimalUserSnapshotQuery users = mock(MinimalUserSnapshotQuery.class);
@@ -61,6 +63,8 @@ class MigratedTimeImportServiceTest {
                 .thenReturn(List.of(
                         new MemberProjectQuery.Project(project, "交付项目", "P001", "ACTIVE"),
                         new MemberProjectQuery.Project(UUID.randomUUID(), "旧项目", "P002", "ARCHIVED")));
+        when(deletion.lockForProjection(eq(company), any()))
+                .thenAnswer(call -> Optional.of(projectState(call.getArgument(1), "ACTIVE")));
         when(items.findTitles(company, project))
                 .thenReturn(List.of(
                         new WorkItemRepository.WorkItemTitle(itemA, "接口开发", false),
@@ -73,6 +77,7 @@ class MigratedTimeImportServiceTest {
                 timers,
                 shares,
                 projects,
+                deletion,
                 items,
                 memberships,
                 users,
@@ -127,7 +132,7 @@ class MigratedTimeImportServiceTest {
                 .isEqualTo("USER_INVALID");
         verify(timers, never()).save(any());
         verify(timers, never()).stateVersion(any(), any(), eq(true));
-        verifyNoInteractions(audits, shares);
+        verifyNoInteractions(audits, shares, deletion);
     }
 
     @Test
@@ -248,6 +253,85 @@ class MigratedTimeImportServiceTest {
         var saved = ArgumentCaptor.forClass(TimeTrackingModels.Session.class);
         verify(timers, times(1)).save(saved.capture());
         assertThat(saved.getValue().workItemId()).isEqualTo(itemA);
+    }
+
+    @Test
+    void commitShareLocksProjectsBeforeTimerStates() {
+        run(actor, new Request(false, List.of(new Row(member, DAY, "交付项目", "接口开发", 60))));
+
+        var ordered = inOrder(deletion, timers);
+        ordered.verify(deletion).lockForProjection(company, project);
+        ordered.verify(timers).stateVersion(company, member, true);
+        ordered.verify(timers).save(any());
+    }
+
+    @Test
+    void commitSkipsRowsWhoseProjectWasArchivedBeforeItsLock() {
+        when(deletion.lockForProjection(company, project)).thenReturn(Optional.of(projectState(project, "ARCHIVED")));
+        var rows = List.of(
+                new Row(member, DAY, "交付项目", "接口开发", 60),
+                new Row(member, DAY, "交付项目", "不存在", 30),
+                new Row(member, DAY.plusDays(1), "交付项目", "联调测试", 60));
+        var result = json.readTree(run(actor, new Request(false, rows)).responseJson());
+
+        assertThat(result.path("importedDayCount").asInt()).isZero();
+        assertThat(result.path("skippedMinutes").asLong()).isEqualTo(150);
+        assertThat(result.path("skippedRows"))
+                .isEqualTo(json.valueToTree(List.of(
+                        new MigratedTimeImportService.SkippedRow(0, "PROJECT_NOT_FOUND"),
+                        new MigratedTimeImportService.SkippedRow(1, "WORK_ITEM_NOT_FOUND"),
+                        new MigratedTimeImportService.SkippedRow(2, "PROJECT_NOT_FOUND"))));
+        verify(timers, never()).stateVersion(any(), any(), eq(true));
+        verify(timers, never()).save(any());
+    }
+
+    private ProjectDeletionQuery.State projectState(UUID id, String lifecycle) {
+        return new ProjectDeletionQuery.State(id, company, "P001", lifecycle, admin, 1, null, null, null, null);
+    }
+
+    @Test
+    void commitLocksMembersInTheOrderOfSqlOrderByUserId() {
+        var low = UUID.fromString("7fffffff-ffff-4fff-bfff-ffffffffffff");
+        var high = UUID.fromString("80000000-0000-4000-8000-000000000000");
+        assertThat(high.compareTo(low)).isNegative();
+        when(users.findByUserIds(eq(company), any()))
+                .thenReturn(Map.of(
+                        low, new MinimalUserSnapshot(low, company, "甲", "ACTIVE", "ENABLED"),
+                        high, new MinimalUserSnapshot(high, company, "乙", "ACTIVE", "ENABLED")));
+        when(memberships.findActiveMemberIds(eq(company), eq(project), any())).thenReturn(Set.of(low, high));
+
+        run(
+                actor,
+                new Request(
+                        false, List.of(new Row(high, DAY, "交付项目", "接口开发", 60), new Row(low, DAY, "交付项目", "接口开发", 60))));
+
+        var ordered = inOrder(timers);
+        ordered.verify(timers).stateVersion(company, low, true);
+        ordered.verify(timers).stateVersion(company, high, true);
+    }
+
+    @Test
+    void databaseOrderMatchesPostgresUnsignedByteComparison() {
+        var random = new Random(42);
+        var ids = new ArrayList<>(List.of(
+                new UUID(0, 0),
+                new UUID(-1, -1),
+                new UUID(Long.MAX_VALUE, -1),
+                new UUID(Long.MIN_VALUE, 0),
+                new UUID(1, Long.MAX_VALUE),
+                new UUID(1, Long.MIN_VALUE)));
+        for (int i = 0; i < 500; i++) ids.add(new UUID(random.nextLong(), random.nextLong()));
+        Comparator<UUID> bytewise = (a, b) -> Arrays.compareUnsigned(bytes(a), bytes(b));
+
+        assertThat(ids.stream().sorted(MigratedTimeImportService.DATABASE_ORDER).toList())
+                .isEqualTo(ids.stream().sorted(bytewise).toList());
+    }
+
+    private static byte[] bytes(UUID id) {
+        return java.nio.ByteBuffer.allocate(16)
+                .putLong(id.getMostSignificantBits())
+                .putLong(id.getLeastSignificantBits())
+                .array();
     }
 
     private TimeTrackingModels.Session migratedRecord(UUID item, LocalDate day, int fromHour, int toHour) {

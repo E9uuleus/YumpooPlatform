@@ -17,6 +17,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -306,6 +308,69 @@ class TimeTrackingHttpIT {
         assertThat(queue.claim(Instant.now(), "purge-after-stop", Duration.ofMinutes(3), true))
                 .get()
                 .satisfies(lease -> assertThat(lease.projectId()).isEqualTo(source.id()));
+    }
+
+    @Test
+    void migratedImportWaitsForTheArchiveProjectLockBeforeAnyTimerStateAndSkipsTheArchivedProject() throws Exception {
+        start(source);
+        Actor admin = companyAdmin();
+        String body = json.writeValueAsString(Map.of(
+                "dryRun",
+                false,
+                "rows",
+                List.of(Map.of(
+                        "userId",
+                        member.userId(),
+                        "workDate",
+                        LocalDate.now(ZoneOffset.UTC).minusDays(30).toString(),
+                        "projectName",
+                        "原计时项目",
+                        "workItemTitle",
+                        "原计时项目工作项",
+                        "minutes",
+                        60))));
+        var locked = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            // Archive's order: the project row, then the timer state of each member running in it.
+            var archive = pool.submit(() -> new TransactionTemplate(transactions).execute(status -> {
+                jdbc.sql("SELECT id FROM yumpoo.project WHERE id=:project FOR UPDATE")
+                        .param("project", source.id())
+                        .query(UUID.class)
+                        .single();
+                locked.countDown();
+                await(release);
+                jdbc.sql(
+                                "SELECT row_version FROM yumpoo.work_item_timer_state WHERE company_id=:company AND user_id=:user FOR UPDATE")
+                        .param("company", COMPANY)
+                        .param("user", member.userId())
+                        .query(Long.class)
+                        .single();
+                return jdbc.sql("""
+                        UPDATE yumpoo.project SET lifecycle='ARCHIVED',archived_at=transaction_timestamp(),
+                            updated_at=transaction_timestamp(),row_version=row_version+1 WHERE id=:project
+                        """).param("project", source.id()).update();
+            }));
+            try {
+                await(locked);
+                var imported =
+                        pool.submit(() -> mutate("POST", "/api/v1/company/migrated-time-imports", admin, body, null));
+                awaitBlockedLock("yumpoo.project", "FOR SHARE");
+                release.countDown();
+                assertThat(archive.get(15, TimeUnit.SECONDS)).isOne();
+                JsonNode result = ok(imported.get(15, TimeUnit.SECONDS));
+                assertThat(result.path("importedDayCount").asInt()).isZero();
+                assertThat(result.path("skippedRows").get(0).path("code").asText())
+                        .isEqualTo("PROJECT_NOT_FOUND");
+            } finally {
+                release.countDown();
+            }
+        }
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_time_session WHERE user_id=:user")
+                        .param("user", member.userId())
+                        .query(Long.class)
+                        .single())
+                .isOne();
     }
 
     @Test
@@ -1103,6 +1168,24 @@ class TimeTrackingHttpIT {
         UUID user = users.provision("timer-purge-" + name + "-" + UUID.randomUUID(), "计时清除 " + name)
                 .userId();
         return new Actor(user, sessions.issueWebSession(user, "timer-purge-http"));
+    }
+
+    private Actor companyAdmin() {
+        try (var ignored =
+                RequestCorrelationContext.open(RequestCorrelation.root("timer-import-admin-" + UUID.randomUUID()))) {
+            Actor admin = actor("admin");
+            jdbc.sql("""
+                    INSERT INTO yumpoo.platform_role_assignment(id,company_id,user_id,role_code,scope_type,scope_id,status,
+                        granted_by_actor_type,granted_by_system_code,grant_reason,granted_at)
+                    VALUES (:id,:company,:user,'COMPANY_ADMIN','COMPANY',:company,'ACTIVE','SYSTEM','TEST_FIXTURE',
+                        '迁入工时锁序测试',transaction_timestamp())
+                    """)
+                    .param("id", UUID.randomUUID())
+                    .param("company", COMPANY)
+                    .param("user", admin.userId())
+                    .update();
+            return new Actor(admin.userId(), sessions.issueWebSession(admin.userId(), "timer-purge-http"));
+        }
     }
 
     private Project project(String name) throws Exception {

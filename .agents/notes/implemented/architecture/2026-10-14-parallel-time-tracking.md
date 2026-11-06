@@ -18,7 +18,7 @@ Status: implemented
 4. 父项的单元格、列表时长排序与范围筛选、`timeTrackingState` 筛选使用本项加有效直接子项的汇总；直接子项须有未删除的 `PARENT_CHILD` 关系且工作项未删除。`allocatedDurationMs` 为本项计入时长，`rollupDurationMs` 为汇总，`rollupRunningRate` 表示每毫秒的增长量。其余统计均不汇总父项，避免子项重复累计。父项日志可通过 `includeChildren` 带出直接子项记录并标注来源；编辑、删除仍使用记录自身的工作项，清除只作用于本项记录。父子关系创建、换父、解除以及工作项删除、恢复推进项目计时修订号，使相关排序游标失效。
 5. `start` 把目标加入运行集合，已运行的目标不重复写入；`switch` 停止目标以外的全部运行会话后开始目标；`stop` 只停止指定会话；`stop-all` 停止全部。并行数量不设上限，批量 start 请求仍受每次最多 10 项的契约约束。
 6. REPLACE 仅裁剪本人已停止、未删除且所在项目可见、ACTIVE、非 `COMPANY_ADMIN_READ_ONLY`，工作项未删除且未归档的会话。其他会话原样保留，新补录与之并行。归档项目会话也参与并行分母，后续补录可改变其计入时长；归档项目仍不进入统计。
-7. 写路径沿用项目锁按 UUID 排序、`work_item_timer_state FOR UPDATE`、工作项锁按 UUID 排序的顺序，再写会话、重建分摊、推进修订号。用户所有会话写入与分摊重建在该用户状态锁内、同一事务完成。
+7. 写路径沿用项目锁按 UUID 排序、`work_item_timer_state FOR UPDATE`、工作项锁按 UUID 排序的顺序，再写会话、重建分摊、推进修订号。用户所有会话写入与分摊重建在该用户状态锁内、同一事务完成。项目归档停表、项目清除和迁入工时导入等一次锁住多名用户的路径，多名用户按数据库 UUID 顺序加锁，即 SQL `ORDER BY user_id` 的无符号字节序；Java `UUID.compareTo` 按有符号 long 比较，两名用户 UUID 首位十六进制数分处 8 两侧时顺序相反，不能用于排序加锁。
 8. 本次写了会话的项目通过 `advanceProjects` 使用 INSERT … ON CONFLICT 推进计时修订号；仅分摊变化的其他项目通过 `touchProjects` 只 UPDATE 既有修订行，不创建新行。两类项目的并集按 UUID 统一排序，再逐项选择对应写法。计时命令推进用户状态版本；补录不推进该版本。
 
 `work_item_time_share` 保存会话按边界切分后的区段、并行数和所属用户、项目、工作项，开放段的 `stopped_at` 为 null。旧数据由此前不重叠的约束保证可按 concurrency=1 回填。读取以区段时长除以 concurrency，聚合后向下取整到毫秒；会话同时返回计入时长及期间并行的其他工作项数。
