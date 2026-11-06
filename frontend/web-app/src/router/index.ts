@@ -121,6 +121,12 @@ export const routes: RouteRecordRaw[] = [
         component: () => import('../views/MyTimeDayPageView.vue'),
         meta: { frame: 'fixed', shellSection: 'my-time', onboardingTour: 'my-day' },
       },
+      {
+        path: 'my-work',
+        name: 'my-work',
+        component: () => import('../views/MyWorkView.vue'),
+        meta: { frame: 'fixed', shellSection: 'my-work', onboardingTour: 'my-work' },
+      },
       { path: 'team', name: 'team-entry', redirect: { name: 'team', params: { view: 'timesheet' } } },
       {
         path: 'team/hours-import',

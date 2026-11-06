@@ -62,7 +62,7 @@ describe('M1-12 Web 全局壳', () => {
     expect(wrapper.text()).toContain('Yumpoo 测试公司')
     expect(wrapper.text()).not.toContain('在线壳')
     expect(wrapper.text()).not.toContain('Web 浏览器')
-    expect(wrapper.findAll('.module-rail__item-label').map(item => item.text())).toEqual(['首页', '工作台', '仪表板', '我的工时'])
+    expect(wrapper.findAll('.module-rail__item-label').map(item => item.text())).toEqual(['首页', '工作台', '仪表板', '我的工时', '我的工作'])
   })
 
   it('全局轻提示默认带关闭按钮', async () => {

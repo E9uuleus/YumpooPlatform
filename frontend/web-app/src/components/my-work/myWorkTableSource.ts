@@ -12,11 +12,13 @@ export function myWorkTableSource(userId: string): WorkItemTableSource {
   const assignee = new Set([userId])
   const contextIds = ref(new Set<string>())
   const matchedCounts = ref(new Map<string, number>())
-  function remember(items: ProjectWorkItemListItem[]): void {
+  function remember(items: ProjectWorkItemListItem[], statuses: ReadonlySet<string> | undefined): void {
     const context = new Set(contextIds.value)
     const counts = new Map(matchedCounts.value)
     for (const item of items) {
-      if (workItemAssignees(item).some(person => person.userId === userId)) context.delete(item.id)
+      const selfMatch = workItemAssignees(item).some(person => person.userId === userId)
+        && (!statuses?.size || statuses.has(item.statusCode))
+      if (selfMatch) context.delete(item.id)
       else context.add(item.id)
       counts.set(item.id, item.matchedSubitemCount ?? 0)
     }
@@ -26,7 +28,7 @@ export function myWorkTableSource(userId: string): WorkItemTableSource {
   return {
     listProjectWorkItems: async (request, init) => {
       const page = await workItemsApi.listProjectWorkItems({ ...request, assigneeUserId: assignee }, init)
-      remember(page.items)
+      remember(page.items, request.status)
       return page
     },
     listProjectWorkItemFilterOptions: (request, init) =>

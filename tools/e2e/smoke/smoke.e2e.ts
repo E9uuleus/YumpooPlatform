@@ -9,7 +9,7 @@ test('首页登录', async ({ page }) => {
   await page.goto('/')
   await skipOnboarding(page)
   await expect(page.getByRole('heading', { level: 1 })).toContainText('本地测试管理员')
-  for (const name of ['首页', '工作台', '仪表板', '我的工时', '团队', '公司管理', '运维']) {
+  for (const name of ['首页', '工作台', '仪表板', '我的工时', '我的工作', '团队', '公司管理', '运维']) {
     await expect(page.getByRole('navigation').getByRole('button', { name, exact: true })).toBeVisible()
   }
 })

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Calendar, DataLine, DataAnalysis, Box, Clock, Close, FolderOpened, Grid, House, Menu as MenuIcon, Search, Setting, User, OfficeBuilding, Monitor } from '@element-plus/icons-vue'
+import { Calendar, DataLine, DataAnalysis, Box, Clock, Close, FolderOpened, Finished, Grid, House, Menu as MenuIcon, Search, Setting, User, OfficeBuilding, Monitor } from '@element-plus/icons-vue'
 import { AuthenticationClientType, ProjectLifecycleFilter, ProjectActorAccess, type Project, type ProjectSummary } from '@yumpoo/api-client'
 import {
   ElButton,
@@ -44,7 +44,7 @@ import ProjectNavigationMore from './shell/ProjectNavigationMore.vue'
 interface ModuleItem {
   section: ShellSection
   label: string
-  routeName: 'home' | 'workspace' | 'dashboards' | 'my-time' | 'team-entry' | 'company-overview' | 'operations-overview'
+  routeName: 'home' | 'workspace' | 'dashboards' | 'my-time' | 'my-work' | 'team-entry' | 'company-overview' | 'operations-overview'
   icon: Component
 }
 
@@ -91,7 +91,7 @@ const releaseLabel = computed(() => releaseVersion.value
 const activeSection = computed<ShellSection>(() => route.meta.shellSection ?? 'work')
 const fixedFrame = computed(() => route.meta.frame === 'fixed')
 const isWorkspaceSection = computed(() => activeSection.value === 'work')
-const CONTEXTLESS_SECTIONS: ReadonlySet<ShellSection> = new Set(['home', 'dashboards', 'my-time'])
+const CONTEXTLESS_SECTIONS: ReadonlySet<ShellSection> = new Set(['home', 'dashboards', 'my-time', 'my-work'])
 const hasContextNavigation = computed(() => !CONTEXTLESS_SECTIONS.has(activeSection.value))
 const projectRecentScope = computed(() => {
   const authentication = session.authentication.value
@@ -120,6 +120,7 @@ const moduleItems = computed<ModuleItem[]>(() => [
   { section: 'work', label: '工作台', routeName: 'workspace', icon: Grid },
   { section: 'dashboards', label: '仪表板', routeName: 'dashboards', icon: DataAnalysis },
   { section: 'my-time', label: '我的工时', routeName: 'my-time', icon: Calendar },
+  { section: 'my-work', label: '我的工作', routeName: 'my-work', icon: Finished },
   ...(session.isCompanyAdmin.value ? [{ section: 'team', label: '团队', routeName: 'team-entry', icon: DataLine } as const] : []),
   ...(session.isIdentityReader.value
     ? [{ section: 'company', label: '公司管理', routeName: 'company-overview', icon: OfficeBuilding } as const]
@@ -131,6 +132,7 @@ const contextTitle = computed(() => ({
   work: '工作台',
   dashboards: '仪表板',
   'my-time': '我的工时',
+  'my-work': '我的工作',
   team: '团队视图',
   company: '公司管理',
   inbox: '收件箱',

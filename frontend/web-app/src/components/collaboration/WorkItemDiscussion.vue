@@ -492,7 +492,7 @@ watch(editDialogVisible, visible => { if (!visible) editAttachments.abortUploads
 
 defineExpose({ hasDraft, busy, discardDraft, editor, editEditor, saveEdit, loadLatest, loadOlder })
 onMounted(() => {
-  scrollRoot = timeline.value?.closest<HTMLElement>('.el-drawer__body') ?? undefined
+  scrollRoot = timeline.value?.closest<HTMLElement>('.el-drawer__body, [data-detail-scroll-root]') ?? undefined
   if (scrollRoot && typeof IntersectionObserver !== 'undefined' && sentinel.value) {
     observer = new IntersectionObserver(entries => {
       if (entries.some(entry => entry.isIntersecting)) void loadOlder()

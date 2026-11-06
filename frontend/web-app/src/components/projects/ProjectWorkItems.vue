@@ -491,7 +491,7 @@ const { draft: inlineDraft, rows: displayWorkItemRows, isDraft, start: createBel
 const session = useSession()
 const groupingClock = useMinuteClock()
 const { settings: tableViewSettings, state: tableSettingsState, update: updateTableSettings, load: reloadTableSettings,
-  saveState: tableSettingsSaveState, saveError: tableSettingsSaveError, retrySave: retrySaveTableSettings }
+  saveState: tableSettingsSaveState, saveError: tableSettingsSaveError, retrySave: retrySaveTableSettings, whenLoaded: tableSettingsLoaded }
   = useWorkItemTableSettings(() => projectId.value)
 const companyToday = computed(() => companyDate(groupingClock.value, session.authentication.value?.company.timezone ?? 'Asia/Shanghai'))
 const createDefaults = computed(() => resolveWorkItemCreateDefaults(tableViewSettings.value.defaultValues, {
@@ -1350,19 +1350,15 @@ async function loadWorkspace(): Promise<void> {
       contentsApi.listProjectContents({ projectId: requestedProjectId }),
       workItemsApi.getProjectWorkItemLabels({ projectId: requestedProjectId }),
     ])
+    if (props.myWork) await tableSettingsLoaded()
     if (revision !== loadRevision) return
     project.value = nextProject
     catalog.value = nextCatalog
     labelCatalog.value = nextLabels
-    const requestedStatuses = unfinishedStatusCodes.value?.join(',')
     await Promise.all([
       loadMembers(requestedProjectId, revision),
       selectedView.value === 'kanban' ? loadKanban(revision) : loadTable(null, false, revision),
     ])
-    if (props.myWork && revision === loadRevision && requestedStatuses !== unfinishedStatusCodes.value?.join(',')) {
-      loading.value = false
-      await resetCurrentData()
-    }
     const revealId = route.query.workItemId
     if (revision === loadRevision && typeof revealId === 'string') void revealWorkItem(revealId)
   } catch (reason) {

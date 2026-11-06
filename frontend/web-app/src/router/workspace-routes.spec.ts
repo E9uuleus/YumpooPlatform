@@ -57,6 +57,9 @@ describe('个人工作台规范路由守卫', () => {
   })
 
   it('个人页面解析到对应模块栏入口', () => {
+    const myWork = router.resolve('/my-work')
+    expect(myWork.name).toBe('my-work')
+    expect(myWork.meta).toMatchObject({ shellSection: 'my-work', frame: 'fixed' })
     const workspace = '/workspace/hanzhoujiangshangyu'
     expect(router.resolve(`${workspace}/dashboards`).meta.shellSection).toBe('dashboards')
     expect(router.resolve(`${workspace}/my-time`).meta.shellSection).toBe('my-time')

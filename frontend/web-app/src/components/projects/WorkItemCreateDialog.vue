@@ -7,11 +7,13 @@ import {
 } from '@yumpoo/api-client'
 import { ElButton, ElDialog, ElIcon, ElInput, ElMessage } from 'element-plus'
 import { computed, reactive, ref } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import { workItemsApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import { useSession } from '../../composables/useSession'
 import InlineProblem from '../InlineProblem.vue'
 import type { WorkItemPatchField, WorkItemPatchValue } from './useWorkItemEdits'
+import { MAX_WORK_ITEM_ASSIGNEES } from './workItemAssignees'
 import { applyDefaultStatus } from './workItemDefaultStatus'
 import { apiDate, type DueDateValue } from './workItemDueDate'
 import WorkItemPropertyList, { type WorkItemPropertyValues } from './WorkItemPropertyList.vue'
@@ -39,6 +41,7 @@ const user = useSession().authentication.value?.user
 const titleInput = ref<InstanceType<typeof ElInput>>()
 const title = ref('')
 const saving = ref(false)
+onBeforeRouteLeave(() => !saving.value)
 const problem = ref<ApiProblem>()
 /** 同一次打开内重试沿用同一个幂等键，网络失败后再次提交不会重复创建。 */
 const idempotencyKey = globalThis.crypto.randomUUID()
@@ -48,7 +51,8 @@ const draft = reactive({
   statusCode: props.defaults.statusCode ?? 'NOT_STARTED',
   priority: props.defaults.fields.priority ?? null,
   // 我的工作只显示分配给自己的工作项，新建默认处理人包含自己，否则创建后会立刻从列表消失。
-  assigneeUserIds: [...new Set([...(user ? [user.id] : []), ...(props.defaults.fields.assigneeUserIds ?? [])])],
+  assigneeUserIds: [...new Set([...(user ? [user.id] : []), ...(props.defaults.fields.assigneeUserIds ?? [])])]
+    .slice(0, MAX_WORK_ITEM_ASSIGNEES),
   dueDate: props.defaults.fields.dueDate ?? null,
   dueTime: null as string | null,
 })
@@ -126,6 +130,8 @@ async function submit(): Promise<void> {
     align-center
     append-to-body
     :close-on-click-modal="false"
+    :close-on-press-escape="!saving"
+    :show-close="!saving"
     @opened="titleInput?.focus()"
     @close="emit('close')"
   >
