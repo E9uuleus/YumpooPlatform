@@ -250,6 +250,51 @@ class MigratedTimeImportServiceTest {
         assertThat(saved.getValue().workItemId()).isEqualTo(itemA);
     }
 
+    @Test
+    void commitLocksMembersInTheOrderOfSqlOrderByUserId() {
+        var low = UUID.fromString("7fffffff-ffff-4fff-bfff-ffffffffffff");
+        var high = UUID.fromString("80000000-0000-4000-8000-000000000000");
+        assertThat(high.compareTo(low)).isNegative();
+        when(users.findByUserIds(eq(company), any()))
+                .thenReturn(Map.of(
+                        low, new MinimalUserSnapshot(low, company, "甲", "ACTIVE", "ENABLED"),
+                        high, new MinimalUserSnapshot(high, company, "乙", "ACTIVE", "ENABLED")));
+        when(memberships.findActiveMemberIds(eq(company), eq(project), any())).thenReturn(Set.of(low, high));
+
+        run(
+                actor,
+                new Request(
+                        false, List.of(new Row(high, DAY, "交付项目", "接口开发", 60), new Row(low, DAY, "交付项目", "接口开发", 60))));
+
+        var ordered = inOrder(timers);
+        ordered.verify(timers).stateVersion(company, low, true);
+        ordered.verify(timers).stateVersion(company, high, true);
+    }
+
+    @Test
+    void databaseOrderMatchesPostgresUnsignedByteComparison() {
+        var random = new Random(42);
+        var ids = new ArrayList<>(List.of(
+                new UUID(0, 0),
+                new UUID(-1, -1),
+                new UUID(Long.MAX_VALUE, -1),
+                new UUID(Long.MIN_VALUE, 0),
+                new UUID(1, Long.MAX_VALUE),
+                new UUID(1, Long.MIN_VALUE)));
+        for (int i = 0; i < 500; i++) ids.add(new UUID(random.nextLong(), random.nextLong()));
+        Comparator<UUID> bytewise = (a, b) -> Arrays.compareUnsigned(bytes(a), bytes(b));
+
+        assertThat(ids.stream().sorted(MigratedTimeImportService.DATABASE_ORDER).toList())
+                .isEqualTo(ids.stream().sorted(bytewise).toList());
+    }
+
+    private static byte[] bytes(UUID id) {
+        return java.nio.ByteBuffer.allocate(16)
+                .putLong(id.getMostSignificantBits())
+                .putLong(id.getLeastSignificantBits())
+                .array();
+    }
+
     private TimeTrackingModels.Session migratedRecord(UUID item, LocalDate day, int fromHour, int toHour) {
         return new TimeTrackingModels.Session(
                 UUID.randomUUID(),

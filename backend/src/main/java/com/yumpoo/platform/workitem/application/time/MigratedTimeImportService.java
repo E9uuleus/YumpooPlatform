@@ -39,6 +39,13 @@ public class MigratedTimeImportService {
     /** Migrated time goes only into days without the member's own records; a day holding only earlier migrated records is overwritten whole. */
     private static final DayPlan DAY_HAS_TIME = new DayPlan(
             Outcome.ERROR, List.of(), List.of(), 0, List.of(new MigratedTimeLayoutPlanner.Issue("DAY_HAS_TIME", null)));
+    /**
+     * PostgreSQL's {@code ORDER BY} on uuid compares the 16 bytes unsigned. {@link UUID#compareTo} compares signed longs,
+     * so it reverses two ids whose first hex digits fall on either side of 8.
+     */
+    static final Comparator<UUID> DATABASE_ORDER = Comparator.comparing(
+                    UUID::getMostSignificantBits, Long::compareUnsigned)
+            .thenComparing(UUID::getLeastSignificantBits, Long::compareUnsigned);
 
     public record Row(UUID userId, LocalDate workDate, String projectName, String workItemTitle, Integer minutes) {}
 
@@ -125,9 +132,9 @@ public class MigratedTimeImportService {
         List<Row> rows = request.rows();
         var skipped = new ArrayList<SkippedRow>();
         var targets = match(actor, rows, skipped);
-        // Matched rows per member-day in file order; members in id order so concurrent imports and timer commands lock
-        // timer states in one order.
-        var byUser = new TreeMap<UUID, LinkedHashMap<LocalDate, List<Integer>>>();
+        // Matched rows per member-day in file order; members in database id order, the order archive and purge lock
+        // timer states in.
+        var byUser = new TreeMap<UUID, LinkedHashMap<LocalDate, List<Integer>>>(DATABASE_ORDER);
         for (int i = 0; i < rows.size(); i++)
             if (targets.containsKey(i))
                 byUser.computeIfAbsent(rows.get(i).userId(), id -> new LinkedHashMap<>())
