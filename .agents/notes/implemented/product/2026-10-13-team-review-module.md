@@ -9,7 +9,7 @@ Status: implemented
 ## Decision
 
 - 工作台只放个人范围；一级模块「团队」是公司管理人员的业务审阅视角，仅 COMPANY_ADMIN 可见，APP_MANAGER 自动包含。公司管理只做配置与治理，先例是独立的运维中心。
-- 团队路由为 `team/:view(timesheet|overtime|workload)`，侧栏切换成员工时、加班统计和成员当前任务，共用组件保留周期和勾选状态。我的工时使用 `workspace/:workspaceSlug/my-time`，入口在工作台侧栏的仪表板之后。
+- 团队路由为 `team/:view(timesheet|overtime|workload)`，侧栏切换成员工时、加班统计和成员当前任务，共用组件保留周期和勾选状态。我的工时使用 `workspace/:workspaceSlug/my-time`，入口在模块栏，见[模块栏个人入口与我的工作](2026-11-06-module-rail-and-my-work.md)。
 - 旧的工作台团队地址和 `/dashboards/team` 提醒入口由会话守卫转到 `/team/timesheet`，保留查询参数和 hash；旧的 `my-time` 固定标签地址转到我的工时页。普通成员访问团队地址进入 forbidden。
 - 仪表板只剩私人画布，保留原有选择、重命名、保存和导出能力。
 - 首页卡片按 `memberTier` 增减：普通成员保留原卡片，仅工时日历「查看明细」改到新页面；公司管理员第二张卡片为团队视图；APP_MANAGER 另有运维卡片与告警数。

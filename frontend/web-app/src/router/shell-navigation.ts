@@ -1,1 +1,1 @@
-export type ShellSection = 'home' | 'work' | 'team' | 'company' | 'inbox' | 'operations'
+export type ShellSection = 'home' | 'work' | 'dashboards' | 'my-time' | 'team' | 'company' | 'inbox' | 'operations'

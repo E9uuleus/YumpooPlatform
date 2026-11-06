@@ -56,6 +56,13 @@ describe('个人工作台规范路由守卫', () => {
     })
   })
 
+  it('个人页面解析到对应模块栏入口', () => {
+    const workspace = '/workspace/hanzhoujiangshangyu'
+    expect(router.resolve(`${workspace}/dashboards`).meta.shellSection).toBe('dashboards')
+    expect(router.resolve(`${workspace}/my-time`).meta.shellSection).toBe('my-time')
+    expect(router.resolve(`${workspace}/my-time/day/2026-11-06`).meta.shellSection).toBe('my-time')
+  })
+
   it('错误或其他用户别名不查询身份，直接替换为当前用户地址', () => {
     expect(destination('/workspace/someone-else')).toEqual({
       name: 'workspace',
