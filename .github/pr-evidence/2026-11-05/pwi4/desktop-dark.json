@@ -1,0 +1,43 @@
+{
+  "theme": "dark",
+  "mode": "desktop",
+  "seed": "b155cca7-9217-43c7-a39c-f71ef2e80add",
+  "window": {
+    "title": "YumpooPlatform",
+    "role": "工作计时器",
+    "surface": "timer",
+    "url": "/timer",
+    "visible": [
+      {
+        "path": "/timer",
+        "bounds": {
+          "x": 2164,
+          "y": 876,
+          "width": 384,
+          "height": 504
+        }
+      },
+      {
+        "path": "/timer/rail",
+        "bounds": {
+          "x": 2496,
+          "y": 659,
+          "width": 64,
+          "height": 74
+        }
+      },
+      {
+        "path": "/",
+        "bounds": {
+          "x": 632,
+          "y": 276,
+          "width": 1296,
+          "height": 839
+        }
+      }
+    ],
+    "foundWorkItem": true
+  },
+  "errors": [],
+  "result": "PASS"
+}

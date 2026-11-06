@@ -1,0 +1,15 @@
+{
+  "theme": "light",
+  "mode": "midnight",
+  "seed": "b6c95076-f51f-4952-ba70-ff3b9e57c98b",
+  "clock": {
+    "timezone": "Asia/Shanghai",
+    "from": "今天 · 2026-11-06 周五",
+    "to": "昨天 · 2026-11-06 周五",
+    "entryTime": "12:55",
+    "requestsDuringRollover": 0,
+    "navigationsDuringRollover": 0
+  },
+  "errors": [],
+  "result": "PASS"
+}

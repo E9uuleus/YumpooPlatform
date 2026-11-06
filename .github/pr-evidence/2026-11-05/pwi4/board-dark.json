@@ -1,0 +1,42 @@
+{
+  "theme": "dark",
+  "mode": "board",
+  "seed": "b155cca7-9217-43c7-a39c-f71ef2e80add",
+  "pages": {
+    "first": 25,
+    "after": 28,
+    "cursorResponses": [
+      {
+        "status": 200,
+        "cursor": true
+      }
+    ]
+  },
+  "plainTransition": {
+    "before": "NOT_STARTED",
+    "after": "IN_PROGRESS",
+    "body": {
+      "toStatus": "IN_PROGRESS",
+      "resolution": null
+    }
+  },
+  "resolution": {
+    "fixture": "only requiresResolution on one returned move",
+    "fixtureHits": 1,
+    "cancelRequests": 0,
+    "body": {
+      "toStatus": "STUCK",
+      "resolution": "交接已确认，可以进入下一状态"
+    },
+    "persisted": "STUCK"
+  },
+  "drawer": {
+    "width": 560,
+    "after": 680,
+    "keptDraft": true,
+    "discarded": true,
+    "reopenWidth": 680
+  },
+  "errors": [],
+  "result": "PASS"
+}

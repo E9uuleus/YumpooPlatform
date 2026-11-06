@@ -1,0 +1,31 @@
+{
+  "theme": "dark",
+  "mode": "navigation",
+  "seed": "b155cca7-9217-43c7-a39c-f71ef2e80add",
+  "project": {
+    "held": [
+      "/assets/ProjectLayout-BTvbixCC.js",
+      "/assets/ProjectOverviewView-Da-Obrp_.js"
+    ],
+    "barHeight": 3,
+    "workspaceVisibleDuringLoad": true,
+    "frames": {
+      "sampled": 92,
+      "blank": []
+    }
+  },
+  "company": {
+    "held": [
+      "/assets/IdentityAdminLayout-9qF-VmQv.js",
+      "/assets/IdentityOverviewView-Cqa1PfMr.js"
+    ],
+    "barHeight": 3,
+    "workspaceVisibleDuringLoad": true,
+    "frames": {
+      "sampled": 52,
+      "blank": []
+    }
+  },
+  "errors": [],
+  "result": "PASS"
+}
