@@ -21,8 +21,6 @@ public final class SecureSessionCredentialGenerator implements SessionCredential
     public SessionCredential generate() {
         byte[] bytes = new byte[TOKEN_BYTES];
         secureRandom.nextBytes(bytes);
-        return new SessionCredential(
-                Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
-        );
+        return new SessionCredential(Base64.getUrlEncoder().withoutPadding().encodeToString(bytes));
     }
 }

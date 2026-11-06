@@ -1,19 +1,5 @@
 package com.yumpoo.platform.audit.api;
 
-import com.yumpoo.platform.audit.application.WorkItemCellActivityRepository;
-import com.yumpoo.platform.audit.application.WorkItemCellActivityStoredEvent;
-import com.yumpoo.platform.foundation.application.event.DomainEventEnvelope;
-import com.yumpoo.platform.foundation.application.event.EventActor;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.node.ObjectNode;
-
-import java.time.Instant;
-import java.util.Optional;
-import java.util.UUID;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -21,6 +7,19 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import com.yumpoo.platform.audit.application.WorkItemCellActivityRepository;
+import com.yumpoo.platform.audit.application.WorkItemCellActivityStoredEvent;
+import com.yumpoo.platform.foundation.application.event.DomainEventEnvelope;
+import com.yumpoo.platform.foundation.application.event.EventActor;
+import java.time.Instant;
+import java.util.Optional;
+import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 class WorkItemCellActivityProjectionServiceTest {
     private static final UUID COMPANY = UUID.fromString("00000000-0000-4000-8000-000000000001");
@@ -41,10 +40,10 @@ class WorkItemCellActivityProjectionServiceTest {
         context = mock(ActivityProjectionContextPort.class);
         when(repository.acceptedFrom()).thenReturn(CUTOVER);
         when(context.userDisplayName(COMPANY, ACTOR)).thenReturn(Optional.of("林晓"));
-        when(context.content(COMPANY, PROJECT, CONTENT)).thenReturn(Optional.of(
-                new ActivityProjectionContextPort.ContentReference(CONTENT, "需求")));
-        when(context.priority(COMPANY, PROJECT, "HIGH")).thenReturn(Optional.of(
-                new ActivityProjectionContextPort.LabelReference("HIGH", "高", "DARK_ORANGE")));
+        when(context.content(COMPANY, PROJECT, CONTENT))
+                .thenReturn(Optional.of(new ActivityProjectionContextPort.ContentReference(CONTENT, "需求")));
+        when(context.priority(COMPANY, PROJECT, "HIGH"))
+                .thenReturn(Optional.of(new ActivityProjectionContextPort.LabelReference("HIGH", "高", "DARK_ORANGE")));
         service = new WorkItemCellActivityProjectionService(repository, context, objectMapper);
     }
 
@@ -70,19 +69,31 @@ class WorkItemCellActivityProjectionServiceTest {
         payload.putNull("previousDueDate");
         payload.putNull("priority");
         payload.put("dueDate", "2026-09-08");
-        payload.set("changedFields", objectMapper.createArrayNode().add("title")
-                .add("priority").add("dueDate").add("description").add("notes")
-                .add("timelineStartDate"));
+        payload.set(
+                "changedFields",
+                objectMapper
+                        .createArrayNode()
+                        .add("title")
+                        .add("priority")
+                        .add("dueDate")
+                        .add("description")
+                        .add("notes")
+                        .add("timelineStartDate"));
 
         service.consume(event("workitem.work_item_fields_changed", CUTOVER.plusSeconds(1), payload));
 
         ArgumentCaptor<WorkItemCellActivityStoredEvent> captor =
                 ArgumentCaptor.forClass(WorkItemCellActivityStoredEvent.class);
         verify(repository, times(3)).append(captor.capture());
-        assertThat(captor.getAllValues()).extracting(WorkItemCellActivityStoredEvent::columnCode)
+        assertThat(captor.getAllValues())
+                .extracting(WorkItemCellActivityStoredEvent::columnCode)
                 .containsExactly("WORK_ITEM_NAME", "PRIORITY", "DUE_DATE");
         assertThat(captor.getAllValues().get(1).changeType()).isEqualTo("REMOVED");
-        assertThat(captor.getAllValues().get(1).beforeValue().path("displayName").asText())
+        assertThat(captor.getAllValues()
+                        .get(1)
+                        .beforeValue()
+                        .path("displayName")
+                        .asText())
                 .isEqualTo("高");
         assertThat(captor.getAllValues().get(2).changeType()).isEqualTo("ADDED");
     }
@@ -117,10 +128,13 @@ class WorkItemCellActivityProjectionServiceTest {
         payload.put("previousDueDate", "2026-09-09").put("previousDueTime", "09:30");
         payload.putNull("dueDate").putNull("dueTime");
         service.consume(event("workitem.work_item_fields_changed", 2, CUTOVER.plusSeconds(3), payload));
-        ArgumentCaptor<WorkItemCellActivityStoredEvent> captor = ArgumentCaptor.forClass(WorkItemCellActivityStoredEvent.class);
+        ArgumentCaptor<WorkItemCellActivityStoredEvent> captor =
+                ArgumentCaptor.forClass(WorkItemCellActivityStoredEvent.class);
         verify(repository, times(3)).append(captor.capture());
         var changes = captor.getAllValues();
-        assertThat(changes).extracting(WorkItemCellActivityStoredEvent::columnCode).containsOnly("DUE_DATE");
+        assertThat(changes)
+                .extracting(WorkItemCellActivityStoredEvent::columnCode)
+                .containsOnly("DUE_DATE");
         assertThat(changes.get(0).beforeValue().path("displayName").asText()).isEqualTo("2026-09-08");
         assertThat(changes.get(0).afterValue().path("displayName").asText()).isEqualTo("2026-09-08 18:05");
         assertThat(changes.get(1).beforeValue().path("displayName").asText()).isEqualTo("2026-09-08 18:05");
@@ -138,15 +152,19 @@ class WorkItemCellActivityProjectionServiceTest {
         payload.put("startedAt", "2026-09-01T01:00:00Z");
         payload.put("stoppedAt", "2026-09-01T02:30:00Z");
         service.consume(event("workitem.time_tracking_edited", 2, CUTOVER.plusSeconds(1), payload));
-        ArgumentCaptor<WorkItemCellActivityStoredEvent> captor = ArgumentCaptor.forClass(WorkItemCellActivityStoredEvent.class);
+        ArgumentCaptor<WorkItemCellActivityStoredEvent> captor =
+                ArgumentCaptor.forClass(WorkItemCellActivityStoredEvent.class);
         verify(repository).append(captor.capture());
         assertThat(captor.getValue().columnCode()).isEqualTo("TIME_TRACKING");
-        assertThat(captor.getValue().beforeValue().path("displayName").asText()).isEqualTo("2026-09-01T01:00:00Z/2026-09-01T02:00:00Z");
+        assertThat(captor.getValue().beforeValue().path("displayName").asText())
+                .isEqualTo("2026-09-01T01:00:00Z/2026-09-01T02:00:00Z");
         assertThat(captor.getValue().afterValue().path("displayName").asText()).endsWith("02:30:00Z");
         payload.put("previousStoppedAt", "2026-09-01T02:30:00Z");
         service.consume(event("workitem.time_tracking_edited", 2, CUTOVER.plusSeconds(2), payload));
         verify(repository, times(1)).append(any());
-        assertThat(service.subscriptions()).noneMatch(subscription -> subscription.eventType().matches("workitem.time_tracking_(started|stopped|added)"));
+        assertThat(service.subscriptions())
+                .noneMatch(subscription ->
+                        subscription.eventType().matches("workitem.time_tracking_(started|stopped|added)"));
     }
 
     @Test
@@ -163,30 +181,43 @@ class WorkItemCellActivityProjectionServiceTest {
         assertThat(row.columnCode()).isEqualTo("TIME_TRACKING");
         assertThat(row.changeType()).isEqualTo("REMOVED");
         assertThat(row.afterValue()).isNull();
-        assertThat(row.beforeValue().path("displayName").asText()).isEqualTo("2026-09-01T01:00:00Z/2026-09-01T02:00:00Z");
+        assertThat(row.beforeValue().path("displayName").asText())
+                .isEqualTo("2026-09-01T01:00:00Z/2026-09-01T02:00:00Z");
         assertThat(row.actorUserId()).isEqualTo(ACTOR);
         assertThat(row.occurredAt()).isEqualTo(occurredAt);
     }
 
     @Test
     void assigneeSetChangesProduceOneRowPerRemovedAndAddedMember() {
-        UUID added=UUID.randomUUID(), removed=UUID.randomUUID();
-        ObjectNode payload=base();payload.putArray("addedUserIds").add(added.toString());
+        UUID added = UUID.randomUUID(), removed = UUID.randomUUID();
+        ObjectNode payload = base();
+        payload.putArray("addedUserIds").add(added.toString());
         payload.putArray("removedUserIds").add(removed.toString());
-        service.consume(event("workitem.work_item_assignees_changed",CUTOVER.plusSeconds(1),payload));
-        var captor=ArgumentCaptor.forClass(WorkItemCellActivityStoredEvent.class);
-        verify(repository,times(2)).append(captor.capture());
-        assertThat(captor.getAllValues()).extracting(WorkItemCellActivityStoredEvent::changeType).containsExactly("REMOVED","ADDED");
-        assertThat(captor.getAllValues()).extracting(WorkItemCellActivityStoredEvent::valueKey).containsExactly(removed.toString(),added.toString());
-        assertThat(captor.getAllValues().get(0).beforeValue().path("referenceId").asText()).isEqualTo(removed.toString());
-        assertThat(captor.getAllValues().get(1).afterValue().path("referenceId").asText()).isEqualTo(added.toString());
+        service.consume(event("workitem.work_item_assignees_changed", CUTOVER.plusSeconds(1), payload));
+        var captor = ArgumentCaptor.forClass(WorkItemCellActivityStoredEvent.class);
+        verify(repository, times(2)).append(captor.capture());
+        assertThat(captor.getAllValues())
+                .extracting(WorkItemCellActivityStoredEvent::changeType)
+                .containsExactly("REMOVED", "ADDED");
+        assertThat(captor.getAllValues())
+                .extracting(WorkItemCellActivityStoredEvent::valueKey)
+                .containsExactly(removed.toString(), added.toString());
+        assertThat(captor.getAllValues()
+                        .get(0)
+                        .beforeValue()
+                        .path("referenceId")
+                        .asText())
+                .isEqualTo(removed.toString());
+        assertThat(captor.getAllValues().get(1).afterValue().path("referenceId").asText())
+                .isEqualTo(added.toString());
     }
 
     @Test
     void markedLegacyAssignmentDoesNotProduceCellActivity() {
-        ObjectNode payload=base();payload.putArray("assigneeUserIds");
-        service.consume(event("workitem.work_item_assigned",CUTOVER.plusSeconds(1),payload));
-        verify(repository,never()).append(any());
+        ObjectNode payload = base();
+        payload.putArray("assigneeUserIds");
+        service.consume(event("workitem.work_item_assigned", CUTOVER.plusSeconds(1), payload));
+        verify(repository, never()).append(any());
     }
 
     private ObjectNode base() {
@@ -203,8 +234,19 @@ class WorkItemCellActivityProjectionServiceTest {
     }
 
     private DomainEventEnvelope event(String type, int version, Instant occurredAt, ObjectNode payload) {
-        return new DomainEventEnvelope(UUID.randomUUID(), type, version, occurredAt, "WorkItem", ITEM,
-                2, COMPANY, EventActor.user(ACTOR), "cell-activity-test", "cell-activity-test",
-                null, payload);
+        return new DomainEventEnvelope(
+                UUID.randomUUID(),
+                type,
+                version,
+                occurredAt,
+                "WorkItem",
+                ITEM,
+                2,
+                COMPANY,
+                EventActor.user(ACTOR),
+                "cell-activity-test",
+                "cell-activity-test",
+                null,
+                payload);
     }
 }

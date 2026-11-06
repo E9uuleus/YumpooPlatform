@@ -1,12 +1,11 @@
 package com.yumpoo.platform.identityaccess.application.directory;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.List;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
 
 class DirectoryProfileMapperTest {
 
@@ -17,13 +16,9 @@ class DirectoryProfileMapperTest {
                 "Alice",
                 DirectoryOptionalField.unavailable(),
                 DirectoryOptionalField.clear(),
-                List.of(20L, 3L, 20L)
-        );
+                List.of(20L, 3L, 20L));
 
-        WeComMemberProfile mapped = DirectoryProfileMapper.map(
-                raw,
-                Map.of(3L, "研发部", 20L, "华东区")
-        );
+        WeComMemberProfile mapped = DirectoryProfileMapper.map(raw, Map.of(3L, "研发部", 20L, "华东区"));
 
         assertThat(mapped.departmentSummary()).isEqualTo("研发部、华东区");
         assertThat(mapped.email().state()).isEqualTo(DirectoryOptionalField.State.UNAVAILABLE);
@@ -34,8 +29,13 @@ class DirectoryProfileMapperTest {
     @Test
     void includesProviderAccountStatusInTheProfileAndFingerprint() {
         var active = profile(DirectoryOptionalField.unavailable());
-        var disabled = new WeComRawMemberProfile(active.externalUserId(), active.displayName(),
-                active.email(), active.mobile(), active.departmentIds(), true);
+        var disabled = new WeComRawMemberProfile(
+                active.externalUserId(),
+                active.displayName(),
+                active.email(),
+                active.mobile(),
+                active.departmentIds(),
+                true);
         var mapped = DirectoryProfileMapper.map(disabled, Map.of(3L, "研发部"));
         assertThat(mapped.accountDisabled()).isTrue();
         assertThat(mapped.rawProfileHash()).isNotEqualTo(DirectoryCanonicalHash.profile(active, "研发部"));
@@ -44,17 +44,12 @@ class DirectoryProfileMapperTest {
     @Test
     void failsWhenDepartmentNameIsOutsideReadableScope() {
         WeComRawMemberProfile raw = new WeComRawMemberProfile(
-                "member-a",
-                "Alice",
-                DirectoryOptionalField.clear(),
-                DirectoryOptionalField.clear(),
-                List.of(3L)
-        );
+                "member-a", "Alice", DirectoryOptionalField.clear(), DirectoryOptionalField.clear(), List.of(3L));
 
         assertThatThrownBy(() -> DirectoryProfileMapper.map(raw, Map.of()))
-                .isInstanceOfSatisfying(DirectorySyncException.class,
-                        error -> assertThat(error.errorCode())
-                                .isEqualTo("DIRECTORY_DEPARTMENT_UNAVAILABLE"));
+                .isInstanceOfSatisfying(
+                        DirectorySyncException.class,
+                        error -> assertThat(error.errorCode()).isEqualTo("DIRECTORY_DEPARTMENT_UNAVAILABLE"));
     }
 
     @Test
@@ -65,17 +60,11 @@ class DirectoryProfileMapperTest {
         assertThat(DirectoryCanonicalHash.profile(unavailable, "研发部"))
                 .isNotEqualTo(DirectoryCanonicalHash.profile(clear, "研发部"));
         assertThat(DirectoryCanonicalHash.profile(unavailable, "研发部"))
-                .isEqualTo(DirectoryCanonicalHash.profile(profile(
-                        DirectoryOptionalField.unavailable()), "研发部"));
+                .isEqualTo(DirectoryCanonicalHash.profile(profile(DirectoryOptionalField.unavailable()), "研发部"));
     }
 
     private static WeComRawMemberProfile profile(DirectoryOptionalField email) {
         return new WeComRawMemberProfile(
-                "member-a",
-                "Alice",
-                email,
-                DirectoryOptionalField.present("13800000000"),
-                List.of(3L)
-        );
+                "member-a", "Alice", email, DirectoryOptionalField.present("13800000000"), List.of(3L));
     }
 }

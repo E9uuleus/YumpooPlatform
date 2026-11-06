@@ -8,17 +8,16 @@ import com.yumpoo.platform.identityaccess.application.desktopauth.DesktopIdentit
 import com.yumpoo.platform.identityaccess.application.desktopauth.PkceS256Challenge;
 import com.yumpoo.platform.identityaccess.application.desktopauth.ProductDesktopAuthAttempt;
 import com.yumpoo.platform.identityaccess.application.desktopauth.ProductDesktopAuthExchange;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Repository;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 @Repository
 public class JdbcDesktopAuthAttemptRepository implements DesktopAuthAttemptStore {
@@ -156,7 +155,8 @@ public class JdbcDesktopAuthAttemptRepository implements DesktopAuthAttemptStore
     @Transactional
     public void create(DesktopAuthAttempt attempt) {
         Objects.requireNonNull(attempt, "attempt must not be null");
-        int rows = jdbcClient.sql(INSERT_ATTEMPT)
+        int rows = jdbcClient
+                .sql(INSERT_ATTEMPT)
                 .param("desktopStateHash", attempt.desktopStateHash().value())
                 .param("oauthStateHash", attempt.oauthStateHash().value())
                 .param("pkceChallenge", attempt.pkceChallenge().value())
@@ -177,23 +177,24 @@ public class JdbcDesktopAuthAttemptRepository implements DesktopAuthAttemptStore
             DesktopAuthTokenHash handoffCodeHash,
             DesktopIdentityFingerprint identityFingerprint,
             Instant issuedAt,
-            Instant expiresAt
-    ) {
+            Instant expiresAt) {
         Objects.requireNonNull(oauthStateHash, "oauthStateHash must not be null");
         Objects.requireNonNull(desktopStateHash, "desktopStateHash must not be null");
         Objects.requireNonNull(handoffCodeHash, "handoffCodeHash must not be null");
         Objects.requireNonNull(identityFingerprint, "identityFingerprint must not be null");
         Objects.requireNonNull(issuedAt, "issuedAt must not be null");
         Objects.requireNonNull(expiresAt, "expiresAt must not be null");
-        return jdbcClient.sql(ISSUE_HANDOFF)
-                .param("oauthStateHash", oauthStateHash.value())
-                .param("desktopStateHash", desktopStateHash.value())
-                .param("handoffCodeHash", handoffCodeHash.value())
-                .param("corpFingerprint", identityFingerprint.corpFingerprint())
-                .param("memberFingerprint", identityFingerprint.memberFingerprint())
-                .param("issuedAt", utc(issuedAt))
-                .param("expiresAt", utc(expiresAt))
-                .update() == 1;
+        return jdbcClient
+                        .sql(ISSUE_HANDOFF)
+                        .param("oauthStateHash", oauthStateHash.value())
+                        .param("desktopStateHash", desktopStateHash.value())
+                        .param("handoffCodeHash", handoffCodeHash.value())
+                        .param("corpFingerprint", identityFingerprint.corpFingerprint())
+                        .param("memberFingerprint", identityFingerprint.memberFingerprint())
+                        .param("issuedAt", utc(issuedAt))
+                        .param("expiresAt", utc(expiresAt))
+                        .update()
+                == 1;
     }
 
     @Override
@@ -202,25 +203,24 @@ public class JdbcDesktopAuthAttemptRepository implements DesktopAuthAttemptStore
             DesktopAuthTokenHash desktopStateHash,
             DesktopAuthTokenHash handoffCodeHash,
             PkceS256Challenge pkceChallenge,
-            Instant consumedAt
-    ) {
+            Instant consumedAt) {
         Objects.requireNonNull(desktopStateHash, "desktopStateHash must not be null");
         Objects.requireNonNull(handoffCodeHash, "handoffCodeHash must not be null");
         Objects.requireNonNull(pkceChallenge, "pkceChallenge must not be null");
         Objects.requireNonNull(consumedAt, "consumedAt must not be null");
-        return jdbcClient.sql(CONSUME_HANDOFF)
+        return jdbcClient
+                .sql(CONSUME_HANDOFF)
                 .param("desktopStateHash", desktopStateHash.value())
                 .param("handoffCodeHash", handoffCodeHash.value())
                 .param("pkceChallenge", pkceChallenge.value())
                 .param("consumedAt", utc(consumedAt))
                 .query((resultSet, rowNumber) -> new DesktopAuthExchange(
                         new DesktopIdentityFingerprint(
-                                resultSet.getString("corp_fingerprint"),
-                                resultSet.getString("member_fingerprint")
-                        ),
-                        resultSet.getObject("handoff_issued_at", OffsetDateTime.class).toInstant(),
-                        resultSet.getObject("consumed_at", OffsetDateTime.class).toInstant()
-                ))
+                                resultSet.getString("corp_fingerprint"), resultSet.getString("member_fingerprint")),
+                        resultSet
+                                .getObject("handoff_issued_at", OffsetDateTime.class)
+                                .toInstant(),
+                        resultSet.getObject("consumed_at", OffsetDateTime.class).toInstant()))
                 .optional();
     }
 
@@ -228,7 +228,8 @@ public class JdbcDesktopAuthAttemptRepository implements DesktopAuthAttemptStore
     @Transactional
     public void createProduct(ProductDesktopAuthAttempt attempt) {
         Objects.requireNonNull(attempt, "attempt must not be null");
-        int rows = jdbcClient.sql(INSERT_PRODUCT_ATTEMPT)
+        int rows = jdbcClient
+                .sql(INSERT_PRODUCT_ATTEMPT)
                 .param("stateHash", attempt.stateHash().value())
                 .param("pkceChallenge", attempt.pkceChallenge().value())
                 .param("requestId", attempt.requestId())
@@ -246,10 +247,12 @@ public class JdbcDesktopAuthAttemptRepository implements DesktopAuthAttemptStore
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean claimProductAuthorization(DesktopAuthTokenHash stateHash, Instant claimedAt) {
-        return jdbcClient.sql(CLAIM_PRODUCT_AUTHORIZATION)
-                .param("stateHash", stateHash.value())
-                .param("claimedAt", utc(claimedAt))
-                .update() == 1;
+        return jdbcClient
+                        .sql(CLAIM_PRODUCT_AUTHORIZATION)
+                        .param("stateHash", stateHash.value())
+                        .param("claimedAt", utc(claimedAt))
+                        .update()
+                == 1;
     }
 
     /**
@@ -264,15 +267,16 @@ public class JdbcDesktopAuthAttemptRepository implements DesktopAuthAttemptStore
             DesktopAuthTokenHash handoffCodeHash,
             UUID userId,
             Instant issuedAt,
-            Instant expiresAt
-    ) {
-        return jdbcClient.sql(ISSUE_PRODUCT_HANDOFF)
-                .param("stateHash", stateHash.value())
-                .param("handoffCodeHash", handoffCodeHash.value())
-                .param("userId", userId)
-                .param("issuedAt", utc(issuedAt))
-                .param("expiresAt", utc(expiresAt))
-                .update() == 1;
+            Instant expiresAt) {
+        return jdbcClient
+                        .sql(ISSUE_PRODUCT_HANDOFF)
+                        .param("stateHash", stateHash.value())
+                        .param("handoffCodeHash", handoffCodeHash.value())
+                        .param("userId", userId)
+                        .param("issuedAt", utc(issuedAt))
+                        .param("expiresAt", utc(expiresAt))
+                        .update()
+                == 1;
     }
 
     @Override
@@ -281,9 +285,9 @@ public class JdbcDesktopAuthAttemptRepository implements DesktopAuthAttemptStore
             DesktopAuthTokenHash stateHash,
             DesktopAuthTokenHash handoffCodeHash,
             PkceS256Challenge pkceChallenge,
-            Instant consumedAt
-    ) {
-        return jdbcClient.sql(CONSUME_PRODUCT_HANDOFF)
+            Instant consumedAt) {
+        return jdbcClient
+                .sql(CONSUME_PRODUCT_HANDOFF)
                 .param("stateHash", stateHash.value())
                 .param("handoffCodeHash", handoffCodeHash.value())
                 .param("pkceChallenge", pkceChallenge.value())
@@ -292,10 +296,11 @@ public class JdbcDesktopAuthAttemptRepository implements DesktopAuthAttemptStore
                         resultSet.getObject("authenticated_user_id", UUID.class),
                         resultSet.getString("client_version"),
                         resultSet.getString("client_protocol_version"),
-                        resultSet.getObject("handoff_issued_at", OffsetDateTime.class).toInstant(),
+                        resultSet
+                                .getObject("handoff_issued_at", OffsetDateTime.class)
+                                .toInstant(),
                         resultSet.getObject("consumed_at", OffsetDateTime.class).toInstant(),
-                        resultSet.getBoolean("remember_me")
-                ))
+                        resultSet.getBoolean("remember_me")))
                 .optional();
     }
 

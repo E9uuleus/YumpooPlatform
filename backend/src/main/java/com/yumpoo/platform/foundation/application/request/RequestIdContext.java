@@ -12,11 +12,12 @@ public final class RequestIdContext {
     public static final int MAX_LENGTH = 64;
     private static final Pattern SAFE_ID = Pattern.compile("^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$");
 
-    private RequestIdContext() {
-    }
+    private RequestIdContext() {}
 
     public static boolean isValid(String value) {
-        return value != null && value.length() <= MAX_LENGTH && SAFE_ID.matcher(value).matches();
+        return value != null
+                && value.length() <= MAX_LENGTH
+                && SAFE_ID.matcher(value).matches();
     }
 
     public static String requireValid(String value, String fieldName) {

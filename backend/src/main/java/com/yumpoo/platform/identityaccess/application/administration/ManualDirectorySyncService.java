@@ -7,10 +7,9 @@ import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncAdm
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncCommand;
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncExecutionResult;
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncTriggerType;
+import java.util.UUID;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
-
-import java.util.UUID;
 
 @Service
 public class ManualDirectorySyncService {
@@ -20,28 +19,19 @@ public class ManualDirectorySyncService {
 
     public ManualDirectorySyncService(
             IdentityAdminAccessPolicy accessPolicy,
-            ObjectProvider<DirectorySyncAdministrationUseCase> useCaseProvider
-    ) {
+            ObjectProvider<DirectorySyncAdministrationUseCase> useCaseProvider) {
         this.accessPolicy = accessPolicy;
         this.useCaseProvider = useCaseProvider;
     }
 
     public DirectorySyncExecutionResult execute(
-            UUID companyId,
-            UUID actorUserId,
-            String idempotencyKey,
-            String requestId
-    ) {
+            UUID companyId, UUID actorUserId, String idempotencyKey, String requestId) {
         accessPolicy.requireCompanyAdmin(companyId, actorUserId);
         DirectorySyncAdministrationUseCase useCase = useCaseProvider.getIfAvailable();
         if (useCase == null) {
             throw new ApplicationException(StandardErrorCode.DEPENDENCY_UNAVAILABLE);
         }
         return useCase.executeWithDisposition(new DirectorySyncCommand(
-                idempotencyKey,
-                DirectorySyncTriggerType.MANUAL,
-                EventActor.user(actorUserId),
-                requestId
-        ));
+                idempotencyKey, DirectorySyncTriggerType.MANUAL, EventActor.user(actorUserId), requestId));
     }
 }

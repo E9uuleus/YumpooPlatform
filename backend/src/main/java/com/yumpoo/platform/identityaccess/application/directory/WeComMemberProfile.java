@@ -1,7 +1,6 @@
 package com.yumpoo.platform.identityaccess.application.directory;
 
 import com.yumpoo.platform.identityaccess.domain.identity.ProfileHash;
-
 import java.util.Objects;
 
 public record WeComMemberProfile(
@@ -11,12 +10,15 @@ public record WeComMemberProfile(
         DirectoryOptionalField mobile,
         String departmentSummary,
         ProfileHash rawProfileHash,
-        boolean accountDisabled
-) {
+        boolean accountDisabled) {
 
-    public WeComMemberProfile(String externalUserId, String displayName,
-            DirectoryOptionalField email, DirectoryOptionalField mobile,
-            String departmentSummary, ProfileHash rawProfileHash) {
+    public WeComMemberProfile(
+            String externalUserId,
+            String displayName,
+            DirectoryOptionalField email,
+            DirectoryOptionalField mobile,
+            String departmentSummary,
+            ProfileHash rawProfileHash) {
         this(externalUserId, displayName, email, mobile, departmentSummary, rawProfileHash, false);
     }
 
@@ -25,11 +27,7 @@ public record WeComMemberProfile(
         displayName = normalizeRequired(displayName, 200, "displayName");
         email = normalizedField(email, 320, "email");
         mobile = normalizedField(mobile, 64, "mobile");
-        departmentSummary = normalizeOptional(
-                departmentSummary,
-                1000,
-                "departmentSummary"
-        );
+        departmentSummary = normalizeOptional(departmentSummary, 1000, "departmentSummary");
         Objects.requireNonNull(rawProfileHash, "rawProfileHash must not be null");
     }
 
@@ -62,10 +60,7 @@ public record WeComMemberProfile(
     }
 
     private static DirectoryOptionalField normalizedField(
-            DirectoryOptionalField field,
-            int maxLength,
-            String fieldName
-    ) {
+            DirectoryOptionalField field, int maxLength, String fieldName) {
         Objects.requireNonNull(field, fieldName + " must not be null");
         if (field.state() != DirectoryOptionalField.State.PRESENT) {
             return field;

@@ -3,7 +3,6 @@ package com.yumpoo.platform.identityaccess.testing;
 import com.yumpoo.platform.identityaccess.application.directory.DirectoryMemberFingerprint;
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySnapshotFailure;
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySnapshotResult;
-
 import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
@@ -11,29 +10,16 @@ import java.util.Set;
 /** M0-13 live-only compatibility for WeCom terminal pages that omit next_cursor. */
 public final class M013OmittedCursorConfirmation {
 
-    private M013OmittedCursorConfirmation() {
-    }
+    private M013OmittedCursorConfirmation() {}
 
     public static ConfirmedSnapshot confirm(
             DirectorySnapshotResult firstPaginated,
             DirectorySnapshotResult repeatedPaginated,
-            DirectorySnapshotResult wide
-    ) {
-        DirectorySnapshotResult.Incomplete first = requireCandidate(
-                firstPaginated,
-                true,
-                "first paginated snapshot"
-        );
-        DirectorySnapshotResult.Incomplete repeated = requireCandidate(
-                repeatedPaginated,
-                true,
-                "repeated paginated snapshot"
-        );
-        DirectorySnapshotResult.Incomplete wideCandidate = requireCandidate(
-                wide,
-                false,
-                "wide snapshot"
-        );
+            DirectorySnapshotResult wide) {
+        DirectorySnapshotResult.Incomplete first = requireCandidate(firstPaginated, true, "first paginated snapshot");
+        DirectorySnapshotResult.Incomplete repeated =
+                requireCandidate(repeatedPaginated, true, "repeated paginated snapshot");
+        DirectorySnapshotResult.Incomplete wideCandidate = requireCandidate(wide, false, "wide snapshot");
 
         Set<String> memberFingerprints = fingerprintValues(first);
         if (!first.corpFingerprint().equals(repeated.corpFingerprint())
@@ -45,18 +31,11 @@ public final class M013OmittedCursorConfirmation {
             throw new IllegalStateException("M0-13 narrow and wide snapshots did not match");
         }
 
-        return new ConfirmedSnapshot(
-                memberFingerprints,
-                first.corpFingerprint(),
-                first.memberSetFingerprint()
-        );
+        return new ConfirmedSnapshot(memberFingerprints, first.corpFingerprint(), first.memberSetFingerprint());
     }
 
     private static DirectorySnapshotResult.Incomplete requireCandidate(
-            DirectorySnapshotResult result,
-            boolean paginationRequired,
-            String description
-    ) {
+            DirectorySnapshotResult result, boolean paginationRequired, String description) {
         Objects.requireNonNull(result, "snapshot must not be null");
         if (!(result instanceof DirectorySnapshotResult.Incomplete incomplete)
                 || incomplete.failure() != DirectorySnapshotFailure.MISSING_CURSOR) {
@@ -83,10 +62,7 @@ public final class M013OmittedCursorConfirmation {
     }
 
     public record ConfirmedSnapshot(
-            Set<String> memberFingerprints,
-            String corpFingerprint,
-            String snapshotFingerprint
-    ) {
+            Set<String> memberFingerprints, String corpFingerprint, String snapshotFingerprint) {
 
         public ConfirmedSnapshot {
             memberFingerprints = Set.copyOf(memberFingerprints);

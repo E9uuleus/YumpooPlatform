@@ -13,12 +13,7 @@ public final class InitialIdentityBootstrapException extends RuntimeException {
         this(stage, errorCode, null, safeMessage);
     }
 
-    public InitialIdentityBootstrapException(
-            String stage,
-            String errorCode,
-            UUID directoryRunId,
-            String safeMessage
-    ) {
+    public InitialIdentityBootstrapException(String stage, String errorCode, UUID directoryRunId, String safeMessage) {
         super(requireSafeMessage(safeMessage));
         this.stage = requireCode(stage, "stage");
         this.errorCode = requireCode(errorCode, "errorCode");

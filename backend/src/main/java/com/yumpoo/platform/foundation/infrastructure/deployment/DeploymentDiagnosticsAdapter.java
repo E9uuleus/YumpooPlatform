@@ -27,25 +27,25 @@ public class DeploymentDiagnosticsAdapter implements DeploymentDiagnosticsPort {
     public Snapshot read() {
         record Root(String key, String fallback, String purpose, boolean writable) {}
         List<Root> roots = List.of(
-            new Root("yumpoo.deployment.release-root", ".", "APPLICATION", false),
-            new Root("yumpoo.attachments.attachment-root", "out/attachments", "ATTACHMENTS", true),
-            new Root("yumpoo.attachments.upload-temp-root", "out/upload-temp", "UPLOAD_TEMP", true),
-            new Root(
-                "yumpoo.deployment.log-root",
-                Path.of(environment.getProperty("logging.file.name", "out/logs/yumpoo-server.log"))
-                    .toAbsolutePath()
-                    .getParent()
-                    .toString(),
-                "LOGS",
-                true
-            )
-        );
+                new Root("yumpoo.deployment.release-root", ".", "APPLICATION", false),
+                new Root("yumpoo.attachments.attachment-root", "out/attachments", "ATTACHMENTS", true),
+                new Root("yumpoo.attachments.upload-temp-root", "out/upload-temp", "UPLOAD_TEMP", true),
+                new Root(
+                        "yumpoo.deployment.log-root",
+                        Path.of(environment.getProperty("logging.file.name", "out/logs/yumpoo-server.log"))
+                                .toAbsolutePath()
+                                .getParent()
+                                .toString(),
+                        "LOGS",
+                        true));
         Map<FileStore, List<String>> purposes = new LinkedHashMap<>();
         Map<FileStore, Path> locations = new HashMap<>();
         boolean healthy = true;
         for (Root root : roots) {
             try {
-                Path path = Path.of(environment.getProperty(root.key, root.fallback)).toAbsolutePath().normalize();
+                Path path = Path.of(environment.getProperty(root.key, root.fallback))
+                        .toAbsolutePath()
+                        .normalize();
                 if (root.writable && !DeploymentDirectoryProbe.canWrite(path)) healthy = false;
                 while (path != null && !Files.exists(path)) path = path.getParent();
                 if (path == null) continue;
@@ -60,21 +60,15 @@ public class DeploymentDiagnosticsAdapter implements DeploymentDiagnosticsPort {
         for (var entry : purposes.entrySet()) {
             try {
                 String root = locations.get(entry.getKey()).getRoot().toString();
-                String id = UUID.nameUUIDFromBytes(
-                    (entry.getKey().name() + root).getBytes(StandardCharsets.UTF_8)
-                ).toString();
-                String label = root.matches("[A-Za-z]:[\\\\/]?")
-                    ? root.substring(0, 2)
-                    : "磁盘 " + (volumes.size() + 1);
-                volumes.add(
-                    new Volume(
+                String id = UUID.nameUUIDFromBytes((entry.getKey().name() + root).getBytes(StandardCharsets.UTF_8))
+                        .toString();
+                String label = root.matches("[A-Za-z]:[\\\\/]?") ? root.substring(0, 2) : "磁盘 " + (volumes.size() + 1);
+                volumes.add(new Volume(
                         id,
                         label,
                         entry.getKey().getTotalSpace(),
                         entry.getKey().getUsableSpace(),
-                        entry.getValue()
-                    )
-                );
+                        entry.getValue()));
             } catch (Exception ignored) {
                 healthy = false;
             }

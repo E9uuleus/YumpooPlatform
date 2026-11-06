@@ -24,8 +24,7 @@ public final class SparseRank {
     public static Optional<String> between(String lower, String upper, String field) {
         BigInteger left = lower == null ? LOWER_BOUND : new BigInteger(require(lower, field));
         BigInteger right = upper == null ? UPPER_BOUND : new BigInteger(require(upper, field));
-        if (left.compareTo(right) >= 0)
-            throw new IllegalArgumentException(field + " boundaries must be ordered");
+        if (left.compareTo(right) >= 0) throw new IllegalArgumentException(field + " boundaries must be ordered");
         BigInteger candidate = left.add(right).divide(BigInteger.TWO);
         if (candidate.equals(left) || candidate.equals(right)) return Optional.empty();
         return Optional.of(format(candidate));
@@ -34,18 +33,16 @@ public final class SparseRank {
     public static String evenlySpaced(int position, int total) {
         if (position < 1 || total < position)
             throw new IllegalArgumentException("sparse rank spacing position is invalid");
-        return format(UPPER_BOUND.multiply(BigInteger.valueOf(position))
-                .divide(BigInteger.valueOf(total + 1L)));
+        return format(UPPER_BOUND.multiply(BigInteger.valueOf(position)).divide(BigInteger.valueOf(total + 1L)));
     }
 
-    public static Optional<String> evenlySpacedBetween(String lower, String upper,
-            int position, int total, String field) {
+    public static Optional<String> evenlySpacedBetween(
+            String lower, String upper, int position, int total, String field) {
         if (position < 1 || total < position)
             throw new IllegalArgumentException("sparse rank spacing position is invalid");
         BigInteger left = lower == null ? LOWER_BOUND : new BigInteger(require(lower, field));
         BigInteger right = upper == null ? UPPER_BOUND : new BigInteger(require(upper, field));
-        if (left.compareTo(right) >= 0)
-            throw new IllegalArgumentException(field + " boundaries must be ordered");
+        if (left.compareTo(right) >= 0) throw new IllegalArgumentException(field + " boundaries must be ordered");
         BigInteger step = right.subtract(left).divide(BigInteger.valueOf(total + 1L));
         if (step.signum() == 0) return Optional.empty();
         return Optional.of(format(left.add(step.multiply(BigInteger.valueOf(position)))));

@@ -1,5 +1,8 @@
 package com.yumpoo.platform.filestorage.consistency;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.yumpoo.platform.filestorage.api.AttachmentStatus;
 import com.yumpoo.platform.filestorage.application.AttachmentUploadPolicy;
 import com.yumpoo.platform.filestorage.testing.M014AttachmentProbeConfiguration;
@@ -11,18 +14,6 @@ import com.yumpoo.platform.filestorage.testing.M014ParentAccessResolver;
 import com.yumpoo.platform.filestorage.testing.M014StorageFixture;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
 import com.yumpoo.platform.testing.TestProbeSecurityConfiguration;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.jdbc.Sql;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
-
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.InetAddress;
@@ -42,44 +33,39 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.jdbc.Sql;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 @Import({
-        PostgreSqlTestContainerConfiguration.class,
-        TestProbeSecurityConfiguration.class,
-        M014AttachmentProbeConfiguration.class,
-        M014AttachmentProbeController.class
+    PostgreSqlTestContainerConfiguration.class,
+    TestProbeSecurityConfiguration.class,
+    M014AttachmentProbeConfiguration.class,
+    M014AttachmentProbeController.class
 })
 @ActiveProfiles("m0-14-probe")
-@SpringBootTest(
-        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "yumpoo.outbox.enabled=false"
-)
-@Sql(
-        scripts = "/sql/m0-14-probe-schema.sql",
-        executionPhase = Sql.ExecutionPhase.BEFORE_TEST_CLASS
-)
-@Sql(
-        scripts = "/sql/m0-14-probe-drop.sql",
-        executionPhase = Sql.ExecutionPhase.AFTER_TEST_CLASS
-)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = "yumpoo.outbox.enabled=false")
+@Sql(scripts = "/sql/m0-14-probe-schema.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_CLASS)
+@Sql(scripts = "/sql/m0-14-probe-drop.sql", executionPhase = Sql.ExecutionPhase.AFTER_TEST_CLASS)
 class M014AttachmentSecurityIT {
 
     private static final String API = "/api/v1/__test/m0-14/attachments";
     private static final UUID OWNER = UUID.fromString("10000000-0000-0000-0000-000000000014");
     private static final UUID ACTOR = UUID.fromString("20000000-0000-0000-0000-000000000014");
-    private static final UUID OTHER_ACTOR = UUID.fromString(
-            "30000000-0000-0000-0000-000000000014"
-    );
-    private static final byte[] PDF = (
-            "%PDF-1.7\n1 0 obj<</Type/Catalog>>endobj\n%%EOF\n"
-    ).getBytes(StandardCharsets.US_ASCII);
+    private static final UUID OTHER_ACTOR = UUID.fromString("30000000-0000-0000-0000-000000000014");
+    private static final byte[] PDF =
+            ("%PDF-1.7\n1 0 obj<</Type/Catalog>>endobj\n%%EOF\n").getBytes(StandardCharsets.US_ASCII);
 
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(5))
-            .build();
+    private final HttpClient httpClient =
+            HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
 
     @LocalServerPort
     private int port;
@@ -117,8 +103,7 @@ class M014AttachmentSecurityIT {
     }
 
     @Test
-    void detectionRunsOutsideDatabaseTransactionAndOnlyAvailableContentCanBeDownloaded()
-            throws Exception {
+    void detectionRunsOutsideDatabaseTransactionAndOnlyAvailableContentCanBeDownloaded() throws Exception {
         UUID attachmentId = create("report.pdf", "application/pdf", ACTOR);
         detector.block();
 
@@ -132,9 +117,8 @@ class M014AttachmentSecurityIT {
         });
         assertThat(getContent(attachmentId, ACTOR).statusCode()).isEqualTo(404);
 
-        CompletableFuture<Void> independentWrite = CompletableFuture.runAsync(
-                () -> repository.incrementObservation(attachmentId)
-        );
+        CompletableFuture<Void> independentWrite =
+                CompletableFuture.runAsync(() -> repository.incrementObservation(attachmentId));
         independentWrite.get(2, TimeUnit.SECONDS);
 
         detector.release();
@@ -143,17 +127,16 @@ class M014AttachmentSecurityIT {
         assertThat(available.get("status").asText()).isEqualTo("AVAILABLE");
         assertThat(available.get("sizeBytes").asLong()).isEqualTo(PDF.length);
         assertThat(available.toString()).doesNotContain("storageKey", "quarantine");
-        assertThat(repository.find(attachmentId).orElseThrow().probeObservation()).isOne();
+        assertThat(repository.find(attachmentId).orElseThrow().probeObservation())
+                .isOne();
 
         HttpResponse<byte[]> download = getContent(attachmentId, ACTOR);
         assertThat(download.statusCode()).isEqualTo(200);
         assertThat(download.body()).isEqualTo(PDF);
-        assertThat(download.headers().firstValue("Content-Type").orElseThrow())
-                .startsWith("application/pdf");
+        assertThat(download.headers().firstValue("Content-Type").orElseThrow()).startsWith("application/pdf");
         assertThat(download.headers().firstValue("X-Content-Type-Options").orElseThrow())
                 .isEqualTo("nosniff");
-        assertThat(download.headers().firstValue("Cache-Control").orElseThrow())
-                .contains("no-store", "private");
+        assertThat(download.headers().firstValue("Cache-Control").orElseThrow()).contains("no-store", "private");
         assertThat(download.headers().firstValue("X-Content-SHA256").orElseThrow())
                 .isEqualTo(available.get("sha256").asText());
     }
@@ -162,12 +145,7 @@ class M014AttachmentSecurityIT {
     void declaredAndStreamedPolicyFailuresAreFailClosed() throws Exception {
         UUID oversized = create("large.pdf", "application/pdf", ACTOR);
 
-        String response = rawPut(
-                oversized,
-                ACTOR,
-                AttachmentUploadPolicy.MAX_BYTES + 1,
-                new byte[0]
-        );
+        String response = rawPut(oversized, ACTOR, AttachmentUploadPolicy.MAX_BYTES + 1, new byte[0]);
 
         assertThat(response).startsWith("HTTP/1.1 413");
         assertThat(response).contains("FILE_TOO_LARGE");
@@ -180,8 +158,7 @@ class M014AttachmentSecurityIT {
         assertThat(put(mismatch, ACTOR, PDF).statusCode()).isEqualTo(202);
         service.awaitProcessing(mismatch, Duration.ofSeconds(5));
 
-        assertThat(metadata(mismatch, ACTOR).get("rejectedCode").asText())
-                .isEqualTo("FILE_TYPE_NOT_ALLOWED");
+        assertThat(metadata(mismatch, ACTOR).get("rejectedCode").asText()).isEqualTo("FILE_TYPE_NOT_ALLOWED");
         assertThat(getContent(mismatch, ACTOR).statusCode()).isEqualTo(404);
         assertThat(storageFixture.quarantineFileCount()).isZero();
         assertThat(storageFixture.blobFileCount()).isZero();
@@ -192,14 +169,10 @@ class M014AttachmentSecurityIT {
         UUID attachmentId = create("retry.pdf", "application/pdf", ACTOR);
 
         rawPut(attachmentId, ACTOR, PDF.length + 17L, PDF);
-        awaitRow(
-                attachmentId,
-                row -> row.processingStage() == null,
-                Duration.ofSeconds(5)
-        );
+        awaitRow(attachmentId, row -> row.processingStage() == null, Duration.ofSeconds(5));
 
-        M014AttachmentProbeRepository.ProbeRow interrupted = repository.find(attachmentId)
-                .orElseThrow();
+        M014AttachmentProbeRepository.ProbeRow interrupted =
+                repository.find(attachmentId).orElseThrow();
         assertThat(interrupted.status()).isEqualTo(AttachmentStatus.UPLOADING);
         assertThat(interrupted.lastFailureCode().name()).isEqualTo("UPLOAD_INCOMPLETE");
         assertThat(storageFixture.quarantineFileCount()).isZero();
@@ -207,13 +180,11 @@ class M014AttachmentSecurityIT {
 
         assertThat(put(attachmentId, ACTOR, PDF).statusCode()).isEqualTo(202);
         service.awaitProcessing(attachmentId, Duration.ofSeconds(5));
-        assertThat(metadata(attachmentId, ACTOR).get("status").asText())
-                .isEqualTo("AVAILABLE");
+        assertThat(metadata(attachmentId, ACTOR).get("status").asText()).isEqualTo("AVAILABLE");
     }
 
     @Test
-    void writeRevocationDuringProcessingRejectsAndReadRevocationHidesAvailableBytes()
-            throws Exception {
+    void writeRevocationDuringProcessingRejectsAndReadRevocationHidesAvailableBytes() throws Exception {
         UUID revokedDuringScan = create("revoked.pdf", "application/pdf", ACTOR);
         detector.block();
         assertThat(put(revokedDuringScan, ACTOR, PDF).statusCode()).isEqualTo(202);
@@ -268,8 +239,7 @@ class M014AttachmentSecurityIT {
         assertThat(put(attachmentId, ACTOR, PDF).statusCode()).isEqualTo(202);
         service.awaitProcessing(attachmentId, Duration.ofSeconds(5));
 
-        assertThat(metadata(attachmentId, ACTOR).get("rejectedCode").asText())
-                .isEqualTo("INTEGRITY_CHECK_FAILED");
+        assertThat(metadata(attachmentId, ACTOR).get("rejectedCode").asText()).isEqualTo("INTEGRITY_CHECK_FAILED");
         assertThat(storageFixture.quarantineFileCount()).isZero();
         assertThat(storageFixture.blobFileCount()).isZero();
         assertThat(getContent(attachmentId, ACTOR).statusCode()).isEqualTo(404);
@@ -291,8 +261,7 @@ class M014AttachmentSecurityIT {
         assertThat(detector.awaitDetectionEntered(Duration.ofSeconds(5))).isTrue();
         detector.release();
         service.awaitProcessing(attachmentId, Duration.ofSeconds(5));
-        assertThat(repository.find(attachmentId).orElseThrow().status())
-                .isEqualTo(AttachmentStatus.AVAILABLE);
+        assertThat(repository.find(attachmentId).orElseThrow().status()).isEqualTo(AttachmentStatus.AVAILABLE);
         assertThat(storageFixture.blobFileCount()).isOne();
     }
 
@@ -311,17 +280,13 @@ class M014AttachmentSecurityIT {
         String json = objectMapper.writeValueAsString(Map.of(
                 "ownerId", OWNER,
                 "fileName", fileName,
-                "declaredMime", mime
-        ));
+                "declaredMime", mime));
         HttpRequest request = HttpRequest.newBuilder(uri(API))
                 .header("Content-Type", "application/json")
                 .header(M014AttachmentProbeController.ACTOR_HEADER, actorId.toString())
                 .POST(HttpRequest.BodyPublishers.ofString(json))
                 .build();
-        HttpResponse<String> response = httpClient.send(
-                request,
-                HttpResponse.BodyHandlers.ofString()
-        );
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         assertThat(response.statusCode()).isEqualTo(201);
         return UUID.fromString(objectMapper.readTree(response.body()).get("id").asText());
     }
@@ -351,23 +316,15 @@ class M014AttachmentSecurityIT {
         return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
-    private HttpResponse<byte[]> getContent(UUID attachmentId, UUID actorId)
-            throws IOException, InterruptedException {
-        HttpRequest request = HttpRequest.newBuilder(
-                        uri(API + "/" + attachmentId + "/content")
-                )
+    private HttpResponse<byte[]> getContent(UUID attachmentId, UUID actorId) throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder(uri(API + "/" + attachmentId + "/content"))
                 .header(M014AttachmentProbeController.ACTOR_HEADER, actorId.toString())
                 .GET()
                 .build();
         return httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
     }
 
-    private String rawPut(
-            UUID attachmentId,
-            UUID actorId,
-            long contentLength,
-            byte[] partialBody
-    ) throws IOException {
+    private String rawPut(UUID attachmentId, UUID actorId, long contentLength, byte[] partialBody) throws IOException {
         try (Socket socket = new Socket(InetAddress.getLoopbackAddress(), port)) {
             socket.setSoTimeout(5_000);
             String headers = "PUT " + API + "/" + attachmentId + "/content HTTP/1.1\r\n"
@@ -393,8 +350,8 @@ class M014AttachmentSecurityIT {
     private void awaitRow(
             UUID attachmentId,
             java.util.function.Predicate<M014AttachmentProbeRepository.ProbeRow> condition,
-            Duration timeout
-    ) throws InterruptedException {
+            Duration timeout)
+            throws InterruptedException {
         long deadline = System.nanoTime() + timeout.toNanos();
         while (System.nanoTime() < deadline) {
             if (repository.find(attachmentId).filter(condition).isPresent()) {

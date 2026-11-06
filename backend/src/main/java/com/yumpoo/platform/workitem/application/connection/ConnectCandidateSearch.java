@@ -1,14 +1,14 @@
 package com.yumpoo.platform.workitem.application.connection;
 
+import static com.yumpoo.platform.workitem.application.connection.ConnectionAccess.invalid;
+import static com.yumpoo.platform.workitem.application.connection.WorkItemConnectionModels.CandidateField;
+import static com.yumpoo.platform.workitem.application.connection.WorkItemConnectionModels.CandidateSort;
+
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-
-import static com.yumpoo.platform.workitem.application.connection.ConnectionAccess.invalid;
-import static com.yumpoo.platform.workitem.application.connection.WorkItemConnectionModels.CandidateField;
-import static com.yumpoo.platform.workitem.application.connection.WorkItemConnectionModels.CandidateSort;
 
 /** Normalized candidate search input; an empty text browses the whole project instead of matching. */
 public record ConnectCandidateSearch(String text, Set<CandidateField> fields, CandidateSort sort) {
@@ -28,8 +28,9 @@ public record ConnectCandidateSearch(String text, Set<CandidateField> fields, Ca
         if (values == null || values.isEmpty()) return EnumSet.of(CandidateField.NAME);
         EnumSet<CandidateField> result = EnumSet.noneOf(CandidateField.class);
         for (String value : values) {
-            try { result.add(CandidateField.valueOf(value.strip().toUpperCase(Locale.ROOT))); }
-            catch (IllegalArgumentException | NullPointerException error) {
+            try {
+                result.add(CandidateField.valueOf(value.strip().toUpperCase(Locale.ROOT)));
+            } catch (IllegalArgumentException | NullPointerException error) {
                 throw invalid("fields", "INVALID_CANDIDATE_FIELD", "搜索字段无效");
             }
         }
@@ -38,7 +39,10 @@ public record ConnectCandidateSearch(String text, Set<CandidateField> fields, Ca
 
     private static CandidateSort sort(String value) {
         if (value == null || value.isBlank()) return CandidateSort.RECENT;
-        try { return CandidateSort.valueOf(value.strip().toUpperCase(Locale.ROOT)); }
-        catch (IllegalArgumentException error) { throw invalid("sort", "INVALID_CANDIDATE_SORT", "排序方式无效"); }
+        try {
+            return CandidateSort.valueOf(value.strip().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException error) {
+            throw invalid("sort", "INVALID_CANDIDATE_SORT", "排序方式无效");
+        }
     }
 }

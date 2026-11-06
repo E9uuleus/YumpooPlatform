@@ -5,9 +5,6 @@ import com.yumpoo.platform.filestorage.application.PublishedBlob;
 import com.yumpoo.platform.filestorage.application.SealedUpload;
 import com.yumpoo.platform.filestorage.domain.AttachmentProcessingStage;
 import com.yumpoo.platform.filestorage.domain.AttachmentRejectedCode;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.OffsetDateTime;
@@ -16,6 +13,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 仅供 M0-14 真实 PostgreSQL 隔离验收使用，不进入生产制品或 Flyway。
@@ -32,15 +31,11 @@ public class M014AttachmentProbeRepository {
     }
 
     @Transactional
-    public UUID createIntent(
-            UUID ownerId,
-            UUID actorId,
-            String fileName,
-            String declaredMime
-    ) {
+    public UUID createIntent(UUID ownerId, UUID actorId, String fileName, String declaredMime) {
         UUID attachmentId = UUID.randomUUID();
         OffsetDateTime now = now();
-        jdbcClient.sql("""
+        jdbcClient
+                .sql("""
                         INSERT INTO yumpoo.m014_attachment_probe (
                             id, owner_id, uploader_actor, original_file_name, declared_mime,
                             status, created_at, updated_at
@@ -61,7 +56,8 @@ public class M014AttachmentProbeRepository {
 
     @Transactional
     public boolean claimReceive(UUID attachmentId, UUID actorId) {
-        return jdbcClient.sql("""
+        return jdbcClient
+                        .sql("""
                         UPDATE yumpoo.m014_attachment_probe
                         SET processing_stage = 'RECEIVING',
                             last_failure_code = NULL,
@@ -72,15 +68,17 @@ public class M014AttachmentProbeRepository {
                           AND status = 'UPLOADING'
                           AND processing_stage IS NULL
                         """)
-                .param("now", now())
-                .param("id", attachmentId)
-                .param("actorId", actorId)
-                .update() == 1;
+                        .param("now", now())
+                        .param("id", attachmentId)
+                        .param("actorId", actorId)
+                        .update()
+                == 1;
     }
 
     @Transactional
     public void resetIncomplete(UUID attachmentId) {
-        int updated = jdbcClient.sql("""
+        int updated = jdbcClient
+                .sql("""
                         UPDATE yumpoo.m014_attachment_probe
                         SET processing_stage = NULL,
                             size_bytes = NULL,
@@ -101,7 +99,8 @@ public class M014AttachmentProbeRepository {
 
     @Transactional
     public void rejectReceive(UUID attachmentId, AttachmentRejectedCode code) {
-        int updated = jdbcClient.sql("""
+        int updated = jdbcClient
+                .sql("""
                         UPDATE yumpoo.m014_attachment_probe
                         SET status = 'REJECTED',
                             processing_stage = NULL,
@@ -123,7 +122,8 @@ public class M014AttachmentProbeRepository {
 
     @Transactional
     public void queueForScan(UUID attachmentId, SealedUpload upload) {
-        int updated = jdbcClient.sql("""
+        int updated = jdbcClient
+                .sql("""
                         UPDATE yumpoo.m014_attachment_probe
                         SET processing_stage = 'QUEUED_SCAN',
                             size_bytes = :sizeBytes,
@@ -155,12 +155,9 @@ public class M014AttachmentProbeRepository {
     }
 
     @Transactional
-    public void finalizeAvailable(
-            UUID attachmentId,
-            PublishedBlob blob,
-            String detectedMime
-    ) {
-        int updated = jdbcClient.sql("""
+    public void finalizeAvailable(UUID attachmentId, PublishedBlob blob, String detectedMime) {
+        int updated = jdbcClient
+                .sql("""
                         UPDATE yumpoo.m014_attachment_probe
                         SET status = 'AVAILABLE',
                             processing_stage = NULL,
@@ -191,12 +188,9 @@ public class M014AttachmentProbeRepository {
     }
 
     @Transactional
-    public void finalizeRejected(
-            UUID attachmentId,
-            AttachmentRejectedCode code,
-            boolean retainQuarantined
-    ) {
-        int updated = jdbcClient.sql("""
+    public void finalizeRejected(UUID attachmentId, AttachmentRejectedCode code, boolean retainQuarantined) {
+        int updated = jdbcClient
+                .sql("""
                         UPDATE yumpoo.m014_attachment_probe
                         SET status = 'REJECTED',
                             processing_stage = NULL,
@@ -224,7 +218,8 @@ public class M014AttachmentProbeRepository {
 
     @Transactional
     public void incrementObservation(UUID attachmentId) {
-        int updated = jdbcClient.sql("""
+        int updated = jdbcClient
+                .sql("""
                         UPDATE yumpoo.m014_attachment_probe
                         SET probe_observation = probe_observation + 1,
                             updated_at = :now
@@ -237,7 +232,8 @@ public class M014AttachmentProbeRepository {
     }
 
     public Optional<ProbeRow> find(UUID attachmentId) {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                         SELECT id, owner_id, uploader_actor, original_file_name, declared_mime,
                                status, processing_stage, size_bytes, sha256, detected_mime,
                                quarantine_path, storage_key, rejected_code, last_failure_code,
@@ -253,26 +249,16 @@ public class M014AttachmentProbeRepository {
                         resultSet.getString("original_file_name"),
                         resultSet.getString("declared_mime"),
                         AttachmentStatus.valueOf(resultSet.getString("status")),
-                        enumOrNull(
-                                AttachmentProcessingStage.class,
-                                resultSet.getString("processing_stage")
-                        ),
+                        enumOrNull(AttachmentProcessingStage.class, resultSet.getString("processing_stage")),
                         resultSet.getObject("size_bytes", Long.class),
                         resultSet.getString("sha256"),
                         resultSet.getString("detected_mime"),
                         pathOrNull(resultSet.getString("quarantine_path")),
                         resultSet.getString("storage_key"),
-                        enumOrNull(
-                                AttachmentRejectedCode.class,
-                                resultSet.getString("rejected_code")
-                        ),
-                        enumOrNull(
-                                AttachmentRejectedCode.class,
-                                resultSet.getString("last_failure_code")
-                        ),
+                        enumOrNull(AttachmentRejectedCode.class, resultSet.getString("rejected_code")),
+                        enumOrNull(AttachmentRejectedCode.class, resultSet.getString("last_failure_code")),
                         resultSet.getLong("row_version"),
-                        resultSet.getLong("probe_observation")
-                ))
+                        resultSet.getLong("probe_observation")))
                 .optional();
     }
 
@@ -285,7 +271,8 @@ public class M014AttachmentProbeRepository {
     }
 
     private void transitionStage(UUID attachmentId, String expected, String target) {
-        int updated = jdbcClient.sql("""
+        int updated = jdbcClient
+                .sql("""
                         UPDATE yumpoo.m014_attachment_probe
                         SET processing_stage = :target,
                             row_version = row_version + 1,
@@ -336,8 +323,7 @@ public class M014AttachmentProbeRepository {
             AttachmentRejectedCode rejectedCode,
             AttachmentRejectedCode lastFailureCode,
             long rowVersion,
-            long probeObservation
-    ) {
+            long probeObservation) {
         public SealedUpload sealedUpload() {
             if (quarantinePath == null || sizeBytes == null || sha256 == null) {
                 throw new IllegalStateException("M0-14 probe row has no sealed upload");

@@ -1,10 +1,9 @@
 package com.yumpoo.platform.audit.api;
 
-import tools.jackson.databind.JsonNode;
-
 import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
+import tools.jackson.databind.JsonNode;
 
 public record SecurityAuditEventView(
         UUID id,
@@ -27,6 +26,4 @@ public record SecurityAuditEventView(
         String correlationId,
         String clientType,
         String clientVersion,
-        Instant occurredAt
-) {
-}
+        Instant occurredAt) {}

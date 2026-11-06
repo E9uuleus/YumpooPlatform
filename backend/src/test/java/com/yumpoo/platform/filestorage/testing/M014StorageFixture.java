@@ -1,7 +1,6 @@
 package com.yumpoo.platform.filestorage.testing;
 
 import com.yumpoo.platform.filestorage.infrastructure.LocalFileQuarantineStorage;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -20,8 +19,7 @@ public final class M014StorageFixture implements AutoCloseable {
     public M014StorageFixture() throws IOException {
         Path target = Path.of("target").toAbsolutePath().normalize();
         Files.createDirectories(target);
-        baseRoot = Files.createTempDirectory(target, "m0-14-storage-")
-                .toRealPath(LinkOption.NOFOLLOW_LINKS);
+        baseRoot = Files.createTempDirectory(target, "m0-14-storage-").toRealPath(LinkOption.NOFOLLOW_LINKS);
         quarantineRoot = Files.createDirectory(baseRoot.resolve("quarantine"));
         blobRoot = Files.createDirectory(baseRoot.resolve("blobs"));
         storage = new LocalFileQuarantineStorage(quarantineRoot, blobRoot);
@@ -62,7 +60,8 @@ public final class M014StorageFixture implements AutoCloseable {
 
     private static long regularFileCount(Path root) throws IOException {
         try (Stream<Path> paths = Files.walk(root)) {
-            return paths.filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)).count();
+            return paths.filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
+                    .count();
         }
     }
 

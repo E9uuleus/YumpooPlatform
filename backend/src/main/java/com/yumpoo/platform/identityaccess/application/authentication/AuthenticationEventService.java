@@ -9,15 +9,14 @@ import com.yumpoo.platform.identityaccess.application.session.AuthenticatedSessi
 import com.yumpoo.platform.identityaccess.application.session.IssuedSession;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
 import com.yumpoo.platform.organization.api.CompanyConfigurationSnapshot;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
-import tools.jackson.databind.ObjectMapper;
-
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.ObjectMapper;
 
 @Service
 public class AuthenticationEventService {
@@ -35,8 +34,7 @@ public class AuthenticationEventService {
             TransactionalEventPort eventPort,
             CompanyConfigurationQuery companyQuery,
             ObjectMapper objectMapper,
-            IdentitySecurityAuditRecorder auditRecorder
-    ) {
+            IdentitySecurityAuditRecorder auditRecorder) {
         this.eventPort = eventPort;
         this.companyQuery = companyQuery;
         this.objectMapper = objectMapper;
@@ -57,12 +55,20 @@ public class AuthenticationEventService {
                 0,
                 user.companyId(),
                 EventActor.user(user.userId()),
-                objectMapper.valueToTree(payload)
-        ));
+                objectMapper.valueToTree(payload)));
         auditRecorder.succeeded(
-                user.companyId(), "login:" + issuedSession.session().id(), "LOGIN_SUCCEEDED",
-                EventActor.user(user.userId()), Set.of(), "LOGIN_SESSION", issuedSession.session().id(),
-                null, null, Map.of("clientType", clientType), null, clientType,
+                user.companyId(),
+                "login:" + issuedSession.session().id(),
+                "LOGIN_SUCCEEDED",
+                EventActor.user(user.userId()),
+                Set.of(),
+                "LOGIN_SESSION",
+                issuedSession.session().id(),
+                null,
+                null,
+                Map.of("clientType", clientType),
+                null,
+                clientType,
                 issuedSession.session().clientVersion());
     }
 
@@ -86,15 +92,23 @@ public class AuthenticationEventService {
                 0,
                 company.companyId(),
                 EventActor.system("WECOM_AUTH"),
-                objectMapper.valueToTree(payload)
-        ));
+                objectMapper.valueToTree(payload)));
         String requestId = RequestCorrelationContext.required().requestId();
         auditRecorder.outcome(
-                company.companyId(), "login-rejected:" + requestId + ":" + stage,
-                "LOGIN_REJECTED", com.yumpoo.platform.audit.api.SecurityAuditOutcome.FAILED,
-                EventActor.system("WECOM_AUTH"), Set.of(), "AUTHENTICATION_ATTEMPT", requestId,
-                null, null, Map.of("stage", stage, "clientType", clientType), outcomeCode,
-                clientType, null);
+                company.companyId(),
+                "login-rejected:" + requestId + ":" + stage,
+                "LOGIN_REJECTED",
+                com.yumpoo.platform.audit.api.SecurityAuditOutcome.FAILED,
+                EventActor.system("WECOM_AUTH"),
+                Set.of(),
+                "AUTHENTICATION_ATTEMPT",
+                requestId,
+                null,
+                null,
+                Map.of("stage", stage, "clientType", clientType),
+                outcomeCode,
+                clientType,
+                null);
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
@@ -112,14 +126,19 @@ public class AuthenticationEventService {
                 0,
                 authenticatedSession.user().companyId(),
                 EventActor.user(authenticatedSession.user().userId()),
-                objectMapper.valueToTree(payload)
-        ));
+                objectMapper.valueToTree(payload)));
         auditRecorder.succeeded(
                 authenticatedSession.user().companyId(),
-                "logout:" + authenticatedSession.session().id(), "LOGOUT_SUCCEEDED",
-                EventActor.user(authenticatedSession.user().userId()), Set.of(),
-                "LOGIN_SESSION", authenticatedSession.session().id(), null,
-                Map.of("status", "ACTIVE"), Map.of("status", "REVOKED"), null,
+                "logout:" + authenticatedSession.session().id(),
+                "LOGOUT_SUCCEEDED",
+                EventActor.user(authenticatedSession.user().userId()),
+                Set.of(),
+                "LOGIN_SESSION",
+                authenticatedSession.session().id(),
+                null,
+                Map.of("status", "ACTIVE"),
+                Map.of("status", "REVOKED"),
+                null,
                 authenticatedSession.session().clientType().name(),
                 authenticatedSession.session().clientVersion());
     }

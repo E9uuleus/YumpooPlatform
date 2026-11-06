@@ -4,13 +4,32 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
-public record WorkItemConnection(UUID id, UUID companyId, UUID columnId, UUID sourceProjectId,
-        UUID sourceWorkItemId, UUID targetProjectId, UUID targetWorkItemId, Origin origin,
-        UUID createdByUserId, Instant createdAt, UUID deletedByUserId, Instant deletedAt,
-        DeleteReason deleteReason, long rowVersion) {
+public record WorkItemConnection(
+        UUID id,
+        UUID companyId,
+        UUID columnId,
+        UUID sourceProjectId,
+        UUID sourceWorkItemId,
+        UUID targetProjectId,
+        UUID targetWorkItemId,
+        Origin origin,
+        UUID createdByUserId,
+        Instant createdAt,
+        UUID deletedByUserId,
+        Instant deletedAt,
+        DeleteReason deleteReason,
+        long rowVersion) {
     public static final int MAX_PER_CELL = 50;
-    public enum Origin { LINKED, CREATED }
-    public enum DeleteReason { UNLINKED, COLUMN_DELETED }
+
+    public enum Origin {
+        LINKED,
+        CREATED
+    }
+
+    public enum DeleteReason {
+        UNLINKED,
+        COLUMN_DELETED
+    }
 
     public WorkItemConnection {
         Objects.requireNonNull(id);
@@ -32,19 +51,54 @@ public record WorkItemConnection(UUID id, UUID companyId, UUID columnId, UUID so
             throw new IllegalArgumentException("incomplete deletion facts");
     }
 
-    public boolean active() { return deletedAt == null; }
+    public boolean active() {
+        return deletedAt == null;
+    }
 
-    public static WorkItemConnection create(UUID id, UUID companyId, UUID columnId, UUID sourceProjectId,
-            UUID sourceWorkItemId, UUID targetProjectId, UUID targetWorkItemId, Origin origin,
-            UUID actor, Instant now) {
-        return new WorkItemConnection(id, companyId, columnId, sourceProjectId, sourceWorkItemId,
-                targetProjectId, targetWorkItemId, origin, actor, now, null, null, null, 0);
+    public static WorkItemConnection create(
+            UUID id,
+            UUID companyId,
+            UUID columnId,
+            UUID sourceProjectId,
+            UUID sourceWorkItemId,
+            UUID targetProjectId,
+            UUID targetWorkItemId,
+            Origin origin,
+            UUID actor,
+            Instant now) {
+        return new WorkItemConnection(
+                id,
+                companyId,
+                columnId,
+                sourceProjectId,
+                sourceWorkItemId,
+                targetProjectId,
+                targetWorkItemId,
+                origin,
+                actor,
+                now,
+                null,
+                null,
+                null,
+                0);
     }
 
     public WorkItemConnection delete(UUID actor, DeleteReason reason, Instant now) {
         if (!active()) throw new IllegalStateException("connection is deleted");
-        return new WorkItemConnection(id, companyId, columnId, sourceProjectId, sourceWorkItemId,
-                targetProjectId, targetWorkItemId, origin, createdByUserId, createdAt,
-                actor, now, Objects.requireNonNull(reason), rowVersion + 1);
+        return new WorkItemConnection(
+                id,
+                companyId,
+                columnId,
+                sourceProjectId,
+                sourceWorkItemId,
+                targetProjectId,
+                targetWorkItemId,
+                origin,
+                createdByUserId,
+                createdAt,
+                actor,
+                now,
+                Objects.requireNonNull(reason),
+                rowVersion + 1);
     }
 }

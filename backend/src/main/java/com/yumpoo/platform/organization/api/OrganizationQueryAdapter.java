@@ -1,16 +1,15 @@
 package com.yumpoo.platform.organization.api;
 
-import com.yumpoo.platform.organization.application.OrganizationQueryService;
 import com.yumpoo.platform.organization.application.CalendarDayView;
 import com.yumpoo.platform.organization.application.CompanyConfigurationView;
-import org.springframework.stereotype.Component;
-
+import com.yumpoo.platform.organization.application.OrganizationQueryService;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import org.springframework.stereotype.Component;
 
 @Component
 public class OrganizationQueryAdapter implements CompanyConfigurationQuery, CompanyCalendarQuery {
@@ -30,8 +29,7 @@ public class OrganizationQueryAdapter implements CompanyConfigurationQuery, Comp
                 company.timezone(),
                 company.weekStartDay(),
                 company.defaultWorkdayMinutes(),
-                company.rowVersion()
-        );
+                company.rowVersion());
     }
 
     @Override
@@ -82,7 +80,6 @@ public class OrganizationQueryAdapter implements CompanyConfigurationQuery, Comp
                 day.calendarDayRowVersion(),
                 day.note(),
                 day.configuredStandardMinutes(),
-                day.source() == null ? null : CalendarDaySource.valueOf(day.source())
-        );
+                day.source() == null ? null : CalendarDaySource.valueOf(day.source()));
     }
 }

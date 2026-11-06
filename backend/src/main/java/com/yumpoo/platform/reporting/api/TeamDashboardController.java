@@ -14,16 +14,33 @@ import org.springframework.web.bind.annotation.RequestBody;
 public class TeamDashboardController {
     private final TeamDashboardService service;
     private final CurrentActorProvider actors;
-    public TeamDashboardController(TeamDashboardService service, CurrentActorProvider actors) { this.service = service; this.actors = actors; }
+
+    public TeamDashboardController(TeamDashboardService service, CurrentActorProvider actors) {
+        this.service = service;
+        this.actors = actors;
+    }
 
     @GetMapping("/company/team-dashboard/options")
-    ResponseEntity<Options> options() { return response(service.options(actors.requiredActive())); }
-    @PostMapping("/company/team-dashboard/timesheet/query")
-    ResponseEntity<Timesheet> timesheet(@RequestBody TimesheetQuery body) { return response(service.timesheet(actors.requiredActive(), body)); }
-    @PostMapping("/company/team-dashboard/workload/query")
-    ResponseEntity<Workload> workload(@RequestBody WorkloadQuery body) { return response(service.workload(actors.requiredActive(), body)); }
-    @PostMapping("/company/team-dashboard/workload/tasks/query")
-    ResponseEntity<TaskPage> tasks(@RequestBody TasksQuery body) { return response(service.tasks(actors.requiredActive(), body)); }
+    ResponseEntity<Options> options() {
+        return response(service.options(actors.requiredActive()));
+    }
 
-    private static <T> ResponseEntity<T> response(T value) { return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(value); }
+    @PostMapping("/company/team-dashboard/timesheet/query")
+    ResponseEntity<Timesheet> timesheet(@RequestBody TimesheetQuery body) {
+        return response(service.timesheet(actors.requiredActive(), body));
+    }
+
+    @PostMapping("/company/team-dashboard/workload/query")
+    ResponseEntity<Workload> workload(@RequestBody WorkloadQuery body) {
+        return response(service.workload(actors.requiredActive(), body));
+    }
+
+    @PostMapping("/company/team-dashboard/workload/tasks/query")
+    ResponseEntity<TaskPage> tasks(@RequestBody TasksQuery body) {
+        return response(service.tasks(actors.requiredActive(), body));
+    }
+
+    private static <T> ResponseEntity<T> response(T value) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(value);
+    }
 }

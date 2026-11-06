@@ -2,12 +2,7 @@ package com.yumpoo.platform.foundation.application.outbox;
 
 import java.util.regex.Pattern;
 
-public record OutboxFailure(
-        String consumerName,
-        String errorCode,
-        String exceptionType,
-        boolean retryable
-) {
+public record OutboxFailure(String consumerName, String errorCode, String exceptionType, boolean retryable) {
 
     private static final Pattern CONSUMER = Pattern.compile("^[a-z][a-z0-9_.:-]{0,119}$");
     private static final Pattern ERROR = Pattern.compile("^[A-Z][A-Z0-9_]{0,79}$");

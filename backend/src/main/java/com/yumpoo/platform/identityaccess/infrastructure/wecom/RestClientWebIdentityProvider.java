@@ -2,10 +2,9 @@ package com.yumpoo.platform.identityaccess.infrastructure.wecom;
 
 import com.yumpoo.platform.identityaccess.application.authentication.WebIdentityProvider;
 import com.yumpoo.platform.identityaccess.application.oauth.WeComMemberIdentity;
-import org.springframework.web.client.RestClient;
-
 import java.net.URI;
 import java.time.Clock;
+import org.springframework.web.client.RestClient;
 
 final class RestClientWebIdentityProvider implements WebIdentityProvider {
 
@@ -13,11 +12,7 @@ final class RestClientWebIdentityProvider implements WebIdentityProvider {
     private final WebOAuthProperties properties;
     private final RestClientWeComIdentityGateway delegate;
 
-    RestClientWebIdentityProvider(
-            RestClient.Builder builder,
-            WebOAuthProperties properties,
-            Clock clock
-    ) {
+    RestClientWebIdentityProvider(RestClient.Builder builder, WebOAuthProperties properties, Clock clock) {
         this.corpId = properties.getCorpId();
         this.properties = properties;
         this.delegate = new RestClientWeComIdentityGateway(
@@ -26,10 +21,8 @@ final class RestClientWebIdentityProvider implements WebIdentityProvider {
                         properties.getCorpId(),
                         properties.getAgentId(),
                         properties.getAppSecret(),
-                        properties.getCallbackUri()
-                ),
-                clock
-        );
+                        properties.getCallbackUri()),
+                clock);
     }
 
     @Override

@@ -4,12 +4,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
-public record SecurityAuditActor(
-        String type,
-        UUID userId,
-        String systemCode,
-        Set<String> roleSnapshot
-) {
+public record SecurityAuditActor(String type, UUID userId, String systemCode, Set<String> roleSnapshot) {
     public SecurityAuditActor {
         Objects.requireNonNull(type, "type must not be null");
         roleSnapshot = roleSnapshot == null ? Set.of() : Set.copyOf(roleSnapshot);

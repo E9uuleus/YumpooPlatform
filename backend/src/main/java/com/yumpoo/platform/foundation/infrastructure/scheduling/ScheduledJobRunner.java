@@ -1,14 +1,13 @@
 package com.yumpoo.platform.foundation.infrastructure.scheduling;
 
 import com.yumpoo.platform.foundation.application.scheduling.ScheduledJobService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
-
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 @Component
 public class ScheduledJobRunner implements SmartLifecycle {
@@ -41,7 +40,9 @@ public class ScheduledJobRunner implements SmartLifecycle {
     }
 
     @Override
-    public boolean isRunning() { return running; }
+    public boolean isRunning() {
+        return running;
+    }
 
     @Override
     public boolean isAutoStartup() {
@@ -49,14 +50,20 @@ public class ScheduledJobRunner implements SmartLifecycle {
     }
 
     @Override
-    public int getPhase() { return Integer.MAX_VALUE - 100; }
+    public int getPhase() {
+        return Integer.MAX_VALUE - 100;
+    }
 
     private void tick() {
         try {
             service.runDue();
         } catch (RuntimeException exception) {
-            LoggerFactory.getLogger(getClass()).atWarn().setMessage("scheduled job tick failed")
-                    .addKeyValue("event", "scheduler.tick.failed").setCause(exception).log();
+            LoggerFactory.getLogger(getClass())
+                    .atWarn()
+                    .setMessage("scheduled job tick failed")
+                    .addKeyValue("event", "scheduler.tick.failed")
+                    .setCause(exception)
+                    .log();
         }
     }
 }

@@ -48,6 +48,7 @@ export default defineConfig(({ mode }) => {
     test: {
       environment: 'happy-dom',
       include: ['src/**/*.spec.ts', 'build/**/*.spec.ts'],
+      setupFiles: ['./src/testing/happyDomCompat.ts'],
       clearMocks: true,
       testTimeout: 20_000,
       // Source-constraint specs read stylesheets as ?raw text; normal CSS imports stay stubbed.

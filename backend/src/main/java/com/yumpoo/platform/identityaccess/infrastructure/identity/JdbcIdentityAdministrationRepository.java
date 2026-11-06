@@ -1,5 +1,6 @@
 package com.yumpoo.platform.identityaccess.infrastructure.identity;
 
+import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
 import com.yumpoo.platform.identityaccess.application.administration.DirectoryRunQuery;
 import com.yumpoo.platform.identityaccess.application.administration.DirectoryRuntimeSnapshot;
 import com.yumpoo.platform.identityaccess.application.administration.DirectorySyncFailurePage;
@@ -12,10 +13,6 @@ import com.yumpoo.platform.identityaccess.application.administration.IdentityMem
 import com.yumpoo.platform.identityaccess.application.administration.IdentityMemberView;
 import com.yumpoo.platform.identityaccess.application.authorization.ManagedPlatformRole;
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncCounts;
-import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Repository;
-
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
@@ -25,6 +22,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Repository;
 
 @Repository
 public class JdbcIdentityAdministrationRepository implements IdentityAdministrationRepository {
@@ -96,35 +95,31 @@ public class JdbcIdentityAdministrationRepository implements IdentityAdministrat
     public IdentityMemberPage findMembers(UUID companyId, IdentityMemberQuery query) {
         OffsetPageRequest page = query.pageRequest();
         List<IdentityMemberView> items = bindMemberFilters(
-                jdbcClient.sql(MEMBER_COLUMNS + MEMBER_FILTER + """
+                        jdbcClient.sql(MEMBER_COLUMNS + MEMBER_FILTER + """
                         ORDER BY lower(u.display_name), u.id
                         LIMIT :limit OFFSET :offset
-                        """),
-                companyId,
-                query
-        )
+                        """), companyId, query)
                 .param("limit", page.size())
                 .param("offset", Math.multiplyExact(page.page(), page.size()))
                 .query(JdbcIdentityAdministrationRepository::mapMember)
                 .list();
-        long total = bindMemberFilters(
-                jdbcClient.sql("""
+        long total = bindMemberFilters(jdbcClient.sql("""
                         SELECT count(*)
                         FROM yumpoo.identity_user u
                         JOIN yumpoo.external_identity e
                           ON e.company_id = u.company_id
                          AND e.user_id = u.id
                          AND e.provider = 'WECOM'
-                        """ + MEMBER_FILTER),
-                companyId,
-                query
-        ).query(Long.class).single();
+                        """ + MEMBER_FILTER), companyId, query)
+                .query(Long.class)
+                .single();
         return new IdentityMemberPage(items, total);
     }
 
     @Override
     public Optional<IdentityMemberView> findMember(UUID companyId, UUID userId) {
-        return jdbcClient.sql(MEMBER_COLUMNS + """
+        return jdbcClient
+                .sql(MEMBER_COLUMNS + """
                         WHERE u.company_id = :companyId AND u.id = :userId
                         """)
                 .param("companyId", companyId)
@@ -137,28 +132,27 @@ public class JdbcIdentityAdministrationRepository implements IdentityAdministrat
     public DirectorySyncRunPage findRuns(UUID companyId, DirectoryRunQuery query) {
         OffsetPageRequest page = query.pageRequest();
         List<DirectorySyncRunView> items = bindRunFilters(
-                jdbcClient.sql(RUN_COLUMNS + RUN_FILTER + """
+                        jdbcClient.sql(RUN_COLUMNS + RUN_FILTER + """
                         ORDER BY r.started_at DESC, r.id DESC
                         LIMIT :limit OFFSET :offset
-                        """),
-                companyId,
-                query
-        )
+                        """), companyId, query)
                 .param("limit", page.size())
                 .param("offset", Math.multiplyExact(page.page(), page.size()))
                 .query(JdbcIdentityAdministrationRepository::mapRun)
                 .list();
         long total = bindRunFilters(
-                jdbcClient.sql("SELECT count(*) FROM yumpoo.directory_sync_run r " + RUN_FILTER),
-                companyId,
-                query
-        ).query(Long.class).single();
+                        jdbcClient.sql("SELECT count(*) FROM yumpoo.directory_sync_run r " + RUN_FILTER),
+                        companyId,
+                        query)
+                .query(Long.class)
+                .single();
         return new DirectorySyncRunPage(items, total);
     }
 
     @Override
     public Optional<DirectorySyncRunView> findRun(UUID companyId, UUID runId) {
-        return jdbcClient.sql(RUN_COLUMNS + """
+        return jdbcClient
+                .sql(RUN_COLUMNS + """
                         WHERE r.company_id = :companyId AND r.id = :runId
                         """)
                 .param("companyId", companyId)
@@ -168,12 +162,9 @@ public class JdbcIdentityAdministrationRepository implements IdentityAdministrat
     }
 
     @Override
-    public DirectorySyncFailurePage findFailures(
-            UUID companyId,
-            UUID runId,
-            OffsetPageRequest pageRequest
-    ) {
-        List<DirectorySyncFailureView> items = jdbcClient.sql("""
+    public DirectorySyncFailurePage findFailures(UUID companyId, UUID runId, OffsetPageRequest pageRequest) {
+        List<DirectorySyncFailureView> items = jdbcClient
+                .sql("""
                         SELECT
                             CASE
                                 WHEN char_length(i.external_user_id) <= 4
@@ -198,10 +189,10 @@ public class JdbcIdentityAdministrationRepository implements IdentityAdministrat
                         rs.getString("masked_member_reference"),
                         rs.getString("action"),
                         rs.getString("result"),
-                        rs.getString("error_code")
-                ))
+                        rs.getString("error_code")))
                 .list();
-        long total = jdbcClient.sql("""
+        long total = jdbcClient
+                .sql("""
                         SELECT count(*)
                         FROM yumpoo.directory_sync_item i
                         JOIN yumpoo.directory_sync_run r ON r.id = i.run_id
@@ -218,7 +209,8 @@ public class JdbcIdentityAdministrationRepository implements IdentityAdministrat
 
     @Override
     public DirectoryRuntimeSnapshot runtimeStatus(UUID companyId) {
-        return jdbcClient.sql("""
+        return jdbcClient
+                .sql("""
                         SELECT
                             (SELECT id FROM yumpoo.directory_sync_run
                              WHERE company_id = :companyId AND status = 'RUNNING'
@@ -241,16 +233,12 @@ public class JdbcIdentityAdministrationRepository implements IdentityAdministrat
                         rs.getObject("active_run_id", UUID.class),
                         instant(rs, "last_successful_run_at"),
                         instant(rs, "last_problem_at"),
-                        rs.getString("last_problem_code")
-                ))
+                        rs.getString("last_problem_code")))
                 .single();
     }
 
     private static JdbcClient.StatementSpec bindMemberFilters(
-            JdbcClient.StatementSpec statement,
-            UUID companyId,
-            IdentityMemberQuery query
-    ) {
+            JdbcClient.StatementSpec statement, UUID companyId, IdentityMemberQuery query) {
         return statement
                 .param("companyId", companyId)
                 .param("name", query.name())
@@ -261,10 +249,7 @@ public class JdbcIdentityAdministrationRepository implements IdentityAdministrat
     }
 
     private static JdbcClient.StatementSpec bindRunFilters(
-            JdbcClient.StatementSpec statement,
-            UUID companyId,
-            DirectoryRunQuery query
-    ) {
+            JdbcClient.StatementSpec statement, UUID companyId, DirectoryRunQuery query) {
         return statement
                 .param("companyId", companyId)
                 .param("status", query.status())
@@ -289,8 +274,7 @@ public class JdbcIdentityAdministrationRepository implements IdentityAdministrat
                 roles(rs.getString("platform_roles")),
                 rs.getLong("authorization_version"),
                 rowVersion,
-                "\"" + rowVersion + "\""
-        );
+                "\"" + rowVersion + "\"");
     }
 
     private static DirectorySyncRunView mapRun(ResultSet rs, int row) throws SQLException {
@@ -313,15 +297,13 @@ public class JdbcIdentityAdministrationRepository implements IdentityAdministrat
                         rs.getInt("left_count"),
                         rs.getInt("returned_count"),
                         rs.getInt("failed_count"),
-                        rs.getInt("not_applied_count")
-                ),
+                        rs.getInt("not_applied_count")),
                 rs.getString("error_code"),
                 rs.getString("error_summary"),
                 rs.getString("request_id"),
                 rs.getLong("row_version"),
                 instant(rs, "started_at"),
-                instant(rs, "finished_at")
-        );
+                instant(rs, "finished_at"));
     }
 
     private static Set<ManagedPlatformRole> roles(String value) {
@@ -329,9 +311,7 @@ public class JdbcIdentityAdministrationRepository implements IdentityAdministrat
             return Set.of();
         }
         Set<ManagedPlatformRole> roles = new LinkedHashSet<>();
-        Arrays.stream(value.split(","))
-                .map(ManagedPlatformRole::valueOf)
-                .forEach(roles::add);
+        Arrays.stream(value.split(",")).map(ManagedPlatformRole::valueOf).forEach(roles::add);
         return Set.copyOf(roles);
     }
 

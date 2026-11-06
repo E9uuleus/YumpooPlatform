@@ -3,11 +3,7 @@ package com.yumpoo.platform.identityaccess.application.directory;
 import java.util.List;
 
 /** 只在受信任应用边界内流转的原始企业微信成员 ID 页，禁止直接序列化。 */
-public record WeComDirectoryPage(
-        List<String> memberIds,
-        String nextCursor,
-        CursorState cursorState
-) {
+public record WeComDirectoryPage(List<String> memberIds, String nextCursor, CursorState cursorState) {
 
     private static final int MAX_IDENTIFIER_LENGTH = 256;
     private static final int MAX_CURSOR_LENGTH = 4096;
@@ -73,8 +69,7 @@ public record WeComDirectoryPage(
 
     @Override
     public String toString() {
-        return "WeComDirectoryPage[memberCount=" + memberIds.size()
-                + ", cursorState=" + cursorState + "]";
+        return "WeComDirectoryPage[memberCount=" + memberIds.size() + ", cursorState=" + cursorState + "]";
     }
 
     public enum CursorState {

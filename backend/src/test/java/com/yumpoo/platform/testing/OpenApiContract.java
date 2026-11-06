@@ -4,7 +4,6 @@ import com.atlassian.oai.validator.OpenApiInteractionValidator;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.swagger.v3.core.util.Yaml;
 import io.swagger.v3.parser.util.DeserializationUtils;
-
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -12,8 +11,7 @@ import java.nio.file.Path;
 
 public final class OpenApiContract {
 
-    private OpenApiContract() {
-    }
+    private OpenApiContract() {}
 
     static final OpenApiInteractionValidator VALIDATOR = createValidator();
 
@@ -22,7 +20,8 @@ public final class OpenApiContract {
             // The bundled specification uses YAML anchors. Swagger Parser expands aliases before building the tree.
             ObjectNode root = (ObjectNode) DeserializationUtils.readYamlTree(Files.readString(specification()));
             OpenApiNullableReferences.normalize(root);
-            return OpenApiInteractionValidator.createForInlineApiSpecification(Yaml.mapper().writeValueAsString(root))
+            return OpenApiInteractionValidator.createForInlineApiSpecification(
+                            Yaml.mapper().writeValueAsString(root))
                     .withBasePathOverride("/api/v1")
                     .build();
         } catch (IOException exception) {

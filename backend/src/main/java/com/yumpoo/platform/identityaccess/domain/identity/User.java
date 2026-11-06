@@ -22,8 +22,7 @@ public record User(
         long authorizationVersion,
         long rowVersion,
         Instant createdAt,
-        Instant updatedAt
-) {
+        Instant updatedAt) {
 
     public User {
         Objects.requireNonNull(id, "id must not be null");
@@ -51,15 +50,14 @@ public record User(
         if (employmentStatus == EmploymentStatus.LEFT && leftAt == null) {
             throw new IllegalArgumentException("LEFT user requires left facts");
         }
-        boolean disabledFactsAbsent = accountDisabledAt == null
-                && accountDisabledByUserId == null
-                && accountDisabledReason == null;
+        boolean disabledFactsAbsent =
+                accountDisabledAt == null && accountDisabledByUserId == null && accountDisabledReason == null;
         boolean disabledFactsComplete = accountDisabledAt != null
                 && accountDisabledReason != null
                 && !accountDisabledReason.isBlank()
                 && (accountDisabledByUserId != null
-                    || accountDisabledReason.equals("DIRECTORY_ACCOUNT_DISABLED")
-                    || accountDisabledReason.equals("DIRECTORY_SNAPSHOT_MISSING"));
+                        || accountDisabledReason.equals("DIRECTORY_ACCOUNT_DISABLED")
+                        || accountDisabledReason.equals("DIRECTORY_SNAPSHOT_MISSING"));
         if (!disabledFactsAbsent && !disabledFactsComplete) {
             throw new IllegalArgumentException("account-disabled facts must be complete");
         }

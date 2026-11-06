@@ -1,12 +1,11 @@
 package com.yumpoo.platform.testing;
 
+import static org.junit.jupiter.api.Assertions.fail;
+
+import java.util.List;
 import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
-
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.fail;
 
 class OpenApiResponseValidationExtension implements BeforeEachCallback, AfterEachCallback {
 

@@ -611,7 +611,7 @@ watch(() => unfinishedStatusCodes.value?.join(','), () => void resetCurrentData(
 const groupingSwitching = ref(false)
 const { horizontalPageScrollbar, verticalPageScrollbar, horizontalOverflow, horizontalScrollExtent, verticalScrollExtent,
   pageScrollbarLeft, horizontalPageScrollbarStyle, verticalPageScrollbarStyle, onHorizontalPageScroll, onVerticalPageScroll,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- ProjectOverviewView.spec.ts 通过组件实例同步滚动条。
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- ProjectWorkItems.detail.spec.ts 通过组件实例同步滚动条。
   syncPageScrollbars,
   resolveTableScrollElement, schedulePageScrollbarSync, scheduleResponsiveTableLayout, flushResponsiveTableLayout,
 } = useProjectTableScrollLayout({

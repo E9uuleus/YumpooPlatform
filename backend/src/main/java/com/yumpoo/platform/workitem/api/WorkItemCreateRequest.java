@@ -1,22 +1,25 @@
 package com.yumpoo.platform.workitem.api;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonInclude;
-import tools.jackson.databind.JsonNode;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
-
 import java.time.LocalDate;
-import java.util.UUID;
 import java.util.List;
+import java.util.UUID;
+import tools.jackson.databind.JsonNode;
 
 public record WorkItemCreateRequest(
         @NotNull UUID contentId,
-        @JsonProperty(required = true) @NotBlank @Size(max = 300) String title,
-        @JsonProperty(required = true)
-        @Pattern(regexp = "[A-Z][A-Z0-9_]{1,31}") String priority,
+
+        @JsonProperty(required = true) @NotBlank @Size(max = 300)
+        String title,
+
+        @JsonProperty(required = true) @Pattern(regexp = "[A-Z][A-Z0-9_]{1,31}")
+        String priority,
+
         UUID assigneeUserId,
         @JsonProperty(required = true) @Size(max = 65536) String description,
         @JsonProperty(required = true) @Size(max = 16384) String notes,
@@ -24,5 +27,4 @@ public record WorkItemCreateRequest(
         LocalDate timelineEndDate,
         LocalDate dueDate,
         @JsonInclude(JsonInclude.Include.NON_NULL) JsonNode dueTime,
-        @JsonInclude(JsonInclude.Include.NON_NULL) List<UUID> assigneeUserIds
-) {}
+        @JsonInclude(JsonInclude.Include.NON_NULL) List<UUID> assigneeUserIds) {}

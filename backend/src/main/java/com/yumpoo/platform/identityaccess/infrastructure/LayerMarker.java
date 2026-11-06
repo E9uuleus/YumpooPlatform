@@ -5,6 +5,5 @@ package com.yumpoo.platform.identityaccess.infrastructure;
  */
 final class LayerMarker {
 
-    private LayerMarker() {
-    }
+    private LayerMarker() {}
 }

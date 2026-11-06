@@ -6,14 +6,13 @@ import com.yumpoo.platform.foundation.application.event.OutboxConsumerException;
 import com.yumpoo.platform.foundation.application.event.OutboxEventConsumer;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelation;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelationContext;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Component;
-
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Component;
 
 @Component
 public class M011SecondaryProbeConsumer implements OutboxEventConsumer {
@@ -49,14 +48,13 @@ public class M011SecondaryProbeConsumer implements OutboxEventConsumer {
         if (remaining > 0) {
             throw new OutboxConsumerException("M011_RETRYABLE_FAILURE", true);
         }
-        int permanentRemaining = permanentFailuresRemaining.getAndUpdate(
-                value -> Math.max(0, value - 1)
-        );
+        int permanentRemaining = permanentFailuresRemaining.getAndUpdate(value -> Math.max(0, value - 1));
         if (permanentRemaining > 0) {
             throw new OutboxConsumerException("M011_PERMANENT_FAILURE", false);
         }
         RequestCorrelation correlation = RequestCorrelationContext.required();
-        jdbcClient.sql("""
+        jdbcClient
+                .sql("""
                         INSERT INTO yumpoo.m011_projection (
                             consumer_name, event_id, probe_id, request_id,
                             correlation_id, consumer_causation_id, created_at
@@ -73,9 +71,7 @@ public class M011SecondaryProbeConsumer implements OutboxEventConsumer {
                 .param("causationId", correlation.causationId())
                 .param("createdAt", OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC))
                 .update();
-        int postInsertRemaining = postInsertFailuresRemaining.getAndUpdate(
-                value -> Math.max(0, value - 1)
-        );
+        int postInsertRemaining = postInsertFailuresRemaining.getAndUpdate(value -> Math.max(0, value - 1));
         if (postInsertRemaining > 0) {
             throw new OutboxConsumerException("M011_POST_EFFECT_FAILURE", true);
         }

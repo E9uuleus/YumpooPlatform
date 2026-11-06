@@ -3,55 +3,38 @@ package com.yumpoo.platform.workitem.api;
 import com.yumpoo.platform.foundation.api.http.IdempotencyKeyParser;
 import com.yumpoo.platform.foundation.api.http.IdempotencyRequestHasher;
 import com.yumpoo.platform.foundation.api.http.IfMatchParser;
-import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
 import com.yumpoo.platform.foundation.api.pagination.CursorPageRequest;
+import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
 import com.yumpoo.platform.foundation.api.web.ApiV1Controller;
-import com.yumpoo.platform.foundation.application.idempotency.StoredCommandResult;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.FieldViolation;
-import com.yumpoo.platform.workitem.application.DueTimeChange;
+import com.yumpoo.platform.foundation.application.idempotency.StoredCommandResult;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.CurrentActorProvider;
+import com.yumpoo.platform.workitem.application.DueTimeChange;
+import com.yumpoo.platform.workitem.application.WorkItemCommandService;
+import com.yumpoo.platform.workitem.application.WorkItemCommands.ChangeContent;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.Create;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.CreateSubitem;
-import com.yumpoo.platform.workitem.application.WorkItemCommands.ChangeContent;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.Delete;
-import com.yumpoo.platform.workitem.application.WorkItemCommands.RankMove;
-import com.yumpoo.platform.workitem.application.WorkItemCommands.ProjectOrderMove;
-import com.yumpoo.platform.workitem.application.WorkItemCommands.SubitemOrderMove;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.InlineUpdate;
+import com.yumpoo.platform.workitem.application.WorkItemCommands.ProjectOrderMove;
+import com.yumpoo.platform.workitem.application.WorkItemCommands.RankMove;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.Restore;
+import com.yumpoo.platform.workitem.application.WorkItemCommands.SubitemOrderMove;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.Transition;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.Update;
-import com.yumpoo.platform.workitem.application.WorkItemModels.WorkItemDetail;
+import com.yumpoo.platform.workitem.application.WorkItemLifecycleService;
 import com.yumpoo.platform.workitem.application.WorkItemModels.ArchivedWorkItemPage;
-import com.yumpoo.platform.workitem.application.WorkItemModels.WorkItemPage;
 import com.yumpoo.platform.workitem.application.WorkItemModels.ProjectWorkItemCursorPage;
 import com.yumpoo.platform.workitem.application.WorkItemModels.ProjectWorkItemFilterOptionCursorPage;
+import com.yumpoo.platform.workitem.application.WorkItemModels.WorkItemDetail;
 import com.yumpoo.platform.workitem.application.WorkItemModels.WorkItemSubitemList;
+import com.yumpoo.platform.workitem.application.WorkItemOrderingService;
 import com.yumpoo.platform.workitem.application.WorkItemQuery;
 import com.yumpoo.platform.workitem.application.WorkItemQueryService;
-import com.yumpoo.platform.workitem.application.WorkItemCommandService;
-import com.yumpoo.platform.workitem.application.WorkItemOrderingService;
-import com.yumpoo.platform.workitem.application.WorkItemLifecycleService;
-import jakarta.validation.Valid;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.http.CacheControl;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PatchMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RequestParam;
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.JsonNode;
-
+import jakarta.validation.Valid;
 import java.net.URI;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -59,6 +42,21 @@ import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.http.CacheControl;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 @ApiV1Controller
 public final class WorkItemController {
@@ -72,17 +70,30 @@ public final class WorkItemController {
     private final IdempotencyRequestHasher hasher;
     private final ObjectMapper objectMapper;
 
-    public WorkItemController(CurrentActorProvider actors, WorkItemQueryService queries,
-            WorkItemCommandService commands, WorkItemOrderingService ordering, WorkItemLifecycleService lifecycle,
-            IfMatchParser ifMatch, IdempotencyKeyParser keys,
-            IdempotencyRequestHasher hasher, ObjectMapper objectMapper) {
-        this.actors = actors; this.queries = queries; this.commands = commands;
-        this.ordering = ordering; this.lifecycle = lifecycle; this.ifMatch = ifMatch; this.keys = keys;
-        this.hasher = hasher; this.objectMapper = objectMapper;
+    public WorkItemController(
+            CurrentActorProvider actors,
+            WorkItemQueryService queries,
+            WorkItemCommandService commands,
+            WorkItemOrderingService ordering,
+            WorkItemLifecycleService lifecycle,
+            IfMatchParser ifMatch,
+            IdempotencyKeyParser keys,
+            IdempotencyRequestHasher hasher,
+            ObjectMapper objectMapper) {
+        this.actors = actors;
+        this.queries = queries;
+        this.commands = commands;
+        this.ordering = ordering;
+        this.lifecycle = lifecycle;
+        this.ifMatch = ifMatch;
+        this.keys = keys;
+        this.hasher = hasher;
+        this.objectMapper = objectMapper;
     }
 
     @GetMapping("/projects/{projectId}/work-items")
-    ResponseEntity<ProjectWorkItemCursorPage> listProject(@PathVariable UUID projectId,
+    ResponseEntity<ProjectWorkItemCursorPage> listProject(
+            @PathVariable UUID projectId,
             @RequestParam(required = false) List<UUID> connectedColumnIds,
             @RequestParam(required = false) List<UUID> unconnectedColumnIds,
             @RequestParam(required = false) List<UUID> incomingProjectIds,
@@ -105,29 +116,47 @@ public final class WorkItemController {
             @RequestParam(required = false) Integer limit,
             HttpServletRequest httpRequest) {
         String[] sorts = httpRequest.getParameterValues("sort");
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(queries.listProject(actors.requiredActive(), projectId,
-                        withTime(new WorkItemQuery.Request(q, statuses, priorities, assigneeUserIds, contentIds,
-                                dueFrom, dueTo, updatedAfter, sorts == null ? null : List.of(sorts))
-                                .withEmptyField(httpRequest.getParameter("emptyField"))
-                                .withAssigneeSet(assigneeSetUserIds)
-                                .withConnections(connectedColumnIds, unconnectedColumnIds, incomingProjectIds)
-                                .withGroup(new WorkItemQuery.GroupFilter(groupStatus, groupPriority, groupContentId, groupDueFrom, groupDueTo)), httpRequest),
-                        view, CursorPageRequest.of(cursor, limit)));
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(queries.listProject(
+                        actors.requiredActive(),
+                        projectId,
+                        withTime(
+                                new WorkItemQuery.Request(
+                                                q,
+                                                statuses,
+                                                priorities,
+                                                assigneeUserIds,
+                                                contentIds,
+                                                dueFrom,
+                                                dueTo,
+                                                updatedAfter,
+                                                sorts == null ? null : List.of(sorts))
+                                        .withEmptyField(httpRequest.getParameter("emptyField"))
+                                        .withAssigneeSet(assigneeSetUserIds)
+                                        .withConnections(connectedColumnIds, unconnectedColumnIds, incomingProjectIds)
+                                        .withGroup(new WorkItemQuery.GroupFilter(
+                                                groupStatus, groupPriority, groupContentId, groupDueFrom, groupDueTo)),
+                                httpRequest),
+                        view,
+                        CursorPageRequest.of(cursor, limit)));
     }
 
     @GetMapping("/projects/{projectId}/archived-work-items")
-    ResponseEntity<ArchivedWorkItemPage> listArchived(@PathVariable UUID projectId,
+    ResponseEntity<ArchivedWorkItemPage> listArchived(
+            @PathVariable UUID projectId,
             @RequestParam(required = false) String q,
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size) {
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
                 .body(queries.listArchived(actors.requiredActive(), projectId, q, OffsetPageRequest.of(page, size)));
     }
 
     @GetMapping("/projects/{projectId}/work-items/filter-options")
     ResponseEntity<ProjectWorkItemFilterOptionCursorPage> listProjectFilterOptions(
-            @PathVariable UUID projectId, @RequestParam String field,
+            @PathVariable UUID projectId,
+            @RequestParam String field,
             @RequestParam(defaultValue = "false") boolean countSubitems,
             @RequestParam(required = false) List<UUID> connectedColumnIds,
             @RequestParam(required = false) List<UUID> unconnectedColumnIds,
@@ -145,30 +174,62 @@ public final class WorkItemController {
             @RequestParam(required = false) Integer limit,
             HttpServletRequest httpRequest) {
         String[] sorts = httpRequest.getParameterValues("sort");
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(queries.listProjectFilterOptions(actors.requiredActive(), projectId, field, countSubitems,
-                        withTime(new WorkItemQuery.Request(q, statuses, priorities, assigneeUserIds,
-                                contentIds, dueFrom, dueTo, updatedAfter,
-                                sorts == null ? null : List.of(sorts))
-                                .withAssigneeSet(assigneeSetUserIds)
-                                .withEmptyField(httpRequest.getParameter("emptyField"))
-                                .withConnections(connectedColumnIds, unconnectedColumnIds, incomingProjectIds), httpRequest),
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(queries.listProjectFilterOptions(
+                        actors.requiredActive(),
+                        projectId,
+                        field,
+                        countSubitems,
+                        withTime(
+                                new WorkItemQuery.Request(
+                                                q,
+                                                statuses,
+                                                priorities,
+                                                assigneeUserIds,
+                                                contentIds,
+                                                dueFrom,
+                                                dueTo,
+                                                updatedAfter,
+                                                sorts == null ? null : List.of(sorts))
+                                        .withAssigneeSet(assigneeSetUserIds)
+                                        .withEmptyField(httpRequest.getParameter("emptyField"))
+                                        .withConnections(connectedColumnIds, unconnectedColumnIds, incomingProjectIds),
+                                httpRequest),
                         CursorPageRequest.of(cursor, limit)));
     }
 
     @PostMapping("/projects/{projectId}/work-items")
-    ResponseEntity<String> create(@PathVariable UUID projectId,
+    ResponseEntity<String> create(
+            @PathVariable UUID projectId,
             @Valid @RequestBody WorkItemCreateRequest body,
-            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false)
-            String idempotencyHeader) {
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String idempotencyHeader) {
         CurrentActor actor = actors.requiredActive();
         UUID key = keys.parseRequired(idempotencyHeader);
-        StoredCommandResult stored = commands.create(new Create(actor, projectId, body.contentId(), body.title(),
-                body.priority(), body.assigneeUserId(), body.description(), body.notes(),
-                body.timelineStartDate(), body.timelineEndDate(), body.dueDate(), key,
-                hasher.hash("createWorkItem", Map.of("projectId", projectId.toString(),
-                                "contentId", body.contentId().toString()),
-                        objectMapper.valueToTree(body)), dueTimeChange(body.dueTime()), body.assigneeUserIds())).result();
+        StoredCommandResult stored = commands.create(new Create(
+                        actor,
+                        projectId,
+                        body.contentId(),
+                        body.title(),
+                        body.priority(),
+                        body.assigneeUserId(),
+                        body.description(),
+                        body.notes(),
+                        body.timelineStartDate(),
+                        body.timelineEndDate(),
+                        body.dueDate(),
+                        key,
+                        hasher.hash(
+                                "createWorkItem",
+                                Map.of(
+                                        "projectId",
+                                        projectId.toString(),
+                                        "contentId",
+                                        body.contentId().toString()),
+                                objectMapper.valueToTree(body)),
+                        dueTimeChange(body.dueTime()),
+                        body.assigneeUserIds()))
+                .result();
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setCacheControl(CacheControl.noStore());
@@ -178,7 +239,8 @@ public final class WorkItemController {
     }
 
     @GetMapping("/work-items/{parentWorkItemId}/subitems")
-    ResponseEntity<WorkItemSubitemList> listSubitems(@PathVariable UUID parentWorkItemId,
+    ResponseEntity<WorkItemSubitemList> listSubitems(
+            @PathVariable UUID parentWorkItemId,
             @RequestParam(required = false) String q,
             @RequestParam(name = "status", required = false) List<String> statuses,
             @RequestParam(name = "priority", required = false) List<String> priorities,
@@ -189,26 +251,52 @@ public final class WorkItemController {
             @RequestParam(required = false) Instant updatedAfter,
             HttpServletRequest httpRequest) {
         String[] sorts = httpRequest.getParameterValues("sort");
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(queries.listSubitems(actors.requiredActive(), parentWorkItemId,
-                        withTime(new WorkItemQuery.Request(q, statuses, priorities, assigneeUserIds, contentIds,
-                                dueFrom, dueTo, updatedAfter, sorts == null ? null : List.of(sorts)), httpRequest)));
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(queries.listSubitems(
+                        actors.requiredActive(),
+                        parentWorkItemId,
+                        withTime(
+                                new WorkItemQuery.Request(
+                                        q,
+                                        statuses,
+                                        priorities,
+                                        assigneeUserIds,
+                                        contentIds,
+                                        dueFrom,
+                                        dueTo,
+                                        updatedAfter,
+                                        sorts == null ? null : List.of(sorts)),
+                                httpRequest)));
     }
 
     @PostMapping("/work-items/{parentWorkItemId}/subitems")
-    ResponseEntity<String> createSubitem(@PathVariable UUID parentWorkItemId,
+    ResponseEntity<String> createSubitem(
+            @PathVariable UUID parentWorkItemId,
             @Valid @RequestBody WorkItemSubitemCreateRequest body,
-            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false)
-            String idempotencyHeader) {
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String idempotencyHeader) {
         CurrentActor actor = actors.requiredActive();
         UUID key = keys.parseRequired(idempotencyHeader);
-        StoredCommandResult stored = commands.createSubitem(new CreateSubitem(actor,
-                parentWorkItemId, body.contentId(), body.title(), body.priority(),
-                body.assigneeUserId(), body.description(), body.notes(), body.timelineStartDate(),
-                body.timelineEndDate(), body.dueDate(), key,
-                hasher.hash("createWorkItemSubitem", Map.of(
-                                "parentWorkItemId", parentWorkItemId.toString()),
-                        objectMapper.valueToTree(body)), dueTimeChange(body.dueTime()), body.assigneeUserIds())).result();
+        StoredCommandResult stored = commands.createSubitem(new CreateSubitem(
+                        actor,
+                        parentWorkItemId,
+                        body.contentId(),
+                        body.title(),
+                        body.priority(),
+                        body.assigneeUserId(),
+                        body.description(),
+                        body.notes(),
+                        body.timelineStartDate(),
+                        body.timelineEndDate(),
+                        body.dueDate(),
+                        key,
+                        hasher.hash(
+                                "createWorkItemSubitem",
+                                Map.of("parentWorkItemId", parentWorkItemId.toString()),
+                                objectMapper.valueToTree(body)),
+                        dueTimeChange(body.dueTime()),
+                        body.assigneeUserIds()))
+                .result();
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setCacheControl(CacheControl.noStore());
@@ -218,209 +306,273 @@ public final class WorkItemController {
     }
 
     @PostMapping("/work-items/{parentWorkItemId}/subitems/{subitemId}/order-moves")
-    ResponseEntity<String> subitemOrderMove(@PathVariable UUID parentWorkItemId,
+    ResponseEntity<String> subitemOrderMove(
+            @PathVariable UUID parentWorkItemId,
             @PathVariable UUID subitemId,
             @RequestBody ProjectWorkItemOrderMoveRequest body,
-            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false)
-            String ifMatchHeader,
-            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false)
-            String idempotencyHeader) {
+            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader,
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String idempotencyHeader) {
         CurrentActor actor = actors.requiredActive();
         queries.find(actor, subitemId);
         long expectedVersion = ifMatch.parseForVisibleResource(true, ifMatchHeader);
         UUID key = keys.parseRequired(idempotencyHeader);
-        StoredCommandResult stored = ordering.subitemOrderMove(new SubitemOrderMove(actor,
-                parentWorkItemId, subitemId, expectedVersion,
-                body.previousVisibleWorkItemId(), body.nextVisibleWorkItemId(), key,
-                hasher.hash("moveWorkItemSubitemOrder", Map.of(
-                                "parentWorkItemId", parentWorkItemId.toString(),
-                                "subitemId", subitemId.toString(),
-                                "ifMatch", Long.toString(expectedVersion)),
-                        objectMapper.valueToTree(body)))).result();
+        StoredCommandResult stored = ordering.subitemOrderMove(new SubitemOrderMove(
+                        actor,
+                        parentWorkItemId,
+                        subitemId,
+                        expectedVersion,
+                        body.previousVisibleWorkItemId(),
+                        body.nextVisibleWorkItemId(),
+                        key,
+                        hasher.hash(
+                                "moveWorkItemSubitemOrder",
+                                Map.of(
+                                        "parentWorkItemId", parentWorkItemId.toString(),
+                                        "subitemId", subitemId.toString(),
+                                        "ifMatch", Long.toString(expectedVersion)),
+                                objectMapper.valueToTree(body))))
+                .result();
         return storedResponse(stored);
     }
 
     @GetMapping("/work-items/{workItemId}")
     ResponseEntity<WorkItemDetail> detail(@PathVariable UUID workItemId) {
         WorkItemDetail detail = queries.find(actors.requiredActive(), workItemId);
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .eTag(Long.toString(detail.rowVersion())).body(detail);
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .eTag(Long.toString(detail.rowVersion()))
+                .body(detail);
     }
 
     @PatchMapping("/work-items/{workItemId}")
-    ResponseEntity<WorkItemDetail> update(@PathVariable UUID workItemId,
+    ResponseEntity<WorkItemDetail> update(
+            @PathVariable UUID workItemId,
             @Valid @RequestBody WorkItemUpdateRequest body,
-            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false)
-            String ifMatchHeader) {
+            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader) {
         CurrentActor actor = actors.requiredActive();
         queries.find(actor, workItemId);
         long expectedVersion = ifMatch.parseForVisibleResource(true, ifMatchHeader);
-        WorkItemDetail detail = commands.update(new Update(actor, workItemId, expectedVersion,
-                body.title(), body.priority(), body.assigneeUserId(), body.description(),
-                body.notes(), body.timelineStartDate(), body.timelineEndDate(), body.dueDate(),
-                dueTimeChange(body.dueTime()), body.assigneeUserIds()));
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .eTag(Long.toString(detail.rowVersion())).body(detail);
+        WorkItemDetail detail = commands.update(new Update(
+                actor,
+                workItemId,
+                expectedVersion,
+                body.title(),
+                body.priority(),
+                body.assigneeUserId(),
+                body.description(),
+                body.notes(),
+                body.timelineStartDate(),
+                body.timelineEndDate(),
+                body.dueDate(),
+                dueTimeChange(body.dueTime()),
+                body.assigneeUserIds()));
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .eTag(Long.toString(detail.rowVersion()))
+                .body(detail);
     }
 
     @PostMapping("/work-items/{workItemId}/transitions")
-    ResponseEntity<String> transition(@PathVariable UUID workItemId,
+    ResponseEntity<String> transition(
+            @PathVariable UUID workItemId,
             @Valid @RequestBody WorkItemTransitionRequest body,
-            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false)
-            String ifMatchHeader,
-            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false)
-            String idempotencyHeader) {
+            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader,
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String idempotencyHeader) {
         CurrentActor actor = actors.requiredActive();
         queries.find(actor, workItemId);
         long expectedVersion = ifMatch.parseForVisibleResource(true, ifMatchHeader);
         UUID key = keys.parseRequired(idempotencyHeader);
-        StoredCommandResult stored = commands.transition(new Transition(actor, workItemId,
-                expectedVersion, body.toStatus(), body.resolution(), key,
-                hasher.hash("transitionWorkItem", Map.of(
-                                "workItemId", workItemId.toString(),
-                                "ifMatch", Long.toString(expectedVersion)),
-                        objectMapper.valueToTree(body)))).result();
+        StoredCommandResult stored = commands.transition(new Transition(
+                        actor,
+                        workItemId,
+                        expectedVersion,
+                        body.toStatus(),
+                        body.resolution(),
+                        key,
+                        hasher.hash(
+                                "transitionWorkItem",
+                                Map.of(
+                                        "workItemId", workItemId.toString(),
+                                        "ifMatch", Long.toString(expectedVersion)),
+                                objectMapper.valueToTree(body))))
+                .result();
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setCacheControl(CacheControl.noStore());
         headers.setETag(stored.etag());
-        return new ResponseEntity<>(stored.responseJson(), headers,
-                HttpStatus.valueOf(stored.httpStatus()));
+        return new ResponseEntity<>(stored.responseJson(), headers, HttpStatus.valueOf(stored.httpStatus()));
     }
 
     @PostMapping("/work-items/{workItemId}/rank-moves")
-    ResponseEntity<String> rankMove(@PathVariable UUID workItemId,
+    ResponseEntity<String> rankMove(
+            @PathVariable UUID workItemId,
             @Valid @RequestBody WorkItemRankMoveRequest body,
-            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false)
-            String ifMatchHeader,
-            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false)
-            String idempotencyHeader) {
+            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader,
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String idempotencyHeader) {
         CurrentActor actor = actors.requiredActive();
         queries.find(actor, workItemId);
         long expectedVersion = ifMatch.parseForVisibleResource(true, ifMatchHeader);
         UUID key = keys.parseRequired(idempotencyHeader);
-        StoredCommandResult stored = ordering.rankMove(new RankMove(actor, workItemId,
-                expectedVersion, body.toStatus(), body.placement(), body.anchorWorkItemId(),
-                body.resolution(), key, hasher.hash("rankMoveWorkItem", Map.of(
-                                "workItemId", workItemId.toString(),
-                                "ifMatch", Long.toString(expectedVersion)),
-                        objectMapper.valueToTree(body)))).result();
+        StoredCommandResult stored = ordering.rankMove(new RankMove(
+                        actor,
+                        workItemId,
+                        expectedVersion,
+                        body.toStatus(),
+                        body.placement(),
+                        body.anchorWorkItemId(),
+                        body.resolution(),
+                        key,
+                        hasher.hash(
+                                "rankMoveWorkItem",
+                                Map.of(
+                                        "workItemId", workItemId.toString(),
+                                        "ifMatch", Long.toString(expectedVersion)),
+                                objectMapper.valueToTree(body))))
+                .result();
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setCacheControl(CacheControl.noStore());
         headers.setETag(stored.etag());
-        return new ResponseEntity<>(stored.responseJson(), headers,
-                HttpStatus.valueOf(stored.httpStatus()));
+        return new ResponseEntity<>(stored.responseJson(), headers, HttpStatus.valueOf(stored.httpStatus()));
     }
 
     @PostMapping("/projects/{projectId}/work-items/{workItemId}/order-moves")
-    ResponseEntity<String> projectOrderMove(@PathVariable UUID projectId,
+    ResponseEntity<String> projectOrderMove(
+            @PathVariable UUID projectId,
             @PathVariable UUID workItemId,
             @RequestBody ProjectWorkItemOrderMoveRequest body,
-            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false)
-            String ifMatchHeader,
-            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false)
-            String idempotencyHeader) {
+            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader,
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String idempotencyHeader) {
         CurrentActor actor = actors.requiredActive();
         queries.find(actor, workItemId);
         long expectedVersion = ifMatch.parseForVisibleResource(true, ifMatchHeader);
         UUID key = keys.parseRequired(idempotencyHeader);
-        StoredCommandResult stored = ordering.projectOrderMove(new ProjectOrderMove(actor,
-                projectId, workItemId, expectedVersion, body.previousVisibleWorkItemId(),
-                body.nextVisibleWorkItemId(), key,
-                hasher.hash("moveProjectWorkItemOrder", Map.of(
-                                "projectId", projectId.toString(),
-                                "workItemId", workItemId.toString(),
-                                "ifMatch", Long.toString(expectedVersion)),
-                        objectMapper.valueToTree(body)))).result();
+        StoredCommandResult stored = ordering.projectOrderMove(new ProjectOrderMove(
+                        actor,
+                        projectId,
+                        workItemId,
+                        expectedVersion,
+                        body.previousVisibleWorkItemId(),
+                        body.nextVisibleWorkItemId(),
+                        key,
+                        hasher.hash(
+                                "moveProjectWorkItemOrder",
+                                Map.of(
+                                        "projectId", projectId.toString(),
+                                        "workItemId", workItemId.toString(),
+                                        "ifMatch", Long.toString(expectedVersion)),
+                                objectMapper.valueToTree(body))))
+                .result();
         return storedResponse(stored);
     }
 
     @PatchMapping("/work-items/{workItemId}/assignee")
-    ResponseEntity<String> patchAssignee(@PathVariable UUID workItemId,
+    ResponseEntity<String> patchAssignee(
+            @PathVariable UUID workItemId,
             @RequestBody WorkItemAssigneePatchRequest body,
             @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader,
-            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false)
-            String idempotencyHeader) {
-        return inlineUpdate(workItemId, ifMatchHeader, idempotencyHeader, "ASSIGNEE",
-                null, body.assigneeUserId(), null, body);
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String idempotencyHeader) {
+        return inlineUpdate(
+                workItemId, ifMatchHeader, idempotencyHeader, "ASSIGNEE", null, body.assigneeUserId(), null, body);
     }
 
     @PatchMapping("/work-items/{workItemId}/assignees")
-    ResponseEntity<String> patchAssignees(@PathVariable UUID workItemId,
+    ResponseEntity<String> patchAssignees(
+            @PathVariable UUID workItemId,
             @Valid @RequestBody WorkItemAssigneesPatchRequest body,
             @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader,
             @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String idempotencyHeader) {
         if (body.assigneeUserIds() == null)
             throw ApplicationException.validation(new FieldViolation("assigneeUserIds", "REQUIRED", "处理人列表必填"));
-        return inlineUpdate(workItemId, ifMatchHeader, idempotencyHeader, "ASSIGNEES",
-                null, null, null, body);
+        return inlineUpdate(workItemId, ifMatchHeader, idempotencyHeader, "ASSIGNEES", null, null, null, body);
     }
 
     @PatchMapping("/work-items/{workItemId}/priority")
-    ResponseEntity<String> patchPriority(@PathVariable UUID workItemId,
+    ResponseEntity<String> patchPriority(
+            @PathVariable UUID workItemId,
             @RequestBody WorkItemPriorityPatchRequest body,
             @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader,
-            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false)
-            String idempotencyHeader) {
-        return inlineUpdate(workItemId, ifMatchHeader, idempotencyHeader, "PRIORITY",
-                body.priority(), null, null, body);
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String idempotencyHeader) {
+        return inlineUpdate(
+                workItemId, ifMatchHeader, idempotencyHeader, "PRIORITY", body.priority(), null, null, body);
     }
 
     @PatchMapping("/work-items/{workItemId}/due-date")
-    ResponseEntity<String> patchDueDate(@PathVariable UUID workItemId,
+    ResponseEntity<String> patchDueDate(
+            @PathVariable UUID workItemId,
             @RequestBody WorkItemDueDatePatchRequest body,
             @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader,
-            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false)
-            String idempotencyHeader) {
-        return inlineUpdate(workItemId, ifMatchHeader, idempotencyHeader, "DUE_DATE",
-                null, null, body.dueDate(), body);
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String idempotencyHeader) {
+        return inlineUpdate(workItemId, ifMatchHeader, idempotencyHeader, "DUE_DATE", null, null, body.dueDate(), body);
     }
 
     @PatchMapping("/work-items/{workItemId}/description")
-    ResponseEntity<String> patchDescription(@PathVariable UUID workItemId,
+    ResponseEntity<String> patchDescription(
+            @PathVariable UUID workItemId,
             @Valid @RequestBody WorkItemDescriptionPatchRequest body,
             @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader,
-            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false)
-            String idempotencyHeader) {
-        return inlineUpdate(workItemId, ifMatchHeader, idempotencyHeader, "DESCRIPTION",
-                null, null, null, body);
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String idempotencyHeader) {
+        return inlineUpdate(workItemId, ifMatchHeader, idempotencyHeader, "DESCRIPTION", null, null, null, body);
     }
 
     @PatchMapping("/work-items/{workItemId}/content")
-    ResponseEntity<String> patchContent(@PathVariable UUID workItemId,
+    ResponseEntity<String> patchContent(
+            @PathVariable UUID workItemId,
             @Valid @RequestBody WorkItemContentPatchRequest body,
             @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader,
-            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false)
-            String idempotencyHeader) {
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String idempotencyHeader) {
         CurrentActor actor = actors.requiredActive();
         queries.find(actor, workItemId);
         long expectedVersion = ifMatch.parseForVisibleResource(true, ifMatchHeader);
         UUID key = keys.parseRequired(idempotencyHeader);
-        StoredCommandResult stored = commands.changeContent(new ChangeContent(actor, workItemId,
-                expectedVersion, body.contentId(), key, hasher.hash("changeWorkItemContent",
-                        Map.of("workItemId", workItemId.toString(),
-                                "ifMatch", Long.toString(expectedVersion)),
-                        objectMapper.valueToTree(body)))).result();
+        StoredCommandResult stored = commands.changeContent(new ChangeContent(
+                        actor,
+                        workItemId,
+                        expectedVersion,
+                        body.contentId(),
+                        key,
+                        hasher.hash(
+                                "changeWorkItemContent",
+                                Map.of("workItemId", workItemId.toString(), "ifMatch", Long.toString(expectedVersion)),
+                                objectMapper.valueToTree(body))))
+                .result();
         return storedResponse(stored);
     }
 
-    private ResponseEntity<String> inlineUpdate(UUID workItemId, String ifMatchHeader,
-            String idempotencyHeader, String field, String priority, UUID assigneeUserId,
-            LocalDate dueDate, Object body) {
+    private ResponseEntity<String> inlineUpdate(
+            UUID workItemId,
+            String ifMatchHeader,
+            String idempotencyHeader,
+            String field,
+            String priority,
+            UUID assigneeUserId,
+            LocalDate dueDate,
+            Object body) {
         CurrentActor actor = actors.requiredActive();
         queries.find(actor, workItemId);
         long expectedVersion = ifMatch.parseForVisibleResource(true, ifMatchHeader);
         UUID key = keys.parseRequired(idempotencyHeader);
-        StoredCommandResult stored = commands.inlineUpdate(new InlineUpdate(actor, workItemId,
-                expectedVersion, field, priority, assigneeUserId, dueDate, key,
-                hasher.hash("inlineUpdateWorkItem:" + field, Map.of(
-                                "workItemId", workItemId.toString(),
-                                "ifMatch", Long.toString(expectedVersion)),
-                        objectMapper.valueToTree(body)), body instanceof WorkItemDueDatePatchRequest deadline
-                        ? dueTimeChange(deadline.dueTime()) : DueTimeChange.unchanged(),
-                body instanceof WorkItemDescriptionPatchRequest description ? description.description() : null,
-                body instanceof WorkItemAssigneesPatchRequest assignees ? assignees.assigneeUserIds() : null)).result();
+        StoredCommandResult stored = commands.inlineUpdate(new InlineUpdate(
+                        actor,
+                        workItemId,
+                        expectedVersion,
+                        field,
+                        priority,
+                        assigneeUserId,
+                        dueDate,
+                        key,
+                        hasher.hash(
+                                "inlineUpdateWorkItem:" + field,
+                                Map.of(
+                                        "workItemId", workItemId.toString(),
+                                        "ifMatch", Long.toString(expectedVersion)),
+                                objectMapper.valueToTree(body)),
+                        body instanceof WorkItemDueDatePatchRequest deadline
+                                ? dueTimeChange(deadline.dueTime())
+                                : DueTimeChange.unchanged(),
+                        body instanceof WorkItemDescriptionPatchRequest description ? description.description() : null,
+                        body instanceof WorkItemAssigneesPatchRequest assignees ? assignees.assigneeUserIds() : null))
+                .result();
         return storedResponse(stored);
     }
 
@@ -428,71 +580,96 @@ public final class WorkItemController {
         if (value == null) return DueTimeChange.unchanged();
         if (value.isNull()) return new DueTimeChange(true, null);
         if (!value.isTextual() || !value.textValue().matches("(?:[01][0-9]|2[0-3]):[0-5][0-9]"))
-            throw ApplicationException.validation(new FieldViolation("dueTime", "INVALID_TIME",
-                    "截止时间必须使用 HH:mm 格式"));
+            throw ApplicationException.validation(new FieldViolation("dueTime", "INVALID_TIME", "截止时间必须使用 HH:mm 格式"));
         return new DueTimeChange(true, LocalTime.parse(value.textValue()));
     }
 
     @DeleteMapping("/work-items/{workItemId}")
-    ResponseEntity<String> delete(@PathVariable UUID workItemId,
+    ResponseEntity<String> delete(
+            @PathVariable UUID workItemId,
             @Valid @RequestBody WorkItemDeleteRequest body,
-            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false)
-            String ifMatchHeader,
-            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false)
-            String idempotencyHeader) {
+            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader,
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String idempotencyHeader) {
         CurrentActor actor = actors.requiredActive();
         queries.findForLifecycle(actor, workItemId);
         long expectedVersion = ifMatch.parseForVisibleResource(true, ifMatchHeader);
         UUID key = keys.parseRequired(idempotencyHeader);
-        StoredCommandResult stored = lifecycle.delete(new Delete(actor, workItemId,
-                expectedVersion, body.reason(), key, hasher.hash("deleteWorkItem", Map.of(
-                                "workItemId", workItemId.toString(),
-                                "ifMatch", Long.toString(expectedVersion)),
-                        objectMapper.valueToTree(body)))).result();
+        StoredCommandResult stored = lifecycle
+                .delete(new Delete(
+                        actor,
+                        workItemId,
+                        expectedVersion,
+                        body.reason(),
+                        key,
+                        hasher.hash(
+                                "deleteWorkItem",
+                                Map.of(
+                                        "workItemId", workItemId.toString(),
+                                        "ifMatch", Long.toString(expectedVersion)),
+                                objectMapper.valueToTree(body))))
+                .result();
         return storedResponse(stored);
     }
 
     @PostMapping("/work-items/{workItemId}/restore")
-    ResponseEntity<String> restore(@PathVariable UUID workItemId,
-            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false)
-            String ifMatchHeader,
-            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false)
-            String idempotencyHeader) {
+    ResponseEntity<String> restore(
+            @PathVariable UUID workItemId,
+            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader,
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String idempotencyHeader) {
         CurrentActor actor = actors.requiredActive();
         queries.findForLifecycle(actor, workItemId);
         long expectedVersion = ifMatch.parseForVisibleResource(true, ifMatchHeader);
         UUID key = keys.parseRequired(idempotencyHeader);
-        StoredCommandResult stored = lifecycle.restore(new Restore(actor, workItemId,
-                expectedVersion, key, hasher.hash("restoreWorkItem", Map.of(
-                        "workItemId", workItemId.toString(),
-                        "ifMatch", Long.toString(expectedVersion)), objectMapper.nullNode()))).result();
+        StoredCommandResult stored = lifecycle
+                .restore(new Restore(
+                        actor,
+                        workItemId,
+                        expectedVersion,
+                        key,
+                        hasher.hash(
+                                "restoreWorkItem",
+                                Map.of(
+                                        "workItemId", workItemId.toString(),
+                                        "ifMatch", Long.toString(expectedVersion)),
+                                objectMapper.nullNode())))
+                .result();
         return storedResponse(stored);
     }
 
     @PostMapping("/work-items/{workItemId}/archive")
-    ResponseEntity<String> archive(@PathVariable UUID workItemId,
+    ResponseEntity<String> archive(
+            @PathVariable UUID workItemId,
             @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader,
             @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String idempotencyHeader) {
         return changeArchive(workItemId, true, ifMatchHeader, idempotencyHeader);
     }
 
     @PostMapping("/work-items/{workItemId}/unarchive")
-    ResponseEntity<String> unarchive(@PathVariable UUID workItemId,
+    ResponseEntity<String> unarchive(
+            @PathVariable UUID workItemId,
             @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader,
             @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String idempotencyHeader) {
         return changeArchive(workItemId, false, ifMatchHeader, idempotencyHeader);
     }
 
-    private ResponseEntity<String> changeArchive(UUID workItemId, boolean archived,
-            String ifMatchHeader, String idempotencyHeader) {
+    private ResponseEntity<String> changeArchive(
+            UUID workItemId, boolean archived, String ifMatchHeader, String idempotencyHeader) {
         CurrentActor actor = actors.requiredActive();
         queries.find(actor, workItemId);
         long version = ifMatch.parseForVisibleResource(true, ifMatchHeader);
         String operation = archived ? "archiveWorkItem" : "unarchiveWorkItem";
-        return storedResponse(lifecycle.archive(new com.yumpoo.platform.workitem.application.WorkItemCommands.Archive(
-                actor, workItemId, version, archived, keys.parseRequired(idempotencyHeader),
-                hasher.hash(operation, Map.of("workItemId", workItemId.toString(),
-                        "ifMatch", Long.toString(version)), objectMapper.nullNode()))).result());
+        return storedResponse(lifecycle
+                .archive(new com.yumpoo.platform.workitem.application.WorkItemCommands.Archive(
+                        actor,
+                        workItemId,
+                        version,
+                        archived,
+                        keys.parseRequired(idempotencyHeader),
+                        hasher.hash(
+                                operation,
+                                Map.of("workItemId", workItemId.toString(), "ifMatch", Long.toString(version)),
+                                objectMapper.nullNode())))
+                .result());
     }
 
     private static ResponseEntity<String> storedResponse(StoredCommandResult stored) {
@@ -500,20 +677,20 @@ public final class WorkItemController {
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setCacheControl(CacheControl.noStore());
         headers.setETag(stored.etag());
-        return new ResponseEntity<>(stored.responseJson(), headers,
-                HttpStatus.valueOf(stored.httpStatus()));
-    }
-    private static WorkItemQuery.Request withTime(WorkItemQuery.Request request, HttpServletRequest http) {
-        String state=http.getParameter("timeTrackingState");
-        String min=http.getParameter("timeTrackingMinMs"), max=http.getParameter("timeTrackingMaxMs");
-        if (state==null && min==null && max==null) return request;
-        try {
-            return request.withTime(new WorkItemQuery.TimeFilter(state,min==null ? null : Long.valueOf(min),
-                    max==null ? null : Long.valueOf(max),null,0,0));
-        } catch (NumberFormatException e) {
-            throw com.yumpoo.platform.foundation.application.error.ApplicationException.validation(
-                    new com.yumpoo.platform.foundation.application.error.FieldViolation("timeTrackingMinMs","INVALID_VALUE","时长须为整数毫秒"));
-        }
+        return new ResponseEntity<>(stored.responseJson(), headers, HttpStatus.valueOf(stored.httpStatus()));
     }
 
+    private static WorkItemQuery.Request withTime(WorkItemQuery.Request request, HttpServletRequest http) {
+        String state = http.getParameter("timeTrackingState");
+        String min = http.getParameter("timeTrackingMinMs"), max = http.getParameter("timeTrackingMaxMs");
+        if (state == null && min == null && max == null) return request;
+        try {
+            return request.withTime(new WorkItemQuery.TimeFilter(
+                    state, min == null ? null : Long.valueOf(min), max == null ? null : Long.valueOf(max), null, 0, 0));
+        } catch (NumberFormatException e) {
+            throw com.yumpoo.platform.foundation.application.error.ApplicationException.validation(
+                    new com.yumpoo.platform.foundation.application.error.FieldViolation(
+                            "timeTrackingMinMs", "INVALID_VALUE", "时长须为整数毫秒"));
+        }
+    }
 }

@@ -6,10 +6,6 @@ import com.yumpoo.platform.foundation.application.event.OutboxEventConsumer;
 import com.yumpoo.platform.foundation.application.logging.StructuredLoggingContext;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelation;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelationContext;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
-
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -17,6 +13,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
 
 @Service
 public class OutboxDispatcher {
@@ -41,8 +40,7 @@ public class OutboxDispatcher {
             OutboxRuntimeSettings settings,
             OutboxWorkerIdentity workerIdentity,
             OutboxTaskExecutor deliveryExecutor,
-            Clock clock
-    ) {
+            Clock clock) {
         this.storePort = storePort;
         this.registry = registry;
         this.consumerExecutor = consumerExecutor;
@@ -62,8 +60,7 @@ public class OutboxDispatcher {
                 workerIdentity.value(),
                 UUID.randomUUID(),
                 clock.instant(),
-                settings.leaseDuration()
-        );
+                settings.leaseDuration());
         List<CompletableFuture<Void>> tasks = new ArrayList<>(claims.size());
         for (OutboxClaim claim : claims) {
             tasks.add(deliveryExecutor.submit(() -> process(claim)));
@@ -75,72 +72,66 @@ public class OutboxDispatcher {
     private void process(OutboxClaim claim) {
         long started = System.nanoTime();
         DomainEventEnvelope event = claim.event();
-        RequestCorrelation consumerCorrelation = new RequestCorrelation(
-                event.requestId(),
-                event.correlationId(),
-                event.eventId()
-        );
-        try (
-                RequestCorrelationContext.Scope ignoredCorrelation =
-                        RequestCorrelationContext.open(consumerCorrelation);
+        RequestCorrelation consumerCorrelation =
+                new RequestCorrelation(event.requestId(), event.correlationId(), event.eventId());
+        try (RequestCorrelationContext.Scope ignoredCorrelation = RequestCorrelationContext.open(consumerCorrelation);
                 StructuredLoggingContext.Scope ignoredLogging = StructuredLoggingContext.open(Map.of(
                         StructuredLoggingContext.REQUEST_ID, event.requestId(),
                         StructuredLoggingContext.CORRELATION_ID, event.correlationId(),
                         StructuredLoggingContext.EVENT_ID, event.eventId(),
-                        StructuredLoggingContext.ATTEMPT, claim.attemptCount()
-                ))
-        ) {
+                        StructuredLoggingContext.ATTEMPT, claim.attemptCount()))) {
             List<OutboxEventConsumer> consumers = registry.consumersFor(event);
             if (consumers.isEmpty()) {
                 String errorCode = registry.knowsEventType(event.eventType())
                         ? "UNSUPPORTED_EVENT_VERSION"
                         : "NO_MATCHING_CONSUMER";
-                fail(claim, new OutboxFailure(
-                        DISPATCHER_CONSUMER,
-                        errorCode,
-                        "ConsumerRegistryFailure",
-                        false
-                ));
+                fail(claim, new OutboxFailure(DISPATCHER_CONSUMER, errorCode, "ConsumerRegistryFailure", false));
                 return;
             }
 
             for (OutboxEventConsumer consumer : consumers) {
-                try (StructuredLoggingContext.Scope ignoredConsumer = StructuredLoggingContext.open(Map.of(
-                        StructuredLoggingContext.CONSUMER_NAME, consumer.consumerName()
-                ))) {
+                try (StructuredLoggingContext.Scope ignoredConsumer = StructuredLoggingContext.open(
+                        Map.of(StructuredLoggingContext.CONSUMER_NAME, consumer.consumerName()))) {
                     OutboxConsumerOutcome outcome = consumerExecutor.execute(consumer, event);
-                    try (StructuredLoggingContext.Scope ignoredOutcome = StructuredLoggingContext.open(Map.of(
-                            StructuredLoggingContext.OUTCOME, outcome.name()
-                    ))) {
-                        LOGGER.atDebug().setMessage("outbox consumer completed").addKeyValue("event", "outbox.consumer.completed").log();
+                    try (StructuredLoggingContext.Scope ignoredOutcome =
+                            StructuredLoggingContext.open(Map.of(StructuredLoggingContext.OUTCOME, outcome.name()))) {
+                        LOGGER.atDebug()
+                                .setMessage("outbox consumer completed")
+                                .addKeyValue("event", "outbox.consumer.completed")
+                                .log();
                     }
                 } catch (OutboxConsumerException exception) {
-                    fail(claim, new OutboxFailure(
-                            consumer.consumerName(),
-                            exception.errorCode(),
-                            safeExceptionType(exception),
-                            exception.retryable()
-                    ));
+                    fail(
+                            claim,
+                            new OutboxFailure(
+                                    consumer.consumerName(),
+                                    exception.errorCode(),
+                                    safeExceptionType(exception),
+                                    exception.retryable()));
                     return;
                 } catch (RuntimeException exception) {
-                    fail(claim, new OutboxFailure(
-                            consumer.consumerName(),
-                            "UNEXPECTED_CONSUMER_FAILURE",
-                            safeExceptionType(exception),
-                            true
-                    ));
+                    fail(
+                            claim,
+                            new OutboxFailure(
+                                    consumer.consumerName(),
+                                    "UNEXPECTED_CONSUMER_FAILURE",
+                                    safeExceptionType(exception),
+                                    true));
                     return;
                 }
             }
 
             boolean completed = storePort.markCompleted(claim.lease(), clock.instant());
-            try (StructuredLoggingContext.Scope ignoredOutcome = StructuredLoggingContext.open(Map.of(
-                    StructuredLoggingContext.OUTCOME, completed ? "COMPLETED" : "STALE_LEASE"
-            ))) {
+            try (StructuredLoggingContext.Scope ignoredOutcome = StructuredLoggingContext.open(
+                    Map.of(StructuredLoggingContext.OUTCOME, completed ? "COMPLETED" : "STALE_LEASE"))) {
                 LOGGER.atLevel(completed ? org.slf4j.event.Level.DEBUG : org.slf4j.event.Level.WARN)
-                        .setMessage("outbox event finalized").addKeyValue("event", completed ? "outbox.event.completed" : "outbox.event.stale_lease")
-                        .addKeyValue("eventType", event.eventType()).addKeyValue("attempt", claim.attemptCount())
-                        .addKeyValue("consumers", consumers.size()).addKeyValue("durationMs", (System.nanoTime() - started) / 1_000_000).log();
+                        .setMessage("outbox event finalized")
+                        .addKeyValue("event", completed ? "outbox.event.completed" : "outbox.event.stale_lease")
+                        .addKeyValue("eventType", event.eventType())
+                        .addKeyValue("attempt", claim.attemptCount())
+                        .addKeyValue("consumers", consumers.size())
+                        .addKeyValue("durationMs", (System.nanoTime() - started) / 1_000_000)
+                        .log();
             }
         }
     }
@@ -152,10 +143,7 @@ public class OutboxDispatcher {
         String outcome;
         if (retry) {
             updated = storePort.markRetry(
-                    claim.lease(),
-                    failure,
-                    retryPolicy.nextAttemptAt(claim.attemptCount(), failedAt)
-            );
+                    claim.lease(), failure, retryPolicy.nextAttemptAt(claim.attemptCount(), failedAt));
             outcome = updated ? "RETRY" : "STALE_LEASE";
         } else {
             updated = storePort.markDead(claim.lease(), failure, failedAt);
@@ -164,12 +152,19 @@ public class OutboxDispatcher {
         try (StructuredLoggingContext.Scope ignoredFailure = StructuredLoggingContext.open(Map.of(
                 StructuredLoggingContext.CONSUMER_NAME, failure.consumerName(),
                 StructuredLoggingContext.ERROR_CODE, failure.errorCode(),
-                StructuredLoggingContext.OUTCOME, outcome
-        ))) {
+                StructuredLoggingContext.OUTCOME, outcome))) {
             LOGGER.atLevel("DEAD".equals(outcome) ? org.slf4j.event.Level.ERROR : org.slf4j.event.Level.WARN)
                     .setMessage("outbox event processing failed")
-                    .addKeyValue("event", "DEAD".equals(outcome) ? "outbox.event.dead" : "RETRY".equals(outcome) ? "outbox.event.retry_scheduled" : "outbox.event.stale_lease")
-                    .addKeyValue("exceptionType", failure.exceptionType()).addKeyValue("attempt", claim.attemptCount()).log();
+                    .addKeyValue(
+                            "event",
+                            "DEAD".equals(outcome)
+                                    ? "outbox.event.dead"
+                                    : "RETRY".equals(outcome)
+                                            ? "outbox.event.retry_scheduled"
+                                            : "outbox.event.stale_lease")
+                    .addKeyValue("exceptionType", failure.exceptionType())
+                    .addKeyValue("attempt", claim.attemptCount())
+                    .log();
         }
     }
 

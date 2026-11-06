@@ -1,10 +1,17 @@
 package com.yumpoo.platform.foundation.api.error;
 
+import com.yumpoo.platform.foundation.api.web.HttpAccessLog;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.foundation.application.request.RequestIdContext;
-import com.yumpoo.platform.foundation.api.web.HttpAccessLog;
 import jakarta.servlet.http.HttpServletRequest;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.TypeMismatchException;
 import org.springframework.context.MessageSourceResolvable;
 import org.springframework.http.HttpHeaders;
@@ -27,15 +34,6 @@ import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Locale;
-import java.util.UUID;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 /**
  * 将 MVC 与应用层异常收敛为唯一的 Yumpoo 错误体。
  */
@@ -44,34 +42,29 @@ public final class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
-    private static final MediaType JSON_UTF8 = new MediaType(
-            MediaType.APPLICATION_JSON,
-            StandardCharsets.UTF_8
-    );
+    private static final MediaType JSON_UTF8 = new MediaType(MediaType.APPLICATION_JSON, StandardCharsets.UTF_8);
 
     @ExceptionHandler(ApplicationException.class)
-    ResponseEntity<Object> handleApplicationException(
-            ApplicationException exception,
-            WebRequest request
-    ) {
+    ResponseEntity<Object> handleApplicationException(ApplicationException exception, WebRequest request) {
         String requestId = requestId(request);
         if (request instanceof ServletWebRequest web) {
             HttpAccessLog.applicationError(web.getRequest(), exception);
         }
         return response(
-                ApiErrorResponses.from(exception, requestId),
-                ApiErrorStatus.forCode(exception.errorCode()),
-                requestId
-        );
+                ApiErrorResponses.from(exception, requestId), ApiErrorStatus.forCode(exception.errorCode()), requestId);
     }
 
     @ExceptionHandler(Exception.class)
     ResponseEntity<Object> handleUnexpectedException(Exception exception, WebRequest request) {
-        var log = LOGGER.atError().setMessage("unexpected api failure").setCause(exception)
-                .addKeyValue("event", "api.request.failed").addKeyValue("requestId", requestId(request));
+        var log = LOGGER.atError()
+                .setMessage("unexpected api failure")
+                .setCause(exception)
+                .addKeyValue("event", "api.request.failed")
+                .addKeyValue("requestId", requestId(request));
         if (request instanceof ServletWebRequest web) {
             web.getRequest().setAttribute(HttpAccessLog.ERROR_LOGGED, true);
-            log.addKeyValue("method", web.getRequest().getMethod()).addKeyValue("route", HttpAccessLog.route(web.getRequest()));
+            log.addKeyValue("method", web.getRequest().getMethod())
+                    .addKeyValue("route", HttpAccessLog.route(web.getRequest()));
         }
         log.log();
         return response(StandardErrorCode.INTERNAL_ERROR, HttpStatus.INTERNAL_SERVER_ERROR, request, List.of());
@@ -79,62 +72,34 @@ public final class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
     @Override
     protected ResponseEntity<Object> handleHttpMessageNotReadable(
-            HttpMessageNotReadableException exception,
-            HttpHeaders headers,
-            HttpStatusCode status,
-            WebRequest request
-    ) {
+            HttpMessageNotReadableException exception, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
         return response(StandardErrorCode.MALFORMED_REQUEST, HttpStatus.BAD_REQUEST, request, List.of());
     }
 
     @Override
     protected ResponseEntity<Object> handleTypeMismatch(
-            TypeMismatchException exception,
-            HttpHeaders headers,
-            HttpStatusCode status,
-            WebRequest request
-    ) {
+            TypeMismatchException exception, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
         return response(StandardErrorCode.MALFORMED_REQUEST, HttpStatus.BAD_REQUEST, request, List.of());
     }
 
     @Override
     protected ResponseEntity<Object> handleServletRequestBindingException(
-            ServletRequestBindingException exception,
-            HttpHeaders headers,
-            HttpStatusCode status,
-            WebRequest request
-    ) {
+            ServletRequestBindingException exception, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
         return response(StandardErrorCode.MALFORMED_REQUEST, HttpStatus.BAD_REQUEST, request, List.of());
     }
 
     @Override
     protected ResponseEntity<Object> handleMethodArgumentNotValid(
-            MethodArgumentNotValidException exception,
-            HttpHeaders headers,
-            HttpStatusCode status,
-            WebRequest request
-    ) {
+            MethodArgumentNotValidException exception, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
         List<ApiFieldError> fieldErrors = new ArrayList<>();
         for (FieldError fieldError : exception.getBindingResult().getFieldErrors()) {
             fieldErrors.add(new ApiFieldError(
-                    fieldError.getField(),
-                    validationCode(fieldError),
-                    validationMessage(fieldError)
-            ));
+                    fieldError.getField(), validationCode(fieldError), validationMessage(fieldError)));
         }
         for (ObjectError globalError : exception.getBindingResult().getGlobalErrors()) {
-            fieldErrors.add(new ApiFieldError(
-                    "request",
-                    validationCode(globalError),
-                    validationMessage(globalError)
-            ));
+            fieldErrors.add(new ApiFieldError("request", validationCode(globalError), validationMessage(globalError)));
         }
-        return response(
-                StandardErrorCode.VALIDATION_FAILED,
-                HttpStatus.UNPROCESSABLE_CONTENT,
-                request,
-                fieldErrors
-        );
+        return response(StandardErrorCode.VALIDATION_FAILED, HttpStatus.UNPROCESSABLE_CONTENT, request, fieldErrors);
     }
 
     @Override
@@ -142,94 +107,58 @@ public final class ApiExceptionHandler extends ResponseEntityExceptionHandler {
             HandlerMethodValidationException exception,
             HttpHeaders headers,
             HttpStatusCode status,
-            WebRequest request
-    ) {
+            WebRequest request) {
         List<ApiFieldError> fieldErrors = new ArrayList<>();
         for (ParameterValidationResult result : exception.getParameterValidationResults()) {
             String parameterName = result.getMethodParameter().getParameterName();
             String field = parameterName == null || parameterName.isBlank() ? "request" : parameterName;
             for (MessageSourceResolvable error : result.getResolvableErrors()) {
-                fieldErrors.add(new ApiFieldError(
-                        field,
-                        validationCode(error),
-                        validationMessage(error)
-                ));
+                fieldErrors.add(new ApiFieldError(field, validationCode(error), validationMessage(error)));
             }
         }
         for (MessageSourceResolvable error : exception.getCrossParameterValidationResults()) {
-            fieldErrors.add(new ApiFieldError(
-                    "request",
-                    validationCode(error),
-                    validationMessage(error)
-            ));
+            fieldErrors.add(new ApiFieldError("request", validationCode(error), validationMessage(error)));
         }
-        return response(
-                StandardErrorCode.VALIDATION_FAILED,
-                HttpStatus.UNPROCESSABLE_CONTENT,
-                request,
-                fieldErrors
-        );
+        return response(StandardErrorCode.VALIDATION_FAILED, HttpStatus.UNPROCESSABLE_CONTENT, request, fieldErrors);
     }
 
     @Override
     protected ResponseEntity<Object> handleNoHandlerFoundException(
-            NoHandlerFoundException exception,
-            HttpHeaders headers,
-            HttpStatusCode status,
-            WebRequest request
-    ) {
+            NoHandlerFoundException exception, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
         return response(StandardErrorCode.RESOURCE_NOT_FOUND, HttpStatus.NOT_FOUND, request, List.of());
     }
 
     @Override
     protected ResponseEntity<Object> handleNoResourceFoundException(
-            NoResourceFoundException exception,
-            HttpHeaders headers,
-            HttpStatusCode status,
-            WebRequest request
-    ) {
+            NoResourceFoundException exception, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
         return response(StandardErrorCode.RESOURCE_NOT_FOUND, HttpStatus.NOT_FOUND, request, List.of());
     }
 
     @Override
     protected ResponseEntity<Object> handleExceptionInternal(
-            Exception exception,
-            Object body,
-            HttpHeaders headers,
-            HttpStatusCode status,
-            WebRequest request
-    ) {
-        StandardErrorCode code = status.is5xxServerError()
-                ? StandardErrorCode.INTERNAL_ERROR
-                : StandardErrorCode.MALFORMED_REQUEST;
+            Exception exception, Object body, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        StandardErrorCode code =
+                status.is5xxServerError() ? StandardErrorCode.INTERNAL_ERROR : StandardErrorCode.MALFORMED_REQUEST;
         return response(code, status, request, List.of());
     }
 
     private static ResponseEntity<Object> response(
-            StandardErrorCode code,
-            HttpStatusCode status,
-            WebRequest request,
-            List<ApiFieldError> fieldErrors
-    ) {
+            StandardErrorCode code, HttpStatusCode status, WebRequest request, List<ApiFieldError> fieldErrors) {
         if (request instanceof ServletWebRequest web) {
-            HttpAccessLog.rejected(web.getRequest(), code.name(), null, fieldErrors.stream()
-                    .map(error -> error.field() + ":" + error.code()).toList());
+            HttpAccessLog.rejected(
+                    web.getRequest(),
+                    code.name(),
+                    null,
+                    fieldErrors.stream()
+                            .map(error -> error.field() + ":" + error.code())
+                            .toList());
         }
         String requestId = requestId(request);
-        ApiErrorResponse body = ApiErrorResponses.create(
-                code,
-                code.defaultMessage(),
-                requestId,
-                fieldErrors
-        );
+        ApiErrorResponse body = ApiErrorResponses.create(code, code.defaultMessage(), requestId, fieldErrors);
         return response(body, status, requestId);
     }
 
-    private static ResponseEntity<Object> response(
-            ApiErrorResponse body,
-            HttpStatusCode status,
-            String requestId
-    ) {
+    private static ResponseEntity<Object> response(ApiErrorResponse body, HttpStatusCode status, String requestId) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(JSON_UTF8);
         ApiErrorHeaders.apply(headers, body);

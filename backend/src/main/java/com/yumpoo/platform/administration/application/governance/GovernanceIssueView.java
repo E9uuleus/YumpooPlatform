@@ -15,6 +15,4 @@ public record GovernanceIssueView(
         Instant detectedAt,
         UUID resolvedEventId,
         Instant resolvedAt,
-        long rowVersion
-) {
-}
+        long rowVersion) {}

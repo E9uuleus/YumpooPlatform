@@ -2,13 +2,12 @@ package com.yumpoo.platform.audit.application;
 
 import com.yumpoo.platform.foundation.application.request.RequestCorrelation;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelationContext;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class SecurityAuditService {
@@ -32,9 +31,7 @@ public class SecurityAuditService {
     }
 
     @Transactional(readOnly = true)
-    public SecurityAuditResultPage findByRequestId(
-            UUID companyId, String requestId, int page, int size
-    ) {
+    public SecurityAuditResultPage findByRequestId(UUID companyId, String requestId, int page, int size) {
         Objects.requireNonNull(companyId, "companyId must not be null");
         if (requestId == null || requestId.isBlank()) {
             throw new IllegalArgumentException("requestId must not be blank");
@@ -43,8 +40,8 @@ public class SecurityAuditService {
             throw new IllegalArgumentException("page must be non-negative and size between 1 and 100");
         }
         long total = repository.countByRequestId(companyId, requestId);
-        List<SecurityAuditStoredEvent> items = repository.findByRequestId(
-                companyId, requestId, Math.multiplyExact(page, size), size);
+        List<SecurityAuditStoredEvent> items =
+                repository.findByRequestId(companyId, requestId, Math.multiplyExact(page, size), size);
         int pages = total == 0 ? 0 : Math.toIntExact((total + size - 1) / size);
         return new SecurityAuditResultPage(items, page, size, total, pages);
     }

@@ -1,19 +1,16 @@
 package com.yumpoo.platform.workitem.infrastructure;
 
-import com.yumpoo.platform.workitem.infrastructure.statistics.JdbcWorkItemChartRepository;
-import com.yumpoo.platform.workitem.infrastructure.time.TimeShareSql;
 import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
-import com.yumpoo.platform.workitem.application.WorkItemModels.WorkItemLocator;
 import com.yumpoo.platform.workitem.application.WorkItemImportPlanner;
+import com.yumpoo.platform.workitem.application.WorkItemModels.WorkItemLocator;
 import com.yumpoo.platform.workitem.application.WorkItemQuery;
 import com.yumpoo.platform.workitem.application.WorkItemRepository;
 import com.yumpoo.platform.workitem.application.WorkItemSortRanks;
-import com.yumpoo.platform.workitem.domain.WorkItemViewType;
 import com.yumpoo.platform.workitem.domain.WorkItem;
 import com.yumpoo.platform.workitem.domain.WorkItemStatusCategory;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Repository;
-
+import com.yumpoo.platform.workitem.domain.WorkItemViewType;
+import com.yumpoo.platform.workitem.infrastructure.statistics.JdbcWorkItemChartRepository;
+import com.yumpoo.platform.workitem.infrastructure.time.TimeShareSql;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
@@ -29,6 +26,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Repository;
 
 @Repository
 public class JdbcWorkItemRepository implements WorkItemRepository {
@@ -54,8 +53,11 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         if (ids.isEmpty()) return List.of();
         return jdbc.sql("SELECT " + COLUMNS + " FROM yumpoo.work_item WHERE company_id=:companyId"
                         + " AND project_id=:projectId AND id IN (:ids) AND deleted_at IS NULL")
-                .param("companyId", companyId).param("projectId", projectId).param("ids", ids)
-                .query(JdbcWorkItemRepository::map).list();
+                .param("companyId", companyId)
+                .param("projectId", projectId)
+                .param("ids", ids)
+                .query(JdbcWorkItemRepository::map)
+                .list();
     }
 
     @Override
@@ -67,8 +69,11 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                    SET last_sequence = yumpoo.work_item_project_counter.last_sequence + 1
                  WHERE yumpoo.work_item_project_counter.company_id = EXCLUDED.company_id
                 RETURNING last_sequence
-                """).param("projectId", projectId).param("companyId", companyId)
-                .query(Long.class).single();
+                """)
+                .param("projectId", projectId)
+                .param("companyId", companyId)
+                .query(Long.class)
+                .single();
     }
 
     @Override
@@ -83,14 +88,21 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                  WHERE company_id=:companyId AND project_id=:projectId
                    AND deleted_at IS NULL AND NOT archived
                  ORDER BY project_sort_key ASC, id ASC
-                """).param("companyId", companyId).param("projectId", projectId)
+                """)
+                .param("companyId", companyId)
+                .param("projectId", projectId)
                 .query((rs, row) -> new WorkItemImportPlanner.Existing(
-                        rs.getObject("id", UUID.class), rs.getObject("content_id", UUID.class),
-                        rs.getString("item_no"), rs.getString("title"), rs.getString("status_code"),
+                        rs.getObject("id", UUID.class),
+                        rs.getObject("content_id", UUID.class),
+                        rs.getString("item_no"),
+                        rs.getString("title"),
+                        rs.getString("status_code"),
                         rs.getString("priority"),
-                        java.util.Arrays.stream((Object[]) rs.getArray("assignee_user_ids").getArray())
+                        java.util.Arrays.stream((Object[])
+                                        rs.getArray("assignee_user_ids").getArray())
                                 .map(v -> v instanceof UUID u ? u : UUID.fromString(v.toString()))
-                                .toList())).list();
+                                .toList()))
+                .list();
     }
 
     @Override
@@ -106,28 +118,35 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                 + "FROM yumpoo.work_item" + archivedWhere(query, parameters)
                 + " ORDER BY updated_at DESC, id DESC LIMIT :limit OFFSET :offset");
         return bind(statement, parameters)
-                .query((rs, row) -> new ArchivedRow(map(rs, row), rs.getString("parent_title"))).list();
+                .query((rs, row) -> new ArchivedRow(map(rs, row), rs.getString("parent_title")))
+                .list();
     }
 
     @Override
     public long countArchived(UUID companyId, UUID projectId, String query) {
         Map<String, Object> parameters = baseProjectParameters(companyId, projectId);
         return bind(jdbc.sql("SELECT count(*) FROM yumpoo.work_item" + archivedWhere(query, parameters)), parameters)
-                .query(Long.class).single();
+                .query(Long.class)
+                .single();
     }
 
     private static String archivedWhere(String query, Map<String, Object> parameters) {
         String where = " WHERE company_id=:companyId AND project_id=:projectId AND deleted_at IS NULL AND archived";
         if (query == null) return where;
         parameters.put("titleQuery", "%" + escapeLike(query.toLowerCase(Locale.ROOT)) + "%");
-        return where + " AND (lower(title) LIKE :titleQuery ESCAPE '\\' OR lower(item_no) LIKE :titleQuery ESCAPE '\\')";
+        return where
+                + " AND (lower(title) LIKE :titleQuery ESCAPE '\\' OR lower(item_no) LIKE :titleQuery ESCAPE '\\')";
     }
 
     @Override
     public List<WorkItemTitle> findTitles(UUID companyId, UUID projectId) {
-        return jdbc.sql("SELECT id, title, archived FROM yumpoo.work_item WHERE company_id=:companyId AND project_id=:projectId AND deleted_at IS NULL")
-                .param("companyId", companyId).param("projectId", projectId)
-                .query((rs, row) -> new WorkItemTitle(rs.getObject("id", UUID.class), rs.getString("title"), rs.getBoolean("archived"))).list();
+        return jdbc.sql(
+                        "SELECT id, title, archived FROM yumpoo.work_item WHERE company_id=:companyId AND project_id=:projectId AND deleted_at IS NULL")
+                .param("companyId", companyId)
+                .param("projectId", projectId)
+                .query((rs, row) -> new WorkItemTitle(
+                        rs.getObject("id", UUID.class), rs.getString("title"), rs.getBoolean("archived")))
+                .list();
     }
 
     @Override
@@ -148,9 +167,13 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                     :createdByUserId, :updatedAt, :updatedByUserId, :deletedAt,
                     :deletedByUserId, :deleteReason
                 )
-                """).param("id", item.id()).param("companyId", item.companyId())
-                .param("projectId", item.projectId()).param("contentId", item.contentId())
-                .param("itemSequence", item.itemSequence()).param("itemNo", item.itemNo())
+                """)
+                .param("id", item.id())
+                .param("companyId", item.companyId())
+                .param("projectId", item.projectId())
+                .param("contentId", item.contentId())
+                .param("itemSequence", item.itemSequence())
+                .param("itemNo", item.itemNo())
                 .param("title", item.title())
                 .param("statusCode", item.statusCode())
                 .param("statusCategory", item.statusCategory().name())
@@ -168,12 +191,18 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         statement = nullable(statement, "timelineEndDate", item.timelineEndDate(), Types.DATE);
         statement = nullable(statement, "dueDate", item.dueDate(), Types.DATE);
         statement = nullable(statement, "dueTime", item.dueTime(), Types.TIME);
-        statement = nullable(statement, "completedAt", item.completedAt() == null ? null
-                : item.completedAt().atOffset(ZoneOffset.UTC), Types.TIMESTAMP_WITH_TIMEZONE);
+        statement = nullable(
+                statement,
+                "completedAt",
+                item.completedAt() == null ? null : item.completedAt().atOffset(ZoneOffset.UTC),
+                Types.TIMESTAMP_WITH_TIMEZONE);
         statement = nullable(statement, "rank", item.rank(), Types.VARCHAR);
         statement = statement.param("projectSortKey", item.projectSortKey());
-        statement = nullable(statement, "deletedAt", item.deletedAt() == null ? null
-                : OffsetDateTime.ofInstant(item.deletedAt(), ZoneOffset.UTC), Types.TIMESTAMP_WITH_TIMEZONE);
+        statement = nullable(
+                statement,
+                "deletedAt",
+                item.deletedAt() == null ? null : OffsetDateTime.ofInstant(item.deletedAt(), ZoneOffset.UTC),
+                Types.TIMESTAMP_WITH_TIMEZONE);
         statement = nullable(statement, "deletedByUserId", item.deletedByUserId(), Types.OTHER);
         statement = nullable(statement, "deleteReason", item.deleteReason(), Types.VARCHAR);
         boolean inserted = statement.update() == 1;
@@ -191,11 +220,14 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         return jdbc.sql("SELECT id, project_id, content_id FROM yumpoo.work_item "
                         + "WHERE company_id=:companyId AND project_id=:projectId "
                         + "AND id=:workItemId AND deleted_at IS NULL")
-                .param("companyId", companyId).param("projectId", projectId)
+                .param("companyId", companyId)
+                .param("projectId", projectId)
                 .param("workItemId", workItemId)
-                .query((rs, row) -> new WorkItemLocator(rs.getObject("id", UUID.class),
+                .query((rs, row) -> new WorkItemLocator(
+                        rs.getObject("id", UUID.class),
                         rs.getObject("project_id", UUID.class),
-                        rs.getObject("content_id", UUID.class))).optional();
+                        rs.getObject("content_id", UUID.class)))
+                .optional();
     }
 
     @Override
@@ -203,15 +235,17 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         return findLocator(companyId, workItemId, true);
     }
 
-    private Optional<WorkItemLocator> findLocator(UUID companyId, UUID workItemId,
-            boolean includeDeleted) {
+    private Optional<WorkItemLocator> findLocator(UUID companyId, UUID workItemId, boolean includeDeleted) {
         return jdbc.sql("SELECT id, project_id, content_id FROM yumpoo.work_item "
                         + "WHERE company_id=:companyId AND id=:workItemId"
                         + (includeDeleted ? "" : " AND deleted_at IS NULL"))
-                .param("companyId", companyId).param("workItemId", workItemId)
-                .query((rs, row) -> new WorkItemLocator(rs.getObject("id", UUID.class),
+                .param("companyId", companyId)
+                .param("workItemId", workItemId)
+                .query((rs, row) -> new WorkItemLocator(
+                        rs.getObject("id", UUID.class),
                         rs.getObject("project_id", UUID.class),
-                        rs.getObject("content_id", UUID.class))).optional();
+                        rs.getObject("content_id", UUID.class)))
+                .optional();
     }
 
     @Override
@@ -220,8 +254,7 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
     }
 
     @Override
-    public Optional<WorkItem> findIncludingDeleted(UUID companyId, UUID projectId,
-            UUID contentId, UUID workItemId) {
+    public Optional<WorkItem> findIncludingDeleted(UUID companyId, UUID projectId, UUID contentId, UUID workItemId) {
         return find(companyId, projectId, contentId, workItemId, false, true);
     }
 
@@ -231,8 +264,7 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
     }
 
     @Override
-    public Optional<WorkItem> lockIncludingDeleted(UUID companyId, UUID projectId,
-            UUID contentId, UUID workItemId) {
+    public Optional<WorkItem> lockIncludingDeleted(UUID companyId, UUID projectId, UUID contentId, UUID workItemId) {
         return find(companyId, projectId, contentId, workItemId, true, true);
     }
 
@@ -247,11 +279,14 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                 WHERE company_id=:companyId AND project_id=:projectId AND content_id=:contentId
                   AND id=:id AND deleted_at IS NULL AND row_version=:expectedVersion
                 RETURNING %s
-                """.formatted(COLUMNS)).param("title", item.title())
+                """.formatted(COLUMNS))
+                .param("title", item.title())
                 .param("updatedAt", OffsetDateTime.ofInstant(item.updatedAt(), ZoneOffset.UTC))
                 .param("updatedByUserId", item.updatedByUserId())
-                .param("companyId", item.companyId()).param("projectId", item.projectId())
-                .param("contentId", item.contentId()).param("id", item.id())
+                .param("companyId", item.companyId())
+                .param("projectId", item.projectId())
+                .param("contentId", item.contentId())
+                .param("id", item.id())
                 .param("expectedVersion", expectedVersion);
         statement = nullable(statement, "priority", priorityName(item), Types.VARCHAR);
         statement = nullable(statement, "assigneeUserId", item.assigneeUserId(), Types.OTHER);
@@ -282,11 +317,16 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                 .param("rank", item.rank())
                 .param("updatedAt", OffsetDateTime.ofInstant(item.updatedAt(), ZoneOffset.UTC))
                 .param("updatedByUserId", item.updatedByUserId())
-                .param("companyId", item.companyId()).param("projectId", item.projectId())
-                .param("contentId", item.contentId()).param("id", item.id())
+                .param("companyId", item.companyId())
+                .param("projectId", item.projectId())
+                .param("contentId", item.contentId())
+                .param("id", item.id())
                 .param("expectedVersion", expectedVersion);
-        statement = nullable(statement, "completedAt", item.completedAt() == null ? null
-                : item.completedAt().atOffset(ZoneOffset.UTC), Types.TIMESTAMP_WITH_TIMEZONE);
+        statement = nullable(
+                statement,
+                "completedAt",
+                item.completedAt() == null ? null : item.completedAt().atOffset(ZoneOffset.UTC),
+                Types.TIMESTAMP_WITH_TIMEZONE);
         return statement.query(JdbcWorkItemRepository::map).optional();
     }
 
@@ -306,10 +346,13 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                 .param("deleteReason", item.deleteReason())
                 .param("updatedAt", OffsetDateTime.ofInstant(item.updatedAt(), ZoneOffset.UTC))
                 .param("updatedByUserId", item.updatedByUserId())
-                .param("companyId", item.companyId()).param("projectId", item.projectId())
-                .param("contentId", item.contentId()).param("id", item.id())
+                .param("companyId", item.companyId())
+                .param("projectId", item.projectId())
+                .param("contentId", item.contentId())
+                .param("id", item.id())
                 .param("expectedVersion", expectedVersion)
-                .query(JdbcWorkItemRepository::map).optional();
+                .query(JdbcWorkItemRepository::map)
+                .optional();
     }
 
     @Override
@@ -328,10 +371,13 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                 .param("projectSortKey", item.projectSortKey())
                 .param("updatedAt", OffsetDateTime.ofInstant(item.updatedAt(), ZoneOffset.UTC))
                 .param("updatedByUserId", item.updatedByUserId())
-                .param("companyId", item.companyId()).param("projectId", item.projectId())
-                .param("contentId", item.contentId()).param("id", item.id())
+                .param("companyId", item.companyId())
+                .param("projectId", item.projectId())
+                .param("contentId", item.contentId())
+                .param("id", item.id())
                 .param("expectedVersion", expectedVersion)
-                .query(JdbcWorkItemRepository::map).optional();
+                .query(JdbcWorkItemRepository::map)
+                .optional();
     }
 
     @Override
@@ -340,10 +386,15 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                         + "updated_at=:updatedAt, updated_by_user_id=:actor, row_version=row_version+1 "
                         + "WHERE company_id=:companyId AND project_id=:projectId AND id=:id "
                         + "AND deleted_at IS NULL AND row_version=:version RETURNING " + COLUMNS)
-                .param("archived", item.archived()).param("updatedAt", item.updatedAt().atOffset(ZoneOffset.UTC))
-                .param("actor", item.updatedByUserId()).param("companyId", item.companyId())
-                .param("projectId", item.projectId()).param("id", item.id()).param("version", expectedVersion)
-                .query(JdbcWorkItemRepository::map).optional();
+                .param("archived", item.archived())
+                .param("updatedAt", item.updatedAt().atOffset(ZoneOffset.UTC))
+                .param("actor", item.updatedByUserId())
+                .param("companyId", item.companyId())
+                .param("projectId", item.projectId())
+                .param("id", item.id())
+                .param("version", expectedVersion)
+                .query(JdbcWorkItemRepository::map)
+                .optional();
     }
 
     @Override
@@ -359,9 +410,12 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                 .param("contentId", item.contentId())
                 .param("updatedAt", OffsetDateTime.ofInstant(item.updatedAt(), ZoneOffset.UTC))
                 .param("updatedByUserId", item.updatedByUserId())
-                .param("companyId", item.companyId()).param("projectId", item.projectId())
-                .param("id", item.id()).param("expectedVersion", expectedVersion)
-                .query(JdbcWorkItemRepository::map).optional();
+                .param("companyId", item.companyId())
+                .param("projectId", item.projectId())
+                .param("id", item.id())
+                .param("expectedVersion", expectedVersion)
+                .query(JdbcWorkItemRepository::map)
+                .optional();
     }
 
     @Override
@@ -370,31 +424,35 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         for (String status : ordered) {
             jdbc.sql("INSERT INTO yumpoo.work_item_rank_lane (project_id, company_id, status_code) "
                             + "VALUES (:projectId, :companyId, :statusCode) ON CONFLICT DO NOTHING")
-                    .param("projectId", projectId).param("companyId", companyId)
-                    .param("statusCode", status).update();
+                    .param("projectId", projectId)
+                    .param("companyId", companyId)
+                    .param("statusCode", status)
+                    .update();
         }
         jdbc.sql("SELECT status_code FROM yumpoo.work_item_rank_lane "
                         + "WHERE project_id=:projectId AND company_id=:companyId AND status_code IN (:statuses) "
                         + "ORDER BY status_code FOR UPDATE")
-                .param("projectId", projectId).param("companyId", companyId).param("statuses", ordered)
-                .query(String.class).list();
+                .param("projectId", projectId)
+                .param("companyId", companyId)
+                .param("statuses", ordered)
+                .query(String.class)
+                .list();
     }
 
     @Override
-    public List<RankedWorkItem> findRankOrder(UUID companyId, UUID projectId,
-            String statusCode) {
+    public List<RankedWorkItem> findRankOrder(UUID companyId, UUID projectId, String statusCode) {
         return jdbc.sql("SELECT id, rank FROM yumpoo.work_item WHERE company_id=:companyId "
                         + "AND project_id=:projectId "
                         + "AND status_code=:statusCode AND deleted_at IS NULL ORDER BY rank ASC, id ASC")
-                .param("companyId", companyId).param("projectId", projectId)
+                .param("companyId", companyId)
+                .param("projectId", projectId)
                 .param("statusCode", statusCode)
-                .query((rs, row) -> new RankedWorkItem(rs.getObject("id", UUID.class),
-                        rs.getString("rank"))).list();
+                .query((rs, row) -> new RankedWorkItem(rs.getObject("id", UUID.class), rs.getString("rank")))
+                .list();
     }
 
     @Override
-    public void rewriteRanks(UUID companyId, UUID projectId, String statusCode,
-            Map<UUID, String> ranks) {
+    public void rewriteRanks(UUID companyId, UUID projectId, String statusCode, Map<UUID, String> ranks) {
         if (ranks.isEmpty()) return;
         StringBuilder cases = new StringBuilder("CASE id");
         Map<String, Object> parameters = baseProjectParameters(companyId, projectId);
@@ -423,11 +481,15 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
     public void lockProjectOrder(UUID companyId, UUID projectId) {
         jdbc.sql("INSERT INTO yumpoo.work_item_project_order (project_id, company_id) "
                         + "VALUES (:projectId, :companyId) ON CONFLICT DO NOTHING")
-                .param("projectId", projectId).param("companyId", companyId).update();
+                .param("projectId", projectId)
+                .param("companyId", companyId)
+                .update();
         jdbc.sql("SELECT project_id FROM yumpoo.work_item_project_order "
                         + "WHERE project_id=:projectId AND company_id=:companyId FOR UPDATE")
-                .param("projectId", projectId).param("companyId", companyId)
-                .query(UUID.class).single();
+                .param("projectId", projectId)
+                .param("companyId", companyId)
+                .query(UUID.class)
+                .single();
     }
 
     @Override
@@ -435,49 +497,54 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         return jdbc.sql("SELECT " + COLUMNS + " FROM yumpoo.work_item "
                         + "WHERE company_id=:companyId AND project_id=:projectId "
                         + "AND id=:workItemId AND deleted_at IS NULL AND NOT archived FOR UPDATE")
-                .param("companyId", companyId).param("projectId", projectId)
-                .param("workItemId", workItemId).query(JdbcWorkItemRepository::map).optional();
-    }
-
-    @Override
-    public Optional<RankedProjectWorkItem> findProjectNeighborBefore(UUID companyId,
-            UUID projectId, String projectSortKey, UUID excludedId) {
-        return projectNeighbor(companyId, projectId, projectSortKey, excludedId, false);
-    }
-
-    @Override
-    public Optional<RankedProjectWorkItem> findProjectNeighborAfter(UUID companyId,
-            UUID projectId, String projectSortKey, UUID excludedId) {
-        return projectNeighbor(companyId, projectId, projectSortKey, excludedId, true);
-    }
-
-    @Override
-    public Optional<RankedProjectWorkItem> findFirstProjectRank(UUID companyId, UUID projectId,
-            UUID excludedId) {
-        return jdbc.sql("SELECT id, project_sort_key FROM yumpoo.work_item "
-                        + "WHERE company_id=:companyId AND project_id=:projectId "
-                        + "AND deleted_at IS NULL AND id<>:excludedId "
-                        + "ORDER BY project_sort_key ASC, id ASC LIMIT 1")
-                .param("companyId", companyId).param("projectId", projectId)
-                .param("excludedId", excludedId)
-                .query((rs, row) -> new RankedProjectWorkItem(
-                        rs.getObject("id", UUID.class), rs.getString("project_sort_key")))
+                .param("companyId", companyId)
+                .param("projectId", projectId)
+                .param("workItemId", workItemId)
+                .query(JdbcWorkItemRepository::map)
                 .optional();
     }
 
     @Override
-    public boolean projectSortKeyOccupied(UUID companyId, UUID projectId, String projectSortKey,
-            UUID excludedId) {
+    public Optional<RankedProjectWorkItem> findProjectNeighborBefore(
+            UUID companyId, UUID projectId, String projectSortKey, UUID excludedId) {
+        return projectNeighbor(companyId, projectId, projectSortKey, excludedId, false);
+    }
+
+    @Override
+    public Optional<RankedProjectWorkItem> findProjectNeighborAfter(
+            UUID companyId, UUID projectId, String projectSortKey, UUID excludedId) {
+        return projectNeighbor(companyId, projectId, projectSortKey, excludedId, true);
+    }
+
+    @Override
+    public Optional<RankedProjectWorkItem> findFirstProjectRank(UUID companyId, UUID projectId, UUID excludedId) {
+        return jdbc.sql("SELECT id, project_sort_key FROM yumpoo.work_item "
+                        + "WHERE company_id=:companyId AND project_id=:projectId "
+                        + "AND deleted_at IS NULL AND id<>:excludedId "
+                        + "ORDER BY project_sort_key ASC, id ASC LIMIT 1")
+                .param("companyId", companyId)
+                .param("projectId", projectId)
+                .param("excludedId", excludedId)
+                .query((rs, row) ->
+                        new RankedProjectWorkItem(rs.getObject("id", UUID.class), rs.getString("project_sort_key")))
+                .optional();
+    }
+
+    @Override
+    public boolean projectSortKeyOccupied(UUID companyId, UUID projectId, String projectSortKey, UUID excludedId) {
         return Boolean.TRUE.equals(jdbc.sql("SELECT EXISTS (SELECT 1 FROM yumpoo.work_item "
                         + "WHERE company_id=:companyId AND project_id=:projectId AND deleted_at IS NULL "
                         + "AND id<>:excludedId AND project_sort_key=:projectSortKey)")
-                .param("companyId", companyId).param("projectId", projectId)
-                .param("excludedId", excludedId).param("projectSortKey", projectSortKey)
-                .query(Boolean.class).single());
+                .param("companyId", companyId)
+                .param("projectId", projectId)
+                .param("excludedId", excludedId)
+                .param("projectSortKey", projectSortKey)
+                .query(Boolean.class)
+                .single());
     }
 
-    private Optional<RankedProjectWorkItem> projectNeighbor(UUID companyId, UUID projectId,
-            String key, UUID excludedId, boolean after) {
+    private Optional<RankedProjectWorkItem> projectNeighbor(
+            UUID companyId, UUID projectId, String key, UUID excludedId, boolean after) {
         String comparison = after ? ">" : "<";
         String direction = after ? "ASC" : "DESC";
         return jdbc.sql("SELECT id, project_sort_key FROM yumpoo.work_item "
@@ -485,26 +552,32 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                         + "AND deleted_at IS NULL AND id<>:excludedId AND project_sort_key "
                         + comparison + " :projectSortKey ORDER BY project_sort_key " + direction
                         + ", id " + direction + " LIMIT 1")
-                .param("companyId", companyId).param("projectId", projectId)
-                .param("excludedId", excludedId).param("projectSortKey", key)
-                .query((rs, row) -> new RankedProjectWorkItem(
-                        rs.getObject("id", UUID.class), rs.getString("project_sort_key")))
+                .param("companyId", companyId)
+                .param("projectId", projectId)
+                .param("excludedId", excludedId)
+                .param("projectSortKey", key)
+                .query((rs, row) ->
+                        new RankedProjectWorkItem(rs.getObject("id", UUID.class), rs.getString("project_sort_key")))
                 .optional();
     }
 
     @Override
-    public List<RankedProjectWorkItem> findProjectRankWindow(UUID companyId, UUID projectId,
-            String pivotKey, UUID excludedId, int limit) {
+    public List<RankedProjectWorkItem> findProjectRankWindow(
+            UUID companyId, UUID projectId, String pivotKey, UUID excludedId, int limit) {
         if (limit < 1 || limit > 100) throw new IllegalArgumentException("project rank window limit");
         return jdbc.sql("SELECT id, project_sort_key FROM (SELECT id, project_sort_key "
                         + "FROM yumpoo.work_item WHERE company_id=:companyId AND project_id=:projectId "
                         + "AND deleted_at IS NULL AND id<>:excludedId ORDER BY "
                         + "abs(project_sort_key::numeric - :pivotKey::numeric), project_sort_key ASC LIMIT :limit) w "
                         + "ORDER BY project_sort_key ASC, id ASC")
-                .param("companyId", companyId).param("projectId", projectId)
-                .param("excludedId", excludedId).param("pivotKey", pivotKey).param("limit", limit)
-                .query((rs, row) -> new RankedProjectWorkItem(
-                        rs.getObject("id", UUID.class), rs.getString("project_sort_key"))).list();
+                .param("companyId", companyId)
+                .param("projectId", projectId)
+                .param("excludedId", excludedId)
+                .param("pivotKey", pivotKey)
+                .param("limit", limit)
+                .query((rs, row) ->
+                        new RankedProjectWorkItem(rs.getObject("id", UUID.class), rs.getString("project_sort_key")))
+                .list();
     }
 
     @Override
@@ -513,15 +586,18 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         if (ranks.size() > 100) throw new IllegalArgumentException("project rank rebalance limit");
         StringBuilder cases = new StringBuilder("CASE id");
         Map<String, Object> parameters = new LinkedHashMap<>();
-        parameters.put("companyId", companyId); parameters.put("projectId", projectId);
+        parameters.put("companyId", companyId);
+        parameters.put("projectId", projectId);
         List<UUID> ids = new ArrayList<>();
         int index = 0;
         for (Map.Entry<UUID, String> entry : ranks.entrySet()) {
             String id = "projectRankId" + index;
             String rank = "projectRankValue" + index;
             cases.append(" WHEN :").append(id).append(" THEN :").append(rank);
-            parameters.put(id, entry.getKey()); parameters.put(rank, entry.getValue());
-            ids.add(entry.getKey()); index++;
+            parameters.put(id, entry.getKey());
+            parameters.put(rank, entry.getValue());
+            ids.add(entry.getKey());
+            index++;
         }
         parameters.put("projectRankIds", ids);
         JdbcClient.StatementSpec statement = jdbc.sql("UPDATE yumpoo.work_item SET project_sort_key="
@@ -540,29 +616,38 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                         + "AND deleted_at IS NULL AND row_version=:expectedVersion RETURNING " + COLUMNS)
                 .param("projectSortKey", item.projectSortKey())
                 .param("updatedByUserId", item.updatedByUserId())
-                .param("companyId", item.companyId()).param("projectId", item.projectId())
-                .param("id", item.id()).param("expectedVersion", expectedVersion)
-                .query(JdbcWorkItemRepository::map).optional();
+                .param("companyId", item.companyId())
+                .param("projectId", item.projectId())
+                .param("id", item.id())
+                .param("expectedVersion", expectedVersion)
+                .query(JdbcWorkItemRepository::map)
+                .optional();
     }
 
     @Override
     public Optional<WorkItem> lockProjectItemIncludingDeleted(UUID companyId, UUID projectId, UUID workItemId) {
         return jdbc.sql("SELECT " + COLUMNS + " FROM yumpoo.work_item "
                         + "WHERE company_id=:companyId AND project_id=:projectId AND id=:workItemId FOR UPDATE")
-                .param("companyId", companyId).param("projectId", projectId)
-                .param("workItemId", workItemId).query(JdbcWorkItemRepository::map).optional();
+                .param("companyId", companyId)
+                .param("projectId", projectId)
+                .param("workItemId", workItemId)
+                .query(JdbcWorkItemRepository::map)
+                .optional();
     }
 
-    private Optional<WorkItem> find(UUID companyId, UUID projectId, UUID contentId,
-            UUID workItemId, boolean lock, boolean includeDeleted) {
+    private Optional<WorkItem> find(
+            UUID companyId, UUID projectId, UUID contentId, UUID workItemId, boolean lock, boolean includeDeleted) {
         return jdbc.sql("SELECT " + COLUMNS + " FROM yumpoo.work_item WHERE company_id=:companyId "
                         + "AND project_id=:projectId AND content_id=:contentId AND id=:workItemId "
                         + (includeDeleted ? "" : "AND deleted_at IS NULL ")
                         + (lock && !includeDeleted ? "AND NOT archived " : "")
                         + (lock ? "FOR UPDATE" : ""))
-                .param("companyId", companyId).param("projectId", projectId)
-                .param("contentId", contentId).param("workItemId", workItemId)
-                .query(JdbcWorkItemRepository::map).optional();
+                .param("companyId", companyId)
+                .param("projectId", projectId)
+                .param("contentId", contentId)
+                .param("workItemId", workItemId)
+                .query(JdbcWorkItemRepository::map)
+                .optional();
     }
 
     @Override
@@ -577,8 +662,12 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                   FROM yumpoo.work_item w JOIN yumpoo.work_item_assignee a ON a.work_item_id=w.id
                  WHERE w.company_id=:companyId AND w.project_id=:projectId
                    AND w.content_id=:contentId AND w.deleted_at IS NULL
-                """).param("companyId", companyId).param("projectId", projectId)
-                .param("contentId", contentId).query(UUID.class).list());
+                """)
+                .param("companyId", companyId)
+                .param("projectId", projectId)
+                .param("contentId", contentId)
+                .query(UUID.class)
+                .list());
     }
 
     @Override
@@ -591,19 +680,27 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                 SELECT a.user_id
                   FROM yumpoo.work_item w JOIN yumpoo.work_item_assignee a ON a.work_item_id=w.id
                  WHERE w.company_id=:companyId AND w.project_id=:projectId AND w.deleted_at IS NULL
-                """).param("companyId", companyId).param("projectId", projectId)
-                .query(UUID.class).list());
+                """)
+                .param("companyId", companyId)
+                .param("projectId", projectId)
+                .query(UUID.class)
+                .list());
     }
 
     @Override
-    public List<WorkItem> findPage(UUID companyId, UUID projectId, UUID contentId,
-            WorkItemQuery query, WorkItemSortRanks ranks, WorkItemViewType view,
+    public List<WorkItem> findPage(
+            UUID companyId,
+            UUID projectId,
+            UUID contentId,
+            WorkItemQuery query,
+            WorkItemSortRanks ranks,
+            WorkItemViewType view,
             OffsetPageRequest page) {
         Map<String, Object> parameters = baseParameters(companyId, projectId, contentId);
         String where = where(query, parameters);
-        String orderBy = view == WorkItemViewType.KANBAN ? "rank ASC, id ASC"
-                : query.sorts().isEmpty() ? "item_sequence DESC, id ASC"
-                : orderBy(query, ranks, parameters);
+        String orderBy = view == WorkItemViewType.KANBAN
+                ? "rank ASC, id ASC"
+                : query.sorts().isEmpty() ? "item_sequence DESC, id ASC" : orderBy(query, ranks, parameters);
         parameters.put("limit", page.size());
         parameters.put("offset", Math.multiplyExact(page.page(), page.size()));
         JdbcClient.StatementSpec statement = jdbc.sql("SELECT " + COLUMNS
@@ -615,19 +712,22 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
     @Override
     public long countPage(UUID companyId, UUID projectId, UUID contentId, WorkItemQuery query) {
         Map<String, Object> parameters = baseParameters(companyId, projectId, contentId);
-        JdbcClient.StatementSpec statement = jdbc.sql("SELECT count(*) FROM yumpoo.work_item"
-                + where(query, parameters));
+        JdbcClient.StatementSpec statement =
+                jdbc.sql("SELECT count(*) FROM yumpoo.work_item" + where(query, parameters));
         return bind(statement, parameters).query(Long.class).single();
     }
 
     @Override
-    public List<WorkItem> findProjectPage(UUID companyId, UUID projectId,
-            WorkItemQuery query, WorkItemSortRanks ranks, WorkItemViewType view,
+    public List<WorkItem> findProjectPage(
+            UUID companyId,
+            UUID projectId,
+            WorkItemQuery query,
+            WorkItemSortRanks ranks,
+            WorkItemViewType view,
             OffsetPageRequest page) {
         Map<String, Object> parameters = baseProjectParameters(companyId, projectId);
         String where = where(query, parameters, false, Rows.ROOTS);
-        String orderBy = view == WorkItemViewType.KANBAN
-                ? "rank ASC, id ASC" : orderBy(query, ranks, parameters);
+        String orderBy = view == WorkItemViewType.KANBAN ? "rank ASC, id ASC" : orderBy(query, ranks, parameters);
         parameters.put("limit", page.size());
         parameters.put("offset", Math.multiplyExact(page.page(), page.size()));
         JdbcClient.StatementSpec statement = jdbc.sql("SELECT " + COLUMNS
@@ -637,17 +737,22 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
     }
 
     @Override
-    public List<WorkItem> findProjectCursorPage(UUID companyId, UUID projectId,
-            WorkItemQuery query, WorkItemSortRanks ranks, WorkItemViewType view,
-            ProjectCursorAnchor anchor, int limit) {
+    public List<WorkItem> findProjectCursorPage(
+            UUID companyId,
+            UUID projectId,
+            WorkItemQuery query,
+            WorkItemSortRanks ranks,
+            WorkItemViewType view,
+            ProjectCursorAnchor anchor,
+            int limit) {
         Map<String, Object> parameters = baseProjectParameters(companyId, projectId);
-        StringBuilder where = new StringBuilder(where(query, parameters, false, view == WorkItemViewType.KANBAN ? Rows.ROOTS : Rows.ROOTS_OR_MATCHING_CHILD));
+        StringBuilder where = new StringBuilder(where(
+                query, parameters, false, view == WorkItemViewType.KANBAN ? Rows.ROOTS : Rows.ROOTS_OR_MATCHING_CHILD));
         String orderBy;
         if (view == WorkItemViewType.KANBAN) {
             orderBy = "rank ASC, id ASC";
             if (anchor != null) {
-                where.append(" AND (rank > :cursorRank OR (rank = :cursorRank")
-                        .append(" AND id > :cursorId))");
+                where.append(" AND (rank > :cursorRank OR (rank = :cursorRank").append(" AND id > :cursorId))");
                 parameters.put("cursorRank", anchor.rank());
                 parameters.put("cursorId", anchor.id());
             }
@@ -661,20 +766,21 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
             }
         } else {
             List<SeekTerm> terms = projectSortTerms(query, ranks, anchor, parameters);
-            orderBy = terms.stream().map(term -> term.expression() + " " + term.direction())
+            orderBy = terms.stream()
+                    .map(term -> term.expression() + " " + term.direction())
                     .collect(java.util.stream.Collectors.joining(", "));
-            if (anchor != null) where.append(" AND (").append(seekPredicate(terms, parameters))
-                    .append(')');
+            if (anchor != null)
+                where.append(" AND (").append(seekPredicate(terms, parameters)).append(')');
         }
         parameters.put("limit", limit);
-        JdbcClient.StatementSpec statement = jdbc.sql("SELECT " + COLUMNS
-                + " FROM yumpoo.work_item" + where + " ORDER BY " + orderBy + " LIMIT :limit");
+        JdbcClient.StatementSpec statement = jdbc.sql(
+                "SELECT " + COLUMNS + " FROM yumpoo.work_item" + where + " ORDER BY " + orderBy + " LIMIT :limit");
         return bind(statement, parameters).query(JdbcWorkItemRepository::map).list();
     }
 
     @Override
-    public List<WorkItem> findSubitems(UUID companyId, UUID projectId, UUID parentWorkItemId,
-            WorkItemQuery query, WorkItemSortRanks ranks) {
+    public List<WorkItem> findSubitems(
+            UUID companyId, UUID projectId, UUID parentWorkItemId, WorkItemQuery query, WorkItemSortRanks ranks) {
         Map<String, Object> parameters = baseProjectParameters(companyId, projectId);
         parameters.put("parentWorkItemId", parentWorkItemId);
         String where = where(query, parameters, false, Rows.ITEMS)
@@ -684,16 +790,21 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                 + "AND relation.left_work_item_id=:parentWorkItemId "
                 + "AND relation.right_work_item_id=yumpoo.work_item.id "
                 + "AND relation.deleted_at IS NULL)";
-        String orderBy = query.sorts().isEmpty() ? "project_sort_key ASC, id ASC"
-                : orderBy(query, ranks, parameters);
-        JdbcClient.StatementSpec statement = jdbc.sql("SELECT " + COLUMNS
-                + " FROM yumpoo.work_item" + where + " ORDER BY " + orderBy);
+        String orderBy = query.sorts().isEmpty() ? "project_sort_key ASC, id ASC" : orderBy(query, ranks, parameters);
+        JdbcClient.StatementSpec statement =
+                jdbc.sql("SELECT " + COLUMNS + " FROM yumpoo.work_item" + where + " ORDER BY " + orderBy);
         return bind(statement, parameters).query(JdbcWorkItemRepository::map).list();
     }
 
     @Override
-    public List<FilterOptionCount> findProjectFilterOptions(UUID companyId, UUID projectId,
-            WorkItemQuery query, String field, boolean countSubitems, String afterValue, int limit) {
+    public List<FilterOptionCount> findProjectFilterOptions(
+            UUID companyId,
+            UUID projectId,
+            WorkItemQuery query,
+            String field,
+            boolean countSubitems,
+            String afterValue,
+            int limit) {
         Rows rows = countSubitems ? Rows.ITEMS : Rows.ROOTS_OR_MATCHING_CHILD;
         if ("INCOMING_PROJECT".equals(field)) {
             Map<String, Object> parameters = baseProjectParameters(companyId, projectId);
@@ -701,13 +812,17 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
             String after = afterValue == null ? "" : " WHERE incoming.option_value > :afterValue";
             if (afterValue != null) parameters.put("afterValue", afterValue);
             parameters.put("limit", limit);
-            return bind(jdbc.sql("SELECT incoming.option_value, count(*) AS option_count FROM ("
-                    + "SELECT ARRAY(SELECT DISTINCT connection.source_project_id::text"
-                    + JdbcConnectionFilterSql.activeConnections(true) + ") AS project_ids"
-                    + " FROM yumpoo.work_item" + predicate + ") filtered"
-                    + " CROSS JOIN LATERAL unnest(filtered.project_ids) incoming(option_value)"
-                    + after + " GROUP BY incoming.option_value ORDER BY incoming.option_value LIMIT :limit"), parameters)
-                    .query((rs, row) -> new FilterOptionCount(rs.getString("option_value"), rs.getLong("option_count"))).list();
+            return bind(
+                            jdbc.sql("SELECT incoming.option_value, count(*) AS option_count FROM ("
+                                    + "SELECT ARRAY(SELECT DISTINCT connection.source_project_id::text"
+                                    + JdbcConnectionFilterSql.activeConnections(true) + ") AS project_ids"
+                                    + " FROM yumpoo.work_item" + predicate + ") filtered"
+                                    + " CROSS JOIN LATERAL unnest(filtered.project_ids) incoming(option_value)"
+                                    + after
+                                    + " GROUP BY incoming.option_value ORDER BY incoming.option_value LIMIT :limit"),
+                            parameters)
+                    .query((rs, row) -> new FilterOptionCount(rs.getString("option_value"), rs.getLong("option_count")))
+                    .list();
         }
         if ("ASSIGNEE".equals(field)) {
             Map<String, Object> parameters = baseProjectParameters(companyId, projectId);
@@ -715,12 +830,17 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
             String after = afterValue == null ? "" : " WHERE member.option_value > :afterValue";
             if (afterValue != null) parameters.put("afterValue", afterValue);
             parameters.put("limit", limit);
-            return bind(jdbc.sql("SELECT member.option_value, count(*) AS option_count FROM ("
-                    + "SELECT ARRAY(SELECT a.user_id::text FROM yumpoo.work_item_assignee a"
-                    + " WHERE a.company_id=yumpoo.work_item.company_id AND a.work_item_id=yumpoo.work_item.id) AS ids FROM yumpoo.work_item" + predicate + ") filtered"
-                    + " CROSS JOIN LATERAL unnest(CASE WHEN cardinality(ids)=0 THEN ARRAY['__NULL__'] ELSE ids END) member(option_value)"
-                    + after + " GROUP BY member.option_value ORDER BY member.option_value LIMIT :limit"), parameters)
-                    .query((rs, row) -> new FilterOptionCount(rs.getString("option_value"), rs.getLong("option_count"))).list();
+            return bind(
+                            jdbc.sql("SELECT member.option_value, count(*) AS option_count FROM ("
+                                    + "SELECT ARRAY(SELECT a.user_id::text FROM yumpoo.work_item_assignee a"
+                                    + " WHERE a.company_id=yumpoo.work_item.company_id AND a.work_item_id=yumpoo.work_item.id) AS ids FROM yumpoo.work_item"
+                                    + predicate + ") filtered"
+                                    + " CROSS JOIN LATERAL unnest(CASE WHEN cardinality(ids)=0 THEN ARRAY['__NULL__'] ELSE ids END) member(option_value)"
+                                    + after
+                                    + " GROUP BY member.option_value ORDER BY member.option_value LIMIT :limit"),
+                            parameters)
+                    .query((rs, row) -> new FilterOptionCount(rs.getString("option_value"), rs.getLong("option_count")))
+                    .list();
         }
         if ("ASSIGNEE_SET".equals(field)) {
             Map<String, Object> parameters = baseProjectParameters(companyId, projectId);
@@ -728,11 +848,15 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
             String after = afterValue == null ? "" : " WHERE o.option_value > :afterValue";
             if (afterValue != null) parameters.put("afterValue", afterValue);
             parameters.put("limit", limit);
-            return bind(jdbc.sql("SELECT o.option_value, count(*) AS option_count FROM ("
-                    + "SELECT coalesce((SELECT string_agg(a.user_id::text, ',' ORDER BY a.user_id) FROM yumpoo.work_item_assignee a"
-                    + " WHERE a.company_id=yumpoo.work_item.company_id AND a.work_item_id=yumpoo.work_item.id), '__NULL__') AS option_value"
-                    + " FROM yumpoo.work_item" + predicate + ") o" + after + " GROUP BY 1 ORDER BY 1 LIMIT :limit"), parameters)
-                    .query((rs, row) -> new FilterOptionCount(rs.getString("option_value"), rs.getLong("option_count"))).list();
+            return bind(
+                            jdbc.sql("SELECT o.option_value, count(*) AS option_count FROM ("
+                                    + "SELECT coalesce((SELECT string_agg(a.user_id::text, ',' ORDER BY a.user_id) FROM yumpoo.work_item_assignee a"
+                                    + " WHERE a.company_id=yumpoo.work_item.company_id AND a.work_item_id=yumpoo.work_item.id), '__NULL__') AS option_value"
+                                    + " FROM yumpoo.work_item" + predicate + ") o" + after
+                                    + " GROUP BY 1 ORDER BY 1 LIMIT :limit"),
+                            parameters)
+                    .query((rs, row) -> new FilterOptionCount(rs.getString("option_value"), rs.getLong("option_count")))
+                    .list();
         }
         String expression = switch (field) {
             case "TITLE" -> "title";
@@ -754,31 +878,36 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                 + " AS option_value, count(*) AS option_count FROM yumpoo.work_item "
                 + predicate + " GROUP BY " + expression + " ORDER BY " + expression
                 + " ASC LIMIT :limit");
-        return bind(statement, parameters).query((rs, row) -> new FilterOptionCount(
-                rs.getString("option_value"), rs.getLong("option_count"))).list();
+        return bind(statement, parameters)
+                .query((rs, row) -> new FilterOptionCount(rs.getString("option_value"), rs.getLong("option_count")))
+                .list();
     }
 
     @Override
-    public Map<UUID, Long> countMatchingChildren(UUID companyId, UUID projectId, WorkItemQuery query,
-            Collection<UUID> parentWorkItemIds) {
+    public Map<UUID, Long> countMatchingChildren(
+            UUID companyId, UUID projectId, WorkItemQuery query, Collection<UUID> parentWorkItemIds) {
         Map<String, Object> parameters = baseProjectParameters(companyId, projectId);
         if (parentWorkItemIds.isEmpty() || match(query, parameters).isEmpty()) return Map.of();
         parameters.put("parentIds", parentWorkItemIds);
-        return bind(jdbc.sql("SELECT relation.left_work_item_id AS parent_id, count(*) AS matched"
-                + " FROM yumpoo.work_item_relation relation WHERE relation.company_id=:companyId"
-                + " AND relation.relation_type='PARENT_CHILD' AND relation.deleted_at IS NULL"
-                + " AND relation.left_work_item_id IN (:parentIds)"
-                + " AND relation.right_work_item_id IN (" + matchingItems(query, parameters) + ")"
-                + " GROUP BY relation.left_work_item_id"), parameters)
-                .query((rs, row) -> Map.entry(rs.getObject("parent_id", UUID.class), rs.getLong("matched"))).list()
-                .stream().collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        return bind(
+                        jdbc.sql("SELECT relation.left_work_item_id AS parent_id, count(*) AS matched"
+                                + " FROM yumpoo.work_item_relation relation WHERE relation.company_id=:companyId"
+                                + " AND relation.relation_type='PARENT_CHILD' AND relation.deleted_at IS NULL"
+                                + " AND relation.left_work_item_id IN (:parentIds)"
+                                + " AND relation.right_work_item_id IN (" + matchingItems(query, parameters) + ")"
+                                + " GROUP BY relation.left_work_item_id"),
+                        parameters)
+                .query((rs, row) -> Map.entry(rs.getObject("parent_id", UUID.class), rs.getLong("matched")))
+                .list()
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     @Override
     public long countProjectPage(UUID companyId, UUID projectId, WorkItemQuery query) {
         Map<String, Object> parameters = baseProjectParameters(companyId, projectId);
-        JdbcClient.StatementSpec statement = jdbc.sql("SELECT count(*) FROM yumpoo.work_item"
-                + where(query, parameters, false, Rows.ROOTS));
+        JdbcClient.StatementSpec statement =
+                jdbc.sql("SELECT count(*) FROM yumpoo.work_item" + where(query, parameters, false, Rows.ROOTS));
         return bind(statement, parameters).query(Long.class).single();
     }
 
@@ -787,8 +916,10 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         return jdbc.sql("SELECT count(*) FROM yumpoo.work_item WHERE company_id=:companyId "
                         + "AND project_id=:projectId AND deleted_at IS NULL "
                         + "AND status_category IN ('TODO','IN_PROGRESS')")
-                .param("companyId", companyId).param("projectId", projectId)
-                .query(Long.class).single();
+                .param("companyId", companyId)
+                .param("projectId", projectId)
+                .query(Long.class)
+                .single();
     }
 
     @Override
@@ -796,12 +927,14 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         return jdbc.sql("SELECT count(*) FROM yumpoo.work_item WHERE company_id=:companyId "
                         + "AND project_id=:projectId AND content_id=:contentId AND deleted_at IS NULL "
                         + "AND status_category IN ('TODO','IN_PROGRESS')")
-                .param("companyId", companyId).param("projectId", projectId)
-                .param("contentId", contentId).query(Long.class).single();
+                .param("companyId", companyId)
+                .param("projectId", projectId)
+                .param("contentId", contentId)
+                .query(Long.class)
+                .single();
     }
 
-    private static Map<String, Object> baseParameters(UUID companyId, UUID projectId,
-            UUID contentId) {
+    private static Map<String, Object> baseParameters(UUID companyId, UUID projectId, UUID contentId) {
         Map<String, Object> parameters = baseProjectParameters(companyId, projectId);
         parameters.put("contentId", contentId);
         return parameters;
@@ -815,14 +948,17 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
     }
 
     /** ITEMS：各工作项本身匹配；ROOTS：只看主行；ROOTS_OR_MATCHING_CHILD：主行或直接子项命中即返回主行。 */
-    private enum Rows { ITEMS, ROOTS, ROOTS_OR_MATCHING_CHILD }
+    private enum Rows {
+        ITEMS,
+        ROOTS,
+        ROOTS_OR_MATCHING_CHILD
+    }
 
     private static String where(WorkItemQuery query, Map<String, Object> parameters) {
         return where(query, parameters, true, Rows.ROOTS);
     }
 
-    private static String where(WorkItemQuery query, Map<String, Object> parameters,
-            boolean contentScoped, Rows rows) {
+    private static String where(WorkItemQuery query, Map<String, Object> parameters, boolean contentScoped, Rows rows) {
         StringBuilder sql = new StringBuilder(" WHERE company_id=:companyId")
                 .append(" AND project_id=:projectId")
                 .append(contentScoped ? " AND content_id=:contentId" : "")
@@ -839,21 +975,32 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         rowFilters(sql, query, parameters);
         String match = match(query, parameters);
         if (rows == Rows.ROOTS_OR_MATCHING_CHILD && !match.isEmpty())
-            sql.append(" AND ((TRUE").append(match).append(") OR id IN (SELECT relation.left_work_item_id")
+            sql.append(" AND ((TRUE")
+                    .append(match)
+                    .append(") OR id IN (SELECT relation.left_work_item_id")
                     .append(" FROM yumpoo.work_item_relation relation WHERE relation.company_id=:companyId")
                     .append(" AND relation.relation_type='PARENT_CHILD' AND relation.deleted_at IS NULL")
-                    .append(" AND relation.right_work_item_id IN (").append(matchingItems(query, parameters)).append(")))");
+                    .append(" AND relation.right_work_item_id IN (")
+                    .append(matchingItems(query, parameters))
+                    .append(")))");
         else sql.append(match);
         return sql.toString();
     }
 
     private static String scope(WorkItemQuery query, Map<String, Object> parameters, boolean withParents) {
         var scope = query.scope();
-        var chart = JdbcWorkItemChartRepository.base((UUID) parameters.get("companyId"),
-                scope.global(), scope.local(), scope.chart(), scope.selection(), scope.asOf(), true);
+        var chart = JdbcWorkItemChartRepository.base(
+                (UUID) parameters.get("companyId"),
+                scope.global(),
+                scope.local(),
+                scope.chart(),
+                scope.selection(),
+                scope.asOf(),
+                true);
         String scopedSql = chart.sql();
         for (var entry : chart.parameters().entrySet()) {
-            scopedSql = scopedSql.replaceAll("(?<!:):" + java.util.regex.Pattern.quote(entry.getKey()) + "\\b", ":chart_" + entry.getKey());
+            scopedSql = scopedSql.replaceAll(
+                    "(?<!:):" + java.util.regex.Pattern.quote(entry.getKey()) + "\\b", ":chart_" + entry.getKey());
             parameters.put("chart_" + entry.getKey(), entry.getValue());
         }
         String ids = scopedSql + "SELECT id FROM scoped";
@@ -869,7 +1016,8 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
     /** 分组表段条件只约束主行本身。 */
     private static void rowFilters(StringBuilder sql, WorkItemQuery query, Map<String, Object> parameters) {
         if (!query.assigneeSetUserIds().isEmpty()) {
-            sql.append(" AND (SELECT string_agg(a.user_id::text, ',' ORDER BY a.user_id) FROM yumpoo.work_item_assignee a WHERE a.company_id=:companyId AND a.work_item_id=yumpoo.work_item.id) = :assigneeSetKey");
+            sql.append(
+                    " AND (SELECT string_agg(a.user_id::text, ',' ORDER BY a.user_id) FROM yumpoo.work_item_assignee a WHERE a.company_id=:companyId AND a.work_item_id=yumpoo.work_item.id) = :assigneeSetKey");
             parameters.put("assigneeSetKey", query.assigneeSetKey());
         }
         if (query.emptyField() != null) {
@@ -882,11 +1030,26 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
             sql.append(" AND ").append(column).append(" IS NULL");
         }
         var group = query.group();
-        if (group.status() != null) { sql.append(" AND status_code=:groupStatus"); parameters.put("groupStatus", group.status()); }
-        if (group.priority() != null) { sql.append(" AND priority=:groupPriority"); parameters.put("groupPriority", group.priority()); }
-        if (group.contentId() != null) { sql.append(" AND content_id=:groupContentId"); parameters.put("groupContentId", group.contentId()); }
-        if (group.dueFrom() != null) { sql.append(" AND due_date >= :groupDueFrom"); parameters.put("groupDueFrom", group.dueFrom()); }
-        if (group.dueTo() != null) { sql.append(" AND due_date <= :groupDueTo"); parameters.put("groupDueTo", group.dueTo()); }
+        if (group.status() != null) {
+            sql.append(" AND status_code=:groupStatus");
+            parameters.put("groupStatus", group.status());
+        }
+        if (group.priority() != null) {
+            sql.append(" AND priority=:groupPriority");
+            parameters.put("groupPriority", group.priority());
+        }
+        if (group.contentId() != null) {
+            sql.append(" AND content_id=:groupContentId");
+            parameters.put("groupContentId", group.contentId());
+        }
+        if (group.dueFrom() != null) {
+            sql.append(" AND due_date >= :groupDueFrom");
+            parameters.put("groupDueFrom", group.dueFrom());
+        }
+        if (group.dueTo() != null) {
+            sql.append(" AND due_date <= :groupDueTo");
+            parameters.put("groupDueTo", group.dueTo());
+        }
     }
 
     private static String match(WorkItemQuery query, Map<String, Object> parameters) {
@@ -905,7 +1068,8 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
             parameters.put("priorities", query.priorities());
         }
         if (!query.assigneeUserIds().isEmpty()) {
-            sql.append(" AND EXISTS (SELECT 1 FROM yumpoo.work_item_assignee a WHERE a.work_item_id=yumpoo.work_item.id AND a.user_id IN (:assigneeUserIds))");
+            sql.append(
+                    " AND EXISTS (SELECT 1 FROM yumpoo.work_item_assignee a WHERE a.work_item_id=yumpoo.work_item.id AND a.user_id IN (:assigneeUserIds))");
             parameters.put("assigneeUserIds", query.assigneeUserIds());
         }
         if (!query.contentIds().isEmpty()) {
@@ -922,18 +1086,31 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         }
         if (query.updatedAfter() != null) {
             sql.append(" AND updated_at > :updatedAfter");
-            parameters.put("updatedAfter",
-                    OffsetDateTime.ofInstant(query.updatedAfter(), ZoneOffset.UTC));
+            parameters.put("updatedAfter", OffsetDateTime.ofInstant(query.updatedAfter(), ZoneOffset.UTC));
         }
-        if (query.timeTracking()!=null) {
-            var time=query.timeTracking();
-            String duration=timeDuration(query,parameters);
-            String sessions="SELECT 1 FROM yumpoo.work_item_time_session ts WHERE ts.company_id=:companyId AND "+timeScope("ts")+" AND ts.deleted_at IS NULL";
-            if ("RUNNING".equals(time.state())) sql.append(" AND EXISTS (").append(sessions).append(" AND ts.stopped_at IS NULL)");
-            if ("EMPTY".equals(time.state())) sql.append(" AND NOT EXISTS (").append(sessions).append(")");
-            if ("STOPPED".equals(time.state())) sql.append(" AND EXISTS (").append(sessions).append(") AND NOT EXISTS (").append(sessions).append(" AND ts.stopped_at IS NULL)");
-            if (time.minMs()!=null) { sql.append(" AND ").append(duration).append(">=:timeMin"); parameters.put("timeMin",time.minMs()); }
-            if (time.maxMs()!=null) { sql.append(" AND ").append(duration).append("<=:timeMax"); parameters.put("timeMax",time.maxMs()); }
+        if (query.timeTracking() != null) {
+            var time = query.timeTracking();
+            String duration = timeDuration(query, parameters);
+            String sessions = "SELECT 1 FROM yumpoo.work_item_time_session ts WHERE ts.company_id=:companyId AND "
+                    + timeScope("ts") + " AND ts.deleted_at IS NULL";
+            if ("RUNNING".equals(time.state()))
+                sql.append(" AND EXISTS (").append(sessions).append(" AND ts.stopped_at IS NULL)");
+            if ("EMPTY".equals(time.state()))
+                sql.append(" AND NOT EXISTS (").append(sessions).append(")");
+            if ("STOPPED".equals(time.state()))
+                sql.append(" AND EXISTS (")
+                        .append(sessions)
+                        .append(") AND NOT EXISTS (")
+                        .append(sessions)
+                        .append(" AND ts.stopped_at IS NULL)");
+            if (time.minMs() != null) {
+                sql.append(" AND ").append(duration).append(">=:timeMin");
+                parameters.put("timeMin", time.minMs());
+            }
+            if (time.maxMs() != null) {
+                sql.append(" AND ").append(duration).append("<=:timeMax");
+                parameters.put("timeMax", time.maxMs());
+            }
         }
         JdbcConnectionFilterSql.append(sql, parameters, query.connections());
         return sql.toString();
@@ -947,29 +1124,29 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         return sql.append(match(query, parameters)).toString();
     }
 
-    private static String orderBy(WorkItemQuery query, WorkItemSortRanks ranks,
-            Map<String, Object> parameters) {
+    private static String orderBy(WorkItemQuery query, WorkItemSortRanks ranks, Map<String, Object> parameters) {
         List<String> order = new ArrayList<>();
         int index = 0;
         for (WorkItemQuery.Sort sort : query.sorts()) {
             String direction = sort.direction().name();
             switch (sort.field()) {
-                case CONTENT -> addRankedUserOrder(order, parameters, "content_id",
-                        "content", ranks.contents(), direction, index);
-                case TIME_TRACKING -> order.add(timeDuration(query,parameters)+" "+direction);
+                case CONTENT ->
+                    addRankedUserOrder(order, parameters, "content_id", "content", ranks.contents(), direction, index);
+                case TIME_TRACKING -> order.add(timeDuration(query, parameters) + " " + direction);
                 case ITEM_NO -> order.add("item_sequence " + direction);
                 case TITLE -> order.add("lower(title) " + direction);
-                case STATUS -> addRankedTextOrder(order, parameters, "status_code",
-                        "status", ranks.statuses(), direction, index);
+                case STATUS ->
+                    addRankedTextOrder(order, parameters, "status_code", "status", ranks.statuses(), direction, index);
                 case PRIORITY -> {
                     order.add("CASE WHEN priority IS NULL THEN 1 ELSE 0 END ASC");
-                    addRankedTextOrder(order, parameters, "priority", "priority",
-                            ranks.priorities(), direction, index);
+                    addRankedTextOrder(order, parameters, "priority", "priority", ranks.priorities(), direction, index);
                 }
-                case ASSIGNEE -> addRankedUserOrder(order, parameters, "assignee_user_id",
-                        "assignee", ranks.assignees(), direction, index);
-                case REPORTER -> addRankedUserOrder(order, parameters, "reporter_user_id",
-                        "reporter", ranks.reporters(), direction, index);
+                case ASSIGNEE ->
+                    addRankedUserOrder(
+                            order, parameters, "assignee_user_id", "assignee", ranks.assignees(), direction, index);
+                case REPORTER ->
+                    addRankedUserOrder(
+                            order, parameters, "reporter_user_id", "reporter", ranks.reporters(), direction, index);
                 case TIMELINE_START_DATE -> order.add("timeline_start_date " + direction + " NULLS LAST");
                 case TIMELINE_END_DATE -> order.add("timeline_end_date " + direction + " NULLS LAST");
                 case DUE_DATE -> order.add("due_date " + direction + " NULLS LAST");
@@ -981,17 +1158,20 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         return String.join(", ", order);
     }
 
-    private static String timeDuration(WorkItemQuery query, Map<String,Object> parameters) {
-        String end="CURRENT_TIMESTAMP";
-        if(query.timeTracking()!=null && query.timeTracking().asOf()!=null) {
-            end=":timeAsOf";
-            parameters.put("timeAsOf",OffsetDateTime.ofInstant(query.timeTracking().asOf(),ZoneOffset.UTC));
+    private static String timeDuration(WorkItemQuery query, Map<String, Object> parameters) {
+        String end = "CURRENT_TIMESTAMP";
+        if (query.timeTracking() != null && query.timeTracking().asOf() != null) {
+            end = ":timeAsOf";
+            parameters.put(
+                    "timeAsOf", OffsetDateTime.ofInstant(query.timeTracking().asOf(), ZoneOffset.UTC));
         }
-        return "(SELECT FLOOR(COALESCE(SUM("+TimeShareSql.allocated("sh",end)+"),0))::bigint FROM yumpoo.work_item_time_share sh WHERE sh.company_id=:companyId AND "+timeScope("sh")+")";
+        return "(SELECT FLOOR(COALESCE(SUM(" + TimeShareSql.allocated("sh", end)
+                + "),0))::bigint FROM yumpoo.work_item_time_share sh WHERE sh.company_id=:companyId AND "
+                + timeScope("sh") + ")";
     }
 
     private static String timeScope(String alias) {
-        return "("+alias+".work_item_id=yumpoo.work_item.id OR "+alias+".work_item_id IN ("
+        return "(" + alias + ".work_item_id=yumpoo.work_item.id OR " + alias + ".work_item_id IN ("
                 + "SELECT r.right_work_item_id FROM yumpoo.work_item_relation r "
                 + "JOIN yumpoo.work_item child ON child.company_id=r.company_id AND child.id=r.right_work_item_id AND child.deleted_at IS NULL "
                 + "WHERE r.company_id=:companyId AND r.relation_type='PARENT_CHILD' AND r.deleted_at IS NULL AND r.left_work_item_id=yumpoo.work_item.id))";
@@ -999,77 +1179,132 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
 
     private record SeekTerm(String expression, String direction, Object anchorValue) {}
 
-    private static List<SeekTerm> projectSortTerms(WorkItemQuery query,
-            WorkItemSortRanks ranks, ProjectCursorAnchor anchor, Map<String, Object> parameters) {
+    private static List<SeekTerm> projectSortTerms(
+            WorkItemQuery query, WorkItemSortRanks ranks, ProjectCursorAnchor anchor, Map<String, Object> parameters) {
         List<SeekTerm> terms = new ArrayList<>();
         int index = 0;
         for (WorkItemQuery.Sort sort : query.sorts()) {
             String direction = sort.direction().name();
             switch (sort.field()) {
                 case CONTENT -> {
-                    String expression = rankedUserExpression(parameters, "content_id",
-                            "projectContent", ranks.contents(), index);
-                    terms.add(new SeekTerm(expression, direction, anchor == null ? 0
-                            : ranks.contents().getOrDefault(anchor.contentId(), ranks.contents().size())));
-                    terms.add(new SeekTerm("content_id", "ASC",
-                            anchor == null ? new UUID(0, 0) : anchor.contentId()));
+                    String expression =
+                            rankedUserExpression(parameters, "content_id", "projectContent", ranks.contents(), index);
+                    terms.add(new SeekTerm(
+                            expression,
+                            direction,
+                            anchor == null
+                                    ? 0
+                                    : ranks.contents()
+                                            .getOrDefault(
+                                                    anchor.contentId(),
+                                                    ranks.contents().size())));
+                    terms.add(new SeekTerm("content_id", "ASC", anchor == null ? new UUID(0, 0) : anchor.contentId()));
                 }
-                case TIME_TRACKING -> terms.add(new SeekTerm(timeDuration(query,parameters),direction,query.timeTracking()==null ? 0L : query.timeTracking().anchorDurationMs()));
-                case ITEM_NO -> terms.add(new SeekTerm("item_sequence", direction,
-                        anchor == null ? 0L : anchor.itemSequence()));
-                case TITLE -> terms.add(new SeekTerm("lower(title)", direction,
-                        anchor == null ? "" : anchor.title().toLowerCase(Locale.ROOT)));
+                case TIME_TRACKING ->
+                    terms.add(new SeekTerm(
+                            timeDuration(query, parameters),
+                            direction,
+                            query.timeTracking() == null
+                                    ? 0L
+                                    : query.timeTracking().anchorDurationMs()));
+                case ITEM_NO ->
+                    terms.add(new SeekTerm("item_sequence", direction, anchor == null ? 0L : anchor.itemSequence()));
+                case TITLE ->
+                    terms.add(new SeekTerm(
+                            "lower(title)",
+                            direction,
+                            anchor == null ? "" : anchor.title().toLowerCase(Locale.ROOT)));
                 case STATUS -> {
-                    String expression = rankedTextExpression(parameters, "status_code",
-                            "projectStatus", ranks.statuses(), index);
-                    terms.add(new SeekTerm(expression, direction, anchor == null ? 0
-                            : ranks.statuses().getOrDefault(anchor.statusCode(), ranks.statuses().size())));
-                    terms.add(new SeekTerm("status_code", "ASC",
-                            anchor == null ? "" : anchor.statusCode()));
+                    String expression =
+                            rankedTextExpression(parameters, "status_code", "projectStatus", ranks.statuses(), index);
+                    terms.add(new SeekTerm(
+                            expression,
+                            direction,
+                            anchor == null
+                                    ? 0
+                                    : ranks.statuses()
+                                            .getOrDefault(
+                                                    anchor.statusCode(),
+                                                    ranks.statuses().size())));
+                    terms.add(new SeekTerm("status_code", "ASC", anchor == null ? "" : anchor.statusCode()));
                 }
                 case PRIORITY -> {
-                    terms.add(new SeekTerm("CASE WHEN priority IS NULL THEN 1 ELSE 0 END", "ASC",
+                    terms.add(new SeekTerm(
+                            "CASE WHEN priority IS NULL THEN 1 ELSE 0 END",
+                            "ASC",
                             anchor != null && anchor.priority() == null ? 1 : 0));
-                    String expression = rankedTextExpression(parameters, "priority",
-                            "projectPriority", ranks.priorities(), index);
-                    terms.add(new SeekTerm(expression, direction,
-                            anchor == null || anchor.priority() == null ? ranks.priorities().size()
-                                    : ranks.priorities().getOrDefault(anchor.priority(),
-                                            ranks.priorities().size())));
-                    terms.add(new SeekTerm("coalesce(priority, '')", "ASC",
+                    String expression =
+                            rankedTextExpression(parameters, "priority", "projectPriority", ranks.priorities(), index);
+                    terms.add(new SeekTerm(
+                            expression,
+                            direction,
+                            anchor == null || anchor.priority() == null
+                                    ? ranks.priorities().size()
+                                    : ranks.priorities()
+                                            .getOrDefault(
+                                                    anchor.priority(),
+                                                    ranks.priorities().size())));
+                    terms.add(new SeekTerm(
+                            "coalesce(priority, '')",
+                            "ASC",
                             anchor == null || anchor.priority() == null ? "" : anchor.priority()));
                 }
                 case ASSIGNEE -> {
-                    terms.add(new SeekTerm("CASE WHEN assignee_user_id IS NULL THEN 1 ELSE 0 END",
-                            "ASC", anchor != null && anchor.assigneeUserId() == null ? 1 : 0));
-                    String expression = rankedUserExpression(parameters, "assignee_user_id",
-                            "projectAssignee", ranks.assignees(), index);
-                    terms.add(new SeekTerm(expression, direction, anchor == null ? 0
-                            : ranks.assignees().getOrDefault(anchor.assigneeUserId(),
-                                    ranks.assignees().size())));
-                    terms.add(new SeekTerm("coalesce(assignee_user_id, "
-                            + "'00000000-0000-0000-0000-000000000000'::uuid)", "ASC",
+                    terms.add(new SeekTerm(
+                            "CASE WHEN assignee_user_id IS NULL THEN 1 ELSE 0 END",
+                            "ASC",
+                            anchor != null && anchor.assigneeUserId() == null ? 1 : 0));
+                    String expression = rankedUserExpression(
+                            parameters, "assignee_user_id", "projectAssignee", ranks.assignees(), index);
+                    terms.add(new SeekTerm(
+                            expression,
+                            direction,
+                            anchor == null
+                                    ? 0
+                                    : ranks.assignees()
+                                            .getOrDefault(
+                                                    anchor.assigneeUserId(),
+                                                    ranks.assignees().size())));
+                    terms.add(new SeekTerm(
+                            "coalesce(assignee_user_id, " + "'00000000-0000-0000-0000-000000000000'::uuid)",
+                            "ASC",
                             anchor == null || anchor.assigneeUserId() == null
-                                    ? new UUID(0, 0) : anchor.assigneeUserId()));
+                                    ? new UUID(0, 0)
+                                    : anchor.assigneeUserId()));
                 }
                 case REPORTER -> {
-                    String expression = rankedUserExpression(parameters, "reporter_user_id",
-                            "projectReporter", ranks.reporters(), index);
-                    terms.add(new SeekTerm(expression, direction, anchor == null ? 0
-                            : ranks.reporters().getOrDefault(anchor.reporterUserId(),
-                                    ranks.reporters().size())));
-                    terms.add(new SeekTerm("reporter_user_id", "ASC",
-                            anchor == null ? new UUID(0, 0) : anchor.reporterUserId()));
+                    String expression = rankedUserExpression(
+                            parameters, "reporter_user_id", "projectReporter", ranks.reporters(), index);
+                    terms.add(new SeekTerm(
+                            expression,
+                            direction,
+                            anchor == null
+                                    ? 0
+                                    : ranks.reporters()
+                                            .getOrDefault(
+                                                    anchor.reporterUserId(),
+                                                    ranks.reporters().size())));
+                    terms.add(new SeekTerm(
+                            "reporter_user_id", "ASC", anchor == null ? new UUID(0, 0) : anchor.reporterUserId()));
                 }
-                case TIMELINE_START_DATE -> addNullableDateTerms(terms, "timeline_start_date",
-                        direction, anchor == null ? null : anchor.timelineStartDate());
-                case TIMELINE_END_DATE -> addNullableDateTerms(terms, "timeline_end_date",
-                        direction, anchor == null ? null : anchor.timelineEndDate());
-                case DUE_DATE -> addNullableDateTerms(terms, "due_date", direction,
-                        anchor == null ? null : anchor.dueDate());
-                case UPDATED_AT -> terms.add(new SeekTerm("updated_at", direction,
-                        anchor == null ? OffsetDateTime.MIN
-                                : OffsetDateTime.ofInstant(anchor.updatedAt(), ZoneOffset.UTC)));
+                case TIMELINE_START_DATE ->
+                    addNullableDateTerms(
+                            terms,
+                            "timeline_start_date",
+                            direction,
+                            anchor == null ? null : anchor.timelineStartDate());
+                case TIMELINE_END_DATE ->
+                    addNullableDateTerms(
+                            terms, "timeline_end_date", direction, anchor == null ? null : anchor.timelineEndDate());
+                case DUE_DATE ->
+                    addNullableDateTerms(terms, "due_date", direction, anchor == null ? null : anchor.dueDate());
+                case UPDATED_AT ->
+                    terms.add(new SeekTerm(
+                            "updated_at",
+                            direction,
+                            anchor == null
+                                    ? OffsetDateTime.MIN
+                                    : OffsetDateTime.ofInstant(anchor.updatedAt(), ZoneOffset.UTC)));
             }
             index++;
         }
@@ -1077,11 +1312,12 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         return terms;
     }
 
-    private static void addNullableDateTerms(List<SeekTerm> terms, String column,
-            String direction, java.time.LocalDate value) {
-        terms.add(new SeekTerm("CASE WHEN " + column + " IS NULL THEN 1 ELSE 0 END", "ASC",
-                value == null ? 1 : 0));
-        terms.add(new SeekTerm("coalesce(" + column + ", DATE '9999-12-31')", direction,
+    private static void addNullableDateTerms(
+            List<SeekTerm> terms, String column, String direction, java.time.LocalDate value) {
+        terms.add(new SeekTerm("CASE WHEN " + column + " IS NULL THEN 1 ELSE 0 END", "ASC", value == null ? 1 : 0));
+        terms.add(new SeekTerm(
+                "coalesce(" + column + ", DATE '9999-12-31')",
+                direction,
                 value == null ? java.time.LocalDate.of(9999, 12, 31) : value));
     }
 
@@ -1092,16 +1328,15 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
             for (int prefix = 0; prefix < index; prefix++)
                 parts.add(terms.get(prefix).expression() + " = :cursorSeek" + prefix);
             SeekTerm term = terms.get(index);
-            parts.add(term.expression() + ("DESC".equals(term.direction()) ? " < " : " > ")
-                    + ":cursorSeek" + index);
+            parts.add(term.expression() + ("DESC".equals(term.direction()) ? " < " : " > ") + ":cursorSeek" + index);
             branches.add("(" + String.join(" AND ", parts) + ")");
             parameters.put("cursorSeek" + index, term.anchorValue());
         }
         return String.join(" OR ", branches);
     }
 
-    private static String rankedTextExpression(Map<String, Object> parameters, String column,
-            String prefix, Map<String, Integer> ranks, int index) {
+    private static String rankedTextExpression(
+            Map<String, Object> parameters, String column, String prefix, Map<String, Integer> ranks, int index) {
         StringBuilder expression = new StringBuilder("CASE ").append(column);
         ranks.entrySet().stream().sorted(Map.Entry.comparingByValue()).forEach(entry -> {
             String name = prefix + index + "_" + entry.getValue();
@@ -1111,8 +1346,8 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         return expression.append(" ELSE ").append(ranks.size()).append(" END").toString();
     }
 
-    private static String rankedUserExpression(Map<String, Object> parameters, String column,
-            String prefix, Map<UUID, Integer> ranks, int index) {
+    private static String rankedUserExpression(
+            Map<String, Object> parameters, String column, String prefix, Map<UUID, Integer> ranks, int index) {
         StringBuilder expression = new StringBuilder("CASE ").append(column);
         ranks.entrySet().stream().sorted(Map.Entry.comparingByValue()).forEach(entry -> {
             String name = prefix + index + "_" + entry.getValue();
@@ -1122,10 +1357,16 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         return expression.append(" ELSE ").append(ranks.size()).append(" END").toString();
     }
 
-    private static void addRankedTextOrder(List<String> order, Map<String, Object> parameters,
-            String column, String prefix, Map<String, Integer> ranks, String direction, int index) {
-        List<Map.Entry<String, Integer>> entries = ranks.entrySet().stream()
-                .sorted(Map.Entry.comparingByValue()).toList();
+    private static void addRankedTextOrder(
+            List<String> order,
+            Map<String, Object> parameters,
+            String column,
+            String prefix,
+            Map<String, Integer> ranks,
+            String direction,
+            int index) {
+        List<Map.Entry<String, Integer>> entries =
+                ranks.entrySet().stream().sorted(Map.Entry.comparingByValue()).toList();
         if (entries.isEmpty()) {
             order.add(column + " ASC");
             return;
@@ -1139,15 +1380,24 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
             parameters.put(parameter, entries.get(i).getKey());
             rank.append(" WHEN :").append(parameter).append(" THEN ").append(i);
         }
-        order.add(rank.append(" ELSE ").append(entries.size()).append(" END ")
-                .append(direction).toString());
+        order.add(rank.append(" ELSE ")
+                .append(entries.size())
+                .append(" END ")
+                .append(direction)
+                .toString());
         order.add(column + " ASC");
     }
 
-    private static void addRankedUserOrder(List<String> order, Map<String, Object> parameters,
-            String column, String prefix, Map<UUID, Integer> ranks, String direction, int index) {
-        List<Map.Entry<UUID, Integer>> entries = ranks.entrySet().stream()
-                .sorted(Map.Entry.comparingByValue()).toList();
+    private static void addRankedUserOrder(
+            List<String> order,
+            Map<String, Object> parameters,
+            String column,
+            String prefix,
+            Map<UUID, Integer> ranks,
+            String direction,
+            int index) {
+        List<Map.Entry<UUID, Integer>> entries =
+                ranks.entrySet().stream().sorted(Map.Entry.comparingByValue()).toList();
         if (entries.isEmpty()) {
             order.add("CASE WHEN " + column + " IS NULL THEN 1 ELSE 0 END ASC");
             order.add(column + " ASC NULLS LAST");
@@ -1163,8 +1413,11 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
             parameters.put(parameter, entries.get(i).getKey());
             rank.append(" WHEN :").append(parameter).append(" THEN ").append(i);
         }
-        order.add(rank.append(" ELSE ").append(entries.size()).append(" END ")
-                .append(direction).toString());
+        order.add(rank.append(" ELSE ")
+                .append(entries.size())
+                .append(" END ")
+                .append(direction)
+                .toString());
         order.add(column + " ASC NULLS LAST");
     }
 
@@ -1172,8 +1425,7 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 
-    private static JdbcClient.StatementSpec bind(JdbcClient.StatementSpec statement,
-            Map<String, Object> parameters) {
+    private static JdbcClient.StatementSpec bind(JdbcClient.StatementSpec statement, Map<String, Object> parameters) {
         JdbcClient.StatementSpec bound = statement;
         for (Map.Entry<String, Object> parameter : parameters.entrySet())
             bound = bound.param(parameter.getKey(), parameter.getValue());
@@ -1183,41 +1435,64 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
     @Override
     public void replaceAssignees(WorkItem item) {
         jdbc.sql("DELETE FROM yumpoo.work_item_assignee WHERE company_id=:company AND work_item_id=:id")
-                .param("company", item.companyId()).param("id", item.id()).update();
+                .param("company", item.companyId())
+                .param("id", item.id())
+                .update();
         for (int position = 0; position < item.assigneeUserIds().size(); position++) {
             jdbc.sql("""
                     INSERT INTO yumpoo.work_item_assignee(company_id, project_id, work_item_id, user_id, position)
                     VALUES (:company, :project, :item, :user, :position)
-                    """).param("company", item.companyId()).param("project", item.projectId())
-                    .param("item", item.id()).param("user", item.assigneeUserIds().get(position))
-                    .param("position", position).update();
+                    """)
+                    .param("company", item.companyId())
+                    .param("project", item.projectId())
+                    .param("item", item.id())
+                    .param("user", item.assigneeUserIds().get(position))
+                    .param("position", position)
+                    .update();
         }
     }
 
     private static WorkItem map(ResultSet rs, int row) throws SQLException {
         OffsetDateTime deleted = rs.getObject("deleted_at", OffsetDateTime.class);
         OffsetDateTime completed = rs.getObject("completed_at", OffsetDateTime.class);
-        return new WorkItem(rs.getObject("id", UUID.class), rs.getObject("company_id", UUID.class),
-                rs.getObject("project_id", UUID.class), rs.getObject("content_id", UUID.class),
-                rs.getLong("item_sequence"), rs.getString("item_no"),
+        return new WorkItem(
+                rs.getObject("id", UUID.class),
+                rs.getObject("company_id", UUID.class),
+                rs.getObject("project_id", UUID.class),
+                rs.getObject("content_id", UUID.class),
+                rs.getLong("item_sequence"),
+                rs.getString("item_no"),
                 rs.getString("title"),
-                rs.getString("status_code"), WorkItemStatusCategory.valueOf(rs.getString("status_category")),
+                rs.getString("status_code"),
+                WorkItemStatusCategory.valueOf(rs.getString("status_category")),
                 rs.getString("priority"),
-                java.util.Arrays.stream((Object[]) rs.getArray("assignee_user_ids").getArray())
-                        .map(v -> v instanceof UUID u ? u : UUID.fromString(v.toString())).toList(),
+                java.util.Arrays.stream(
+                                (Object[]) rs.getArray("assignee_user_ids").getArray())
+                        .map(v -> v instanceof UUID u ? u : UUID.fromString(v.toString()))
+                        .toList(),
                 rs.getObject("reporter_user_id", UUID.class),
-                rs.getString("description"), rs.getString("notes"), rs.getObject("timeline_start_date", java.time.LocalDate.class),
-                rs.getObject("timeline_end_date", java.time.LocalDate.class), rs.getObject("due_date", java.time.LocalDate.class),
-                rs.getObject("due_time", java.time.LocalTime.class), completed == null ? null : completed.toInstant(),
-                rs.getString("rank"), rs.getString("project_sort_key"), rs.getLong("row_version"),
+                rs.getString("description"),
+                rs.getString("notes"),
+                rs.getObject("timeline_start_date", java.time.LocalDate.class),
+                rs.getObject("timeline_end_date", java.time.LocalDate.class),
+                rs.getObject("due_date", java.time.LocalDate.class),
+                rs.getObject("due_time", java.time.LocalTime.class),
+                completed == null ? null : completed.toInstant(),
+                rs.getString("rank"),
+                rs.getString("project_sort_key"),
+                rs.getLong("row_version"),
                 rs.getObject("created_at", OffsetDateTime.class).toInstant(),
-                rs.getObject("created_by_user_id", UUID.class), rs.getObject("updated_at", OffsetDateTime.class).toInstant(),
-                rs.getObject("updated_by_user_id", UUID.class), deleted == null ? null : deleted.toInstant(),
-                rs.getObject("deleted_by_user_id", UUID.class), rs.getString("delete_reason"), rs.getBoolean("archived"));
+                rs.getObject("created_by_user_id", UUID.class),
+                rs.getObject("updated_at", OffsetDateTime.class).toInstant(),
+                rs.getObject("updated_by_user_id", UUID.class),
+                deleted == null ? null : deleted.toInstant(),
+                rs.getObject("deleted_by_user_id", UUID.class),
+                rs.getString("delete_reason"),
+                rs.getBoolean("archived"));
     }
 
-    private static JdbcClient.StatementSpec nullable(JdbcClient.StatementSpec statement,
-            String name, Object value, int sqlType) {
+    private static JdbcClient.StatementSpec nullable(
+            JdbcClient.StatementSpec statement, String name, Object value, int sqlType) {
         return value == null ? statement.param(name, null, sqlType) : statement.param(name, value);
     }
 

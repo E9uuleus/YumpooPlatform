@@ -1,11 +1,11 @@
 package com.yumpoo.platform.filestorage.application;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.yumpoo.platform.filestorage.domain.AttachmentFileType;
 import com.yumpoo.platform.filestorage.domain.AttachmentRejectedCode;
 import org.junit.jupiter.api.Test;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AttachmentFileNamePolicyTest {
 
@@ -28,9 +28,7 @@ class AttachmentFileNamePolicyTest {
 
     @Test
     void removesBidirectionalFormatControlsFromDisplayName() {
-        AttachmentFileName normalized = AttachmentFileNamePolicy.normalize(
-                "quarterly\u202Efdp.pdf"
-        );
+        AttachmentFileName normalized = AttachmentFileNamePolicy.normalize("quarterly\u202Efdp.pdf");
 
         assertThat(normalized.displayName()).isEqualTo("quarterlyfdp.pdf");
     }

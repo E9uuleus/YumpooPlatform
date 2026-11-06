@@ -23,8 +23,7 @@ public record LoginSession(
         Instant revokedAt,
         SessionRevocationReason revokeReason,
         Instant purgeAfter,
-        boolean rememberMe
-) {
+        boolean rememberMe) {
 
     public LoginSession {
         Objects.requireNonNull(id, "id must not be null");
@@ -46,8 +45,8 @@ public record LoginSession(
         Objects.requireNonNull(clientType, "clientType must not be null");
         if (clientVersion != null
                 && (clientVersion.isBlank()
-                || !clientVersion.equals(clientVersion.trim())
-                || clientVersion.length() > 64)) {
+                        || !clientVersion.equals(clientVersion.trim())
+                        || clientVersion.length() > 64)) {
             throw new IllegalArgumentException("clientVersion is invalid");
         }
         Objects.requireNonNull(issuedAt, "issuedAt must not be null");
@@ -62,10 +61,8 @@ public record LoginSession(
             throw new IllegalArgumentException("session lifecycle timestamps are inconsistent");
         }
         boolean activeFacts = revokedAt == null && revokeReason == null;
-        boolean terminalFacts = revokedAt != null && revokeReason != null
-                && !revokedAt.isBefore(issuedAt);
-        if ((status == SessionStatus.ACTIVE && !activeFacts)
-                || (status != SessionStatus.ACTIVE && !terminalFacts)) {
+        boolean terminalFacts = revokedAt != null && revokeReason != null && !revokedAt.isBefore(issuedAt);
+        if ((status == SessionStatus.ACTIVE && !activeFacts) || (status != SessionStatus.ACTIVE && !terminalFacts)) {
             throw new IllegalArgumentException("session status facts are inconsistent");
         }
     }

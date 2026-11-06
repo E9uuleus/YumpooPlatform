@@ -27,11 +27,8 @@ public final class PkceVerifier {
 
     public PkceS256Challenge challenge() {
         try {
-            byte[] digest = MessageDigest.getInstance("SHA-256")
-                    .digest(value.getBytes(StandardCharsets.US_ASCII));
-            return new PkceS256Challenge(
-                    Base64.getUrlEncoder().withoutPadding().encodeToString(digest)
-            );
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.US_ASCII));
+            return new PkceS256Challenge(Base64.getUrlEncoder().withoutPadding().encodeToString(digest));
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 is unavailable", exception);
         }

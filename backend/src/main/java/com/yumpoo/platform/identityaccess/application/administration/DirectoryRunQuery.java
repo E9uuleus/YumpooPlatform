@@ -2,11 +2,7 @@ package com.yumpoo.platform.identityaccess.application.administration;
 
 import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
 
-public record DirectoryRunQuery(
-        String status,
-        String triggerType,
-        OffsetPageRequest pageRequest
-) {
+public record DirectoryRunQuery(String status, String triggerType, OffsetPageRequest pageRequest) {
     public DirectoryRunQuery {
         status = normalize(status);
         triggerType = normalize(triggerType);

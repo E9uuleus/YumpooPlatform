@@ -5,8 +5,7 @@ import org.springframework.http.HttpStatus;
 
 final class ApiErrorStatus {
 
-    private ApiErrorStatus() {
-    }
+    private ApiErrorStatus() {}
 
     static HttpStatus forCode(StandardErrorCode code) {
         return switch (code) {
@@ -14,8 +13,8 @@ final class ApiErrorStatus {
             case AUTHENTICATION_REQUIRED -> HttpStatus.UNAUTHORIZED;
             case ACCOUNT_DISABLED, ACCESS_DENIED -> HttpStatus.FORBIDDEN;
             case RESOURCE_NOT_FOUND -> HttpStatus.NOT_FOUND;
-            case IDEMPOTENCY_KEY_REUSED, REQUEST_IN_PROGRESS,
-                    INVALID_STATE_TRANSITION, WORKLOG_LOCKED -> HttpStatus.CONFLICT;
+            case IDEMPOTENCY_KEY_REUSED, REQUEST_IN_PROGRESS, INVALID_STATE_TRANSITION, WORKLOG_LOCKED ->
+                HttpStatus.CONFLICT;
             case VERSION_CONFLICT -> HttpStatus.PRECONDITION_FAILED;
             case FILE_TOO_LARGE -> HttpStatus.PAYLOAD_TOO_LARGE;
             case FILE_TYPE_NOT_ALLOWED -> HttpStatus.UNSUPPORTED_MEDIA_TYPE;

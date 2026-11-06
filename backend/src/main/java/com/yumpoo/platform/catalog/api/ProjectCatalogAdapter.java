@@ -8,15 +8,22 @@ import com.yumpoo.platform.foundation.application.concurrency.StrongEtag;
 import org.springframework.stereotype.Component;
 
 @Component
-public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, ProjectMembershipQuery,
-        ProjectMembershipCommandPort, ProjectAccessSnapshotQuery, ProjectOwnerScopeQuery,
-        ProjectFactWriteGuard, ProjectActiveMembershipQuery, ProjectModerationGuard {
+public class ProjectCatalogAdapter
+        implements ProjectLifecycleCommandPort,
+                ProjectMembershipQuery,
+                ProjectMembershipCommandPort,
+                ProjectAccessSnapshotQuery,
+                ProjectOwnerScopeQuery,
+                ProjectFactWriteGuard,
+                ProjectActiveMembershipQuery,
+                ProjectModerationGuard {
 
     private final ProjectCreationService service;
     private final com.yumpoo.platform.catalog.application.project.ProjectMembershipService membershipService;
     private final com.yumpoo.platform.catalog.application.project.ProjectLifecycleService lifecycleService;
 
-    public ProjectCatalogAdapter(ProjectCreationService service,
+    public ProjectCatalogAdapter(
+            ProjectCreationService service,
             com.yumpoo.platform.catalog.application.project.ProjectMembershipService membershipService,
             com.yumpoo.platform.catalog.application.project.ProjectLifecycleService lifecycleService) {
         this.service = service;
@@ -27,7 +34,8 @@ public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, Proje
     @Override
     public java.util.Optional<ProjectAccessSnapshot> findVisible(
             com.yumpoo.platform.identityaccess.api.CurrentActor actor, java.util.UUID projectId) {
-        return java.util.Optional.ofNullable(findVisible(actor, java.util.List.of(projectId)).get(projectId));
+        return java.util.Optional.ofNullable(
+                findVisible(actor, java.util.List.of(projectId)).get(projectId));
     }
 
     @Override
@@ -44,8 +52,7 @@ public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, Proje
             java.util.Collection<java.util.UUID> projectIds) {
         return membershipService.findVisible(actor, projectIds).entrySet().stream()
                 .collect(java.util.stream.Collectors.toUnmodifiableMap(
-                        java.util.Map.Entry::getKey,
-                        entry -> access(entry.getValue())));
+                        java.util.Map.Entry::getKey, entry -> access(entry.getValue())));
     }
 
     @Override
@@ -54,9 +61,13 @@ public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, Proje
         membershipService.requireVisible(actor, projectId);
         ProjectSnapshot project = snapshot(lifecycleService.lockForNewFact(actor.companyId(), projectId));
         ProjectAccessSnapshot access = access(membershipService.requireVisible(actor, projectId));
-        return new ProjectFactWriteSnapshot(project.projectId(), project.companyId(), project.code(),
+        return new ProjectFactWriteSnapshot(
+                project.projectId(),
+                project.companyId(),
+                project.code(),
                 ProjectFactWriteSnapshot.ProjectLifecycle.valueOf(project.lifecycle()),
-                ProjectFactWriteSnapshot.ActorProjectAccess.valueOf(access.actorAccess().name()));
+                ProjectFactWriteSnapshot.ActorProjectAccess.valueOf(
+                        access.actorAccess().name()));
     }
 
     @Override
@@ -65,82 +76,116 @@ public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, Proje
         membershipService.requireVisible(actor, projectId);
         ProjectSnapshot project = snapshot(lifecycleService.lockForModeration(actor.companyId(), projectId));
         ProjectAccessSnapshot visible = access(membershipService.requireVisible(actor, projectId));
-        return new ProjectModerationSnapshot(project.projectId(), project.companyId(),
+        return new ProjectModerationSnapshot(
+                project.projectId(),
+                project.companyId(),
                 ProjectModerationSnapshot.ProjectLifecycle.valueOf(project.lifecycle()),
-                ProjectModerationSnapshot.ActorProjectAccess.valueOf(visible.actorAccess().name()));
+                ProjectModerationSnapshot.ActorProjectAccess.valueOf(
+                        visible.actorAccess().name()));
     }
 
     @Override
-    public boolean isActiveMember(java.util.UUID companyId, java.util.UUID projectId,
-            java.util.UUID userId) {
+    public boolean isActiveMember(java.util.UUID companyId, java.util.UUID projectId, java.util.UUID userId) {
         return membershipService.isActiveMember(companyId, projectId, userId);
     }
 
     @Override
-    public java.util.Set<java.util.UUID> findActiveMemberIds(java.util.UUID companyId,
-            java.util.UUID projectId, java.util.Collection<java.util.UUID> userIds) {
+    public java.util.Set<java.util.UUID> findActiveMemberIds(
+            java.util.UUID companyId, java.util.UUID projectId, java.util.Collection<java.util.UUID> userIds) {
         return membershipService.findActiveMemberIds(companyId, projectId, userIds);
     }
 
     @Override
-    public ProjectAccessSnapshot requireVisible(com.yumpoo.platform.identityaccess.api.CurrentActor actor,
-                                                java.util.UUID projectId) {
+    public ProjectAccessSnapshot requireVisible(
+            com.yumpoo.platform.identityaccess.api.CurrentActor actor, java.util.UUID projectId) {
         return access(membershipService.requireVisible(actor, projectId));
     }
 
     @Override
-    public ProjectMemberPage findMembers(com.yumpoo.platform.identityaccess.api.CurrentActor actor,
-            java.util.UUID projectId, ProjectMembershipStatus status,
+    public ProjectMemberPage findMembers(
+            com.yumpoo.platform.identityaccess.api.CurrentActor actor,
+            java.util.UUID projectId,
+            ProjectMembershipStatus status,
             com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest page) {
         return findMembers(actor, projectId, status, null, page);
     }
 
     @Override
-    public ProjectMemberPage findMembers(com.yumpoo.platform.identityaccess.api.CurrentActor actor,
-            java.util.UUID projectId, ProjectMembershipStatus status, String query,
+    public ProjectMemberPage findMembers(
+            com.yumpoo.platform.identityaccess.api.CurrentActor actor,
+            java.util.UUID projectId,
+            ProjectMembershipStatus status,
+            String query,
             com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest page) {
-        var result=membershipService.findMembers(actor,projectId,
-                ProjectMembershipModels.ListStatus.valueOf(status.name()),query,page);
-        return new ProjectMemberPage(result.items().stream().map(ProjectCatalogAdapter::member).toList(),
-                result.page(),result.size(),result.totalElements(),result.totalPages());
+        var result = membershipService.findMembers(
+                actor, projectId, ProjectMembershipModels.ListStatus.valueOf(status.name()), query, page);
+        return new ProjectMemberPage(
+                result.items().stream().map(ProjectCatalogAdapter::member).toList(),
+                result.page(),
+                result.size(),
+                result.totalElements(),
+                result.totalPages());
     }
 
     @Override
-    public ProjectMemberCandidatePage findCandidates(com.yumpoo.platform.identityaccess.api.CurrentActor actor,
-            java.util.UUID projectId, String name,
+    public ProjectMemberCandidatePage findCandidates(
+            com.yumpoo.platform.identityaccess.api.CurrentActor actor,
+            java.util.UUID projectId,
+            String name,
             com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest page) {
-        var result=membershipService.findCandidates(actor,projectId,name,page);
-        return new ProjectMemberCandidatePage(result.items().stream().map(candidate ->
-                new ProjectMemberCandidate(candidate.userId(),candidate.displayName(),
-                        candidate.employmentStatus(),candidate.accountStatus(),candidate.membershipStatus(),
-                        candidate.owner(),candidate.membershipRowVersion(),candidate.membershipRowVersion()==null
-                                ? null:StrongEtag.format(candidate.membershipRowVersion()))).toList(),
-                result.page(),result.size(),result.totalElements(),result.totalPages());
-    }
-
-    @Override public ProjectMemberMutationResult add(ProjectMemberMutation mutation) {
-        var result=membershipService.add(command(mutation));
-        return new ProjectMemberMutationResult(member(result.member()),result.created());
-    }
-
-    @Override public ProjectMemberMutationResult remove(ProjectMemberMutation mutation) {
-        var result=membershipService.remove(command(mutation));
-        return new ProjectMemberMutationResult(member(result.member()),result.created());
-    }
-
-    @Override public ProjectOwnerReassignmentResult reassignOwner(ProjectOwnerReassignmentMutation mutation) {
-        var result=membershipService.reassignOwner(new ProjectMembershipModels.OwnerCommand(
-                mutation.companyId(),mutation.projectId(),mutation.expectedProjectVersion(),
-                mutation.newOwnerUserId(),mutation.actorUserId()));
-        return new ProjectOwnerReassignmentResult(snapshot(result.before()),snapshot(result.after()),
-                member(result.ownerMembership()),result.membershipAdded());
+        var result = membershipService.findCandidates(actor, projectId, name, page);
+        return new ProjectMemberCandidatePage(
+                result.items().stream()
+                        .map(candidate -> new ProjectMemberCandidate(
+                                candidate.userId(),
+                                candidate.displayName(),
+                                candidate.employmentStatus(),
+                                candidate.accountStatus(),
+                                candidate.membershipStatus(),
+                                candidate.owner(),
+                                candidate.membershipRowVersion(),
+                                candidate.membershipRowVersion() == null
+                                        ? null
+                                        : StrongEtag.format(candidate.membershipRowVersion())))
+                        .toList(),
+                result.page(),
+                result.size(),
+                result.totalElements(),
+                result.totalPages());
     }
 
     @Override
-    public java.util.List<ProjectSnapshot> findGovernedByOwner(java.util.UUID companyId,
-                                                               java.util.UUID ownerUserId) {
+    public ProjectMemberMutationResult add(ProjectMemberMutation mutation) {
+        var result = membershipService.add(command(mutation));
+        return new ProjectMemberMutationResult(member(result.member()), result.created());
+    }
+
+    @Override
+    public ProjectMemberMutationResult remove(ProjectMemberMutation mutation) {
+        var result = membershipService.remove(command(mutation));
+        return new ProjectMemberMutationResult(member(result.member()), result.created());
+    }
+
+    @Override
+    public ProjectOwnerReassignmentResult reassignOwner(ProjectOwnerReassignmentMutation mutation) {
+        var result = membershipService.reassignOwner(new ProjectMembershipModels.OwnerCommand(
+                mutation.companyId(),
+                mutation.projectId(),
+                mutation.expectedProjectVersion(),
+                mutation.newOwnerUserId(),
+                mutation.actorUserId()));
+        return new ProjectOwnerReassignmentResult(
+                snapshot(result.before()),
+                snapshot(result.after()),
+                member(result.ownerMembership()),
+                result.membershipAdded());
+    }
+
+    @Override
+    public java.util.List<ProjectSnapshot> findGovernedByOwner(java.util.UUID companyId, java.util.UUID ownerUserId) {
         return membershipService.findGovernedByOwner(companyId, ownerUserId).stream()
-                .map(ProjectCatalogAdapter::snapshot).toList();
+                .map(ProjectCatalogAdapter::snapshot)
+                .toList();
     }
 
     @Override
@@ -148,44 +193,61 @@ public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, Proje
         return membershipService.findProject(companyId, projectId).map(ProjectCatalogAdapter::snapshot);
     }
 
-    @Override public java.util.Map<java.util.UUID,ProjectSnapshot> findAll(java.util.UUID companyId,java.util.Collection<java.util.UUID> ids) {
-        return membershipService.findProjects(companyId,ids).stream().map(ProjectCatalogAdapter::snapshot)
-                .collect(java.util.stream.Collectors.toUnmodifiableMap(ProjectSnapshot::projectId,x->x));
+    @Override
+    public java.util.Map<java.util.UUID, ProjectSnapshot> findAll(
+            java.util.UUID companyId, java.util.Collection<java.util.UUID> ids) {
+        return membershipService.findProjects(companyId, ids).stream()
+                .map(ProjectCatalogAdapter::snapshot)
+                .collect(java.util.stream.Collectors.toUnmodifiableMap(ProjectSnapshot::projectId, x -> x));
     }
 
     @Override
     public ProjectSnapshot create(ProjectCreationMutation mutation) {
         return snapshot(service.create(new ProjectCreateCommand(
-                mutation.companyId(), mutation.name(),
-                mutation.description(),
-                mutation.actorUserId())));
+                mutation.companyId(), mutation.name(), mutation.description(), mutation.actorUserId())));
     }
 
     @Override
     public ProjectSnapshot lockForArchive(ProjectArchiveMutation mutation) {
-        return snapshot(lifecycleService.lockForArchive(new com.yumpoo.platform.catalog.application.project.ProjectArchiveCommand(
-                mutation.companyId(), mutation.projectId(), mutation.expectedRowVersion(),
-                mutation.actorUserId(), mutation.ownerRequired())));
+        return snapshot(lifecycleService.lockForArchive(
+                new com.yumpoo.platform.catalog.application.project.ProjectArchiveCommand(
+                        mutation.companyId(),
+                        mutation.projectId(),
+                        mutation.expectedRowVersion(),
+                        mutation.actorUserId(),
+                        mutation.ownerRequired())));
     }
 
     @Override
     public ProjectSnapshot archive(ProjectArchiveMutation mutation) {
-        return snapshot(lifecycleService.archive(new com.yumpoo.platform.catalog.application.project.ProjectArchiveCommand(
-                mutation.companyId(), mutation.projectId(), mutation.expectedRowVersion(),
-                mutation.actorUserId(), mutation.ownerRequired())));
+        return snapshot(
+                lifecycleService.archive(new com.yumpoo.platform.catalog.application.project.ProjectArchiveCommand(
+                        mutation.companyId(),
+                        mutation.projectId(),
+                        mutation.expectedRowVersion(),
+                        mutation.actorUserId(),
+                        mutation.ownerRequired())));
     }
 
     @Override
     public ProjectRestoreSnapshot lockForRestore(ProjectRestoreMutation mutation) {
-        var state = lifecycleService.lockForRestore(new com.yumpoo.platform.catalog.application.project.ProjectRestoreCommand(
-                mutation.companyId(), mutation.projectId(), mutation.expectedRowVersion(), mutation.actorUserId()));
+        var state = lifecycleService.lockForRestore(
+                new com.yumpoo.platform.catalog.application.project.ProjectRestoreCommand(
+                        mutation.companyId(),
+                        mutation.projectId(),
+                        mutation.expectedRowVersion(),
+                        mutation.actorUserId()));
         return new ProjectRestoreSnapshot(snapshot(state.project()), state.ownerMembershipActive());
     }
 
     @Override
     public ProjectSnapshot reopen(ProjectRestoreMutation mutation) {
-        return snapshot(lifecycleService.reopen(new com.yumpoo.platform.catalog.application.project.ProjectRestoreCommand(
-                mutation.companyId(), mutation.projectId(), mutation.expectedRowVersion(), mutation.actorUserId())));
+        return snapshot(
+                lifecycleService.reopen(new com.yumpoo.platform.catalog.application.project.ProjectRestoreCommand(
+                        mutation.companyId(),
+                        mutation.projectId(),
+                        mutation.expectedRowVersion(),
+                        mutation.actorUserId())));
     }
 
     @Override
@@ -195,38 +257,78 @@ public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, Proje
 
     @Override
     public ProjectSnapshot lockForEnded(ProjectEndMutation mutation) {
-        return snapshot(lifecycleService.lockForEnded(new com.yumpoo.platform.catalog.application.project.ProjectEndCommand(
-                mutation.companyId(), mutation.projectId(), mutation.expectedRowVersion(), mutation.actorUserId(), mutation.admin(), mutation.ended())));
+        return snapshot(
+                lifecycleService.lockForEnded(new com.yumpoo.platform.catalog.application.project.ProjectEndCommand(
+                        mutation.companyId(),
+                        mutation.projectId(),
+                        mutation.expectedRowVersion(),
+                        mutation.actorUserId(),
+                        mutation.admin(),
+                        mutation.ended())));
     }
 
     @Override
     public ProjectSnapshot changeEnded(ProjectEndMutation mutation) {
-        return snapshot(lifecycleService.changeEnded(new com.yumpoo.platform.catalog.application.project.ProjectEndCommand(
-                mutation.companyId(), mutation.projectId(), mutation.expectedRowVersion(), mutation.actorUserId(), mutation.admin(), mutation.ended())));
+        return snapshot(
+                lifecycleService.changeEnded(new com.yumpoo.platform.catalog.application.project.ProjectEndCommand(
+                        mutation.companyId(),
+                        mutation.projectId(),
+                        mutation.expectedRowVersion(),
+                        mutation.actorUserId(),
+                        mutation.admin(),
+                        mutation.ended())));
     }
 
     private static ProjectSnapshot snapshot(ProjectApplicationSnapshot project) {
-        return new ProjectSnapshot(project.projectId(), project.companyId(), project.workspaceId(),
-                project.code(), project.name(), project.description(),
-                project.lifecycle(), project.ownerUserId(), project.rowVersion(), project.endedAt());
+        return new ProjectSnapshot(
+                project.projectId(),
+                project.companyId(),
+                project.workspaceId(),
+                project.code(),
+                project.name(),
+                project.description(),
+                project.lifecycle(),
+                project.ownerUserId(),
+                project.rowVersion(),
+                project.endedAt());
     }
 
     private static ProjectMembershipModels.MemberCommand command(ProjectMemberMutation mutation) {
-        return new ProjectMembershipModels.MemberCommand(mutation.companyId(),mutation.projectId(),
-                mutation.userId(),mutation.expectedMembershipVersion(),mutation.actorUserId(),mutation.reason());
+        return new ProjectMembershipModels.MemberCommand(
+                mutation.companyId(),
+                mutation.projectId(),
+                mutation.userId(),
+                mutation.expectedMembershipVersion(),
+                mutation.actorUserId(),
+                mutation.reason());
     }
 
     private static ProjectMemberSnapshot member(ProjectMembershipModels.Member member) {
-        return ProjectMemberSnapshot.of(member.membershipId(),member.projectId(),member.userId(),
-                member.displayName(),member.employmentStatus(),member.accountStatus(),member.membershipStatus(),
-                member.owner(),member.joinedAt(),member.joinedByUserId(),member.removedAt(),
-                member.removedByUserId(),member.rowVersion());
+        return ProjectMemberSnapshot.of(
+                member.membershipId(),
+                member.projectId(),
+                member.userId(),
+                member.displayName(),
+                member.employmentStatus(),
+                member.accountStatus(),
+                member.membershipStatus(),
+                member.owner(),
+                member.joinedAt(),
+                member.joinedByUserId(),
+                member.removedAt(),
+                member.removedByUserId(),
+                member.rowVersion());
     }
 
     private static ProjectAccessSnapshot access(ProjectMembershipModels.Access access) {
-        return new ProjectAccessSnapshot(access.projectId(),access.companyId(),
+        return new ProjectAccessSnapshot(
+                access.projectId(),
+                access.companyId(),
                 ProjectAccessSnapshot.ProjectLifecycle.valueOf(access.lifecycle()),
-                ProjectAccessSnapshot.ActorProjectAccess.valueOf(access.actorAccess().name()),
-                access.projectVersion(),access.membershipVersion(),access.ended());
+                ProjectAccessSnapshot.ActorProjectAccess.valueOf(
+                        access.actorAccess().name()),
+                access.projectVersion(),
+                access.membershipVersion(),
+                access.ended());
     }
 }

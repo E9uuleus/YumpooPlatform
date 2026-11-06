@@ -4,9 +4,6 @@ import com.yumpoo.platform.organization.domain.CalendarDayOverride;
 import com.yumpoo.platform.organization.domain.Company;
 import com.yumpoo.platform.organization.domain.CompanyCalendar;
 import com.yumpoo.platform.organization.domain.ResolvedCalendarDay;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -16,6 +13,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Transactional(readOnly = true)
@@ -39,8 +38,7 @@ public class OrganizationQueryService {
                 company.timezone(),
                 company.weekStartDay(),
                 company.defaultWorkdayMinutes(),
-                company.rowVersion()
-        );
+                company.rowVersion());
     }
 
     public List<CalendarDayView> days(LocalDate startInclusive, LocalDate endInclusive) {
@@ -52,9 +50,8 @@ public class OrganizationQueryService {
     private List<ResolvedCalendarDay> resolvedDays(LocalDate startInclusive, LocalDate endInclusive) {
         requireRange(startInclusive, endInclusive);
         Company company = repository.current();
-        Map<LocalDate, CalendarDayOverride> overrides = overrides(
-                repository.calendarDays(company.id(), startInclusive, endInclusive)
-        );
+        Map<LocalDate, CalendarDayOverride> overrides =
+                overrides(repository.calendarDays(company.id(), startInclusive, endInclusive));
         List<ResolvedCalendarDay> result = new ArrayList<>();
         LocalDate date = startInclusive;
         while (true) {
@@ -123,8 +120,7 @@ public class OrganizationQueryService {
                 day.calendarDayRowVersion(),
                 day.note(),
                 day.configuredStandardMinutes(),
-                day.source() == null ? null : day.source().name()
-        );
+                day.source() == null ? null : day.source().name());
     }
 
     private static void requireRange(LocalDate startInclusive, LocalDate endInclusive) {
