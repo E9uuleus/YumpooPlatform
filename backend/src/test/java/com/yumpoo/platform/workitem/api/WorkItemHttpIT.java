@@ -150,9 +150,10 @@ class WorkItemHttpIT {
             {"pinnedColumnCount":0,"headerHeight":"SINGLE","rowHeight":"SINGLE","coloringRules":[],
              "defaultValues":{"assigneeUserIds":[],"statusCode":null,"priority":null,"contentId":null,"dueDateOffsetDays":null},
              "grouping":{"field":"STATUS","order":"DEFAULT","showEmpty":true,"collapsed":["STATUS:DONE"],"colors":{}},
-             "completedStatusCodes":["DONE"]}
+             "completedStatusCodes":["DONE"],"subitemPinnedColumnCount":2}
             """;
         JsonNode saved = ok(mutate("PUT", path, member, extended, "\"0\"", null));
+        assertThat(saved.path("subitemPinnedColumnCount").asInt()).isEqualTo(2);
         assertThat(saved.path("grouping").path("field").asText()).isEqualTo("STATUS");
         assertThat(saved.path("completedStatusCodes").toString()).isEqualTo("[\"DONE\"]");
         JsonNode kept = ok(mutate(
@@ -165,13 +166,14 @@ class WorkItemHttpIT {
         assertThat(kept.path("rowHeight").asText()).isEqualTo("DOUBLE");
         assertThat(kept.path("grouping")).isEqualTo(saved.path("grouping"));
         assertThat(kept.path("completedStatusCodes")).isEqualTo(saved.path("completedStatusCodes"));
+        assertThat(kept.path("subitemPinnedColumnCount").asInt()).isEqualTo(2);
         assertThat(jdbc.sql(
                                 "SELECT settings::text FROM yumpoo.work_item_table_settings WHERE project_id=:project AND user_id=:user")
                         .param("project", PROJECT_ID)
                         .param("user", member.userId())
                         .query(String.class)
                         .single())
-                .doesNotContain("grouping", "completedStatusCodes");
+                .doesNotContain("grouping", "completedStatusCodes", "subitemPinnedColumnCount");
     }
 
     @Test
@@ -179,6 +181,7 @@ class WorkItemHttpIT {
         String path = "/api/v1/me/projects/" + PROJECT_ID + "/work-item-table-settings";
         JsonNode defaults = ok(get(path, member));
         assertThat(defaults.path("pinnedColumnCount").asInt()).isZero();
+        assertThat(defaults.path("subitemPinnedColumnCount").asInt()).isZero();
         assertThat(defaults.path("rowHeight").asText()).isEqualTo("SINGLE");
         assertThat(defaults.path("coloringRules").size()).isZero();
         assertThat(defaults.path("defaultValues").path("statusCode").isNull()).isTrue();
@@ -206,6 +209,17 @@ class WorkItemHttpIT {
                                 path,
                                 member,
                                 body.replace("\"pinnedColumnCount\":2", "\"pinnedColumnCount\":51"),
+                                saved.path("etag").asText(),
+                                null)
+                        .statusCode())
+                .isEqualTo(422);
+        assertThat(mutate(
+                                "PUT",
+                                path,
+                                member,
+                                body.replace(
+                                        "\"pinnedColumnCount\":2",
+                                        "\"pinnedColumnCount\":2,\"subitemPinnedColumnCount\":51"),
                                 saved.path("etag").asText(),
                                 null)
                         .statusCode())

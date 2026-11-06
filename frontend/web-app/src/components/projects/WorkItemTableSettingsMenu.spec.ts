@@ -114,3 +114,35 @@ describe('表格设置菜单浮层边界', () => {
     expect(wrapper.emitted('retrySave')).toHaveLength(1)
   })
 })
+
+describe('固定列面板', () => {
+  it('按工作项列与子项列分组显示字段图标、列名与勾选框，并分别写入各自的固定数量', async () => {
+    const columns = [
+      { key: 'title', label: '工作项名称', width: 320 },
+      { key: 'status', label: '状态', width: 96 },
+      { key: 'priority', label: '优先级', width: 90 },
+    ]
+    const wrapper = mount(WorkItemTableSettingsMenu, { attachTo: document.body, props: {
+      settings: { ...emptyTableSettings(), pinnedColumnCount: 1, subitemPinnedColumnCount: 0 },
+      state: 'ready', saveState: 'saved', disabled: false, pinColumns: columns, pinWidthBudget: () => 0,
+      subitemPinColumns: [columns[0]!, columns[2]!, columns[1]!], subitemPinWidthBudget: () => 0, defaultsCount: 0,
+      catalog: { members: [], statuses: [], priorities: [], contents: [] }, defaultColumns: [],
+    } })
+    await wrapper.get('.table-settings-toolbar-button').trigger('click'); await flushPromises()
+    const pinItem = [...document.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]')].find(button => button.textContent?.includes('固定列'))!
+    expect(pinItem.textContent).toContain('固定列 / 1')
+    pinItem.click(); await flushPromises()
+    const groups = [...document.querySelectorAll('.table-settings-pin-group')]
+    expect(groups.map(group => group.querySelector('h4')?.textContent?.trim())).toEqual(['工作项列', '子项列'])
+    const rows = (group: Element) => [...group.querySelectorAll('.table-settings-pin-option')]
+    expect(rows(groups[0]!).map(row => row.querySelector('.table-settings-pin-option__label')?.textContent)).toEqual(['工作项名称', '状态', '优先级'])
+    expect(rows(groups[1]!).map(row => row.querySelector('.table-settings-pin-option__label')?.textContent)).toEqual(['工作项名称', '优先级', '状态'])
+    expect(rows(groups[0]!).every(row => row.querySelector('.work-item-field-glyph'))).toBe(true)
+    expect(rows(groups[0]!)[0]!.classList).toContain('table-settings-pin-option--locked')
+    const checkbox = (row: Element) => new DOMWrapper(row.querySelector<HTMLInputElement>('input[type="checkbox"]')!)
+    expect((checkbox(rows(groups[0]!)[1]!).element).checked).toBe(true)
+    await checkbox(rows(groups[1]!)[2]!).setValue(true)
+    await checkbox(rows(groups[0]!)[1]!).setValue(false)
+    expect(wrapper.emitted('update')).toEqual([[{ subitemPinnedColumnCount: 2 }], [{ pinnedColumnCount: 0 }]])
+  })
+})

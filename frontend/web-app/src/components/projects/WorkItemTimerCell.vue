@@ -1,13 +1,18 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import type { ProjectWorkItemListItem } from '@yumpoo/api-client'
-import { ElPopover } from 'element-plus'
+import { ElPopover, ElTooltip } from 'element-plus'
 import { formatTrackingDuration, observeTimer, useTimeTracker } from '../../composables/useTimeTracker'
 import TimeSessionDialog from '../timer/TimeSessionDialog.vue'
 import { timeLogPlacement, type TimeLogPlacement } from '../timer/timeLogPlacement'
+import WorkItemFieldGlyph from './WorkItemFieldGlyph.vue'
 import './workItemTimer.css'
 
-const props = defineProps<{ item: ProjectWorkItemListItem; projectId: string; disabled?: boolean }>()
+const props = defineProps<{
+  item: ProjectWorkItemListItem; projectId: string; disabled?: boolean
+  /** tag：看板卡片上的标签外观，计时按钮与记录弹窗与表格单元格相同。 */
+  variant?: 'cell' | 'tag'
+}>()
 const emit = defineEmits<{ changed: [] }>()
 async function toggle() { if (await tracker.toggle(props.item.id)) emit('changed') }
 const tracker = useTimeTracker()
@@ -60,6 +65,7 @@ const total = computed(() => {
   const entry = summary.value
   return entry ? entry.value.rollupDurationMs + (tracker.now.value - entry.at) * entry.value.rollupRunningRate : props.item.timeTracking?.rollupDurationMs ?? 0
 })
+const empty = computed(() => total.value <= 0 && !running.value)
 const durationTitle = computed(() => {
   const value = summary.value?.value ?? props.item.timeTracking
   const rollup = value?.rollupDurationMs ?? 0, allocated = value?.allocatedDurationMs ?? 0
@@ -75,15 +81,16 @@ const durationTitle = computed(() => {
     :placement="placement"
     :width="420"
     :persistent="false"
-    :show-arrow="true"
     :popper-options="{ modifiers: [{ name: 'flip', enabled: false }, { name: 'preventOverflow', options: { padding: 12, altAxis: true, tether: false } }] }"
-    popper-class="time-log-popover"
+    popper-class="work-items-popover time-log-popover"
     :popper-style="{ '--time-log-max-height': `${maxHeight}px` }"
   >
     <template #reference>
       <div
         ref="anchor"
-        class="timer-cell"
+        :class="variant === 'tag'
+          ? ['work-item-kanban-tag', 'timer-cell--tag', empty ? 'work-item-kanban-tag--placeholder' : 'work-item-kanban-tag--plain']
+          : 'timer-cell'"
         data-tour="work-item-timer"
         role="button"
         tabindex="0"
@@ -95,32 +102,49 @@ const durationTitle = computed(() => {
         @keydown.stop
         @keydown.esc="open = false"
       >
-        <button
+        <work-item-field-glyph
+          v-if="variant === 'tag' && !(tracker.timerEnabled.value || running)"
+          field="timeTracking"
+          plain
+        />
+        <el-tooltip
           v-if="tracker.timerEnabled.value || running"
-          type="button"
-          class="timer-toggle"
-          :class="{ 'is-unavailable': unavailable }"
-          :disabled="tracker.busy.value || unavailable"
-          :aria-label="running ? '暂停计时' : '开始计时'"
-          :title="running ? '暂停本人计时' : '开始本人计时'"
-          @click.stop="toggle"
-          @keydown.stop
+          :content="running ? '暂停本人计时' : '开始本人计时'"
+          placement="top"
+          :show-after="300"
+          :enterable="false"
+          :disabled="open"
         >
-          <svg
-            v-if="running"
-            viewBox="0 0 16 16"
-            aria-hidden="true"
-          ><path d="M4 3h3v10H4zM9 3h3v10H9z" /></svg>
-          <svg
-            v-else
-            viewBox="0 0 16 16"
-            aria-hidden="true"
-          ><path d="M5 2.8v10.4L13 8z" /></svg>
-        </button>
-        <span
-          class="duration"
-          :title="durationTitle"
-        >{{ formatTrackingDuration(total) }}</span>
+          <button
+            type="button"
+            class="timer-toggle"
+            :class="{ 'is-unavailable': unavailable }"
+            :disabled="tracker.busy.value || unavailable"
+            :aria-label="running ? '暂停计时' : '开始计时'"
+            @click.stop="toggle"
+            @keydown.stop
+          >
+            <svg
+              v-if="running"
+              viewBox="0 0 16 16"
+              aria-hidden="true"
+            ><path d="M4 3h3v10H4zM9 3h3v10H9z" /></svg>
+            <svg
+              v-else
+              viewBox="0 0 16 16"
+              aria-hidden="true"
+            ><path d="M5 2.8v10.4L13 8z" /></svg>
+          </button>
+        </el-tooltip>
+        <el-tooltip
+          :content="durationTitle"
+          placement="top"
+          :show-after="300"
+          :enterable="false"
+          :disabled="open"
+        >
+          <span class="duration">{{ variant === 'tag' && empty ? '时长追踪' : formatTrackingDuration(total) }}</span>
+        </el-tooltip>
       </div>
     </template>
     <TimeSessionDialog
@@ -136,7 +160,10 @@ const durationTitle = computed(() => {
 
 <style scoped>
 .timer-cell,.timer-toggle{cursor:pointer}
-.timer-toggle:hover{background:var(--el-color-primary-dark-2)}.timer-toggle:disabled{cursor:default}.timer-toggle.is-unavailable{opacity:.45}
-.timer-cell:focus-visible{outline:2px solid var(--el-color-primary);outline-offset:-2px}
+.timer-cell--tag .timer-toggle{display:grid;place-items:center;width:18px;height:18px;box-sizing:border-box;padding:3px;border:0;border-radius:4px;background:var(--yp-action-primary);color:var(--yp-on-solid)}
+.timer-cell--tag .timer-toggle svg{width:12px;height:12px;fill:currentColor}
+.timer-cell--tag .duration{font-variant-numeric:tabular-nums}
+.timer-toggle:hover{background:var(--yp-action-primary-hover)}.timer-toggle:disabled{cursor:default}.timer-toggle.is-unavailable{opacity:.45}
+.timer-cell:focus-visible{outline:2px solid var(--yp-focus-ring);outline-offset:-2px}
 :global(.time-log-popover.el-popover){padding:0;max-width:calc(100vw - 24px);box-sizing:border-box;}
 </style>

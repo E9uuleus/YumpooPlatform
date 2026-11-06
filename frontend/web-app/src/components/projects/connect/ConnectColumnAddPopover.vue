@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { ElIcon, ElInput } from 'element-plus'
-import { Connection, Hide, Search } from '@element-plus/icons-vue'
+import { Hide, Search } from '@element-plus/icons-vue'
+import WorkItemFieldGlyph from '../WorkItemFieldGlyph.vue'
 
 const props = defineProps<{ canManage: boolean; hiddenColumns: { key: string; label: string }[] }>()
 const emit = defineEmits<{ addConnectColumn: []; showColumn: [key: string] }>()
@@ -32,7 +33,7 @@ onMounted(() => { void nextTick(() => input.value?.focus()) })
           :disabled="!canManage"
           @click="emit('addConnectColumn')"
         >
-          <el-icon class="connect-column-type__icon"><connection /></el-icon>
+          <work-item-field-glyph field="connect" :size="24" />
           <span><strong>连接项目</strong><small>把工作项连接到其他项目</small></span>
         </button>
       </span>
@@ -65,7 +66,6 @@ onMounted(() => { void nextTick(() => input.value?.focus()) })
 .connect-column-type, .connect-column-center__hidden button { display: flex; width: 100%; min-height: 40px; align-items: center; gap: 10px; padding: 6px 8px; border: 0; border-radius: var(--yp-radius-sm); background: transparent; color: var(--yp-text-primary); text-align: left; cursor: pointer; }
 .connect-column-type:hover:not(:disabled), .connect-column-center__hidden button:hover { background: var(--yp-bg-hover); }
 .connect-column-type:disabled { opacity: .5; cursor: not-allowed; }
-.connect-column-type__icon { width: 24px; height: 24px; flex-shrink: 0; border-radius: 6px; background: var(--yp-label-sunset); color: var(--yp-text-inverse); }
 .connect-column-type strong { display: block; font-size: 13px; font-weight: 500; }
 .connect-column-type small { color: var(--yp-text-secondary); font-size: 12px; }
 .connect-column-center__hidden { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }

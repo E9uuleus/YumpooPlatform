@@ -35,7 +35,8 @@ export function useWorkItemGroupCreate(options: {
   field: () => GroupField | ''
   contentId: () => string | undefined
   disabledReason: (group: WorkItemGroup) => string
-  changed: () => Promise<void>
+  /** 创建（并迁移到目标状态）成功后调用，参数为最终的工作项。 */
+  changed: (created: WorkItemDetail) => Promise<void>
 }) {
   const drafts = reactive<Record<string, GroupCreateDraft>>({})
   const inputs = new Map<string, { focus: () => void }>()
@@ -94,12 +95,13 @@ export function useWorkItemGroupCreate(options: {
           workItemTransitionRequest: { toStatus, resolution: state.transition.resolution } })
       }
       ElMessage.success(`已创建 ${state.created.itemNo}`)
+      const created = state.created
       state.created = undefined
       state.request = undefined
       state.transition = undefined
       state.title = ''
       state.open = continueAdding
-      if (options.projectId() === projectId) await options.changed()
+      if (options.projectId() === projectId) await options.changed(created)
     } catch (reason) {
       state.error = state.created ? localProblem('工作项已创建，状态设置未完成。点击重试继续，不会重复创建。') : await toApiProblem(reason)
       if (!state.created && state.error.kind === 'response' && state.error.status >= 400 && state.error.status < 500 && state.error.status !== 408)

@@ -85,6 +85,7 @@ public final class WorkItemTableSettingsModels {
     /**
      * PUT 请求体。前五项保存在 jsonb 中，grouping 与 completedStatusCodes 保存在独立列，旧版本读取 jsonb 时不会遇到新字段；
      * 两者省略或为 null 时保留原值。completedStatusCodes 为 null 表示按 DONE 与 CANCELED 两类状态判定完成。
+     * subitemPinnedColumnCount 同样保存在独立列，省略或 null 时保留原值，从未保存时视为 0。
      */
     public record Write(
             Integer pinnedColumnCount,
@@ -93,9 +94,10 @@ public final class WorkItemTableSettingsModels {
             List<ColoringRule> coloringRules,
             DefaultValues defaultValues,
             Grouping grouping,
-            List<String> completedStatusCodes) {
+            List<String> completedStatusCodes,
+            Integer subitemPinnedColumnCount) {
         static Write defaults() {
-            return new Write(0, Height.SINGLE, Height.SINGLE, List.of(), DefaultValues.empty(), null, null);
+            return new Write(0, Height.SINGLE, Height.SINGLE, List.of(), DefaultValues.empty(), null, null, null);
         }
     }
 
@@ -108,6 +110,7 @@ public final class WorkItemTableSettingsModels {
             DefaultValues defaultValues,
             Grouping grouping,
             List<String> completedStatusCodes,
+            int subitemPinnedColumnCount,
             Instant updatedAt,
             String etag) {
         static View of(UUID projectId, Write settings, Instant updatedAt) {
@@ -121,6 +124,7 @@ public final class WorkItemTableSettingsModels {
                     settings.defaultValues(),
                     settings.grouping(),
                     settings.completedStatusCodes(),
+                    settings.subitemPinnedColumnCount() == null ? 0 : settings.subitemPinnedColumnCount(),
                     updatedAt,
                     StrongEtag.format(version));
         }

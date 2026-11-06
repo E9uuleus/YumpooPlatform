@@ -220,7 +220,7 @@ describe('项目工作项子表格', () => {
     wrapper.getComponent(WorkItemDueDateCell).vm.$emit('change', { dueDate: null, dueTime: null })
     expect(wrapper.emitted('dueDateChange')).toEqual([[child, { dueDate: null, dueTime: null }]])
     expect(wrapper.props('columnWidths').dueDate).toBe(140)
-    expect(wrapper.getComponent(WorkItemDueDateCell).attributes('style')).toContain('--deadline-cell-height: 34px')
+    expect(wrapper.getComponent(WorkItemDueDateCell).attributes('style')).toContain('--deadline-cell-height: calc(var(--subitem-body-row-height) - 2px)')
     wrapper.unmount()
   })
 
@@ -725,5 +725,50 @@ describe('项目工作项子表格', () => {
     wrapper.findComponent({ name: 'ElTable' }).vm.$emit('header-dragend', 164, 130, { label: '状态' })
     await flushPromises()
     expect(wrapper.emitted('headerResize')?.at(-1)).toEqual([164, 130, { label: '状态' }])
+  })
+})
+
+describe('子项表沿用主表的行高与条件着色', () => {
+  it('按主表行高设置子项行高，并按首条命中规则着色行与单元格', async () => {
+    const wrapper = mountTable([item('child-1'), { ...item('child-2'), title: '紧急修复' }])
+    await wrapper.setProps({
+      rowHeight: 56,
+      today: '2026-08-25',
+      coloringRules: [
+        { column: 'TITLE', operator: 'CONTAINS', values: ['紧急'], target: 'CELL', colorToken: WorkItemLabelColorToken.Red },
+        { column: 'CONTENT', operator: 'IS', values: ['content-1'], target: 'ROW', colorToken: WorkItemLabelColorToken.Green },
+      ] as never,
+    })
+    await flushPromises()
+    const shell = wrapper.get('.subitem-table-shell')
+    expect(shell.attributes('style')).toContain('--subitem-body-row-height: 56px')
+    expect(shell.attributes('style')).toContain('--subitem-title-lines: 2')
+    expect(shell.classes()).toContain('subitem-table-shell--multiline')
+    const rows = wrapper.findAll('tr.subitem-table-row')
+    expect(rows).toHaveLength(2)
+    expect(rows.every(row => row.classes().includes('work-item-table-row--colored'))).toBe(true)
+    expect(rows[0]!.attributes('style')).toContain('--work-item-condition-row-bg')
+    expect(rows[0]!.find('td.work-item-cell--colored').exists()).toBe(false)
+    const colored = rows[1]!.get('td.work-item-cell--colored')
+    expect(colored.attributes('style')).toContain('--work-item-condition-cell-bg')
+  })
+
+  it('未设置时保持单行高度且不着色', () => {
+    const wrapper = mountTable()
+    expect(wrapper.get('.subitem-table-shell').attributes('style')).toContain('--subitem-body-row-height: 36px')
+    expect(wrapper.find('.work-item-table-row--colored').exists()).toBe(false)
+  })
+})
+
+describe('子项表固定列', () => {
+  it('除名称列外，按传入的子项固定列冻结', async () => {
+    const wrapper = mountTable()
+    await flushPromises()
+    const fixedHeaders = () => wrapper.findAll('.el-table__header th.el-table-fixed-column--left').length
+    const before = fixedHeaders()
+    expect(before).toBe(3)
+    await wrapper.setProps({ pinnedColumnKeys: new Set(['content']) })
+    await flushPromises()
+    expect(fixedHeaders()).toBe(before + 1)
   })
 })

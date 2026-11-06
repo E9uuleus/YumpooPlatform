@@ -78,6 +78,9 @@ public class WorkItemTableSettingsService {
                 || w.pinnedColumnCount() == null
                 || w.pinnedColumnCount() < 0
                 || w.pinnedColumnCount() > MAX_PINNED_COLUMNS) throw invalid("pinnedColumnCount", "固定列数量需在 0–50 之间");
+        if (w.subitemPinnedColumnCount() != null
+                && (w.subitemPinnedColumnCount() < 0 || w.subitemPinnedColumnCount() > MAX_PINNED_COLUMNS))
+            throw invalid("subitemPinnedColumnCount", "子项表固定列数量需在 0–50 之间");
         if (w.headerHeight() == null || w.rowHeight() == null) throw invalid("rowHeight", "请选择表头高度与行高");
         if (w.coloringRules() == null || w.coloringRules().size() > MAX_RULES)
             throw invalid("coloringRules", "最多设置 20 条条件着色");
@@ -155,7 +158,8 @@ public class WorkItemTableSettingsService {
                                 g.showEmpty(),
                                 List.copyOf(g.collapsed()),
                                 Map.copyOf(g.colors())),
-                completed == null ? null : List.copyOf(completed));
+                completed == null ? null : List.copyOf(completed),
+                w.subitemPinnedColumnCount());
     }
 
     private static boolean code(String value) {

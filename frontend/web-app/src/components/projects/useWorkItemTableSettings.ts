@@ -47,6 +47,7 @@ function apply(base: TableSettings, patch: SettingsPatch): TableSettings {
   return {
     pinnedColumnCount: base.pinnedColumnCount, headerHeight: base.headerHeight, rowHeight: base.rowHeight,
     coloringRules: base.coloringRules, grouping: base.grouping, completedStatusCodes: base.completedStatusCodes,
+    subitemPinnedColumnCount: base.subitemPinnedColumnCount ?? 0,
     ...patch, defaultValues: { ...base.defaultValues, ...patch.defaultValues },
   }
 }

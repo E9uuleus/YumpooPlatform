@@ -83,3 +83,17 @@ describe('timer popover viewport changes', () => {
     expect(frames.size).toBe(0)
   })
 })
+
+describe('timer cell hover hints', () => {
+  it('uses the shared tooltip instead of native titles and hides hints while the log is open', async () => {
+    const { popover } = await setup()
+    const tooltips = wrapper.findAllComponents({ name: 'ElTooltip' })
+    expect(tooltips.map(tooltip => tooltip.props('content'))).toContain('合计 0m 0s · 本项 0m 0s · 子项 0m 0s')
+    expect(tooltips.every(tooltip => tooltip.props('showAfter') === 300 && tooltip.props('enterable') === false)).toBe(true)
+    expect(tooltips.every(tooltip => tooltip.props('disabled') === true)).toBe(true)
+    expect(wrapper.find('.timer-cell [title]').exists()).toBe(false)
+    popover.vm.$emit('update:visible', false)
+    await nextTick()
+    expect(wrapper.findAllComponents({ name: 'ElTooltip' }).every(tooltip => tooltip.props('disabled') === false)).toBe(true)
+  })
+})

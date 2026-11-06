@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { ElCheckbox, ElIcon, ElInput } from 'element-plus'
+import { ElCheckbox, ElInput } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import type { ConnectCandidateField } from '@yumpoo/api-client'
+import WorkItemFieldGlyph from '../WorkItemFieldGlyph.vue'
 import { connectSearchFields } from './connectSearchFields'
 
 const props = defineProps<{ modelValue: ConnectCandidateField[] }>()
@@ -59,10 +60,7 @@ function toggleAll() { emit('update:modelValue', all.value ? [connectSearchField
         @click.stop
         @change="toggle(field.value)"
       />
-      <span
-        class="connect-fields__icon"
-        :style="{ background: field.tone }"
-      ><el-icon><component :is="field.icon" /></el-icon></span>
+      <work-item-field-glyph :field="field.field" />
       <span>{{ field.label }}</span>
     </div>
   </div>
@@ -74,6 +72,4 @@ function toggleAll() { emit('update:modelValue', all.value ? [connectSearchField
 .connect-fields .el-input { margin-bottom: 4px; }
 .connect-fields__option { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 6px; border-radius: var(--yp-radius-sm); font-size: 13px; cursor: pointer; }
 .connect-fields__option:hover { background: var(--yp-bg-hover); }
-.connect-fields__option--all small { margin-left: auto; color: var(--yp-text-muted); font-size: 12px; }
-.connect-fields__icon { display: inline-grid; width: 20px; height: 20px; flex-shrink: 0; place-items: center; border-radius: var(--yp-radius-xs); color: var(--yp-text-inverse); font-size: 12px; }
-</style>
+.connect-fields__option--all small { margin-left: auto; color: var(--yp-text-muted); font-size: 12px; }</style>

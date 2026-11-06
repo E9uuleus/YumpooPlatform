@@ -27,7 +27,7 @@ public class JdbcWorkItemTableSettingsRepository implements WorkItemTableSetting
         this.json = json;
     }
 
-    /** settings 列只保存 V67 的字段集合，回退后的旧版本仍能按原结构读取；分组与完成定义保存在独立列。 */
+    /** settings 列只保存 V67 的字段集合，回退后的旧版本仍能按原结构读取；分组、完成定义与子项表固定列保存在独立列。 */
     private record Settings(
             Integer pinnedColumnCount,
             Height headerHeight,
@@ -38,7 +38,7 @@ public class JdbcWorkItemTableSettingsRepository implements WorkItemTableSetting
     @Override
     public Optional<Stored> find(UUID company, UUID project, UUID user) {
         return jdbc.sql("""
-            SELECT settings, grouping_settings, completed_status_codes, updated_at FROM yumpoo.work_item_table_settings
+            SELECT settings, grouping_settings, completed_status_codes, subitem_pinned_column_count, updated_at FROM yumpoo.work_item_table_settings
             WHERE company_id=:company AND project_id=:project AND user_id=:user
             """)
                 .param("company", company)
@@ -62,10 +62,11 @@ public class JdbcWorkItemTableSettingsRepository implements WorkItemTableSetting
                 : json.writeValueAsString(settings.completedStatusCodes());
         if (expectedVersion == 0)
             return jdbc.sql("""
-            INSERT INTO yumpoo.work_item_table_settings (company_id,project_id,user_id,settings,grouping_settings,completed_status_codes)
-            VALUES (:company,:project,:user,CAST(:settings AS jsonb),CAST(:grouping AS jsonb),CAST(:completed AS jsonb))
+            INSERT INTO yumpoo.work_item_table_settings
+                (company_id,project_id,user_id,settings,grouping_settings,completed_status_codes,subitem_pinned_column_count)
+            VALUES (:company,:project,:user,CAST(:settings AS jsonb),CAST(:grouping AS jsonb),CAST(:completed AS jsonb),:subitemPinned)
             ON CONFLICT (company_id,project_id,user_id) DO NOTHING
-            RETURNING settings, grouping_settings, completed_status_codes, updated_at
+            RETURNING settings, grouping_settings, completed_status_codes, subitem_pinned_column_count, updated_at
             """)
                     .param("company", company)
                     .param("project", project)
@@ -73,6 +74,7 @@ public class JdbcWorkItemTableSettingsRepository implements WorkItemTableSetting
                     .param("settings", document)
                     .param("grouping", grouping)
                     .param("completed", completed)
+                    .param("subitemPinned", settings.subitemPinnedColumnCount())
                     .query(this::map)
                     .optional();
         Instant expected = Instant.ofEpochSecond(expectedVersion / 1_000_000, (expectedVersion % 1_000_000) * 1_000);
@@ -81,9 +83,10 @@ public class JdbcWorkItemTableSettingsRepository implements WorkItemTableSetting
             SET settings=CAST(:settings AS jsonb),
                 grouping_settings=COALESCE(CAST(:grouping AS jsonb), grouping_settings),
                 completed_status_codes=COALESCE(CAST(:completed AS jsonb), completed_status_codes),
+                subitem_pinned_column_count=COALESCE(CAST(:subitemPinned AS integer), subitem_pinned_column_count),
                 updated_at=GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
             WHERE company_id=:company AND project_id=:project AND user_id=:user AND updated_at=:expected
-            RETURNING settings, grouping_settings, completed_status_codes, updated_at
+            RETURNING settings, grouping_settings, completed_status_codes, subitem_pinned_column_count, updated_at
             """)
                 .param("company", company)
                 .param("project", project)
@@ -92,6 +95,7 @@ public class JdbcWorkItemTableSettingsRepository implements WorkItemTableSetting
                 .param("settings", document)
                 .param("grouping", grouping)
                 .param("completed", completed)
+                .param("subitemPinned", settings.subitemPinnedColumnCount())
                 .query(this::map)
                 .optional();
     }
@@ -108,7 +112,8 @@ public class JdbcWorkItemTableSettingsRepository implements WorkItemTableSetting
                         settings.coloringRules(),
                         settings.defaultValues(),
                         grouping == null ? null : json.readValue(grouping, Grouping.class),
-                        completed == null ? null : List.of(json.readValue(completed, String[].class))),
+                        completed == null ? null : List.of(json.readValue(completed, String[].class)),
+                        (Integer) rs.getObject("subitem_pinned_column_count")),
                 rs.getTimestamp("updated_at").toInstant());
     }
 }

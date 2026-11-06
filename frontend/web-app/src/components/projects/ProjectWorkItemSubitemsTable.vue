@@ -45,6 +45,8 @@ import type { DueDateValue } from './workItemDueDate'
 import { workItemLabelColorValue } from './workItemLabelColors'
 import type { WorkItemConnection, WorkItemConnectionCell } from '@yumpoo/api-client'
 import type { ConnectTableColumn } from './connect/connectColumnKeys'
+import { evaluateWorkItemColoring, type WorkItemColoring } from './workItemTableSettings'
+import type { WorkItemColoringRule } from '@yumpoo/api-client'
 import ConnectTableCell from './connect/ConnectTableCell.vue'
 
 export interface ProjectWorkItemSubitemSortRule {
@@ -101,6 +103,14 @@ const props = defineProps<{
   editingCell: boolean
   selectedCellKey?: string | undefined
   beforeRemove?: ((item: ProjectWorkItemListItem) => Promise<boolean>) | undefined
+  /** 主表的行高设置（像素），子项行与主表行同高；表头与添加行保持单行。 */
+  rowHeight?: number | undefined
+  /** 主表的条件着色规则，按同样的首条命中规则作用于子项行与单元格。 */
+  coloringRules?: readonly WorkItemColoringRule[] | undefined
+  /** 企业时区的今天，YYYY-MM-DD，用于截止日期类着色规则。 */
+  today?: string | undefined
+  /** 子项表固定的列（不含始终固定的名称列）。 */
+  pinnedColumnKeys?: ReadonlySet<string> | undefined
 }>()
 
 function contentLabel(item: ProjectWorkItemListItem) {
@@ -383,21 +393,42 @@ function subitemRowElements(): HTMLTableRowElement[] {
   ) ?? [])]
 }
 
+const subitemRowHeight = computed(() => props.rowHeight ?? 36)
+const subitemTitleLines = computed(() => subitemRowHeight.value >= 76 ? 3 : subitemRowHeight.value >= 56 ? 2 : 1)
+const subitemColoring = computed(() => {
+  const rules = props.coloringRules ?? []
+  const today = props.today ?? ''
+  const result = new Map<string, WorkItemColoring>()
+  if (!rules.length) return result
+  for (const item of props.items) {
+    const coloring = evaluateWorkItemColoring(rules, item, today)
+    if (coloring) result.set(item.id, coloring)
+  }
+  return result
+})
+function subitemCellColoring(item: ProjectWorkItemListItem | undefined, column: { property?: string; columnKey?: string }): string | undefined {
+  const key = column.property ?? column.columnKey
+  return key && item ? subitemColoring.value.get(item.id)?.cells[key as keyof WorkItemColoring['cells']] : undefined
+}
+
 function subitemRowClassName({ row: item }: { row: ProjectWorkItemListItem }): string {
   return ['subitem-table-row', isDraft(item) ? 'work-item-draft-row' : '',
+    subitemColoring.value.get(item.id)?.row ? 'work-item-table-row--colored' : '',
     draggingItem.value?.id === item.id ? 'subitem-table-row--dragging' : '',
     props.selected?.(item) ? 'subitem-table-row--selected' : '',
     props.completed?.(item) ? 'work-item-table-row--completed' : ''].filter(Boolean).join(' ')
 }
 
-function subitemRowStyle({ rowIndex }: { rowIndex: number }): CSSProperties {
-  if (!draggingItem.value || rowDropIndex.value === undefined) return {}
+function subitemRowStyle({ row: item, rowIndex }: { row: ProjectWorkItemListItem; rowIndex: number }): CSSProperties {
+  const color = subitemColoring.value.get(item.id)?.row
+  const coloring: CSSProperties = color ? { '--work-item-condition-row-bg': color } as CSSProperties : {}
+  if (!draggingItem.value || rowDropIndex.value === undefined) return coloring
   const from = rowDraggingIndex.value
   const to = rowDropIndex.value
-  if (rowIndex === from) return { opacity: 0, pointerEvents: 'none' }
+  if (rowIndex === from) return { ...coloring, opacity: 0, pointerEvents: 'none' }
   const offset = from < to && rowIndex > from && rowIndex < to ? -rowDragHeight
     : from > to && rowIndex >= to && rowIndex < from ? rowDragHeight : 0
-  return { transform: `translateY(${offset}px)` }
+  return { ...coloring, transform: `translateY(${offset}px)` }
 }
 
 function resetRowDrag(): void {
@@ -732,8 +763,13 @@ function columnDragStyle(columnKey?: string): CSSProperties {
   return { transform: 'translateX(0px)' }
 }
 
-function subitemCellStyle({ column }: { column: { property?: string } }): CSSProperties {
-  return columnDragStyle(column.property)
+function subitemCellStyle({ row: item, column }: { row?: ProjectWorkItemListItem; column: { property?: string; columnKey?: string } }): CSSProperties {
+  const color = subitemCellColoring(item, column)
+  return color ? { ...columnDragStyle(column.property), '--work-item-condition-cell-bg': color } as CSSProperties : columnDragStyle(column.property)
+}
+
+function subitemCellClassName({ row: item, column }: { row: ProjectWorkItemListItem; column: { property?: string; columnKey?: string } }): string {
+  return subitemCellColoring(item, column) ? 'work-item-cell--colored' : ''
 }
 
 function subitemHeaderCellStyle({ column }: { column: { property?: string } }): CSSProperties {
@@ -884,7 +920,10 @@ onBeforeUnmount(() => {
     :style="{
       '--subitem-title-column-width': `${columnWidths.title}px`,
       '--subitem-menu-column-width': `${SUBITEM_MENU_COLUMN_WIDTH}px`,
+      '--subitem-body-row-height': `${subitemRowHeight}px`,
+      '--subitem-title-lines': subitemTitleLines,
     }"
+    :class="{ 'subitem-table-shell--multiline': subitemTitleLines > 1 }"
     :aria-label="`${parent.title} 的子项`"
     @pointerdown="onColumnPointerDown($event); onRowPointerDown($event)"
     @click.capture="onRowClickCapture"
@@ -933,6 +972,7 @@ onBeforeUnmount(() => {
         :aria-busy="loading"
         border
         :cell-style="subitemCellStyle"
+        :cell-class-name="subitemCellClassName"
         :header-cell-style="subitemHeaderCellStyle"
         @selection-change="$emit('selectionChange', parent.id, $event)"
         @header-dragend="(newWidth: number, oldWidth: number, column: { property?: string; columnKey?: string }) => $emit('headerResize', newWidth, oldWidth, column)"
@@ -978,7 +1018,7 @@ onBeforeUnmount(() => {
           :label="column.label"
           :prop="column.key"
           :width="columnWidths[column.key]"
-          :fixed="column.key === 'title'"
+          :fixed="column.key === 'title' || Boolean(pinnedColumnKeys?.has(column.key))"
           align="center"
           :class-name="columnBodyClass(column)"
           :label-class-name="columnHeaderClass(column)"
@@ -1041,7 +1081,7 @@ onBeforeUnmount(() => {
               :status-label="statusLabel(scope.row.statusCode) || '—'"
               :status-color="workflowStatuses.find(status => status.statusCode === scope.row.statusCode)?.colorToken"
             />
-            <el-popover :persistent="false" v-else-if="column.key === 'assignee'" placement="bottom" :width="360" trigger="click"
+            <el-popover :persistent="false" v-else-if="column.key === 'assignee'" placement="bottom" :width="360" trigger="click" popper-class="work-items-popover"
               :visible="openCell === scope.row.id + ':assignee'" @update:visible="setCellOpen(scope.row.id + ':assignee', $event)">
               <template #reference>
                 <button class="subitem-cell-button" :disabled="editingCell">
@@ -1055,6 +1095,7 @@ onBeforeUnmount(() => {
             </el-popover>
 
             <el-popover :persistent="Boolean(cellPopoverBusy[scope.row.id + ':status'])" v-else-if="column.key === 'status'" placement="bottom" width="auto" trigger="click"
+              popper-class="work-items-label-popover status-popover"
               :visible="openCell === scope.row.id + ':status'" @update:visible="setCellOpen(scope.row.id + ':status', $event)">
               <template #reference>
                 <button class="subitem-block-cell" :style="statusStyle(scope.row.statusCode)" :disabled="editingCell">{{ statusLabel(scope.row.statusCode) }}</button>
@@ -1075,6 +1116,7 @@ onBeforeUnmount(() => {
             </el-popover>
 
             <el-popover :persistent="Boolean(cellPopoverBusy[scope.row.id + ':priority'])" v-else-if="column.key === 'priority'" placement="bottom" width="auto" trigger="click"
+              popper-class="work-items-label-popover priority-popover"
               :visible="openCell === scope.row.id + ':priority'" @update:visible="setCellOpen(scope.row.id + ':priority', $event)">
               <template #reference>
                 <button class="subitem-block-cell" :class="`subitem-priority--${priorityPresentation(scope.row.priority).tone}`" :style="priorityStyle(scope.row.priority)" :disabled="editingCell">
@@ -1096,6 +1138,7 @@ onBeforeUnmount(() => {
             </el-popover>
 
             <el-popover :persistent="Boolean(cellPopoverBusy[scope.row.id + ':content'])" v-else-if="column.key === 'content'" placement="bottom" width="auto" trigger="click"
+              popper-class="work-items-label-popover content-popover"
               :visible="openCell === scope.row.id + ':content'" @update:visible="setCellOpen(scope.row.id + ':content', $event)">
               <template #reference>
                 <button class="subitem-content-pill" :style="labelCellStyle(contentLabel(scope.row as ProjectWorkItemListItem).colorToken)" :disabled="editingCell">
@@ -1116,7 +1159,7 @@ onBeforeUnmount(() => {
 
             <work-item-due-date-cell
               v-else-if="column.key === 'dueDate'" :item="row(scope.row)"
-              style="--deadline-cell-height: 34px"
+              style="--deadline-cell-height: calc(var(--subitem-body-row-height) - 2px)"
               :can-edit="row(scope.row).capabilities.canEditFields" :busy="editingCell"
               :clear-label="batchClearDueDateLabel(scope.row.id)"
               @change="emit('dueDateChange', row(scope.row), $event)"
@@ -1136,6 +1179,7 @@ onBeforeUnmount(() => {
         <el-table-column
           v-for="column in connectColumns ?? []"
           :key="column.key"
+          :fixed="Boolean(pinnedColumnKeys?.has(column.key))"
           :column-key="column.key"
           :prop="column.key"
           :label="column.label"
@@ -1232,6 +1276,7 @@ onBeforeUnmount(() => {
   --subitem-add-row-accent: color-mix(in srgb, var(--work-item-group-accent, rgb(87, 155, 252)) 50%, transparent);
   --subitem-table-header-height: 38px;
   --subitem-table-row-height: 36px;
+  --subitem-body-row-height: var(--subitem-table-row-height);
   --subitem-table-empty-height: 60px;
   --subitem-table-quick-height: var(--subitem-table-row-height);
   position: relative;
@@ -1337,6 +1382,11 @@ onBeforeUnmount(() => {
   flex: 0 0 var(--subitem-table-row-height);
 }
 
+.subitem-hierarchy-branch--data {
+  height: var(--subitem-body-row-height);
+  flex-basis: var(--subitem-body-row-height);
+}
+
 .subitem-hierarchy-branch::before {
   position: absolute;
   top: calc(50% - var(--subitem-hierarchy-corner-radius));
@@ -1427,11 +1477,21 @@ onBeforeUnmount(() => {
 @media (prefers-reduced-motion: reduce) {
   :deep(.monday-subitem-table .el-table__body tr.subitem-table-row) { transition: none; }
 }
-:deep(.monday-subitem-table .el-table__header tr),
-:deep(.monday-subitem-table .el-table__body tr) { height: var(--subitem-table-row-height); }
+:deep(.monday-subitem-table .el-table__header tr) { height: var(--subitem-table-row-height); }
+:deep(.monday-subitem-table .el-table__body tr) { --work-item-table-row-height: var(--subitem-body-row-height); height: var(--subitem-body-row-height); }
 :deep(.monday-subitem-table .el-table__cell) { box-sizing: border-box; height: var(--subitem-table-row-height); padding: 0; border-color: var(--yp-border-subtle); }
+:deep(.monday-subitem-table .el-table__body .el-table__cell) { height: var(--subitem-body-row-height); }
 :deep(.monday-subitem-table .cell) { padding: 0 8px; display: flex; align-items: center; justify-content: center; }
-:deep(.monday-subitem-table .el-table__body .cell) { height: 34px; }
+:deep(.monday-subitem-table .el-table__body .cell) { height: calc(var(--subitem-body-row-height) - 2px); }
+.subitem-table-shell--multiline :deep(.monday-subitem-table .work-item-title-text) {
+  display: -webkit-box;
+  width: auto;
+  line-height: 1.35;
+  white-space: normal;
+  word-break: break-word;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--subitem-title-lines);
+}
 :deep(.monday-subitem-table .el-table__body td.work-item-menu-column > .cell) {
   padding: 0;
   justify-content: flex-start;
@@ -1442,12 +1502,12 @@ onBeforeUnmount(() => {
 }
 :deep(.monday-subitem-table td.monday-column--updatedAt > .cell) {
   --work-item-updated-cell-padding: 12px;
-  height: var(--subitem-table-row-height);
+  height: var(--subitem-body-row-height);
   padding: 0;
 }
 :deep(.monday-subitem-table td.subitem-block-column > .cell),
 :deep(.monday-subitem-table td.subitem-title-column > .cell) {
-  height: var(--subitem-table-row-height);
+  height: var(--subitem-body-row-height);
   padding: 0;
 }
 .subitem-content-pill {
