@@ -6,7 +6,6 @@ interface ScrollLayoutOptions {
   tableSentinel: Ref<HTMLElement | undefined>
   embedded: Readonly<Ref<boolean>>
   detailOpen: Ref<boolean>
-  drawerWidth: Ref<number>
   selectedView: Readonly<Ref<'table' | 'kanban'>>
   grouped: Readonly<Ref<boolean>>
   groupingSwitching: Ref<boolean>
@@ -19,7 +18,7 @@ interface ScrollLayoutOptions {
 }
 
 export function useProjectTableScrollLayout({
-  tableRef, tableSentinel, embedded, detailOpen, drawerWidth, selectedView, grouped, groupingSwitching,
+  tableRef, tableSentinel, embedded, detailOpen, selectedView, grouped, groupingSwitching,
   tableLoading, tableSorting, error, loadingMoreError, tableNextCursor, loadTable,
 }: ScrollLayoutOptions) {
   const horizontalPageScrollbar = ref<HTMLElement>()
@@ -43,16 +42,6 @@ export function useProjectTableScrollLayout({
     bottom: horizontalOverflow.value ? '12px' : '0px',
     right: 'var(--yp-work-items-drawer-inset, 0px)',
   }))
-
-  function syncProjectPageScrollLayout(): void {
-    if (embedded.value) { scheduleResponsiveTableLayout(); return }
-    document.body.classList.toggle('yp-work-items-drawer-open', detailOpen.value)
-    if (detailOpen.value) {
-      document.body.style.setProperty('--yp-work-items-drawer-width', `${drawerWidth.value}px`)
-    }
-    document.body.style.setProperty('--yp-work-items-drawer-inset', detailOpen.value ? `${drawerWidth.value}px` : '0px')
-    scheduleResponsiveTableLayout()
-  }
 
   function resolveTableScrollElement(): HTMLElement | undefined {
     return tableRef.value?.$el?.querySelector<HTMLElement>('.el-scrollbar__wrap') ?? undefined
@@ -190,7 +179,7 @@ export function useProjectTableScrollLayout({
     }
   }
 
-  watch(detailOpen, syncProjectPageScrollLayout, { flush: 'post' })
+  watch(detailOpen, scheduleResponsiveTableLayout, { flush: 'post' })
   watch(tableRef, () => {
     observeProjectPageResizeTargets()
     scheduleResponsiveTableLayout()
@@ -198,7 +187,7 @@ export function useProjectTableScrollLayout({
 
   onMounted(() => {
     if (!embedded.value) document.body.classList.add('yp-project-overview-scroll')
-    syncProjectPageScrollLayout()
+    scheduleResponsiveTableLayout()
     observeProjectPageResizeTargets()
     window.addEventListener('resize', scheduleResponsiveTableLayout)
   })
@@ -207,11 +196,7 @@ export function useProjectTableScrollLayout({
     projectPageResizeObserver?.disconnect()
     window.removeEventListener('resize', scheduleResponsiveTableLayout)
     bindTableScrollElement(undefined)
-    if (!embedded.value) {
-      document.body.classList.remove('yp-project-overview-scroll', 'yp-work-items-drawer-open', 'yp-work-items-drawer-resizing')
-      document.body.style.removeProperty('--yp-work-items-drawer-width')
-      document.body.style.removeProperty('--yp-work-items-drawer-inset')
-    }
+    if (!embedded.value) document.body.classList.remove('yp-project-overview-scroll')
   })
 
   return {
