@@ -4,7 +4,8 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
-import { prepareDraft } from './prepare-release.mjs'
+import { spawnSync } from 'node:child_process'
+import { changedFiles, prepareDraft } from './prepare-release.mjs'
 import { repository, ciWorkflowPath, packageName, releaseAssetNames, requiredJobs, attestedFileNames } from './policy.mjs'
 import { packageManifest, sbomBytes } from './test-fixtures.mjs'
 
@@ -54,20 +55,20 @@ function fixture(t) {
       if (draftOrder && draftOrder[2] === sha) return { status: this.draftOrder[draftOrder[1]] ?? 'diverged' }
       if (endpoint === '/actions/workflows/m0-18-ci.yml') return { id: 42, path: ciWorkflowPath }
       if (endpoint === '/actions/runs/3001/attempts/1') return run
-      if (endpoint === `/compare/server-v2026.10.19.1...${sha}`) {
-        return {
-          commits: [
-            { sha: 'c'.repeat(40), parents: [{}], commit: { message: 'feat(timer): 支持并行计时 (TT-4)\n\nbody' } },
-            { sha: 'd'.repeat(40), parents: [{}, {}], commit: { message: "Merge pull request #9 from dev" } },
-            { sha: 'e'.repeat(40), parents: [{}], commit: { message: 'fix(web): 修复表格滚动 (#120)' } },
-          ],
-          files: [{ filename: 'backend/src/main/resources/db/migration/workitem/V79__add_note.sql', status: 'added' }],
-        }
-      }
       throw new Error(`Unexpected GitHub request: ${endpoint}`)
     },
     list(endpoint) {
       this.calls.push(endpoint)
+      if (endpoint === `/compare/${'b'.repeat(40)}...${sha}?per_page=100`) {
+        // Paged compare: commits continue on later pages, total_commits counts them all.
+        return [
+          { total_commits: 3, commits: [
+            { sha: 'c'.repeat(40), parents: [{}], commit: { message: 'feat(timer): 支持并行计时 (TT-4)\n\nbody' } },
+            { sha: 'd'.repeat(40), parents: [{}, {}], commit: { message: "Merge pull request #9 from dev" } },
+          ] },
+          { total_commits: 3, commits: [{ sha: 'e'.repeat(40), parents: [{}], commit: { message: 'fix(web): 修复表格滚动 (#120)' } }] },
+        ]
+      }
       if (endpoint === '/releases?per_page=100') return this.releases
       if (endpoint === '/git/matching-refs/tags/server-v') return this.tags
       if (endpoint.startsWith('/actions/workflows/42/runs?')) return this.runs
@@ -122,7 +123,12 @@ function fixture(t) {
     github.attestations.push({ runId: ciRun.id, attempt: ciRun.run_attempt, uploadsSoFar: github.uploads.length, label: options.label })
     if (github.attestationError) throw new Error(github.attestationError)
   }
-  const draft = (options = {}) => prepareDraft({ github, sourceCommit: sha, env, directory: fs.mkdtempSync(path.join(root, 'run-')), now, unpack, attest, log: () => {}, inventory: () => [{ file: 'workitem/V79__add_note.sql', classification: 'expand' }], ...options })
+  github.changeRanges = []
+  const changes = (base, head) => {
+    github.changeRanges.push([base, head])
+    return [{ filename: 'backend/src/main/resources/db/migration/workitem/V79__add_note.sql', status: 'added' }]
+  }
+  const draft = (options = {}) => prepareDraft({ github, sourceCommit: sha, env, directory: fs.mkdtempSync(path.join(root, 'run-')), now, unpack, attest, log: () => {}, inventory: () => [{ file: 'workitem/V79__add_note.sql', classification: 'expand' }], changes, ...options })
   return { github, draft, packageBytes }
 }
 
@@ -138,6 +144,7 @@ test('a main commit gets a numbered draft with notes and every verified asset, p
   assert.match(created.body, /### 更新内容\n\n\*\*新增\*\*\n\n- 桌面｜托盘左键直接打开快捷工时小窗口。（#121）/u)
   assert.match(created.body, /- 管理员操作：\n  - 服务端｜发布后管理员核对 Nginx 配置。（#121）/u)
   assert.match(created.body, /- 数据库迁移：`V79__add_note\.sql`（只扩展，可快速回退）/u)
+  assert.deepEqual(github.changeRanges, [['b'.repeat(40), sha]], 'changed files span the previous release commit to the source')
   assert.match(created.body, /- 回退：可用 Server Rollback 回退到 `server-v2026\.10\.19\.1`/u)
   assert.match(created.body, /- 包含 PR：#121、#120/u)
   assert.match(created.body, / {2}- #120 fix\(web\): 修复表格滚动：缺少「## 发布说明」段/u)
@@ -237,4 +244,39 @@ test('commits outside main and foreign existing assets fail closed', async t => 
   await assert.rejects(draft(), /Release asset (size|digest) mismatch/u)
   await assert.rejects(draft({ sourceCommit: 'not-a-commit' }), /Invalid source commit/u)
   await assert.rejects(draft({ env: { ...env, GITHUB_EVENT_NAME: 'pull_request' } }), /Unsupported draft trigger/u)
+})
+
+test('changed files come from the full git range, past the 300 files a compare response lists', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yumpoo-range-test-'))
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }))
+  const git = (...args) => {
+    const result = spawnSync('git', ['-c', 'user.name=test', '-c', 'user.email=test@example.invalid', ...args], { cwd: root, encoding: 'utf8' })
+    assert.equal(result.status, 0, result.stderr)
+    return result.stdout.trim()
+  }
+  const write = (file, text) => {
+    fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true })
+    fs.writeFileSync(path.join(root, file), text)
+  }
+  git('init', '-q')
+  write('kept.txt', 'v1\n')
+  write('gone.txt', 'old\n')
+  git('add', '.')
+  git('commit', '-q', '-m', 'chore: base')
+  const base = git('rev-parse', 'HEAD')
+  for (let index = 0; index < 320; index += 1) write(`bulk/f${index}.txt`, `${index}\n`)
+  write('kept.txt', 'v2\n')
+  fs.rmSync(path.join(root, 'gone.txt'))
+  write('backend/src/main/resources/db/migration/workitem/V99__说明.sql', 'SELECT 1;\n')
+  git('add', '-A')
+  git('commit', '-q', '-m', 'feat: bulk')
+  const head = git('rev-parse', 'HEAD')
+
+  const files = changedFiles(root, base, head)
+  assert.equal(files.length, 323)
+  assert.deepEqual(files.find(file => file.filename.endsWith('.sql')), { filename: 'backend/src/main/resources/db/migration/workitem/V99__说明.sql', status: 'added' })
+  assert.deepEqual(files.find(file => file.filename === 'kept.txt'), { filename: 'kept.txt', status: 'modified' })
+  assert.deepEqual(files.find(file => file.filename === 'gone.txt'), { filename: 'gone.txt', status: 'removed' })
+  assert.throws(() => changedFiles(root, 'f'.repeat(40), head), /git diff .* failed/u, 'a commit missing from a shallow checkout fails the draft')
+  assert.throws(() => changedFiles(root, 'HEAD~1', head), /full commit SHAs/u)
 })

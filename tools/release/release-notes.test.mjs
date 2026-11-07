@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { collectReleaseEntries, commitSection, desktopNotes, desktopReleaseBody, exemptPull, parseReleaseNotes, releaseNotes } from './release-notes.mjs'
+import { collectReleaseEntries, commitSection, compareCommits, desktopNotes, desktopReleaseBody, exemptPull, parseReleaseNotes, releaseNotes } from './release-notes.mjs'
 import { notifyWeCom } from './notify.mjs'
 
 const sha = 'a'.repeat(40)
@@ -100,18 +100,15 @@ const collected = {
 }
 
 test('the server body is layered: updates, upgrade impact, then release facts', () => {
-  const comparison = {
-    commits: [],
-    files: [
-      { filename: 'backend/src/main/resources/db/migration/workitem/V80__x.sql', status: 'added' },
-      { filename: 'backend/src/main/resources/db/migration/workitem/V81__y.sql', status: 'added' },
-      { filename: 'backend/src/main/resources/db/migration/workitem/V79__z.sql', status: 'modified' },
-      { filename: 'contracts/openapi/yumpoo-v1.yaml', status: 'modified' },
-      { filename: 'deployment/windows/cd/YumpooDeployment.psm1', status: 'modified' },
-    ],
-  }
+  const files = [
+    { filename: 'backend/src/main/resources/db/migration/workitem/V80__x.sql', status: 'added' },
+    { filename: 'backend/src/main/resources/db/migration/workitem/V81__y.sql', status: 'added' },
+    { filename: 'backend/src/main/resources/db/migration/workitem/V79__z.sql', status: 'modified' },
+    { filename: 'contracts/openapi/yumpoo-v1.yaml', status: 'modified' },
+    { filename: 'deployment/windows/cd/YumpooDeployment.psm1', status: 'modified' },
+  ]
   const inventory = [{ file: 'workitem/V80__x.sql', classification: 'expand' }, { file: 'workitem/V81__y.sql', classification: 'breaking' }]
-  const notes = releaseNotes({ tag: 'server-v2026.10.21.1', sourceCommit: sha, run, previousTag: 'server-v2026.10.20.2', comparison, collected, inventory })
+  const notes = releaseNotes({ tag: 'server-v2026.10.21.1', sourceCommit: sha, run, previousTag: 'server-v2026.10.20.2', files, collected, inventory })
   const order = ['## 服务端 server-v2026.10.21.1', '### 更新内容', '### 升级影响', '### 发布信息', '> 本草稿由 Prepare Release']
   assert.deepEqual(order.map(text => notes.indexOf(text)).toSorted((left, right) => left - right), order.map(text => notes.indexOf(text)))
   assert.match(notes, /新增 1 · 改进 0 · 修复 1 · 安全 0 · 需要管理员操作：是/u)
@@ -126,21 +123,28 @@ test('the server body is layered: updates, upgrade impact, then release facts', 
   assert.match(notes, /actions\/runs\/3001\/attempts\/2/u)
   assert.match(notes, /compare\/server-v2026\.10\.20\.2\.\.\.a{40}/u)
   assert.match(notes, /- 包含 PR：#165、#166、#171、#172\n- 依赖更新：1 项（#172）\n- 未提供发布说明：1 项.*\n {2}- #170 旧 PR：缺少「## 发布说明」段/u)
-  assert.doesNotMatch(notes, /截断/u)
 })
 
-test('the server body states quiet ranges, the first release and truncation', () => {
-  const quiet = releaseNotes({ tag: 'server-v2026.10.21.1', sourceCommit: sha, run, previousTag: 'server-v2026.10.20.2', comparison: { commits: [], files: [] }, collected: empty })
+test('the server body states quiet ranges and the first release', () => {
+  const quiet = releaseNotes({ tag: 'server-v2026.10.21.1', sourceCommit: sha, run, previousTag: 'server-v2026.10.20.2', files: [], collected: empty })
   assert.match(quiet, /- 本版本没有面向使用者的变更。/u)
   assert.match(quiet, /- 数据库迁移：无\n- API \/ 事件契约：无变更\n- 部署引擎：无变化\n- 管理员操作：无\n- 回退：可用 Server Rollback 回退到 `server-v2026\.10\.20\.2`/u)
   assert.match(quiet, /需要管理员操作：否/u)
-  const first = releaseNotes({ tag: 'server-v2026.10.21.1', sourceCommit: sha, run, previousTag: undefined, comparison: null, collected: empty })
+  const first = releaseNotes({ tag: 'server-v2026.10.21.1', sourceCommit: sha, run, previousTag: undefined, collected: empty })
   assert.match(first, /首个 main 发布版本，不生成逐条变更/u)
   assert.match(first, /- 上一版本：无（首个 main 发布版本）/u)
   assert.doesNotMatch(first, /对比范围/u)
-  const truncated = releaseNotes({ tag: 'server-v2026.10.21.1', sourceCommit: sha, run, previousTag: 'server-v2026.10.20.2',
-    comparison: { commits: [], files: Array.from({ length: 300 }, (_, index) => ({ filename: `f${index}`, status: 'modified' })) }, collected: empty })
-  assert.match(truncated, /截断/u)
+})
+
+test('compare commits are read across every page and an incomplete list fails the draft', async () => {
+  const commit = index => ({ sha: String(index).padStart(40, '0'), parents: [{}], commit: { message: `fix: c${index}` } })
+  const pages = [{ total_commits: 260, commits: Array.from({ length: 250 }, (_, index) => commit(index)) }, { total_commits: 260, commits: Array.from({ length: 10 }, (_, index) => commit(250 + index)) }]
+  const github = { calls: [], list(endpoint) { this.calls.push(endpoint); return pages } }
+  const commits = await compareCommits(github, 'b'.repeat(40), sha)
+  assert.equal(commits.length, 260)
+  assert.deepEqual(github.calls, [`/compare/${'b'.repeat(40)}...${sha}?per_page=100`])
+  pages.pop()
+  await assert.rejects(compareCommits(github, 'b'.repeat(40), sha), /incomplete commit list/u)
 })
 
 test('the desktop body and release.json notes keep only 桌面 entries and never show operator steps to users', () => {
