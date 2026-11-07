@@ -208,6 +208,9 @@ code {
   .module-rail__item, .module-rail__expand { height: 44px; }
   .module-rail__expand { top: -52px; }
   .module-rail__items--shifted { transform: translateY(52px); }
+  /* 44px 放不下图标、名称与告警数三行，告警数改为右上角标。 */
+  .module-rail__item { position: relative; }
+  .module-rail__item .operations-badge { position: absolute; top: 2px; right: 2px; }
 }
 
 .app-topbar {

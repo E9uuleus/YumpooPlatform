@@ -213,8 +213,8 @@ defineProps<{ variant: 'description' | 'discussion'; title: string; description:
 </template>
 
 <style scoped>
-.detail-empty { display: grid; justify-items: center; gap: 6px; padding: var(--yp-space-6) var(--yp-space-4) var(--yp-space-4); text-align: center; animation: detail-empty-rise 420ms var(--yp-ease-standard) backwards; }
-.detail-empty__art { width: 168px; height: 111px; overflow: visible; transition: transform 220ms var(--yp-ease-standard); }
+.detail-empty { display: grid; justify-items: center; gap: 6px; padding: var(--yp-space-6) var(--yp-space-4) var(--yp-space-4); text-align: center; transition: transform 220ms var(--yp-ease-standard); animation: detail-empty-rise 420ms var(--yp-ease-standard) backwards; }
+.detail-empty__art { width: 168px; height: 111px; overflow: visible; }
 .detail-empty__title { margin-top: var(--yp-space-2); color: var(--yp-text-primary); font-size: 15px; font-weight: 600; }
 .detail-empty__description { max-width: 320px; color: var(--yp-text-muted); font-size: 12px; line-height: 1.6; }
 
