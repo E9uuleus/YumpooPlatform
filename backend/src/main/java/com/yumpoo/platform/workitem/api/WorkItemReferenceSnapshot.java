@@ -13,8 +13,7 @@ public record WorkItemReferenceSnapshot(
         String title,
         String statusCode,
         String statusCategory,
-        boolean deleted
-) {
+        boolean deleted) {
     public WorkItemReferenceSnapshot {
         Objects.requireNonNull(workItemId, "workItemId must not be null");
         Objects.requireNonNull(projectId, "projectId must not be null");

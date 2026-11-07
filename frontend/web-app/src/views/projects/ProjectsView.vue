@@ -49,7 +49,7 @@ const result = ref<ProjectPage>()
 const colors = computed(() => projectColors((result.value?.items ?? []).map(item => item.id)))
 const ownerOptions = ref<ProjectOwnerOption[]>([])
 const referenceReady = ref(false)
-const activeView = ref<ProjectCatalogView>('content')
+const activeView = ref<ProjectCatalogView>('recent')
 const catalogTabs: TabItem[] = [
   { value: 'recent', label: '最近', id: 'project-recent-tab', controls: 'project-recent-panel' },
   { value: 'content', label: '内容', id: 'project-content-tab', controls: 'project-content-panel' },
@@ -230,7 +230,7 @@ function projectCreated(project: Project): void {
 }
 
 onMounted(async () => {
-  await pageLoad.track(() => Promise.all([load(), loadReferenceData()]))
+  await pageLoad.track(() => Promise.all([load(), loadReferenceData(), selectView('recent')]))
 })
 onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTimer) })
 </script>

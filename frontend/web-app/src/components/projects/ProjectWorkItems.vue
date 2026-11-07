@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import YpNotice from '../yp/YpNotice.vue'
 import { usePageLoad } from '../../brand/page-progress'
 
 import { projectWritable } from './projectStatus'
 import './workItemCompactTable.css'
+import './workItemDragPreview.css'
+import { useTableRowDrag } from './useTableRowDrag'
+import { useTableColumnDrag, type BuiltInColumnKey, type MovableColumnKey } from './useTableColumnDrag'
 import { useWorkItemEdits, type WorkItemPatchField, type WorkItemPatchValue } from './useWorkItemEdits'
 import { isWorkItemViewControl } from './workItemViewControls'
-import { vBrandLoading as vLoading } from '../../brand/loading'
 import { onTimeTrackingChanged, useTimeTracker } from '../../composables/useTimeTracker'
 import { onProjectWorkItemsChanged } from '../../composables/workItemChanges'
 import WorkItemTimerCell from './WorkItemTimerCell.vue'
@@ -23,24 +24,25 @@ import { useWorkItemBatchActions, type WorkItemSelection } from './useWorkItemBa
 import { useWorkItemCellPopover } from './useWorkItemCellPopover'
 import WorkItemBatchEditScope from './WorkItemBatchEditScope.vue'
 import { dueDateBatchEdit, workItemBatchEditScopeKey, type WorkItemBatchAssigneeMode, type WorkItemBatchEdit } from './workItemBatchEdit'
-import { workItemOrderSiblings } from './workItemOrder'
+import { moveWorkItemOrder, workItemOrderSiblings } from './workItemOrder'
 import WorkItemNameCell from './WorkItemNameCell.vue'
 import WorkItemDraftCell from './WorkItemDraftCell.vue'
 import { useWorkItemInlineCreate } from './useWorkItemInlineCreate'
 import WorkItemUpdatedCell from './WorkItemUpdatedCell.vue'
 import WorkItemTableSkeleton from './WorkItemTableSkeleton.vue'
 import WorkItemKanbanSkeleton from './WorkItemKanbanSkeleton.vue'
-import { ArrowDown, Box, Filter as FilterIcon, Hide, Plus, Search, Sort, Upload, User } from '@element-plus/icons-vue'
+import WorkItemKanbanBoard, { type KanbanBoardStatus } from './WorkItemKanbanBoard.vue'
+import WorkItemKanbanCard, { type KanbanCardField } from './WorkItemKanbanCard.vue'
+import { ArrowDown, Box, Hide, Plus, Search, Sort, Upload } from '@element-plus/icons-vue'
 import {
   HideCompletedEffect,
+  ListProjectWorkItemFilterOptionsFieldEnum,
   WorkItemViewType,
   WorkItemRelationRole,
   WorkItemRelationType,
   ProjectActorAccess,
-  ProjectLifecycle,
   ProjectMembershipStatus,
   ProjectMembershipStatusFilter,
-  ListProjectWorkItemFilterOptionsFieldEnum,
   readCsrfToken,
   type ProjectContentCatalog,
   type ProjectDetail,
@@ -56,8 +58,6 @@ import {
   ElDropdown,
   ElDropdownItem,
   ElDropdownMenu,
-  ElDrawer,
-  ElDatePicker,
   ElCheckbox,
   ElIcon,
   ElInput,
@@ -69,13 +69,16 @@ import {
   ElTable,
   ElTableColumn,
 } from 'element-plus'
-import { computed, nextTick, onBeforeUnmount, onMounted, provide, reactive, ref, watch, type CSSProperties, type DefineComponent } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, reactive, ref, watch, type CSSProperties, type ComponentPublicInstance, type DefineComponent } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter, type LocationQuery } from 'vue-router'
 import type { WorkItemTableSource } from './workItemTableSource'
 import { contentsApi, projectsApi, workItemsApi } from '../../api/client'
 import { isProblemStatus, localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
-import WorkItemDetailPanel from '../../components/collaboration/WorkItemDetailPanel.vue'
+import WorkItemCreateDialog from './WorkItemCreateDialog.vue'
+import WorkItemGroupToggle from './WorkItemGroupToggle.vue'
+import { workItemDiscussionAccess } from './workItemDiscussionAccess'
+import WorkItemDetailDrawer from './WorkItemDetailDrawer.vue'
 import WorkItemColumnHeader from './WorkItemColumnHeader.vue'
 import WorkItemColumnExpandButton from './WorkItemColumnExpandButton.vue'
 import WorkItemColumnSettingsPopover from './WorkItemColumnSettingsPopover.vue'
@@ -88,12 +91,14 @@ import WorkItemLabelPopoverContent from './WorkItemLabelPopoverContent.vue'
 import WorkItemContentPopoverContent from './WorkItemContentPopoverContent.vue'
 import WorkItemDueDateCell from './WorkItemDueDateCell.vue'
 import type { DueDateValue } from './workItemDueDate'
-import { workItemLabelColorValue } from './workItemLabelColors'
+import { useProjectTableScrollLayout } from './useProjectTableScrollLayout'
+import { useWorkItemPresentation } from './workItemPresentation'
+import WorkItemFilterPopover from './WorkItemFilterPopover.vue'
+import WorkItemAssigneeFilterPopover from './WorkItemAssigneeFilterPopover.vue'
+import { useWorkItemFilters } from './useWorkItemFilters'
 import WorkItemAssigneePicker from './WorkItemAssigneePicker.vue'
-import { workItemAssignees, workItemAssigneeIds } from './workItemAssignees'
+import { workItemAssignees } from './workItemAssignees'
 import YpAssigneeStack from '../yp/YpAssigneeStack.vue'
-import YpAssignee from '../../components/yp/YpAssignee.vue'
-import YpPriorityBadge from '../../components/yp/YpPriorityBadge.vue'
 import WorkItemGroupingPopover from './WorkItemGroupingPopover.vue'
 import WorkItemTableSettingsMenu from './WorkItemTableSettingsMenu.vue'
 import WorkItemCompletedMenu from './WorkItemCompletedMenu.vue'
@@ -106,7 +111,7 @@ import { useWorkItemGrouping, isGroupDisplayRow, type WorkItemGroupDisplayRow } 
 import { EMPTY_GROUP, type GroupField, type WorkItemGroup } from './workItemGrouping'
 import { useWorkItemGroupCreate } from './useWorkItemGroupCreate'
 import { useSession } from '../../composables/useSession'
-import { useWorkItemDueClock } from './useWorkItemDueClock'
+import { useMinuteClock } from '../../composables/useMinuteClock'
 import { apiDate, companyDate, dueDateKey } from './workItemDueDate'
 import ConnectColumnAddButton from './connect/ConnectColumnAddButton.vue'
 import ConnectTableColumnHeader from './connect/ConnectTableColumnHeader.vue'
@@ -146,8 +151,16 @@ const props = defineProps<{
   preferenceScope?: string
   source?: WorkItemTableSource
   refreshKey?: number
+  /**
+   * 我的工作内嵌：隐藏工具栏；主表、分组与子项只请求本人完成定义以外的状态，含命中子项的父项按筛选口径展开；
+   * 表格随内容增高；打开详情只抛出 openDetail，新建改为弹窗。
+   */
+  myWork?: boolean
 }>()
-const emit = defineEmits<{ changed: [] }>()
+const emit = defineEmits<{
+  changed: []
+  openDetail: [item: ProjectWorkItemListItem, tab: 'details' | 'discussion' | 'activity']
+}>()
 const embedded = computed(() => Boolean(props.embeddedProjectId))
 const pageRoute = useRoute()
 const embeddedQuery = ref<LocationQuery>({})
@@ -204,12 +217,14 @@ const quickCreating = ref(false)
 const creatingTop = ref(false)
 const importOpen = ref(false)
 const archivedOpen = ref(false)
+const createDialog = ref<{ parent?: ProjectWorkItemListItem }>()
 /** Row whose name cell opens for editing as soon as it renders: the item the toolbar button just created. */
 const autoEditId = ref('')
 const quickRow = ref<HTMLElement>()
 const quickTitleInput = ref<InstanceType<typeof ElInput>>()
 const detailOpen = ref(false)
-const detailPanel = ref<InstanceType<typeof WorkItemDetailPanel>>()
+const detailDrawer = ref<InstanceType<typeof WorkItemDetailDrawer>>()
+const detailPanel = computed(() => detailDrawer.value?.detailPanel)
 let leavingDraft: Promise<boolean> | undefined
 let detailGeneration = 0
 
@@ -237,13 +252,6 @@ const detailLoading = ref(false)
 const detail = ref<WorkItemDetail>()
 const detailTab = ref<'details' | 'discussion' | 'activity'>('details')
 const dragging = ref<ProjectWorkItemListItem>()
-const tableDragging = ref<ProjectWorkItemListItem>()
-const tableDraggingIndex = ref<number>(-1)
-const tableDropIndex = ref<number>()
-const columnDraggingKey = ref<MovableColumnKey>()
-const columnDraggingIndex = ref(-1)
-const columnDropIndex = ref<number>()
-const columnResizingKey = ref<MovableColumnKey>()
 const selectedWorkItemIds = ref(new Set<string>())
 const tableRef = ref<{
   $el: HTMLElement
@@ -252,56 +260,10 @@ const tableRef = ref<{
   toggleRowSelection: (row: ProjectWorkItemListItem, selected?: boolean) => void
 }>()
 const tableSentinel = ref<HTMLElement>()
-const horizontalPageScrollbar = ref<HTMLElement>()
-const verticalPageScrollbar = ref<HTMLElement>()
-const horizontalOverflow = ref(false)
-const horizontalScrollExtent = ref(1)
-const verticalScrollExtent = ref(1)
-const pageScrollbarLeft = ref(0)
-const pageScrollbarTop = ref(0)
-let tableDragPreview: HTMLElement | undefined
-let tableColumnDragPreview: HTMLElement | undefined
-let tableScrollElement: HTMLElement | undefined
-let pageScrollbarSyncQueued = false
-let responsiveTableLayoutFrame: number | undefined
-let projectPageResizeObserver: ResizeObserver | undefined
-let tableDragPointerOffset = { x: 0, y: 0 }
-let tableColumnDragPointerOffset = { x: 0, y: 0 }
-let tablePointerCandidate: {
-  pointerId: number
-  row: HTMLElement
-  item: ProjectWorkItemListItem
-  index: number
-  startX: number
-  startY: number
-} | undefined
-let tableColumnPointerCandidate: {
-  pointerId: number
-  key: MovableColumnKey
-  header: HTMLTableCellElement
-  headerRects: Array<{ left: number; width: number }>
-  index: number
-  startX: number
-  startY: number
-} | undefined
-let tableColumnResizeCandidate: {
-  pointerId: number
-  key: BuiltInColumnKey
-  minWidth: number
-  startWidth: number
-  startX: number
-} | undefined
-let suppressTableClick = false
-let suppressTableClickTimer: number | undefined
 const loadingMoreError = ref<ApiProblem>()
 const editingCell = ref('')
 const createDisabled = computed(() => creatingTop.value || Boolean(editingCell.value) || tableSorting.value)
 const editingNames = ref(new Set<string>())
-const assigneeSearch = ref('')
-const assigneeMatches = ref<ProjectMember[]>()
-const filterOptionCounts = ref(new Map<string, number>())
-const filterOptionsLoading = ref(false)
-let filterOptionsRequestId = 0
 const cellPopoverBusy = reactive<Record<string, boolean>>({})
 const { openCell, setCellOpen, closeCell } = useWorkItemCellPopover()
 const labelPopoverContentRefs = new Map<string, LabelPopoverContentHandle>()
@@ -313,52 +275,6 @@ const TABLE_SELECTION_COLUMN_WIDTH = 48
 const TABLE_EXPAND_COLUMN_WIDTH = 1
 const TABLE_MENU_COLUMN_WIDTH = 32
 const TABLE_ADD_COLUMN_MIN_WIDTH = 96
-const DRAWER_MIN_WIDTH = 480
-const DRAWER_VIEWPORT_GUTTER = 60
-const drawerWidth = ref(560)
-const isResizingDrawer = ref(false)
-const horizontalPageScrollbarStyle = computed<CSSProperties>(() => ({
-  left: `${pageScrollbarLeft.value}px`,
-  right: 'calc(var(--yp-work-items-drawer-inset, 0px) + 12px)',
-}))
-const verticalPageScrollbarStyle = computed<CSSProperties>(() => ({
-  top: `${pageScrollbarTop.value}px`,
-  bottom: horizontalOverflow.value ? '12px' : '0px',
-  right: 'var(--yp-work-items-drawer-inset, 0px)',
-}))
-
-function onDrawerResizePointerDown(event: PointerEvent): void {
-  event.preventDefault()
-  event.stopPropagation()
-  isResizingDrawer.value = true
-  const startX = event.clientX
-  const startWidth = drawerWidth.value
-
-  const onPointerMove = (e: PointerEvent) => {
-    const delta = startX - e.clientX
-    const maxWidth = Math.max(DRAWER_MIN_WIDTH, window.innerWidth - DRAWER_VIEWPORT_GUTTER)
-    const nextWidth = Math.max(DRAWER_MIN_WIDTH, Math.min(maxWidth, startWidth + delta))
-    if (nextWidth === drawerWidth.value) return
-    drawerWidth.value = nextWidth
-    if (!embedded.value) {
-      document.body.style.setProperty('--yp-work-items-drawer-width', `${nextWidth}px`)
-      document.body.style.setProperty('--yp-work-items-drawer-inset', `${nextWidth}px`)
-    }
-  }
-
-  const onPointerUp = () => {
-    isResizingDrawer.value = false
-    scheduleResponsiveTableLayout()
-    window.removeEventListener('pointermove', onPointerMove)
-    window.removeEventListener('pointerup', onPointerUp)
-    window.removeEventListener('pointercancel', onPointerUp)
-  }
-
-  window.addEventListener('pointermove', onPointerMove)
-  window.addEventListener('pointerup', onPointerUp)
-  window.addEventListener('pointercancel', onPointerUp)
-}
-
 function selectCell(rowId: string, cellKey: string): void {
   selectedRowId.value = rowId
   selectedCellKey.value = `${rowId}:${cellKey}`
@@ -378,155 +294,6 @@ function tableCellClassName({
   return classes.join(' ')
 }
 
-function syncProjectPageScrollLayout(): void {
-  if (embedded.value) { scheduleResponsiveTableLayout(); return }
-  document.body.classList.toggle('yp-work-items-drawer-open', detailOpen.value)
-  if (detailOpen.value) {
-    document.body.style.setProperty('--yp-work-items-drawer-width', `${drawerWidth.value}px`)
-  }
-  document.body.style.setProperty('--yp-work-items-drawer-inset', detailOpen.value ? `${drawerWidth.value}px` : '0px')
-  scheduleResponsiveTableLayout()
-}
-
-function resolveTableScrollElement(): HTMLElement | undefined {
-  return tableRef.value?.$el?.querySelector<HTMLElement>('.el-scrollbar__wrap') ?? undefined
-}
-
-function syncPageScrollbarPositions(): void {
-  if (!tableScrollElement) return
-  const horizontal = horizontalPageScrollbar.value
-  const vertical = verticalPageScrollbar.value
-  if (horizontal && Math.abs(horizontal.scrollLeft - tableScrollElement.scrollLeft) > 0.5) {
-    horizontal.scrollLeft = tableScrollElement.scrollLeft
-  }
-  if (vertical && Math.abs(vertical.scrollTop - tableScrollElement.scrollTop) > 0.5) {
-    vertical.scrollTop = tableScrollElement.scrollTop
-  }
-}
-
-function syncTableHeaderScrollPosition(): void {
-  if (!tableScrollElement) return
-  const headerWrapper = tableRef.value?.$el?.querySelector<HTMLElement>('.el-table__header-wrapper')
-  if (headerWrapper && Math.abs(headerWrapper.scrollLeft - tableScrollElement.scrollLeft) > 0.5) {
-    headerWrapper.scrollLeft = tableScrollElement.scrollLeft
-  }
-}
-
-function onTableScroll(): void {
-  syncTableHeaderScrollPosition()
-  syncPageScrollbarPositions()
-}
-
-function bindTableScrollElement(next: HTMLElement | undefined): void {
-  if (tableScrollElement === next) return
-  tableScrollElement?.removeEventListener('scroll', onTableScroll)
-  tableScrollElement = next
-  tableScrollElement?.addEventListener('scroll', onTableScroll, { passive: true })
-}
-
-function syncPageScrollbars(): void {
-  bindTableScrollElement(resolveTableScrollElement())
-  if (embedded.value) return
-
-  const contextNavigation = document.querySelector<HTMLElement>('.app-shell--workspace .context-navigation')
-  const appMain = document.querySelector<HTMLElement>('.app-shell--workspace .app-main')
-  const contextRect = contextNavigation?.getBoundingClientRect()
-  const appMainRect = appMain?.getBoundingClientRect()
-  const contextVisible = Boolean(contextNavigation && contextRect && contextRect.width > 0
-    && getComputedStyle(contextNavigation).display !== 'none')
-  pageScrollbarLeft.value = Math.max(0, Math.round(contextVisible ? contextRect!.right : (appMainRect?.left ?? 0)))
-
-  pageScrollbarTop.value = Math.max(0, Math.round(tableScrollElement?.getBoundingClientRect().top ?? 0))
-  const horizontal = horizontalPageScrollbar.value
-  const vertical = verticalPageScrollbar.value
-  if (!tableScrollElement || !horizontal || !vertical) return
-
-  const nextHorizontalOverflow = tableScrollElement.scrollWidth - tableScrollElement.clientWidth > 1
-  const horizontalOverflowChanged = horizontalOverflow.value !== nextHorizontalOverflow
-  horizontalOverflow.value = nextHorizontalOverflow
-
-  horizontalScrollExtent.value = Math.max(
-    horizontal.clientWidth,
-    horizontal.clientWidth + tableScrollElement.scrollWidth - tableScrollElement.clientWidth,
-  )
-  verticalScrollExtent.value = Math.max(
-    vertical.clientHeight,
-    vertical.clientHeight + tableScrollElement.scrollHeight - tableScrollElement.clientHeight,
-  )
-  void nextTick(syncPageScrollbarPositions)
-  if (horizontalOverflowChanged) void nextTick(schedulePageScrollbarSync)
-}
-
-function schedulePageScrollbarSync(): void {
-  if (pageScrollbarSyncQueued) return
-  pageScrollbarSyncQueued = true
-  void nextTick(() => {
-    pageScrollbarSyncQueued = false
-    syncPageScrollbars()
-    fillTableViewport()
-  })
-}
-
-function fillTableViewport(): void {
-  if (selectedView.value !== 'table' || grouped.value || groupingSwitching.value
-    || tableLoading.value || tableSorting.value || error.value || loadingMoreError.value || !tableNextCursor.value) return
-  const root = resolveTableScrollElement()?.getBoundingClientRect()
-  const end = tableSentinel.value?.getBoundingClientRect()
-  // 首批数据可能未填满视口，标记持续可见时 IntersectionObserver 不会再次通知。
-  if (root && end && root.height > 0 && end.height > 0 && end.bottom >= root.top && end.top <= root.bottom + 320)
-    void loadTable(tableNextCursor.value, true)
-}
-
-function syncResponsiveTableLayout(): void {
-  tableRef.value?.doLayout()
-  schedulePageScrollbarSync()
-}
-
-function scheduleResponsiveTableLayout(): void {
-  if (responsiveTableLayoutFrame !== undefined) return
-  responsiveTableLayoutFrame = window.requestAnimationFrame(() => {
-    responsiveTableLayoutFrame = undefined
-    syncResponsiveTableLayout()
-  })
-}
-
-function flushResponsiveTableLayout(): void {
-  if (responsiveTableLayoutFrame !== undefined) {
-    window.cancelAnimationFrame(responsiveTableLayoutFrame)
-    responsiveTableLayoutFrame = undefined
-  }
-  syncResponsiveTableLayout()
-}
-
-function observeProjectPageResizeTargets(): void {
-  projectPageResizeObserver?.disconnect()
-  if (typeof ResizeObserver === 'undefined') return
-  projectPageResizeObserver = new ResizeObserver(scheduleResponsiveTableLayout)
-  const appMain = document.querySelector<HTMLElement>('.app-shell--workspace .app-main')
-  if (appMain) projectPageResizeObserver.observe(appMain)
-  if (tableRef.value?.$el) projectPageResizeObserver.observe(tableRef.value.$el)
-  if (horizontalPageScrollbar.value) projectPageResizeObserver.observe(horizontalPageScrollbar.value)
-  if (verticalPageScrollbar.value) projectPageResizeObserver.observe(verticalPageScrollbar.value)
-}
-
-function onHorizontalPageScroll(): void {
-  if (!tableScrollElement || !horizontalPageScrollbar.value) return
-  if (Math.abs(tableScrollElement.scrollLeft - horizontalPageScrollbar.value.scrollLeft) > 0.5) {
-    tableScrollElement.scrollLeft = horizontalPageScrollbar.value.scrollLeft
-  }
-  syncTableHeaderScrollPosition()
-}
-
-function onVerticalPageScroll(): void {
-  if (!tableScrollElement || !verticalPageScrollbar.value) return
-  if (Math.abs(tableScrollElement.scrollTop - verticalPageScrollbar.value.scrollTop) > 0.5) {
-    tableScrollElement.scrollTop = verticalPageScrollbar.value.scrollTop
-  }
-}
-const filters = reactive({
-  assignees: new Set<string>(), statuses: new Set<string>(), priorities: new Set<string>(),
-  contents: new Set<string>(), dueRange: [] as Date[], updatedAfter: null as Date | null,
-})
 interface SortRule { field: string; direction: 'ASC' | 'DESC' }
 const sortRules = ref<SortRule[]>([])
 const savingSortOrder = ref(false)
@@ -538,9 +305,7 @@ onBeforeUnmount(stopTimerUpdates)
 // The desktop quick panel changes statuses and creates items in its own window.
 onBeforeUnmount(onProjectWorkItemsChanged(() => projectId.value,
   () => void (selectedView.value === 'table' ? reloadSortedTableInPlace() : refreshCurrentView())))
-type BuiltInColumnKey = 'title' | 'assignee' | 'status' | 'priority' | 'content' | 'dueDate' | 'timeTracking' | 'updatedAt'
 type ColumnKey = BuiltInColumnKey | ConnectColumnKey
-type MovableColumnKey = Exclude<BuiltInColumnKey, 'title'>
 const columns: Array<{ key: BuiltInColumnKey; label: string; defaultWidth: number; minWidth: number }> = [
   { key: 'title', label: '工作项名称', defaultWidth: 320, minWidth: 220 },
   { key: 'assignee', label: '处理人', defaultWidth: 90, minWidth: 72 },
@@ -568,9 +333,7 @@ const columnWidths = reactive<Record<BuiltInColumnKey, number>>(Object.fromEntri
 const hiddenColumns = ref(new Set<BuiltInColumnKey>())
 let loadRevision = 0
 let searchTimer: number | undefined
-let memberSearchTimer: number | undefined
 let tableObserver: IntersectionObserver | undefined
-let kanbanObserver: IntersectionObserver | undefined
 let activeController: AbortController | undefined
 
 const TABLE_PREFS_VERSION = 1
@@ -599,13 +362,6 @@ const restorableColumns = computed(() => [...columns, ...connect.columns].filter
 const collapsedColumns = ref(new Set<ColumnKey>())
 const columnSettingsKind = ref<'status' | 'priority' | 'content'>()
 const columnSettingsAnchor = ref<HTMLElement>()
-const assigneeFilterOpen = ref(false)
-const filterPopoverOpen = ref(false)
-const activeFilterCount = computed(() => filters.assignees.size + filters.statuses.size + filters.priorities.size
-  + filters.contents.size + (filters.dueRange.length ? 1 : 0) + (filters.updatedAfter ? 1 : 0))
-/** 已生效的搜索或筛选（以视图查询为准，输入中的搜索词不算）；「隐藏已完成」的隐式状态条件不算。 */
-const explicitFilterActive = computed(() => ['q', 'assignee', 'status', 'priority', 'content', 'dueFrom', 'updatedAfter']
-  .some(key => route.query[key] !== undefined))
 const groupFieldByColumn: Partial<Record<BuiltInColumnKey, GroupField>> = {
   assignee: 'ASSIGNEE', status: 'STATUS', priority: 'PRIORITY', content: 'CONTENT', dueDate: 'DUE_DATE',
 }
@@ -694,12 +450,6 @@ const PAGE_SKELETON_TOOLBAR = [104, 72, 64, 60, 56, 88]
 const skeletonColumns = computed(() => visibleColumns.value.map(item => ({ key: item.key, width: columnWidth(item.key), collapsed: isColumnCollapsed(item.key) })))
 const skeletonRowHeight = computed(() => heightOption(tableViewSettings.value.rowHeight).row)
 const hasExplicitSort = computed(() => sortRules.value.length > 0)
-const filteredMembers = computed(() => {
-  const query = assigneeSearch.value.trim().toLocaleLowerCase()
-  return query
-    ? (assigneeMatches.value ?? activeMembers.value.filter(item => item.displayName.toLocaleLowerCase().includes(query)))
-    : activeMembers.value
-})
 
 const contentsById = computed(() => new Map((catalog.value?.items ?? []).map(item => [item.id, item])))
 const activeContents = computed(() => (catalog.value?.items ?? []).filter(item => item.active))
@@ -708,7 +458,14 @@ const workflowStatuses = computed(() => [...(labelCatalog.value?.statuses ?? [])
   .map(status => ({ ...status, statusCode: status.code })))
 const priorityOptions = computed(() => [...(labelCatalog.value?.priorities ?? [])]
   .sort((left, right) => left.sortOrder - right.sortOrder))
+const { contentName, contentLabel, statusLabel, labelCellStyle, getStatusCellStyle, getPriorityCellStyle,
+  getStatusTone, getPriorityPresentation, formatDate } = useWorkItemPresentation({ contentsById, workflowStatuses, priorityOptions })
 const activeMembers = computed(() => members.value.filter(item => item.membershipStatus === ProjectMembershipStatus.Active))
+const filter = useWorkItemFilters({
+  route, projectId, searchInput, activeMembers, tableItems, tableSource, error, listRequest, syncUrl,
+  getRevision: () => loadRevision, getSignal: () => activeController?.signal ?? null,
+})
+const { filters, assigneeFilterOpen, filterPopoverOpen, explicitFilterActive, loadFilterOptions, invalidateFilterOptions, filterRequest } = filter
 const canCreate = computed(() => Boolean(project.value
   && projectWritable(project.value)
   && activeContents.value.length
@@ -732,9 +489,9 @@ const { draft: inlineDraft, rows: displayWorkItemRows, isDraft, start: createBel
   },
 })
 const session = useSession()
-const groupingClock = useWorkItemDueClock()
+const groupingClock = useMinuteClock()
 const { settings: tableViewSettings, state: tableSettingsState, update: updateTableSettings, load: reloadTableSettings,
-  saveState: tableSettingsSaveState, saveError: tableSettingsSaveError, retrySave: retrySaveTableSettings }
+  saveState: tableSettingsSaveState, saveError: tableSettingsSaveError, retrySave: retrySaveTableSettings, whenLoaded: tableSettingsLoaded }
   = useWorkItemTableSettings(() => projectId.value)
 const companyToday = computed(() => companyDate(groupingClock.value, session.authentication.value?.company.timezone ?? 'Asia/Shanghai'))
 const createDefaults = computed(() => resolveWorkItemCreateDefaults(tableViewSettings.value.defaultValues, {
@@ -758,6 +515,13 @@ const pinnedColumnKeys = computed(() => new Set<string>(pinnableColumns.value
   .slice(0, tableViewSettings.value.pinnedColumnCount).map(column => column.key)))
 const tablePinColumns = computed(() => [columnByKey.get('title')!, ...pinnableColumns.value]
   .map(column => ({ key: column.key, label: column.label, width: columnWidth(column.key) })))
+// 子项表独立冻结前 N 列：按子项列自己的顺序（内置列在前、连接列在后）。
+const subitemPinnableColumns = computed(() => [...visibleSubitemColumns.value, ...connect.visibleColumns]
+  .filter(column => column.key !== 'title' && column.key !== CONNECT_DRAFT_KEY))
+const subitemPinnedColumnKeys = computed(() => new Set<string>(subitemPinnableColumns.value
+  .slice(0, tableViewSettings.value.subitemPinnedColumnCount ?? 0).map(column => column.key)))
+const subitemPinColumns = computed(() => [columnByKey.get('title')!, ...subitemPinnableColumns.value]
+  .map(column => ({ key: column.key, label: column.label, width: columnWidth(column.key) })))
 const tableRowHeight = computed(() => heightOption(tableViewSettings.value.rowHeight).row)
 const tableHeightClasses = computed(() => [
   `monday-table--header-${tableViewSettings.value.headerHeight.toLowerCase()}`,
@@ -769,6 +533,12 @@ function tablePinWidthBudget(): number {
   return width > 0
     ? Math.max(1, width - TABLE_MENU_COLUMN_WIDTH - TABLE_EXPAND_COLUMN_WIDTH - TABLE_SELECTION_COLUMN_WIDTH - PIN_SCROLL_RESERVE)
     : 0
+}
+/** 子项表前导为 72px 菜单列与 48px 勾选列。 */
+const SUBITEM_LEAD_WIDTH = 72 + TABLE_SELECTION_COLUMN_WIDTH
+function subitemPinWidthBudget(): number {
+  const width = resolveTableScrollElement()?.clientWidth ?? 0
+  return width > 0 ? Math.max(1, width - SUBITEM_LEAD_WIDTH - PIN_SCROLL_RESERVE) : 0
 }
 watch(() => [[...pinnedColumnKeys.value].join('|'), tableViewSettings.value.headerHeight, tableViewSettings.value.rowHeight].join(':'),
   () => void nextTick(flushResponsiveTableLayout))
@@ -806,7 +576,9 @@ watch(expandedSubitemIds, ids => {
 })
 /** 筛选生效时：含命中子项的主行默认展开；其间的手动展开收起只记在这里，筛选变化时清空，不写入本机展开记录。 */
 const filterToggledIds = ref(new Set<string>())
-const expandedIds = computed(() => explicitFilterActive.value
+/** 我的工作本身就是一个筛选范围，与显式筛选一样默认展开含命中子项的父项。 */
+const filteredExpansion = computed(() => explicitFilterActive.value || Boolean(props.myWork))
+const expandedIds = computed(() => filteredExpansion.value
   ? tableItems.value.filter(item => Boolean(item.matchedSubitemCount) !== filterToggledIds.value.has(item.id)).map(item => item.id)
   : expandedSubitemIds.value)
 const visibleExpandedIds = computed(() => {
@@ -816,16 +588,28 @@ const visibleExpandedIds = computed(() => {
 watch(() => visibleExpandedIds.value.join('|'), () => visibleExpandedIds.value.forEach(id => void loadSubitems(id)))
 const { hideCompleted, hideCompletedEffect } = useHideCompleted()
 function isCompletedRow(item: ProjectWorkItemListItem): boolean {
-  return hideCompleted.value && isCompletedStatus(tableViewSettings.value.completedStatusCodes, item.statusCode, item.statusCategory)
+  return (props.myWork || hideCompleted.value) && isCompletedStatus(tableViewSettings.value.completedStatusCodes, item.statusCode, item.statusCategory)
 }
-/** 「不显示」：主表只请求本人完成定义以外的状态；看板与仪表板内嵌表格不受影响。 */
-const unfinishedStatusCodes = computed(() => !embedded.value && hideCompleted.value
-  && hideCompletedEffect.value === HideCompletedEffect.Hide
+/** 「不显示」与我的工作：主表只请求本人完成定义以外的状态；看板与仪表板内嵌表格不受影响。 */
+const unfinishedStatusCodes = computed(() => props.myWork
+  || (!embedded.value && hideCompleted.value && hideCompletedEffect.value === HideCompletedEffect.Hide)
   ? workflowStatuses.value.filter(status => !isCompletedStatus(tableViewSettings.value.completedStatusCodes,
     status.code, status.statusCategory)).map(status => status.code)
   : null)
-watch(() => unfinishedStatusCodes.value?.join(','), () => void resetCurrentData())
+watch(() => unfinishedStatusCodes.value?.join(','), () => {
+  // 我的工作首次读取标签时，loadWorkspace 正在用这些状态加载首屏及成员。
+  if (!props.myWork || !loading.value) void resetCurrentData()
+})
 const groupingSwitching = ref(false)
+const { horizontalPageScrollbar, verticalPageScrollbar, horizontalOverflow, horizontalScrollExtent, verticalScrollExtent,
+  pageScrollbarLeft, horizontalPageScrollbarStyle, verticalPageScrollbarStyle, onHorizontalPageScroll, onVerticalPageScroll,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- ProjectWorkItems.detail.spec.ts 通过组件实例同步滚动条。
+  syncPageScrollbars,
+  resolveTableScrollElement, schedulePageScrollbarSync, scheduleResponsiveTableLayout, flushResponsiveTableLayout,
+} = useProjectTableScrollLayout({
+  tableRef, tableSentinel, embedded, detailOpen, selectedView, grouped, groupingSwitching,
+  tableLoading, tableSorting, error, loadingMoreError, tableNextCursor, loadTable,
+})
 const onboardingReady = computed(() => !embedded.value && Boolean(project.value) && !loading.value && !tableLoading.value && !error.value
   && (selectedView.value === 'kanban'
     ? Object.values(lanes).every(state => !state.loading && !state.error)
@@ -880,7 +664,7 @@ const displayTableItems = computed<TableDisplayRow[]>(() => {
     add('heading'); add('columns')
     result.push(...withSubitems(rows.get(group.key) ?? [], group))
     add('load')
-    add('add')
+    if (!props.myWork) add('add')
   })
   return result
 })
@@ -962,18 +746,9 @@ async function changeGrouping(field: GroupField | ''): Promise<void> {
     await nextTick()
   } finally { groupingSwitching.value = false }
 }
-const canPublishDiscussion = computed(() => Boolean(project.value
-  && projectWritable(project.value)
-  && detail.value?.capabilities?.canDiscuss
-  && (project.value.actorAccess === ProjectActorAccess.Owner
-    || project.value.actorAccess === ProjectActorAccess.Member)))
-const discussionReadOnlyReason = computed(() => {
-  if (detail.value?.archived) return '工作项已归档，恢复后可继续编辑和讨论。'
-  if (project.value?.lifecycle === ProjectLifecycle.Archived) return 'Project 已归档，工作项讨论仅可查看。'
-  if (project.value?.endedAt) return '项目已结束，工作项讨论仅可查看。'
-  if (!canPublishDiscussion.value) return '当前角色没有发布讨论的权限。'
-  return undefined
-})
+const discussionAccess = computed(() => workItemDiscussionAccess(project.value, detail.value))
+const canPublishDiscussion = computed(() => discussionAccess.value.canPublish)
+const discussionReadOnlyReason = computed(() => discussionAccess.value.readOnlyReason)
 
 function currentBatchItem(id: string): ProjectWorkItemListItem | undefined {
   return tableItems.value.find(item => item.id === id)
@@ -1087,7 +862,8 @@ async function loadSubitems(parentId: string, force = false): Promise<void> {
       const result = await tableSource.listWorkItemSubitems({
         parentWorkItemId: parentId,
         ...filterRequest(),
-        ...(filters.statuses.size ? { status: filters.statuses } : {}),
+        ...(filters.statuses.size ? { status: filters.statuses }
+          : props.myWork && unfinishedStatusCodes.value ? { status: new Set(unfinishedStatusCodes.value) } : {}),
         ...(state.sortRules.length
           ? { sort: state.sortRules.map(rule => `${rule.field},${rule.direction}`) }
           : {}),
@@ -1113,7 +889,7 @@ function onTableExpandChange(row: TableDisplayRow,
   expanded: TableDisplayRow[] | boolean): void {
   if (isGroupDisplayRow(row)) return
   const open = Array.isArray(expanded) ? expanded.includes(row) : expanded
-  if (explicitFilterActive.value) {
+  if (filteredExpansion.value) {
     const next = new Set(filterToggledIds.value)
     if (open === Boolean(row.matchedSubitemCount)) next.delete(row.id); else next.add(row.id)
     filterToggledIds.value = next
@@ -1136,9 +912,23 @@ function setSubitemTableHandle(id: string, handle: unknown): void {
 
 async function addSubitem(row: ProjectWorkItemListItem): Promise<void> {
   if (!canCreate.value) return
+  if (props.myWork) {
+    createDialog.value = { parent: row }
+    return
+  }
   onTableExpandChange(row, true)
   await nextTick()
   subitemTableHandles.get(row.id)?.openQuick()
+}
+
+function onCreateBelow(item: ProjectWorkItemListItem): void {
+  if (props.myWork) createDialog.value = {}
+  else createBelow(item)
+}
+
+function onMyWorkCreated(parentId: string | undefined): void {
+  createDialog.value = undefined
+  void onRelationsChanged(parentId ? [parentId] : [])
 }
 
 async function beforeRowRemove(row: ProjectWorkItemListItem): Promise<boolean> {
@@ -1232,80 +1022,6 @@ function moveSubitemColumn(source: string, target: string, placement: 'before' |
   persistTablePrefs()
 }
 
-function contentName(contentId: string): string {
-  return contentsById.value.get(contentId)?.name ?? '未知类别'
-}
-
-function contentLabel(item: Pick<ProjectWorkItemListItem, 'contentId' | 'contentName' | 'contentColorToken'>) {
-  return contentsById.value.get(item.contentId) ?? { name: item.contentName, colorToken: item.contentColorToken }
-}
-
-function statusLabel(statusCode: string): string {
-  return workflowStatuses.value.find(item => item.statusCode === statusCode)?.displayName ?? statusCode
-}
-
-function labelCellStyle(colorToken?: string): CSSProperties {
-  return {
-    ...(colorToken ? { backgroundColor: workItemLabelColorValue(colorToken) } : {}),
-    color: 'var(--yp-text-inverse)',
-  }
-}
-
-function getStatusCellStyle(statusCode: string): CSSProperties {
-  return labelCellStyle(workflowStatuses.value.find(item => item.statusCode === statusCode)?.colorToken)
-}
-
-function getPriorityCellStyle(priority: string | null): CSSProperties {
-  return labelCellStyle(priorityOptions.value.find(item => item.code === priority)?.colorToken)
-}
-
-function getStatusTone(statusCode: string): string {
-  const option = workflowStatuses.value.find(item => item.statusCode === statusCode)
-  const colorTone: Record<string, string> = {
-    GREEN: 'green', TEAL: 'green', BLUE: 'blue', INDIGO: 'blue', PURPLE: 'blue',
-    MAGENTA: 'red', RED: 'red', ORANGE: 'yellow', AMBER: 'yellow', LIME: 'green',
-    CYAN: 'blue', GRAY: 'gray',
-  }
-  if (option?.colorToken) return colorTone[option.colorToken] ?? 'gray'
-  const category = option?.statusCategory
-  if (category === 'DONE') return 'green'
-  if (category === 'IN_PROGRESS') return 'yellow'
-  if (category === 'CANCELED') return 'gray'
-
-  const upper = statusCode.toUpperCase()
-  if (upper.includes('STUCK') || upper.includes('BLOCK') || upper.includes('DEFECT') || upper.includes('BUG')) {
-    return 'red'
-  }
-  if (upper.includes('REVIEW') || upper.includes('AUDIT') || upper.includes('TEST') || upper.includes('INSPECT')) {
-    return 'blue'
-  }
-  if (upper.includes('PLAN') || upper.includes('TODO') || upper.includes('BACKLOG')) {
-    return 'neutral'
-  }
-  return 'gray'
-}
-
-function getPriorityPresentation(priority: string | null): { label: string; tone: string } {
-  if (!priority) return { label: '-', tone: 'empty' }
-  const option = priorityOptions.value.find(item => item.code === priority)
-  const tokenTone: Record<string, string> = {
-    RED: 'urgent', MAGENTA: 'urgent', ORANGE: 'high', AMBER: 'high',
-    GREEN: 'low', LIME: 'low', TEAL: 'medium', CYAN: 'medium', BLUE: 'low',
-    INDIGO: 'medium', PURPLE: 'medium', GRAY: 'empty',
-  }
-  if (option) return { label: option.displayName, tone: tokenTone[option.colorToken] ?? 'empty' }
-  const upper = priority.toUpperCase()
-  if (upper === 'URGENT') return { label: '紧急', tone: 'urgent' }
-  if (upper === 'HIGH') return { label: '高', tone: 'high' }
-  if (upper === 'MEDIUM') return { label: '中', tone: 'medium' }
-  if (upper === 'LOW') return { label: '低', tone: 'low' }
-  return { label: priority, tone: 'empty' }
-}
-
-function formatDate(value: Date | string | null): string {
-  return value ? new Date(value).toISOString().slice(0, 10) : '—'
-}
-
 function queryValues(name: string): string[] {
   const value = route.query[name]
   return (Array.isArray(value) ? value : value ? String(value).split(',') : []).filter(Boolean) as string[]
@@ -1365,84 +1081,6 @@ function scheduleSearch(): void {
   searchTimer = window.setTimeout(() => void syncUrl(), 300)
 }
 
-function scheduleMemberSearch(): void {
-  if (memberSearchTimer) window.clearTimeout(memberSearchTimer)
-  const query = assigneeSearch.value.trim()
-  assigneeMatches.value = undefined
-  if (!query) return
-  const requestedProjectId = projectId.value
-  memberSearchTimer = window.setTimeout(async () => {
-    try {
-      const result = await projectsApi.listProjectMembers({
-        projectId: requestedProjectId,
-        status: ProjectMembershipStatusFilter.Active,
-        q: query,
-        page: 0,
-        size: 100,
-      }, { signal: activeController?.signal ?? null })
-      if (requestedProjectId === projectId.value && query === assigneeSearch.value.trim())
-        assigneeMatches.value = result.items
-    } catch (reason) {
-      if (!(reason instanceof DOMException && reason.name === 'AbortError'))
-        assigneeMatches.value = activeMembers.value.filter(item => item.displayName
-          .toLocaleLowerCase().includes(query.toLocaleLowerCase()))
-    }
-  }, 250)
-}
-
-function toggleSet<T>(set: Set<T>, value: T, checked: boolean): void {
-  const next = new Set(set)
-  if (checked) next.add(value); else next.delete(value)
-  if (set === filters.assignees) filters.assignees = next as Set<string>
-  else if (set === filters.statuses) filters.statuses = next as Set<string>
-  else if (set === filters.priorities) filters.priorities = next as Set<string>
-  else filters.contents = next as Set<string>
-  void syncUrl()
-}
-
-function countBy(field: 'statusCode' | 'priority' | 'contentId' | 'assigneeUserId', value: string | null): number {
-  const apiField = ({ statusCode: 'STATUS', priority: 'PRIORITY', contentId: 'CONTENT', assigneeUserId: 'ASSIGNEE' } as const)[field]
-  return filterOptionCounts.value.get(`${apiField}:${value ?? '__NULL__'}`)
-    ?? tableItems.value.filter(item => field === 'assigneeUserId' ? workItemAssigneeIds(item).includes(value ?? '') : item[field] === value).length
-}
-
-async function loadFilterOptions(): Promise<void> {
-  if (filterOptionsLoading.value) return
-  filterOptionsLoading.value = true
-  const requestId = ++filterOptionsRequestId
-  const revision = loadRevision
-  const current = () => requestId === filterOptionsRequestId && revision === loadRevision
-  const fields = [ListProjectWorkItemFilterOptionsFieldEnum.Assignee,
-    ListProjectWorkItemFilterOptionsFieldEnum.Status,
-    ListProjectWorkItemFilterOptionsFieldEnum.Priority,
-    ListProjectWorkItemFilterOptionsFieldEnum.Content]
-  try {
-    const base = listRequest(null)
-    const { view: _view, limit: _limit, ...context } = base
-    void _view; void _limit
-    /** 「不显示」的隐式状态条件只作用于表格行；状态计数仍覆盖全部状态，否则已完成状态的数量显示为空。 */
-    const { status: _implicitStatus, ...withoutStatus } = context
-    void _implicitStatus
-    const pages = await Promise.all(fields.map(field => tableSource.listProjectWorkItemFilterOptions({
-      ...(field === ListProjectWorkItemFilterOptionsFieldEnum.Status && !filters.statuses.size ? withoutStatus : context),
-      projectId: projectId.value, field, limit: 100, countSubitems: true,
-    }, { signal: activeController?.signal ?? null })))
-    const next = new Map<string, number>()
-    if (!current()) return
-    pages.forEach((page, index) => page.items.forEach(option => next.set(`${fields[index]}:${option.value}`, option.count)))
-    filterOptionCounts.value = next
-  } catch (reason) {
-    if (!current() || (reason instanceof DOMException && reason.name === 'AbortError')) return
-    const problem = await toApiProblem(reason)
-    if (current()) error.value = problem
-  } finally { if (requestId === filterOptionsRequestId) filterOptionsLoading.value = false }
-}
-
-function invalidateFilterOptions() {
-  filterOptionsRequestId++
-  filterOptionsLoading.value = false
-}
-
 async function loadMembers(requestedProjectId: string, revision: number): Promise<void> {
   const loaded: ProjectMember[] = []
   let page = 0
@@ -1460,19 +1098,6 @@ async function loadMembers(requestedProjectId: string, revision: number): Promis
     page += 1
   }
   members.value = loaded
-}
-
-/** 用户设置的搜索与筛选（不含状态）；状态由各请求按场景补上。 */
-function filterRequest() {
-  return {
-    ...(searchInput.value.trim() ? { q: searchInput.value.trim() } : {}),
-    ...(filters.priorities.size ? { priority: filters.priorities } : {}),
-    ...(filters.assignees.size ? { assigneeUserId: filters.assignees } : {}),
-    ...(filters.contents.size ? { contentId: filters.contents } : {}),
-    ...(filters.dueRange[0] ? { dueFrom: filters.dueRange[0] } : {}),
-    ...(filters.dueRange[1] ? { dueTo: filters.dueRange[1] } : {}),
-    ...(filters.updatedAfter ? { updatedAfter: filters.updatedAfter } : {}),
-  }
 }
 
 function listRequest(cursor?: string | null) {
@@ -1573,7 +1198,6 @@ async function loadLane(statusCode: string, cursor: string | null = null, revisi
     const merged = cursor ? [...state.items, ...result.items] : result.items
     state.items = [...new Map(merged.map(item => [item.id, item])).values()]
     state.nextCursor = result.nextCursor
-    await nextTick(bindKanbanSentinels)
   } catch (reason) {
     if (revision === loadRevision) state.error = await toApiProblem(reason)
   } finally {
@@ -1583,13 +1207,116 @@ async function loadLane(statusCode: string, cursor: string | null = null, revisi
 
 async function loadKanban(revision = loadRevision): Promise<void> {
   Object.keys(lanes).forEach(key => delete lanes[key])
-  await Promise.all(workflowStatuses.value.map(status => loadLane(status.statusCode, null, revision)))
-  await nextTick(bindKanbanSentinels)
+  await Promise.all([...kanbanLaneStatuses.value.map(status => loadLane(status.statusCode, null, revision)), loadKanbanCounts(revision)])
 }
 
-function bindKanbanSentinels(): void {
-  kanbanObserver?.disconnect()
-  document.querySelectorAll<HTMLElement>('.lane-cursor-sentinel').forEach(element => kanbanObserver?.observe(element))
+// 看板：卡片字段跟随「隐藏」列设置；列头数量与分组计数同源，按当前筛选统计根工作项。
+const KANBAN_CARD_FIELDS: readonly string[] = ['content', 'status', 'priority', 'dueDate', 'timeTracking']
+/** 隐藏已完成开启时（任一效果），看板不显示也不加载被本人视为已完成的状态列；仪表板内嵌看板不受影响。 */
+const kanbanLaneStatuses = computed<KanbanBoardStatus[]>(() => !embedded.value && hideCompleted.value
+  ? workflowStatuses.value.filter(status => !isCompletedStatus(tableViewSettings.value.completedStatusCodes,
+    status.statusCode, status.statusCategory))
+  : workflowStatuses.value)
+watch(() => kanbanLaneStatuses.value.map(status => status.statusCode).join('|'), () => {
+  if (selectedView.value !== 'kanban' || !project.value) return
+  kanbanLaneStatuses.value.filter(status => !lanes[status.statusCode]).forEach(status => void loadLane(status.statusCode))
+})
+const kanbanCardFields = computed(() => movableVisibleColumns.value.map(column => column.key)
+  .filter((key): key is KanbanCardField => KANBAN_CARD_FIELDS.includes(key)))
+const kanbanCounts = ref<Map<string, number>>()
+const kanbanExpandedIds = ref(new Set<string>())
+
+async function loadKanbanCounts(revision = loadRevision): Promise<void> {
+  kanbanCounts.value = undefined
+  const counts = new Map<string, number>()
+  let cursor: string | null = null
+  try {
+    do {
+      const page = await tableSource.listProjectWorkItemFilterOptions({ projectId: projectId.value, ...filterRequest(),
+        field: ListProjectWorkItemFilterOptionsFieldEnum.Status, limit: 100, ...(cursor ? { cursor } : {}) },
+      { signal: activeController?.signal ?? null })
+      if (revision !== loadRevision) return
+      page.items.forEach(option => counts.set(option.value, option.count))
+      cursor = page.nextCursor
+    } while (cursor)
+    kanbanCounts.value = new Map(workflowStatuses.value.map(status => [status.statusCode, counts.get(status.statusCode) ?? 0]))
+  } catch {
+    // 计数失败时列头退回已加载数量，不影响看板本身。
+  }
+}
+
+function loadMoreLane(statusCode: string): void {
+  const state = lane(statusCode)
+  if (state.nextCursor && !state.loading) void loadLane(statusCode, state.nextCursor)
+}
+
+function toggleKanbanSubitems(item: ProjectWorkItemListItem): void {
+  const next = new Set(kanbanExpandedIds.value)
+  if (next.has(item.id)) next.delete(item.id)
+  else { next.add(item.id); void loadSubitems(item.id) }
+  kanbanExpandedIds.value = next
+}
+
+function onKanbanSubitemCreated(parent: ProjectWorkItemListItem): void {
+  kanbanExpandedIds.value = new Set([...kanbanExpandedIds.value, parent.id])
+  onSubitemCreated(parent)
+}
+
+async function reloadLane(statusCode: string): Promise<void> {
+  await Promise.all([loadLane(statusCode), loadKanbanCounts()])
+}
+
+type LanePlacement = { edge: 'top' | 'bottom' } | { edge: 'after'; anchorId: string }
+const lanePlacements = new Map<string, LanePlacement>()
+function laneGroup(statusCode: string): WorkItemGroup {
+  return { key: statusCode, label: statusCode, color: '', count: 0, rank: 0 }
+}
+function laneCreateDisabledReason(group: WorkItemGroup): string {
+  if (!canCreate.value || !defaultContentId.value) return '当前无法添加工作项'
+  return workflowStatuses.value.some(item => item.code === group.key && item.active) ? '' : '此状态已停用'
+}
+/** 列尾新建在当前列最后一项之后；列头「+」与「在下方创建」先建「新工作项」，再进入改名。 */
+async function onLaneCreated(created: WorkItemDetail, placement: LanePlacement | undefined): Promise<void> {
+  notifyChanged()
+  const statusCode = created.statusCode
+  const state = lane(statusCode)
+  try {
+    if (placement?.edge === 'after') await moveWorkItemOrder(created, undefined, placement.anchorId, null)
+    else if (placement?.edge === 'bottom' && !state.nextCursor) {
+      const last = state.items.filter(item => item.id !== created.id).at(-1)
+      if (last) await moveWorkItemOrder(created, undefined, last.id, null)
+    }
+  } catch (reason) {
+    error.value = await toApiProblem(reason)
+  }
+  await reloadLane(statusCode)
+  if (placement?.edge === 'bottom') return
+  if (!lane(statusCode).items.some(item => item.id === created.id)) {
+    ElMessage.success(`已创建 ${created.itemNo}，当前筛选下不显示`)
+    return
+  }
+  await nextTick()
+  autoEditId.value = created.id
+}
+const laneTopCreate = useWorkItemGroupCreate({
+  defaults: () => createDefaults.value, projectId: () => projectId.value, field: () => 'STATUS',
+  contentId: () => defaultContentId.value, disabledReason: laneCreateDisabledReason,
+  changed: created => onLaneCreated(created, lanePlacements.get(`top:${created.statusCode}`)),
+})
+const laneBottomCreate = useWorkItemGroupCreate({
+  defaults: () => createDefaults.value, projectId: () => projectId.value, field: () => 'STATUS',
+  contentId: () => defaultContentId.value, disabledReason: laneCreateDisabledReason,
+  changed: created => onLaneCreated(created, { edge: 'bottom' }),
+})
+async function createInLane(statusCode: string, placement: LanePlacement): Promise<void> {
+  const group = laneGroup(statusCode)
+  const draft = laneTopCreate.draft(group)
+  if (draft.saving || laneCreateDisabledReason(group)) return
+  autoEditId.value = ''
+  draft.title = '新工作项'
+  lanePlacements.set(`top:${statusCode}`, placement)
+  await laneTopCreate.save(group)
+  if (draft.error) { error.value = draft.error; laneTopCreate.cancel(group) }
 }
 
 async function refreshCurrentView(): Promise<void> {
@@ -1623,6 +1350,7 @@ async function loadWorkspace(): Promise<void> {
       contentsApi.listProjectContents({ projectId: requestedProjectId }),
       workItemsApi.getProjectWorkItemLabels({ projectId: requestedProjectId }),
     ])
+    if (props.myWork) await tableSettingsLoaded()
     if (revision !== loadRevision) return
     project.value = nextProject
     catalog.value = nextCatalog
@@ -1862,6 +1590,10 @@ async function revealWorkItem(workItemId: string): Promise<void> {
 }
 
 async function openDetail(item: ProjectWorkItemListItem, tab: 'details' | 'discussion' | 'activity'): Promise<void> {
+  if (props.myWork) {
+    emit('openDetail', item, tab)
+    return
+  }
   if (detailOpen.value && detail.value?.id === item.id && detailTab.value === tab) return
   if (!await beforeDraftLeave()) return
   selectCell(item.id, tab === 'details' ? 'title' : tab === 'activity' ? 'updatedAt' : 'discussion')
@@ -2208,402 +1940,38 @@ async function toggleColumn(key: ColumnKey, checked: boolean): Promise<void> {
 
 const TABLE_DRAG_TILT_DEGREES = 1
 const TABLE_DRAG_POINTER_THRESHOLD = 5
-const TABLE_COLUMN_RESIZE_HANDLE_WIDTH = 8
 
-function removeTableDragPreview(): void {
-  tableDragPreview?.remove()
-  tableDragPreview = undefined
-  tableDragPointerOffset = { x: 0, y: 0 }
-}
+const {
+  removeTableDragPreview, resetTableDragState, tableRowDragStyle, clearTablePointerTracking,
+  suppressClickAfterTableDrag, onTableClickCapture, onTablePointerDown, tableDragging,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- 既有组件测试通过实例读取拖拽状态和入口。
+  moveTableDragPreview, createTableDragPreview, updateTableDropTarget,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- 既有组件测试通过实例读取拖拽状态和入口。
+  onTablePointerMove, onTablePointerUp, onTablePointerCancel,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- 既有组件测试通过实例读取拖拽状态和入口。
+  commitTableDrop, tableDraggingIndex, tableDropIndex,
+} = useTableRowDrag({
+  tableRef, tableRowHeight, tableItems, tableNextCursor, tableLoading, tableSorting, grouped, groupCountsReady, grouping,
+  inlineDraft, hasExplicitSort, sortRules, projectId, error, resolveTableScrollElement, loadTable, syncUrl, replaceLightItem,
+  TABLE_DRAG_TILT_DEGREES, TABLE_DRAG_POINTER_THRESHOLD,
+})
 
-function moveTableDragPreview(clientX: number, clientY: number): void {
-  if (!tableDragPreview || (clientX === 0 && clientY === 0)) return
-  tableDragPreview.style.left = `${Math.round(clientX - tableDragPointerOffset.x)}px`
-  tableDragPreview.style.top = `${Math.round(clientY - tableDragPointerOffset.y)}px`
-}
-
-function createTableDragPreview(source: HTMLElement, clientX: number, clientY: number): HTMLElement {
-  removeTableDragPreview()
-  const rect = source.getBoundingClientRect()
-  const width = Math.max(rect.width, source.offsetWidth, 1)
-  const height = Math.max(rect.height, source.offsetHeight, tableRowHeight.value)
-  tableDragPointerOffset = {
-    x: Math.min(Math.max(clientX - rect.left, 0), width),
-    y: Math.min(Math.max(clientY - rect.top, 0), height),
-  }
-
-  const preview = document.createElement('div')
-  preview.className = 'work-item-drag-preview'
-  preview.setAttribute('aria-hidden', 'true')
-  preview.style.width = `${width}px`
-  preview.style.height = `${height}px`
-  preview.style.transform = `rotate(${TABLE_DRAG_TILT_DEGREES}deg)`
-  preview.style.transformOrigin = `${tableDragPointerOffset.x}px ${tableDragPointerOffset.y}px`
-
-  const previewTable = document.createElement('table')
-  previewTable.className = 'work-item-drag-preview__table'
-  previewTable.style.width = `${width}px`
-  const previewBody = document.createElement('tbody')
-  const previewRow = source.cloneNode(true) as HTMLTableRowElement
-  previewRow.classList.remove('work-item-table-row--dragging')
-  previewRow.classList.add('work-item-drag-preview__row')
-  previewRow.removeAttribute('draggable')
-  previewRow.removeAttribute('style')
-  previewRow.querySelectorAll('[id]').forEach(element => element.removeAttribute('id'))
-  previewRow.querySelectorAll<HTMLElement>('button,input,select,textarea,[tabindex]').forEach(element => {
-    element.tabIndex = -1
-  })
-
-  const sourceCells = source.querySelectorAll('td')
-  const previewCells = previewRow.querySelectorAll<HTMLElement>('td')
-  sourceCells.forEach((cell, index) => {
-    const previewCell = previewCells[index]
-    if (!previewCell) return
-    const cellWidth = cell.getBoundingClientRect().width
-    previewCell.style.width = `${cellWidth}px`
-    previewCell.style.minWidth = `${cellWidth}px`
-    previewCell.style.maxWidth = `${cellWidth}px`
-    previewCell.style.boxSizing = 'border-box'
-  })
-
-  previewBody.appendChild(previewRow)
-  previewTable.appendChild(previewBody)
-  preview.appendChild(previewTable)
-  document.body.appendChild(preview)
-  tableDragPreview = preview
-  moveTableDragPreview(clientX, clientY)
-  return preview
-}
-
-function resetTableDragState(): void {
-  removeTableDragPreview()
-  tableDragging.value = undefined
-  tableDraggingIndex.value = -1
-  tableDropIndex.value = undefined
-}
-
-function removeTableColumnDragPreview(): void {
-  tableColumnDragPreview?.remove()
-  tableColumnDragPreview = undefined
-  tableColumnDragPointerOffset = { x: 0, y: 0 }
-}
-
-function moveTableColumnDragPreview(clientX: number, clientY: number): void {
-  if (!tableColumnDragPreview || (clientX === 0 && clientY === 0)) return
-  tableColumnDragPreview.style.left = `${Math.round(clientX - tableColumnDragPointerOffset.x)}px`
-  tableColumnDragPreview.style.top = `${Math.round(clientY - tableColumnDragPointerOffset.y)}px`
-}
-
-function sanitizeColumnDragPreview(root: HTMLElement): void {
-  root.removeAttribute('id')
-  root.removeAttribute('style')
-  root.querySelectorAll('[id]').forEach(element => element.removeAttribute('id'))
-  root.querySelectorAll<HTMLElement>('button,input,select,textarea,[tabindex]').forEach(element => {
-    element.tabIndex = -1
-  })
-}
-
-function createTableColumnDragPreview(header: HTMLTableCellElement, clientX: number, clientY: number): HTMLElement {
-  removeTableColumnDragPreview()
-  const headerRect = header.getBoundingClientRect()
-  const width = Math.max(headerRect.width, header.offsetWidth, 1)
-  const tableRect = tableRef.value?.$el?.getBoundingClientRect()
-  const height = Math.max(headerRect.height, Math.min(tableRect?.height ?? 420, window.innerHeight - 24))
-  tableColumnDragPointerOffset = {
-    x: Math.min(Math.max(clientX - headerRect.left, 0), width),
-    y: Math.min(Math.max(clientY - headerRect.top, 0), height),
-  }
-
-  const preview = document.createElement('div')
-  preview.className = 'work-item-column-drag-preview'
-  preview.setAttribute('aria-hidden', 'true')
-  preview.style.width = `${width}px`
-  preview.style.height = `${height}px`
-  preview.style.transform = `rotate(${TABLE_DRAG_TILT_DEGREES}deg)`
-  preview.style.transformOrigin = `${tableColumnDragPointerOffset.x}px ${tableColumnDragPointerOffset.y}px`
-
-  const previewTable = document.createElement('table')
-  previewTable.className = 'work-item-column-drag-preview__table'
-  previewTable.style.width = `${width}px`
-  const previewHead = document.createElement('thead')
-  const previewHeadRow = document.createElement('tr')
-  const previewHeader = header.cloneNode(true) as HTMLTableCellElement
-  sanitizeColumnDragPreview(previewHeader)
-  previewHeader.classList.add('work-item-column-drag-preview__header')
-  previewHeader.style.width = `${width}px`
-  previewHeadRow.appendChild(previewHeader)
-  previewHead.appendChild(previewHeadRow)
-  previewTable.appendChild(previewHead)
-
-  const headerIndex = header.parentElement ? [...header.parentElement.children].indexOf(header) : -1
-  const previewBody = document.createElement('tbody')
-  const sourceRows = tableRef.value?.$el?.querySelectorAll<HTMLTableRowElement>(
-    '.el-table__body-wrapper tbody tr.work-item-table-row',
-  ) ?? []
-  sourceRows.forEach(sourceRow => {
-    const sourceCell = sourceRow.children[headerIndex]
-    if (!(sourceCell instanceof HTMLTableCellElement)) return
-    const previewRow = document.createElement('tr')
-    const previewCell = sourceCell.cloneNode(true) as HTMLTableCellElement
-    sanitizeColumnDragPreview(previewCell)
-    previewCell.classList.add('work-item-column-drag-preview__cell')
-    previewCell.style.width = `${width}px`
-    previewRow.appendChild(previewCell)
-    previewBody.appendChild(previewRow)
-  })
-  previewTable.appendChild(previewBody)
-  preview.appendChild(previewTable)
-  document.body.appendChild(preview)
-  tableColumnDragPreview = preview
-  moveTableColumnDragPreview(clientX, clientY)
-  return preview
-}
-
-function resetTableColumnDragState(): void {
-  removeTableColumnDragPreview()
-  columnDraggingKey.value = undefined
-  columnDraggingIndex.value = -1
-  columnDropIndex.value = undefined
-}
-
-function tableColumnDragStyle(columnKey?: string): CSSProperties {
-  const draggedKey = columnDraggingKey.value
-  const dropIndex = columnDropIndex.value
-  const from = columnDraggingIndex.value
-  if (!draggedKey || dropIndex === undefined || from < 0 || !columnKey || columnKey === 'title') return {}
-  const index = movableVisibleColumns.value.findIndex(column => column.key === columnKey)
-  if (index < 0) return {}
-  if (columnKey === draggedKey) return { opacity: 0, pointerEvents: 'none' }
-
-  const draggedWidth = tableColumnPointerCandidate?.headerRects[from]?.width || columnWidths[draggedKey]
-  if (from < dropIndex && index > from && index < dropIndex) {
-    return { transform: `translateX(-${draggedWidth}px)` }
-  }
-  if (from > dropIndex && index >= dropIndex && index < from) {
-    return { transform: `translateX(${draggedWidth}px)` }
-  }
-  return { transform: 'translateX(0px)' }
-}
-
-function tableCellStyle({ row, column }: { row: TableDisplayRow; column: { property?: string; columnKey?: string } }): CSSProperties {
-  const style = tableColumnDragStyle(column.property)
-  const color = cellColoring(row, column)
-  return color ? { ...style, '--work-item-condition-cell-bg': color } : style
-}
-
-function tableHeaderCellStyle({ column }: { column: { property?: string } }): CSSProperties {
-  return tableColumnDragStyle(column.property)
-}
-
-function movableHeaderCells(source?: HTMLTableCellElement): HTMLTableCellElement[] {
-  if (grouped.value) {
-    const row = source?.parentElement ?? tableRef.value?.$el?.querySelector('.work-item-group-columns:not(.work-item-group-collapsed)')
-    return [...(row?.querySelectorAll<HTMLTableCellElement>('td.monday-movable-column-header') ?? [])]
-  }
-  return [...(tableRef.value?.$el?.querySelectorAll<HTMLTableCellElement>(
-    ':scope > .el-table__inner-wrapper > .el-table__header-wrapper th.monday-movable-column-header',
-  ) ?? [])]
-}
-
-function updateTableColumnDropTarget(clientX: number): void {
-  const headerRects = tableColumnPointerCandidate?.headerRects ?? movableHeaderCells().map(header => {
-    const rect = header.getBoundingClientRect()
-    return { left: rect.left, width: rect.width }
-  })
-  let target = headerRects.findIndex(rect => clientX < rect.left + rect.width / 2)
-  if (target < 0) target = headerRects.length
-  columnDropIndex.value = target
-}
-
-function clearTableColumnPointerTracking(): void {
-  tableColumnPointerCandidate = undefined
-  window.removeEventListener('pointermove', onTableColumnPointerMove, true)
-  window.removeEventListener('pointerup', onTableColumnPointerUp, true)
-  window.removeEventListener('pointercancel', onTableColumnPointerCancel, true)
-}
-
-function clearTableColumnResizeTracking(): void {
-  tableColumnResizeCandidate = undefined
-  columnResizingKey.value = undefined
-  window.removeEventListener('pointermove', onTableColumnResizePointerMove, true)
-  window.removeEventListener('pointerup', onTableColumnResizePointerUp, true)
-  window.removeEventListener('pointercancel', onTableColumnResizePointerCancel, true)
-  document.body.style.removeProperty('cursor')
-  document.body.style.removeProperty('user-select')
-}
-
-function applyTableColumnResize(clientX: number): void {
-  const candidate = tableColumnResizeCandidate
-  if (!candidate) return
-  const nextWidth = Math.max(
-    candidate.minWidth,
-    Math.round(candidate.startWidth + clientX - candidate.startX),
-  )
-  if (columnWidths[candidate.key] === nextWidth) return
-  columnWidths[candidate.key] = nextWidth
-  scheduleResponsiveTableLayout()
-}
-
-function onTableColumnResizePointerDown(event: PointerEvent, handle: HTMLElement): void {
-  const columnKey = handle.dataset.columnKey as BuiltInColumnKey | undefined
-  const config = columnKey ? columnByKey.get(columnKey) : undefined
-  const header = handle.closest<HTMLTableCellElement>(grouped.value ? '.work-item-group-column-header' : '.monday-movable-column-header')
-  if (!columnKey || !config || (columnKey === 'title' && !grouped.value) || !header) return
-  const key = columnKey
-
-  clearTableColumnPointerTracking()
-  clearTableColumnResizeTracking()
-  const renderedWidth = header.getBoundingClientRect().width
-  tableColumnResizeCandidate = {
-    pointerId: event.pointerId,
-    key,
-    minWidth: config.minWidth,
-    startWidth: renderedWidth > 0 ? renderedWidth : columnWidths[key],
-    startX: event.clientX,
-  }
-  if (key !== 'title') columnResizingKey.value = key
-  event.preventDefault()
-  event.stopPropagation()
-  document.body.style.cursor = 'col-resize'
-  document.body.style.userSelect = 'none'
-  window.addEventListener('pointermove', onTableColumnResizePointerMove, { capture: true, passive: false })
-  window.addEventListener('pointerup', onTableColumnResizePointerUp, true)
-  window.addEventListener('pointercancel', onTableColumnResizePointerCancel, true)
-}
-
-function onTableColumnResizePointerMove(event: PointerEvent): void {
-  if (!tableColumnResizeCandidate || tableColumnResizeCandidate.pointerId !== event.pointerId) return
-  event.preventDefault()
-  event.stopPropagation()
-  applyTableColumnResize(event.clientX)
-}
-
-function onTableColumnResizePointerUp(event: PointerEvent): void {
-  if (!tableColumnResizeCandidate || tableColumnResizeCandidate.pointerId !== event.pointerId) return
-  event.preventDefault()
-  event.stopPropagation()
-  applyTableColumnResize(event.clientX)
-  clearTableColumnResizeTracking()
-  void nextTick(flushResponsiveTableLayout)
-  persistTablePrefs()
-  suppressClickAfterTableDrag()
-}
-
-function onTableColumnResizePointerCancel(event: PointerEvent): void {
-  if (!tableColumnResizeCandidate || tableColumnResizeCandidate.pointerId !== event.pointerId) return
-  clearTableColumnResizeTracking()
-  void nextTick(flushResponsiveTableLayout)
-  persistTablePrefs()
-  suppressClickAfterTableDrag()
-}
-
-function onTableColumnPointerDown(event: PointerEvent): void {
-  if (!event.isPrimary || event.button !== 0 || tableDragging.value || columnDraggingKey.value || columnResizingKey.value) return
-  const target = event.target as HTMLElement | null
-  const resizeHandle = target?.closest<HTMLElement>('.monday-column-resize-handle')
-  if (resizeHandle) {
-    onTableColumnResizePointerDown(event, resizeHandle)
-    return
-  }
-  if (target?.closest('.sort-by-column, .work-item-column-menu, .work-item-column-expand')) return
-  const header = target?.closest<HTMLTableCellElement>('.monday-movable-column-header')
-  if (!header) return
-  const rect = header.getBoundingClientRect()
-  if (rect.width > 0 && rect.right - event.clientX < TABLE_COLUMN_RESIZE_HANDLE_WIDTH) return
-  const headers = movableHeaderCells(header)
-  const index = headers.indexOf(header)
-  const key = movableVisibleColumns.value[index]?.key as MovableColumnKey | undefined
-  if (!key) return
-
-  clearTableColumnPointerTracking()
-  tableColumnPointerCandidate = {
-    pointerId: event.pointerId,
-    key,
-    header,
-    headerRects: headers.map(candidate => {
-      const candidateRect = candidate.getBoundingClientRect()
-      return { left: candidateRect.left, width: candidateRect.width }
-    }),
-    index,
-    startX: event.clientX,
-    startY: event.clientY,
-  }
-  window.addEventListener('pointermove', onTableColumnPointerMove, { capture: true, passive: false })
-  window.addEventListener('pointerup', onTableColumnPointerUp, true)
-  window.addEventListener('pointercancel', onTableColumnPointerCancel, true)
-}
-
-function onTableColumnPointerMove(event: PointerEvent): void {
-  const candidate = tableColumnPointerCandidate
-  if (!candidate || candidate.pointerId !== event.pointerId) return
-  if (!columnDraggingKey.value) {
-    const distance = Math.hypot(event.clientX - candidate.startX, event.clientY - candidate.startY)
-    if (distance < TABLE_DRAG_POINTER_THRESHOLD) return
-    createTableColumnDragPreview(candidate.header, candidate.startX, candidate.startY)
-    columnDraggingKey.value = candidate.key
-    columnDraggingIndex.value = candidate.index
-    columnDropIndex.value = candidate.index
-    suppressClickAfterTableDrag()
-  }
-  event.preventDefault()
-  moveTableColumnDragPreview(event.clientX, event.clientY)
-  updateTableColumnDropTarget(event.clientX)
-}
-
-function commitTableColumnDrop(): void {
-  const draggedKey = columnDraggingKey.value
-  const from = columnDraggingIndex.value
-  let target = columnDropIndex.value
-  resetTableColumnDragState()
-  if (!draggedKey || from < 0 || target === undefined) return
-  const visibleKeys = movableVisibleColumns.value.map(column => column.key as MovableColumnKey)
-  const currentVisibleIndex = visibleKeys.indexOf(draggedKey)
-  if (currentVisibleIndex < 0) return
-  const remainingVisible = visibleKeys.filter(key => key !== draggedKey)
-  if (currentVisibleIndex < target) target -= 1
-  target = Math.max(0, Math.min(target, remainingVisible.length))
-  if (target === currentVisibleIndex) return
-
-  const nextOrder = movableColumnOrder.value.filter(key => key !== draggedKey)
-  const beforeKey = remainingVisible[target]
-  if (beforeKey) {
-    nextOrder.splice(nextOrder.indexOf(beforeKey), 0, draggedKey)
-  } else {
-    const lastVisibleKey = remainingVisible.at(-1)
-    const insertionIndex = lastVisibleKey ? nextOrder.indexOf(lastVisibleKey) + 1 : nextOrder.length
-    nextOrder.splice(insertionIndex, 0, draggedKey)
-  }
-  movableColumnOrder.value = nextOrder
-  persistTablePrefs()
-  schedulePageScrollbarSync()
-}
-
-function onTableColumnPointerUp(event: PointerEvent): void {
-  const candidate = tableColumnPointerCandidate
-  if (!candidate || candidate.pointerId !== event.pointerId) return
-  const dragged = Boolean(columnDraggingKey.value)
-  clearTableColumnPointerTracking()
-  if (!dragged) return
-  event.preventDefault()
-  event.stopPropagation()
-  suppressClickAfterTableDrag()
-  commitTableColumnDrop()
-}
-
-function onTableColumnPointerCancel(event: PointerEvent): void {
-  if (!tableColumnPointerCandidate || tableColumnPointerCandidate.pointerId !== event.pointerId) return
-  const dragged = Boolean(columnDraggingKey.value)
-  clearTableColumnPointerTracking()
-  if (dragged) suppressClickAfterTableDrag()
-  resetTableColumnDragState()
-}
-
-function onTableSurfacePointerDown(event: PointerEvent): void {
-  if ((event.target as Element | null)?.closest('.timer-cell')) return
-  if ((event.target as HTMLElement | null)?.closest('.subitem-table-shell')) return
-  onTableColumnPointerDown(event)
-  if (!tableColumnPointerCandidate && !tableColumnResizeCandidate) onTablePointerDown(event)
-}
+const {
+  removeTableColumnDragPreview, tableCellStyle, tableHeaderCellStyle, clearTableColumnPointerTracking,
+  clearTableColumnResizeTracking, onTableSurfacePointerDown, columnDraggingKey, columnResizingKey,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- 既有组件测试通过实例读取拖拽状态和入口。
+  tableColumnDragStyle, onTableColumnResizePointerDown, onTableColumnResizePointerMove,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- 既有组件测试通过实例读取拖拽状态和入口。
+  onTableColumnResizePointerUp, onTableColumnPointerDown, onTableColumnPointerMove,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- 既有组件测试通过实例读取拖拽状态和入口。
+  commitTableColumnDrop, onTableColumnPointerUp, columnDraggingIndex,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- 既有组件测试通过实例读取拖拽状态和入口。
+  columnDropIndex,
+} = useTableColumnDrag({
+  tableRef, grouped, tableDragging, movableVisibleColumns, movableColumnOrder, columnWidths, columnByKey, cellColoring,
+  scheduleResponsiveTableLayout, flushResponsiveTableLayout, schedulePageScrollbarSync, persistTablePrefs,
+  suppressClickAfterTableDrag, onTablePointerDown, TABLE_DRAG_TILT_DEGREES, TABLE_DRAG_POINTER_THRESHOLD,
+})
 
 function isRowSelected(rowId: string): boolean {
   if (selectedWorkItemIds.value.has(rowId)) return true
@@ -2654,266 +2022,6 @@ function tableRowStyle(context: { row: ProjectWorkItemListItem; rowIndex: number
   const style = tableRowDragStyle(context)
   const color = rowColoring(context.row)?.row
   return color ? { ...style, '--work-item-condition-row-bg': color } : style
-}
-
-function tableRowDragStyle({ rowIndex }: { row: ProjectWorkItemListItem; rowIndex: number }): CSSProperties {
-  if (!tableDragging.value || tableDraggingIndex.value < 0 || tableDropIndex.value === undefined) {
-    return {}
-  }
-  const from = tableDraggingIndex.value
-  const to = tableDropIndex.value
-  let offset = 0
-
-  if (rowIndex === from) {
-    return { opacity: 0, pointerEvents: 'none' }
-  } else if (from < to && rowIndex > from && rowIndex < to) {
-    offset = -tableRowHeight.value
-  } else if (from > to && rowIndex >= to && rowIndex < from) {
-    offset = tableRowHeight.value
-  }
-
-  if (offset === 0) {
-    return { transform: 'translateY(0px)' }
-  }
-  return { transform: `translateY(${offset}px)` }
-}
-
-function captureTablePositions(): Map<string, number> {
-  const rows = tableRef.value?.$el?.querySelectorAll(
-    '.el-table__body-wrapper tbody tr.work-item-table-row',
-  ) as NodeListOf<HTMLElement> | undefined
-  return new Map([...(rows ?? [])].flatMap(row => {
-    const id = row.querySelector<HTMLElement>('[data-work-item-id]')?.dataset.workItemId
-    return id ? [[id, row.getBoundingClientRect().top] as const] : []
-  }))
-}
-
-function animateTableReorder(previous: Map<string, number>): void {
-  const rows = tableRef.value?.$el?.querySelectorAll(
-    '.el-table__body-wrapper tbody tr.work-item-table-row',
-  ) as NodeListOf<HTMLElement> | undefined
-  rows?.forEach(row => {
-    const id = row.querySelector<HTMLElement>('[data-work-item-id]')?.dataset.workItemId
-    const before = id ? previous.get(id) : undefined
-    if (!row || before === undefined) return
-    const delta = before - row.getBoundingClientRect().top
-    if (Math.abs(delta) < 1) return
-    row.animate([{ transform: `translateY(${delta}px)` }, { transform: 'translateY(0)' }], {
-      duration: 140,
-      easing: 'cubic-bezier(.2, 0, 0, 1)',
-    })
-  })
-}
-
-function rowIndexFromTarget(target: EventTarget | null): number {
-  const row = (target as HTMLElement | null)?.closest('tr.work-item-table-row')
-  if (!row) return -1
-  const id = row.querySelector<HTMLElement>('[data-work-item-id]')?.dataset.workItemId
-  return tableItems.value.findIndex(item => item.id === id)
-}
-
-function clearTablePointerTracking(): void {
-  tablePointerCandidate = undefined
-  window.removeEventListener('pointermove', onTablePointerMove, true)
-  window.removeEventListener('pointerup', onTablePointerUp, true)
-  window.removeEventListener('pointercancel', onTablePointerCancel, true)
-}
-
-function suppressClickAfterTableDrag(): void {
-  suppressTableClick = true
-  if (suppressTableClickTimer) window.clearTimeout(suppressTableClickTimer)
-  suppressTableClickTimer = window.setTimeout(() => {
-    suppressTableClick = false
-    suppressTableClickTimer = undefined
-  }, 50)
-}
-
-function onTableClickCapture(event: MouseEvent): void {
-  if ((event.target as Element | null)?.closest('.timer-cell')) return
-  if ((event.target as HTMLElement | null)?.closest('.subitem-table-shell')) return
-  if (!suppressTableClick) return
-  event.preventDefault()
-  event.stopPropagation()
-  suppressTableClick = false
-  if (suppressTableClickTimer) window.clearTimeout(suppressTableClickTimer)
-  suppressTableClickTimer = undefined
-}
-
-function updateTableDropTarget(clientY: number): void {
-  const rows = [...(tableRef.value?.$el?.querySelectorAll<HTMLElement>(
-    '.el-table__body-wrapper tbody tr.work-item-table-row',
-  ) ?? [])]
-  if (grouped.value && tableDragging.value) {
-    const key = grouping.keyOf(tableDragging.value)
-    const groupRows = rows.filter(row => {
-      const id = row.querySelector<HTMLElement>('[data-work-item-id]')?.dataset.workItemId
-      return grouping.page(key).items.some(item => item.id === id) && row.getBoundingClientRect().height > 0
-    })
-    const first = groupRows[0]?.getBoundingClientRect()
-    const last = groupRows.at(-1)?.getBoundingClientRect()
-    if (!first || !last || clientY < first.top - 16 || clientY > last.bottom + 16) {
-      tableDropIndex.value = undefined
-      return
-    }
-    const row = groupRows.find(candidate => clientY < candidate.getBoundingClientRect().top + candidate.getBoundingClientRect().height / 2)
-    tableDropIndex.value = row ? rowIndexFromTarget(row) : rowIndexFromTarget(groupRows.at(-1)!) + 1
-    return
-  }
-  const hasMeasuredRows = rows.some(row => row.getBoundingClientRect().height > 0)
-  if (hasMeasuredRows) {
-    const target = rows.findIndex(row => clientY < row.getBoundingClientRect().top
-      + row.getBoundingClientRect().height / 2)
-    tableDropIndex.value = target < 0 ? tableItems.value.length : target
-  } else {
-    const bodyWrapper = tableRef.value?.$el?.querySelector('.el-table__body-wrapper') as HTMLElement | null
-    if (bodyWrapper && bodyWrapper.getBoundingClientRect().height > 0) {
-      const rect = bodyWrapper.getBoundingClientRect()
-      const scrollTop = resolveTableScrollElement()?.scrollTop ?? bodyWrapper.scrollTop
-      const relativeY = clientY - rect.top + scrollTop
-      tableDropIndex.value = Math.max(0, Math.min(tableItems.value.length,
-        Math.round(relativeY / tableRowHeight.value)))
-    }
-  }
-  if (clientY >= window.innerHeight - 48) {
-    window.scrollBy({ top: 28, behavior: 'smooth' })
-    if (tableNextCursor.value && !tableLoading.value && !tableSorting.value) void loadTable(tableNextCursor.value, true)
-  } else if (clientY <= 48) {
-    window.scrollBy({ top: -28, behavior: 'smooth' })
-  }
-}
-
-function onTablePointerDown(event: PointerEvent): void {
-  if (!event.isPrimary || event.button !== 0 || tableDragging.value || inlineDraft.value) return
-  const target = event.target as HTMLElement | null
-  if (target?.closest('.subitem-expand-button, .monday-subitems-counter-component, .work-item-name-cell--editing, .work-item-detail-button')) return
-  const dragArea = target?.closest('.work-item-link, .monday-selection-column')
-  if (!dragArea) return
-  const index = rowIndexFromTarget(target)
-  const item = tableItems.value[index]
-  const row = target?.closest('tr.work-item-table-row') as HTMLElement | null
-  if (!row || !item?.capabilities.canMoveInProjectOrder) return
-  if (grouped.value && (!groupCountsReady.value || !grouping.page(grouping.keyOf(item)).loaded)) return
-
-  clearTablePointerTracking()
-  tablePointerCandidate = {
-    pointerId: event.pointerId,
-    row,
-    item,
-    index,
-    startX: event.clientX,
-    startY: event.clientY,
-  }
-  window.addEventListener('pointermove', onTablePointerMove, { capture: true, passive: false })
-  window.addEventListener('pointerup', onTablePointerUp, true)
-  window.addEventListener('pointercancel', onTablePointerCancel, true)
-}
-
-function onTablePointerMove(event: PointerEvent): void {
-  const candidate = tablePointerCandidate
-  if (!candidate || candidate.pointerId !== event.pointerId) return
-
-  if (!tableDragging.value) {
-    const distance = Math.hypot(event.clientX - candidate.startX, event.clientY - candidate.startY)
-    if (distance < TABLE_DRAG_POINTER_THRESHOLD) return
-    if (hasExplicitSort.value) {
-      event.preventDefault()
-      suppressClickAfterTableDrag()
-      clearTablePointerTracking()
-      sortRules.value = []
-      void syncUrl()
-      ElMessage.info('已清除排序，请在列表恢复手工顺序后再次拖动。')
-      return
-    }
-    createTableDragPreview(candidate.row, candidate.startX, candidate.startY)
-    tableDragging.value = candidate.item
-    tableDraggingIndex.value = candidate.index
-    tableDropIndex.value = candidate.index
-    suppressClickAfterTableDrag()
-  }
-
-  event.preventDefault()
-  moveTableDragPreview(event.clientX, event.clientY)
-  updateTableDropTarget(event.clientY)
-}
-
-function onTablePointerUp(event: PointerEvent): void {
-  const candidate = tablePointerCandidate
-  if (!candidate || candidate.pointerId !== event.pointerId) return
-  const dragged = Boolean(tableDragging.value)
-  clearTablePointerTracking()
-  if (!dragged) return
-  event.preventDefault()
-  event.stopPropagation()
-  suppressClickAfterTableDrag()
-  void commitTableDrop()
-}
-
-function onTablePointerCancel(event: PointerEvent): void {
-  if (!tablePointerCandidate || tablePointerCandidate.pointerId !== event.pointerId) return
-  const dragged = Boolean(tableDragging.value)
-  clearTablePointerTracking()
-  if (dragged) suppressClickAfterTableDrag()
-  resetTableDragState()
-}
-
-async function commitTableDrop(): Promise<void> {
-  const item = tableDragging.value
-  let target = tableDropIndex.value
-  resetTableDragState()
-  if (!item || target === undefined) return
-  const groupKey = grouped.value ? grouping.keyOf(item) : undefined
-  const original = groupKey === undefined ? [...tableItems.value] : [...grouping.page(groupKey).items]
-  if (groupKey !== undefined) {
-    const offset = tableItems.value.findIndex(candidate => candidate.id === original[0]?.id)
-    target -= offset
-    if (offset < 0 || target < 0 || target > original.length) return
-  }
-  const applyOrder = (items: ProjectWorkItemListItem[]) => {
-    if (groupKey === undefined) tableItems.value = items
-    else grouping.replaceOrder(groupKey, items)
-  }
-  const from = original.findIndex(candidate => candidate.id === item.id)
-  if (from < 0) return
-  if (target === original.length && (groupKey === undefined ? tableNextCursor.value : grouping.page(groupKey).nextCursor)) {
-    ElMessage.info('正在加载更远的工作项，请稍后继续拖动。')
-    if (groupKey === undefined) await loadTable(tableNextCursor.value, true)
-    else await grouping.load(groupKey)
-    return
-  }
-  const reordered = [...original]
-  reordered.splice(from, 1)
-  if (from < target) target -= 1
-  target = Math.max(0, Math.min(target, reordered.length))
-  reordered.splice(target, 0, item)
-  if (reordered.map(row => row.id).join() === original.map(row => row.id).join()) return
-  const previousPositions = captureTablePositions()
-  applyOrder(reordered)
-  await nextTick()
-  animateTableReorder(previousPositions)
-  const csrf = readCsrfToken()
-  if (!csrf) { applyOrder(original); error.value = localProblem('缺少 CSRF 凭据，请刷新后重试。'); return }
-  try {
-    const updated = await workItemsApi.moveProjectWorkItemOrder({
-      projectId: projectId.value, workItemId: item.id, xXSRFTOKEN: csrf, ifMatch: item.etag,
-      idempotencyKey: globalThis.crypto.randomUUID(),
-      projectWorkItemOrderMoveRequest: {
-        previousVisibleWorkItemId: reordered[target - 1]?.id ?? null,
-        nextVisibleWorkItemId: reordered[target + 1]?.id ?? null,
-      },
-    })
-    replaceLightItem(item.id, updated)
-    ElMessage.success('工作项顺序已更新')
-  } catch (reason) {
-    applyOrder(original)
-    error.value = await toApiProblem(reason)
-    await loadTable(null, false)
-  }
-}
-
-function clearFilters(): void {
-  filters.assignees = new Set(); filters.statuses = new Set(); filters.priorities = new Set(); filters.contents = new Set()
-  filters.dueRange = []; filters.updatedAfter = null
-  void syncUrl()
 }
 
 async function resetCurrentData(): Promise<void> {
@@ -3002,13 +2110,6 @@ watch([() => route.query.workItemId, () => route.query.tab], ([value, tab], [pre
     detail.value = undefined
   }
 }, { immediate: true })
-watch(assigneeSearch, scheduleMemberSearch)
-watch(detailOpen, syncProjectPageScrollLayout, { flush: 'post' })
-watch(isResizingDrawer, value => { if (!embedded.value) document.body.classList.toggle('yp-work-items-drawer-resizing', value) }, { flush: 'sync' })
-watch(tableRef, () => {
-  observeProjectPageResizeTargets()
-  scheduleResponsiveTableLayout()
-}, { flush: 'post' })
 watch([displayTableItems, () => [...grouping.collapsed.value].join('|'), groupCountsReady], () => {
   schedulePageScrollbarSync()
   void nextTick(loadVisibleGroups)
@@ -3045,10 +2146,6 @@ watch([
 ], schedulePageScrollbarSync, { flush: 'post' })
 
 onMounted(() => {
-  if (!embedded.value) document.body.classList.add('yp-project-overview-scroll')
-  syncProjectPageScrollLayout()
-  observeProjectPageResizeTargets()
-  window.addEventListener('resize', scheduleResponsiveTableLayout)
   loadTablePrefs()
   document.addEventListener('pointerdown', onDocumentPointerDown)
   tableObserver = new IntersectionObserver(entries => {
@@ -3060,13 +2157,6 @@ onMounted(() => {
   }, { rootMargin: '240px 0px' })
   groupSentinels.forEach(element => groupObserver?.observe(element))
   groupHeadings.forEach(element => groupObserver?.observe(element))
-  kanbanObserver = new IntersectionObserver(entries => {
-    entries.filter(entry => entry.isIntersecting).forEach(entry => {
-      const status = (entry.target as HTMLElement).dataset.status
-      if (status && lane(status).nextCursor && !lane(status).loading)
-        void loadLane(status, lane(status).nextCursor)
-    })
-  }, { rootMargin: '240px' })
   watch(tableSentinel, (next, previous) => { if (previous) tableObserver?.unobserve(previous); if (next) tableObserver?.observe(next) }, { immediate: true })
 })
 onBeforeUnmount(() => {
@@ -3074,19 +2164,8 @@ onBeforeUnmount(() => {
   columnFlip.cancel()
   groupObserver?.disconnect()
   activeController?.abort(); if (searchTimer) window.clearTimeout(searchTimer)
-  if (memberSearchTimer) window.clearTimeout(memberSearchTimer)
-  if (suppressTableClickTimer) window.clearTimeout(suppressTableClickTimer)
-  if (responsiveTableLayoutFrame !== undefined) window.cancelAnimationFrame(responsiveTableLayoutFrame)
-  projectPageResizeObserver?.disconnect()
-  tableObserver?.disconnect(); kanbanObserver?.disconnect()
+  tableObserver?.disconnect()
   document.removeEventListener('pointerdown', onDocumentPointerDown)
-  window.removeEventListener('resize', scheduleResponsiveTableLayout)
-  bindTableScrollElement(undefined)
-  if (!embedded.value) {
-    document.body.classList.remove('yp-project-overview-scroll', 'yp-work-items-drawer-open', 'yp-work-items-drawer-resizing')
-    document.body.style.removeProperty('--yp-work-items-drawer-width')
-    document.body.style.removeProperty('--yp-work-items-drawer-inset')
-  }
   clearTablePointerTracking()
   clearTableColumnPointerTracking()
   clearTableColumnResizeTracking()
@@ -3098,7 +2177,7 @@ onBeforeUnmount(() => {
 <template>
   <div
     class="project-view-stack project-overview-stack"
-    :class="{ 'work-items-embedded': embedded }"
+    :class="{ 'work-items-embedded': embedded, 'work-items-my-work': myWork }"
   >
     <inline-problem
       v-if="error"
@@ -3124,12 +2203,12 @@ onBeforeUnmount(() => {
       </div>
       <div
         v-if="selectedView === 'kanban'"
-        class="kanban-board"
+        class="kanban-page-skeleton"
       >
         <section
           v-for="lane in 4"
           :key="lane"
-          class="kanban-lane"
+          class="kanban-page-skeleton__lane"
         >
           <work-item-kanban-skeleton />
         </section>
@@ -3232,7 +2311,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div class="work-items-toolbar" aria-label="工作项工具栏" data-work-item-view-control data-tour="work-item-toolbar">
+        <div v-if="!myWork" class="work-items-toolbar" aria-label="工作项工具栏" data-work-item-view-control data-tour="work-item-toolbar">
           <div
             v-if="selectedView === 'table' && canCreate"
             class="toolbar-create-group"
@@ -3287,90 +2366,11 @@ onBeforeUnmount(() => {
             </button>
           </div>
 
-          <el-popover v-model:visible="assigneeFilterOpen" placement="bottom-start" :width="360" trigger="click" popper-class="work-items-popover work-item-view-control" @show="loadFilterOptions">
-            <template #reference>
-              <button class="toolbar-button" :class="{ active: filters.assignees.size }">
-                <el-icon><user /></el-icon><span>处理人</span>
-                <span v-if="filters.assignees.size" class="toolbar-count">{{ filters.assignees.size }}</span>
-              </button>
-            </template>
-            <div class="popover-stack">
-              <el-input v-model="assigneeSearch" clearable autofocus placeholder="搜索项目成员" />
-              <button
-                v-for="member in filteredMembers"
-                :key="member.userId"
-                class="popover-option"
-                @click="toggleSet(filters.assignees, member.userId, !filters.assignees.has(member.userId))"
-              >
-                <el-checkbox :model-value="filters.assignees.has(member.userId)" @click.stop />
-                <yp-assignee :user-id="member.userId" :display-name="member.displayName" />
-                <span class="option-count">{{ countBy('assigneeUserId', member.userId) }}</span>
-              </button>
-            </div>
-          </el-popover>
-
-          <el-popover v-model:visible="filterPopoverOpen" placement="bottom-start" :width="760" trigger="click" popper-class="work-items-popover work-items-filter-popover" @show="loadFilterOptions">
-            <template #reference>
-              <button class="toolbar-button" :class="{ active: activeFilterCount }">
-                <el-icon><filter-icon /></el-icon><span>筛选</span><span v-if="activeFilterCount" class="toolbar-button__count">{{ activeFilterCount }}</span>
-              </button>
-            </template>
-            <div class="filter-popover">
-              <header class="filter-popover__header">
-                <strong>快速筛选</strong>
-                <span v-if="activeFilterCount" class="filter-popover__count" :aria-label="`已选 ${activeFilterCount} 个条件`">{{ activeFilterCount }}</span>
-                <button class="text-button filter-popover__clear" :disabled="!activeFilterCount" @click="clearFilters">清除全部</button>
-              </header>
-              <div class="filter-columns">
-                <section class="filter-section">
-                  <h4>处理人<small v-if="filters.assignees.size">已选 {{ filters.assignees.size }}</small></h4>
-                  <div class="filter-section__values">
-                    <button v-for="member in activeMembers" :key="member.userId" class="filter-value" :aria-pressed="filters.assignees.has(member.userId)" @click="toggleSet(filters.assignees, member.userId, !filters.assignees.has(member.userId))">
-                      <yp-assignee class="filter-value__label" :user-id="member.userId" :display-name="member.displayName" />
-                      <small :class="{ 'filter-value__count--zero': !countBy('assigneeUserId', member.userId) }">{{ countBy('assigneeUserId', member.userId) }}</small>
-                    </button>
-                  </div>
-                </section>
-                <section class="filter-section">
-                  <h4>状态<small v-if="filters.statuses.size">已选 {{ filters.statuses.size }}</small></h4>
-                  <div class="filter-section__values">
-                    <button v-for="status in workflowStatuses" :key="status.statusCode" class="filter-value" :aria-pressed="filters.statuses.has(status.statusCode)" @click="toggleSet(filters.statuses, status.statusCode, !filters.statuses.has(status.statusCode))">
-                      <span class="filter-swatch" :style="{ background: workItemLabelColorValue(status.colorToken) }" aria-hidden="true" />
-                      <span class="filter-value__label">{{ status.displayName }}</span><small :class="{ 'filter-value__count--zero': !countBy('statusCode', status.statusCode) }">{{ countBy('statusCode', status.statusCode) }}</small>
-                    </button>
-                  </div>
-                </section>
-                <section class="filter-section">
-                  <h4>优先级<small v-if="filters.priorities.size">已选 {{ filters.priorities.size }}</small></h4>
-                  <div class="filter-section__values">
-                    <button v-for="priority in priorityOptions" :key="priority.code" class="filter-value" :aria-pressed="filters.priorities.has(priority.code)" @click="toggleSet(filters.priorities, priority.code, !filters.priorities.has(priority.code))">
-                      <span class="filter-swatch" :style="{ background: workItemLabelColorValue(priority.colorToken) }" aria-hidden="true" />
-                      <span class="filter-value__label">{{ priority.displayName }}</span><small :class="{ 'filter-value__count--zero': !countBy('priority', priority.code) }">{{ countBy('priority', priority.code) }}</small>
-                    </button>
-                  </div>
-                </section>
-                <section class="filter-section">
-                  <h4>工作项类别<small v-if="filters.contents.size">已选 {{ filters.contents.size }}</small></h4>
-                  <div class="filter-section__values">
-                    <button v-for="content in catalog?.items ?? []" :key="content.id" class="filter-value" :aria-pressed="filters.contents.has(content.id)" @click="toggleSet(filters.contents, content.id, !filters.contents.has(content.id))">
-                      <span class="filter-swatch" :style="{ background: workItemLabelColorValue(content.colorToken) }" aria-hidden="true" />
-                      <span class="filter-value__label">{{ content.name }}</span><small :class="{ 'filter-value__count--zero': !countBy('contentId', content.id) }">{{ countBy('contentId', content.id) }}</small>
-                    </button>
-                  </div>
-                </section>
-              </div>
-              <div class="filter-dates">
-                <div class="filter-field">
-                  <span class="filter-field-label">截止日期</span>
-                  <el-date-picker v-model="filters.dueRange" type="daterange" start-placeholder="开始日期" end-placeholder="结束日期" @change="syncUrl" />
-                </div>
-                <div class="filter-field">
-                  <span class="filter-field-label">最后更新时间</span>
-                  <el-date-picker v-model="filters.updatedAfter" type="date" aria-label="最后更新时间晚于" placeholder="选择日期之后" @change="syncUrl" />
-                </div>
-              </div>
-            </div>
-          </el-popover>
+          <work-item-assignee-filter-popover :filter="filter" />
+          <work-item-filter-popover
+            :filter="filter" :active-members="activeMembers" :workflow-statuses="workflowStatuses"
+            :priority-options="priorityOptions" :catalog="catalog"
+          />
 
           <el-popover placement="bottom-start" :width="420" trigger="click" :disabled="selectedView === 'kanban' || savingSortOrder" popper-class="work-items-popover work-item-view-control">
             <template #reference>
@@ -3392,9 +2392,10 @@ onBeforeUnmount(() => {
             </div>
           </el-popover>
 
-          <el-popover placement="bottom-start" :width="320" trigger="click" :disabled="selectedView === 'kanban'" popper-class="work-items-popover work-item-view-control">
+          <!-- 看板中「隐藏」控制卡片上显示的字段。 -->
+          <el-popover placement="bottom-start" :width="320" trigger="click" popper-class="work-items-popover work-item-view-control">
             <template #reference>
-              <button class="toolbar-button" :disabled="selectedView === 'kanban'">
+              <button class="toolbar-button">
                 <el-icon><hide /></el-icon><span>隐藏</span>
               </button>
             </template>
@@ -3405,7 +2406,7 @@ onBeforeUnmount(() => {
             :disabled="selectedView === 'kanban' || savingSortOrder"
             @field="changeGrouping" @order="groupingOrder = $event" @show-empty="showEmptyGroups = $event" />
           <work-item-completed-menu :statuses="workflowStatuses" :codes="tableViewSettings.completedStatusCodes"
-            :disabled="selectedView === 'kanban'" :editable="tableSettingsState === 'ready'"
+            :disabled="false" :editable="tableSettingsState === 'ready'"
             @update="codes => updateTableSettings({ completedStatusCodes: codes })" />
           <button
             v-if="!embedded"
@@ -3423,6 +2424,8 @@ onBeforeUnmount(() => {
             :disabled="selectedView === 'kanban'"
             :pin-columns="tablePinColumns"
             :pin-width-budget="tablePinWidthBudget"
+            :subitem-pin-columns="subitemPinColumns"
+            :subitem-pin-width-budget="subitemPinWidthBudget"
             :defaults-count="createDefaults.count"
             :catalog="tableSettingsCatalog"
             :default-columns="defaultValueColumns"
@@ -3467,7 +2470,7 @@ onBeforeUnmount(() => {
               row-key="id"
               class="monday-table work-item-table-base"
               :class="[tableHeightClasses, { 'monday-table--column-dragging': columnDraggingKey, 'monday-table--empty': !displayTableItems.length, 'monday-table--grouped': grouped }]"
-              height="100%"
+              v-bind="myWork ? {} : { height: '100%' }"
               empty-text="当前项目暂无工作项"
               border
               @header-dragend="onHeaderDragEnd"
@@ -3521,6 +2524,10 @@ onBeforeUnmount(() => {
                     :error="subitemState((scope.row.parent as ProjectWorkItemListItem).id).error"
                     :sort-rules="subitemState((scope.row.parent as ProjectWorkItemListItem).id).sortRules"
                     :columns="visibleSubitemColumns"
+                    :row-height="tableRowHeight"
+                    :coloring-rules="tableViewSettings.coloringRules"
+                    :today="companyToday"
+                    :pinned-column-keys="subitemPinnedColumnKeys"
                     :connect-columns="connect.visibleColumns"
                     :connect-cells="connect.cells"
                     :connect-read-only="connect.readOnly"
@@ -3533,7 +2540,7 @@ onBeforeUnmount(() => {
                     :label-catalog="labelCatalog"
                     :completed="isCompletedRow"
                     :selected="item => isRowSelected(item.id)"
-                    :can-create="canCreate"
+                    :can-create="canCreate && !myWork"
                     :editing-cell="Boolean(editingCell) || batchBusy"
                     :before-remove="beforeRowRemove"
                     @duplicate="duplicateRow"
@@ -3589,7 +2596,7 @@ onBeforeUnmount(() => {
                     @open="openDetail($event, 'details')"
                     @add-subitem="addSubitem"
                     @duplicate="duplicateRow($event)"
-                    @create-below="createBelow"
+                    @create-below="onCreateBelow"
                     @moved="onRowMoved"
                     @changed="onRelationsChanged"
                     @removed="onRowRemoved"
@@ -3608,19 +2615,21 @@ onBeforeUnmount(() => {
               >
                 <template #default="scope">
                   <template v-if="isGroupDisplayRow(scope.row)">
-                    <button v-if="scope.row.groupRowKind === 'heading'" type="button" class="work-item-group-toggle"
+                    <work-item-group-toggle
+                      v-if="scope.row.groupRowKind === 'heading'"
+                      :ref="value => setGroupSentinel((scope.row as WorkItemGroupDisplayRow).group.key, (value as ComponentPublicInstance | null)?.$el, true)"
                       data-work-item-view-control
-                      :ref="value => setGroupSentinel((scope.row as WorkItemGroupDisplayRow).group.key, value, true)"
-                      :aria-expanded="!grouping.isCollapsed(scope.row.group.key)"
-                      :aria-label="`${grouping.isCollapsed(scope.row.group.key) ? '展开' : '收起'}分组：${scope.row.group.label}`"
-                      @click.stop="grouping.toggle(scope.row.group.key)">
-                      <svg viewBox="0 0 20 20" width="16" height="16" fill="currentColor" aria-hidden="true" :class="{ expanded: !grouping.isCollapsed(scope.row.group.key) }">
-                        <path d="M12.76 10.56a.77.77 0 0 0 0-1.116L8.397 5.233a.84.84 0 0 0-1.157 0 .77.77 0 0 0 0 1.116l3.785 3.653-3.785 3.652a.77.77 0 0 0 0 1.117.84.84 0 0 0 1.157 0l4.363-4.211Z" />
-                      </svg>
-                      <span class="work-item-group-name">{{ scope.row.group.label }}</span>
+                      :label="scope.row.group.label"
+                      :collapsed="grouping.isCollapsed(scope.row.group.key)"
+                      @toggle="grouping.toggle(scope.row.group.key)"
+                    >
                       <small v-if="groupCountsReady">{{ scope.row.group.count }} 个工作项</small>
-                      <i v-else class="work-item-skeleton work-item-skeleton-block work-item-group-count-skeleton" aria-hidden="true" />
-                    </button>
+                      <i
+                        v-else
+                        class="work-item-skeleton work-item-skeleton-block work-item-group-count-skeleton"
+                        aria-hidden="true"
+                      />
+                    </work-item-group-toggle>
                     <el-checkbox v-else-if="scope.row.groupRowKind === 'columns'" :model-value="groupSelection(scope.row.group).checked"
                       :indeterminate="groupSelection(scope.row.group).mixed" :disabled="!grouping.page(scope.row.group.key).items.length"
                       :aria-label="`选择${scope.row.group.label}已加载工作项`" @change="selectGroupRows(scope.row.group, Boolean($event))" />
@@ -4094,6 +3103,17 @@ onBeforeUnmount(() => {
                   </div>
                 </div>
                 <button
+                  v-else-if="myWork && !tableInitialLoading"
+                  type="button"
+                  class="quick-add monday-quick-add my-work-create-row"
+                  :style="quickGridStyle"
+                  :disabled="!canCreate"
+                  @click="createDialog = {}"
+                >
+                  <span class="monday-quick-lead" aria-hidden="true" />
+                  <span class="my-work-create-row__label"><el-icon aria-hidden="true"><plus /></el-icon>新建工作项</span>
+                </button>
+                <button
                   v-else-if="!grouped && !tableInitialLoading"
                   class="quick-add monday-quick-add"
                   data-tour="work-item-quick-add"
@@ -4137,140 +3157,108 @@ onBeforeUnmount(() => {
           />
         </div>
 
-        <div
+        <work-item-kanban-board
           v-else
-          class="kanban-board"
+          :statuses="kanbanLaneStatuses"
+          :lane="lane"
+          :counts="kanbanCounts"
+          :create-disabled-reason="status => laneCreateDisabledReason(laneGroup(status.statusCode))"
+          :creating-top="statusCode => laneTopCreate.draft(laneGroup(statusCode)).saving"
+          :draft="statusCode => laneBottomCreate.draft(laneGroup(statusCode))"
+          :dragging="Boolean(dragging)"
+          @load-more="loadMoreLane"
+          @drop="dropInto"
+          @create-top="statusCode => createInLane(statusCode, { edge: 'top' })"
+          @open-draft="statusCode => laneBottomCreate.open(laneGroup(statusCode))"
+          @draft-keydown="(statusCode, event) => laneBottomCreate.keydown(laneGroup(statusCode), event)"
+          @cancel-draft="statusCode => laneBottomCreate.cancel(laneGroup(statusCode))"
+          @draft-input="(statusCode, input) => laneBottomCreate.setInput(laneGroup(statusCode), input)"
         >
-          <section
-            v-for="status in workflowStatuses"
-            :key="status.statusCode"
-            class="kanban-lane"
-            @dragover.prevent
-            @drop.prevent="status.active && dropInto(status.statusCode)"
-          >
-            <header><strong>{{ status.displayName }}</strong><span>{{ lane(status.statusCode).items.length }}{{ lane(status.statusCode).nextCursor ? '+' : '' }}</span></header>
-            <inline-problem
-              v-if="lane(status.statusCode).error"
-              :problem="lane(status.statusCode).error!"
-            />
-            <work-item-kanban-skeleton v-if="lane(status.statusCode).loading && !lane(status.statusCode).items.length" />
-            <article
-              v-for="item in lane(status.statusCode).items"
-              :key="item.id"
-              class="kanban-card"
-              draggable="true"
-              @dragstart="dragging = item"
+          <template #card="{ item }">
+            <work-item-kanban-card
+              :item="item as ProjectWorkItemListItem"
+              :project-id="projectId"
+              :fields="kanbanCardFields"
+              :show-assignee="!hiddenColumns.has('assignee')"
+              :label-catalog="labelCatalog"
+              :content-catalog="catalog"
+              :workflow-statuses="workflowStatuses"
+              :priority-options="priorityOptions"
+              :active-contents="activeContents"
+              :can-create="canCreate"
+              :busy="Boolean(editingCell) || batchBusy"
+              :subitem-count="visibleSubitemCount(item as ProjectWorkItemListItem)"
+              :expanded="kanbanExpandedIds.has(item.id)"
+              :subitems="subitems[item.id]"
+              :auto-edit="autoEditId === item.id"
+              @open="openDetail"
+              @updated="replaceLightItem"
+              @editing="active => { if (active) { autoEditId = ''; editingNames.add(item.id) } else editingNames.delete(item.id) }"
+              @transition="transitionItem"
+              @patch="patchCell"
+              @deadline="onDeadlineChange"
+              @labels-updated="onLabelsUpdated"
+              @contents-updated="onContentsUpdated"
+              @timer-changed="notifyChanged"
+              @toggle-subitems="toggleKanbanSubitems"
+              @subitem-created="onKanbanSubitemCreated"
+              @duplicate="duplicateRow"
+              @moved="moved => reloadLane(moved.statusCode)"
+              @changed="onRelationsChanged"
+              @removed="removed => { void onRowRemoved(removed); void reloadLane(removed.statusCode) }"
+              @create-below="anchor => createInLane(anchor.statusCode, { edge: 'after', anchorId: anchor.id })"
+              @dragstart="started => dragging = started"
               @dragend="dragging = undefined"
-              @click="openDetail(item, 'details')"
             >
-              <button
-                type="button"
-                class="kanban-card__open"
-                :aria-label="`打开工作项：${item.title}`"
-                @click.stop="openDetail(item, 'details')"
-              >
-                <small>{{ contentName(item.contentId) }} · {{ item.itemNo }}</small>
-                <strong>{{ item.title }}</strong>
-              </button>
-              <connect-kanban-connections
-                v-if="!embedded"
-                :cell="connect.cells.get(item.id)"
-                @open-card="connect.openCard"
-              />
-              <span><yp-priority-badge :priority="item.priority" /></span>
-            </article>
-            <div
-              v-if="lane(status.statusCode).nextCursor"
-              class="lane-cursor-sentinel incremental-state"
-              :class="{ 'lane-cursor-sentinel--loading': lane(status.statusCode).loading }"
-              :data-status="status.statusCode"
-            >
-              <work-item-kanban-skeleton
-                v-if="lane(status.statusCode).loading"
-                :cards="1"
-                label="正在加载更多工作项"
-              />
-              <template v-else>
-                继续滚动以加载更多
+              <template #connections>
+                <connect-kanban-connections
+                  v-if="!embedded"
+                  :cell="connect.cells.get(item.id)"
+                  @open-card="connect.openCard"
+                />
               </template>
-            </div>
-          </section>
-        </div>
+            </work-item-kanban-card>
+          </template>
+        </work-item-kanban-board>
       </section>
     </template>
 
-    <el-drawer
+    <work-item-detail-drawer
+      v-if="!myWork"
+      ref="detailDrawer"
+      v-model:detail-tab="detailTab"
       :model-value="detailOpen"
-      :before-close="beforeDetailClose"
-      :modal="false"
-      :modal-penetrable="true"
-      append-to-body
-      title="工作项详情"
-      header-class="work-items-detail-drawer__header"
-      modal-class="work-items-drawer-overlay"
-      :class="['work-items-detail-drawer', { 'work-items-detail-drawer--resizing': isResizingDrawer }]"
-      :size="`${drawerWidth}px`"
+      :detail-loading="detailLoading"
+      :detail="detail"
+      :embedded="embedded"
+      :active-members="activeMembers"
+      :can-publish-discussion="canPublishDiscussion"
+      :discussion-read-only-reason="discussionReadOnlyReason"
+      :restoring-archive="restoringArchive"
+      :content-name="contentName"
+      :before-detail-close="beforeDetailClose"
       @close="detailOpen = false"
       @update:model-value="onDetailModelValue"
-    >
-      <div
-        class="drawer-resize-handle"
-        :class="{ 'drawer-resize-handle--resizing': isResizingDrawer }"
-        title="拖动调整抽屉宽度"
-        @pointerdown="onDrawerResizePointerDown"
-      >
-        <div class="drawer-resize-grip" aria-hidden="true">
-          <svg width="6" height="18" viewBox="0 0 6 18" fill="currentColor">
-            <circle cx="1.5" cy="2" r="1.1" />
-            <circle cx="4.5" cy="2" r="1.1" />
-            <circle cx="1.5" cy="6.5" r="1.1" />
-            <circle cx="4.5" cy="6.5" r="1.1" />
-            <circle cx="1.5" cy="11" r="1.1" />
-            <circle cx="4.5" cy="11" r="1.1" />
-            <circle cx="1.5" cy="15.5" r="1.1" />
-            <circle cx="4.5" cy="15.5" r="1.1" />
-          </svg>
-        </div>
-      </div>
-      <div
-        v-loading="detailLoading"
-        class="detail-panel"
-      >
-        <template v-if="detail">
-          <yp-notice
-            v-if="detail.archived"
-            class="work-item-archive-notice"
-            tone="warning"
-          >
-            此工作项已归档
-            <template #actions>
-              <el-button
-                v-if="detail.capabilities.canDelete"
-                :loading="restoringArchive"
-                text
-                @click="restoreArchivedItem"
-              >
-                恢复工作项
-              </el-button>
-            </template>
-          </yp-notice>
-          <div class="detail-heading">
-            <small>{{ contentName(detail.contentId) }} · {{ detail.itemNo }}</small>
-            <h2>{{ detail.title }}</h2>
-          </div>
-          <work-item-detail-panel
-            ref="detailPanel"
-            v-model="detailTab"
-            :detail="detail"
-            :members="activeMembers"
-            :can-publish="canPublishDiscussion"
-            :read-only-reason="discussionReadOnlyReason"
-            @discussion-changed="onDiscussionChanged"
-            @description-updated="replaceLightItem($event.id, $event)"
-          />
-        </template>
-      </div>
-    </el-drawer>
+      @resize-end="scheduleResponsiveTableLayout"
+      @restore="restoreArchivedItem"
+      @discussion-changed="onDiscussionChanged"
+      @description-updated="replaceLightItem($event.id, $event)"
+    />
+
+    <work-item-create-dialog
+      v-if="myWork && project && createDialog"
+      :project="project"
+      :parent="createDialog.parent"
+      :label-catalog="labelCatalog"
+      :content-catalog="catalog"
+      :members="activeMembers"
+      :defaults="createDefaults"
+      :default-content-id="defaultContentId"
+      @close="createDialog = undefined"
+      @created="onMyWorkCreated"
+      @labels-updated="onLabelsUpdated"
+      @contents-updated="onContentsUpdated"
+    />
 
     <teleport v-if="!embedded" to="body">
       <div
@@ -4315,10 +3303,6 @@ onBeforeUnmount(() => {
   height: 38px; padding: 0 14px 0 10px; border: 0; background: transparent;
   color: var(--yp-text-primary); text-align: left; cursor: pointer;
 }
-.work-item-group-toggle svg { flex: none; transition: transform 140ms ease; }
-.work-item-group-toggle svg.expanded { transform: rotate(90deg); }
-.work-item-group-name { color: var(--work-item-group-accent); font-size: 16px; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.work-item-group-toggle small { flex: none; font-size: 12px; color: var(--yp-text-secondary); font-weight: 400; }
 .work-item-group-load { position: sticky; left: 33px; flex: none; display: flex; width: fit-content; max-width: min(540px, calc(100vw - 200px)); gap: 8px; align-items: center; min-height: 36px; padding: 0 16px; color: var(--yp-text-secondary); font-size: 12px; }
 .work-item-group-load--complete { min-height: 0; height: 0; padding: 0; }
 .work-item-group-load--loading { --work-item-skeleton-accent: transparent; position: relative; left: auto; display: block; width: auto; max-width: none; min-height: 0; padding: 0; }
@@ -4387,7 +3371,6 @@ onBeforeUnmount(() => {
   border: 1px solid var(--yp-monday-grid-border); border-radius: var(--work-item-hierarchy-corner-radius);
   background: var(--work-item-table-cell-bg) !important;
 }
-@media (prefers-reduced-motion: reduce) { .work-item-group-toggle svg { transition: none; } }
 .work-items-home {
   display: flex;
   min-width: 0;
@@ -4402,6 +3385,7 @@ onBeforeUnmount(() => {
 
 .monday-view-header {
   display: flex;
+  flex: none;
   align-items: center;
   justify-content: space-between;
   margin-bottom: var(--yp-space-4);
@@ -4430,8 +3414,10 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
 }
 
+/* 工具栏不参与纵向收缩：看板内容高于可用空间时也保持完整高度。 */
 .work-items-toolbar {
   display: flex;
+  flex: none;
   min-width: 0;
   align-items: center;
   gap: var(--yp-space-2);
@@ -4459,13 +3445,12 @@ onBeforeUnmount(() => {
 .toolbar-button:disabled, :deep(.grouping-toolbar-button:disabled), :deep(.table-settings-toolbar-button:disabled) { color: var(--yp-text-disabled); cursor: not-allowed; }
 :deep(.table-settings-toolbar-button) { width: 36px; justify-content: center; padding: 0; }
 :deep(.table-settings-toolbar-button--unsaved) { width: auto; padding: 0 var(--yp-space-3); }
-.toolbar-count { min-width: 18px; padding: 1px 5px; border-radius: var(--yp-radius-pill); color: var(--yp-priority-foreground); background: var(--yp-action-primary); font-size: 11px; }
 /* 主操作底色不随主题变化；--yp-text-inverse 在深色主题是深色，文字固定用蓝底前景色。 */
 .toolbar-create-group { display: inline-flex; height: 32px; flex: 0 0 auto; border-radius: var(--yp-radius-md); background: var(--yp-action-primary); box-shadow: 0 1px 2px color-mix(in srgb, var(--yp-action-primary) 35%, transparent); }
 .toolbar-create-group.is-disabled { opacity: .6; box-shadow: none; }
 .toolbar-create { display: inline-flex; height: 32px; align-items: center; gap: 6px; padding: 0 14px 0 12px; border: 0; border-radius: var(--yp-radius-md); color: var(--yp-status-blue-foreground); background: transparent; font: inherit; font-weight: 500; cursor: pointer; transition: background var(--yp-motion-fast) var(--yp-ease-standard); }
 .toolbar-create .el-icon { font-size: 14px; }
-.toolbar-create-group .toolbar-create:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.toolbar-create-group > .toolbar-create:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .toolbar-create-more { position: relative; width: 28px; justify-content: center; padding: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; }
 .toolbar-create-more::before { position: absolute; top: 8px; bottom: 8px; left: 0; width: 1px; background: color-mix(in srgb, var(--yp-status-blue-foreground) 40%, transparent); content: ''; }
 .toolbar-create-more .el-icon { font-size: 12px; }
@@ -4477,73 +3462,16 @@ onBeforeUnmount(() => {
 .toolbar-search > .toolbar-button { width: 100%; }
 .toolbar-search--expanded { width: min(360px, 40vw); }
 
-.popover-stack, .sort-popover, .filter-popover, .date-editor { display: grid; gap: var(--yp-space-3); }
-.popover-option, .filter-value, .text-button, .popover-add {
+.sort-popover, .date-editor { display: grid; gap: var(--yp-space-3); }
+.text-button, .popover-add {
   display: flex; align-items: center; gap: var(--yp-space-2); width: 100%; padding: 7px 8px; border: 0;
   border-radius: var(--yp-radius-sm); color: var(--yp-text-primary); background: transparent; text-align: left; cursor: pointer;
 }
-.popover-option:hover, .filter-value:hover, .popover-add:hover { background: var(--yp-bg-hover); }
-.option-count, .filter-value small { margin-left: auto; color: var(--yp-text-muted); }
+.popover-add:hover { background: var(--yp-bg-hover); }
 .empty-avatar { display: inline-grid; width: 28px; height: 28px; place-items: center; border: 1px dashed var(--yp-border-default); border-radius: 50%; }
-.filter-popover > header, .sort-popover > header { display: flex; align-items: center; justify-content: space-between; }
+.sort-popover > header { display: flex; align-items: center; justify-content: space-between; }
 .text-button { width: auto; color: var(--yp-action-primary); }
-.toolbar-button__count {
-  display: inline-grid; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; place-items: center;
-  border-radius: var(--yp-radius-pill); background: var(--yp-action-primary); color: var(--yp-on-solid);
-  font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1;
-}
-.filter-popover {
-  gap: var(--yp-space-4); min-width: 0; max-height: min(720px, calc(100dvh - 96px));
-  overflow: hidden auto; padding: 0 var(--yp-space-5) var(--yp-space-5);
-}
-.filter-popover__header {
-  position: sticky; z-index: 1; top: 0; display: flex; align-items: center; gap: var(--yp-space-2);
-  margin: 0 calc(-1 * var(--yp-space-5)); padding: var(--yp-space-4) var(--yp-space-5) var(--yp-space-3);
-   background: var(--yp-bg-raised);
-}
-.filter-popover__header strong { color: var(--yp-text-primary); font-size: 15px; font-weight: 600; }
-.filter-popover__count {
-  display: inline-grid; min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; place-items: center;
-  border-radius: var(--yp-radius-pill); background: var(--yp-action-primary); color: var(--yp-on-solid);
-  font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums;
-}
-.filter-popover__clear { margin-left: auto; padding: 4px 8px; }
-.filter-popover__clear:disabled { color: var(--yp-text-muted); background: transparent; cursor: default; }
-.filter-section { display: grid; align-content: start; gap: 4px; min-width: 0; }
-.filter-section h4 {
-  display: flex; align-items: baseline; justify-content: space-between; gap: var(--yp-space-2);
-  margin: 0 0 var(--yp-space-2); color: var(--yp-text-secondary); font-size: 12px; font-weight: 600; letter-spacing: .02em;
-}
-.filter-section h4 small { color: var(--yp-action-primary); font-size: 12px; font-weight: 500; letter-spacing: 0; }
-.filter-section__values { display: grid; align-content: start; gap: 4px; max-height: 248px; overflow: hidden auto; }
-.filter-columns {
-  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--yp-space-4) var(--yp-space-4); min-width: 0;
-  padding-top: var(--yp-space-4);
-}
-.filter-value {
-  min-width: 0; min-height: 32px; gap: 8px; padding: 5px 10px; background: var(--yp-bg-sunken);
-  transition: background-color var(--yp-motion-fast) var(--yp-ease-standard);
-}
-.filter-value[aria-pressed='true'] { background: var(--yp-bg-selected-strong); }
-.filter-value[aria-pressed='true'] .filter-value__label { font-weight: 500; }
-.filter-value__label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.filter-swatch { flex: none; width: 8px; height: 8px; border-radius: 50%; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--yp-text-primary) 12%, transparent); }
-.filter-value small { flex: 0 0 auto; color: var(--yp-text-secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
-.filter-value small.filter-value__count--zero { opacity: .55; }
-.filter-dates {
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--yp-space-4) var(--yp-space-5); min-width: 0;
-  padding-top: var(--yp-space-4);
-}
-.filter-field { display: grid; gap: var(--yp-space-2); min-width: 0; }
-.filter-field-label { color: var(--yp-text-secondary); font-size: 12px; font-weight: 600; letter-spacing: .02em; }
-.filter-field :deep(.el-date-editor) { width: 100%; min-width: 0; box-sizing: border-box; }
-:global(.work-items-filter-popover.el-popover) { width: min(760px, calc(100vw - 32px)) !important; box-sizing: border-box; padding: 0; overflow: hidden; }
-@media (max-width: 560px) {
-  .filter-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .filter-dates { grid-template-columns: minmax(0, 1fr); }
-}
 .sort-rule { display: grid; grid-template-columns: 1fr 130px; gap: var(--yp-space-2); }
-.column-option { display: flex; align-items: center; gap: var(--yp-space-2); padding: 5px 0; }
 
 :global(.work-items-popover.el-zoom-in-top-enter-active),
 :global(.work-items-popover.el-zoom-in-top-leave-active) {
@@ -4761,7 +3689,7 @@ onBeforeUnmount(() => {
   background-color: var(--work-item-condition-row-bg);
 }
 
-:deep(.monday-table .el-table__body tr.work-item-table-row > td.el-table__cell.work-item-cell--colored:not(.work-item-menu-column):not(.monday-expand-column)) {
+:deep(.monday-table .el-table__body tr:is(.work-item-table-row, .subitem-table-row) > td.el-table__cell.work-item-cell--colored:not(.work-item-menu-column):not(.monday-expand-column)) {
   background-color: var(--work-item-condition-cell-bg);
 }
 
@@ -5704,77 +4632,18 @@ onBeforeUnmount(() => {
   padding: var(--yp-space-4) 0;
 }
 
-.kanban-board {
-  display: grid;
-  grid-auto-columns: minmax(280px, 1fr);
-  grid-auto-flow: column;
-  gap: var(--yp-space-4);
-  overflow-x: auto;
-  padding: var(--yp-space-4) 0;
-  background: transparent;
+.kanban-page-skeleton {
+  display: flex;
+  gap: 16px;
+  padding: 4px 0 8px;
+  overflow: hidden;
 }
 
-.kanban-lane {
-  min-height: 320px;
-  padding: var(--yp-space-3);
-  border: 1px solid var(--yp-border-subtle);
+.kanban-page-skeleton__lane {
+  flex: 0 0 272px;
+  padding: 0 8px 12px;
   border-radius: var(--yp-radius-md);
-  background: var(--yp-bg-surface);
-}
-
-.kanban-lane header {
-  display: flex;
-  justify-content: space-between;
-  padding: var(--yp-space-2);
-}
-
-.kanban-lane header span {
-  color: var(--yp-text-muted);
-}
-
-.kanban-card {
-  display: flex;
-  width: 100%;
-  flex-direction: column;
-  gap: var(--yp-space-2);
-  margin-top: var(--yp-space-3);
-  padding: var(--yp-space-4);
-  border: 1px solid var(--yp-border-subtle);
-  border-radius: var(--yp-radius-md);
-  color: var(--yp-text-primary);
-  background: var(--yp-bg-surface);
-  box-shadow: var(--yp-shadow-card);
-  text-align: left;
-  cursor: grab;
-}
-
-.kanban-card:hover {
-  border-color: var(--yp-border-strong);
-}
-
-.kanban-card__open {
-  display: flex;
-  flex-direction: column;
-  gap: var(--yp-space-2);
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  font: inherit;
-  cursor: pointer;
-}
-
-.kanban-card__open:focus-visible { outline: 2px solid var(--yp-action-primary); outline-offset: 2px; }
-
-.detail-heading h2 {
-  margin: var(--yp-space-1) 0 var(--yp-space-4);
-}
-
-.work-item-archive-notice { margin-bottom: 16px; }
-
-.detail-heading small {
-  color: var(--yp-text-muted);
+  background: var(--yp-bg-sunken);
 }
 
 :deep(.monday-table td.monday-column--collapsed > .cell),
@@ -5783,204 +4652,6 @@ onBeforeUnmount(() => {
 </style>
 
 <style>
-.work-item-drag-preview,
-.work-item-column-drag-preview {
-  position: fixed;
-  z-index: 100000;
-  pointer-events: none;
-  overflow: hidden;
-  border: 1px solid var(--yp-border-strong);
-  border-radius: 4px;
-  background: linear-gradient(180deg, var(--yp-bg-raised) 0%, var(--yp-bg-sunken) 100%);
-  box-shadow:
-    var(--yp-shadow-overlay),
-    0 7px 16px color-mix(in srgb, var(--yp-text-primary) 20%, transparent),
-    inset 0 1px 0 color-mix(in srgb, var(--yp-bg-surface) 96%, transparent),
-    inset 0 -1px 0 color-mix(in srgb, var(--yp-text-primary) 18%, transparent);
-  filter: grayscale(1);
-  opacity: 0.96;
-  cursor: grabbing;
-  user-select: none;
-  will-change: left, top, transform;
-}
-
-.work-item-drag-preview::after,
-.work-item-column-drag-preview::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--yp-bg-surface) 17%, transparent),
-    color-mix(in srgb, var(--yp-text-primary) 10%, transparent)
-  );
-  pointer-events: none;
-}
-
-.work-item-drag-preview::after {
-  box-shadow: inset 6px 0 0 rgb(87, 155, 252);
-}
-
-.work-item-column-drag-preview::after {
-  box-shadow: inset 6px 0 0 var(--yp-text-muted);
-}
-
-.work-item-drag-preview__table {
-  height: 100%;
-  table-layout: fixed;
-  border-spacing: 0;
-  border-collapse: collapse;
-  color: var(--yp-text-secondary);
-  background: var(--yp-bg-sunken);
-}
-
-.work-item-drag-preview__row,
-.work-item-drag-preview__row > td {
-  height: 36px;
-}
-
-.work-item-drag-preview__row > td {
-  padding: 0;
-  overflow: hidden;
-  color: var(--yp-text-secondary) !important;
-  background: var(--yp-bg-sunken) !important;
-  border-right: 1px solid var(--yp-border-default) !important;
-  border-bottom: 1px solid var(--yp-border-strong) !important;
-  box-sizing: border-box;
-}
-
-.work-item-drag-preview__row > td:nth-child(even) {
-  background: var(--yp-bg-hover) !important;
-}
-
-.work-item-column-drag-preview__table {
-  width: 100%;
-  table-layout: fixed;
-  border-spacing: 0;
-  border-collapse: collapse;
-  color: var(--yp-text-primary);
-  background: var(--yp-bg-surface);
-}
-
-.work-item-column-drag-preview {
-  filter: none;
-  opacity: 1;
-}
-
-.work-item-column-drag-preview::after {
-  background: transparent;
-  box-shadow: none;
-}
-
-.work-item-column-drag-preview__header {
-  height: 38px;
-  padding: 0 var(--yp-space-2);
-  overflow: hidden;
-  color: var(--yp-text-secondary) !important;
-  background: var(--yp-monday-header-bg) !important;
-  border-right: 1px solid var(--yp-monday-grid-border) !important;
-  border-bottom: 1px solid var(--yp-monday-grid-border) !important;
-  box-sizing: border-box;
-  text-align: center;
-}
-
-.work-item-column-drag-preview__cell {
-  height: 36px;
-  padding: 0;
-  overflow: hidden;
-  color: var(--yp-text-primary) !important;
-  background: var(--yp-bg-surface) !important;
-  border-right: 1px solid var(--yp-monday-grid-border) !important;
-  border-bottom: 1px solid var(--yp-monday-grid-border) !important;
-  box-sizing: border-box;
-  text-align: center;
-}
-
-.work-item-drag-preview *,
-.work-item-column-drag-preview * {
-  pointer-events: none !important;
-  cursor: grabbing !important;
-}
-
-/* 抽屉无蒙版交互穿透 */
-.work-items-drawer-overlay {
-  --el-transition-duration: var(--yp-work-items-drawer-duration, 300ms);
-  pointer-events: none !important;
-  background: transparent !important;
-}
-
-.work-items-drawer-overlay .el-drawer,
-.work-items-detail-drawer {
-  transform: translateX(calc(var(--yp-work-items-drawer-width, 560px) - var(--yp-work-items-drawer-inset, 0px))) !important;
-  transition: none !important;
-  pointer-events: auto !important;
-  box-shadow: -4px 0 24px color-mix(in srgb, var(--yp-text-primary) 12%, transparent) !important;
-  overflow: visible !important;
-}
-
-.work-items-detail-drawer--resizing {
-  transition: none !important;
-}
-
-/* 加载时详情为空：面板撑满抽屉内容区，品牌加载遮罩才能完整居中，不被抽屉滚动区裁掉。 */
-.work-items-detail-drawer .detail-panel {
-  min-height: 100%;
-}
-
-/* 抽屉左侧拖动手柄 */
-.drawer-resize-handle {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 20px;
-  cursor: ew-resize;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  user-select: none;
-  touch-action: none;
-}
-
-.drawer-resize-handle::before {
-  content: '';
-  position: absolute;
-  inset: 0 10px 0 0;
-  background: var(--yp-bg-sunken);
-  box-shadow: -2px 0 8px color-mix(in srgb, var(--yp-text-primary) 10%, transparent);
-  opacity: 0;
-  transition: opacity var(--yp-motion-fast) var(--yp-ease-standard);
-}
-
-.drawer-resize-grip {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 12px;
-  height: 32px;
-  border-radius: 4px;
-  color: var(--yp-text-secondary);
-  background: var(--yp-bg-sunken);
-  border: 1px solid var(--yp-monday-grid-border);
-  box-shadow: 0 1px 4px color-mix(in srgb, var(--yp-text-primary) 10%, transparent);
-  opacity: 0;
-  transform: scale(.92);
-  transition: opacity var(--yp-motion-fast) var(--yp-ease-standard),
-              transform var(--yp-motion-fast) var(--yp-ease-standard);
-}
-
-.drawer-resize-handle:hover::before,
-.drawer-resize-handle--resizing::before,
-.drawer-resize-handle:hover .drawer-resize-grip,
-.drawer-resize-handle--resizing .drawer-resize-grip {
-  opacity: 1;
-}
-
-.drawer-resize-handle:hover .drawer-resize-grip,
-.drawer-resize-handle--resizing .drawer-resize-grip {
-  transform: scale(1);
-}
 :deep(.monday-table td.monday-column--collapsed > .cell),
 :deep(.monday-table th.monday-column-header--collapsed > .cell) { padding: 0; }
 .work-item-collapsed-cell { display: block; width: 100%; height: 100%; }
@@ -5993,6 +4664,30 @@ onBeforeUnmount(() => {
 .work-items-embedded .work-items-toolbar { margin: 0; flex: none; }
 .work-items-embedded :deep(.el-scrollbar__bar) { display: block !important; }
 .work-items-embedded :deep(.el-scrollbar__wrap) { overscroll-behavior: auto; }
+
+/* 我的工作：表格随内容增高，由页面统一滚动。 */
+.work-items-my-work.project-overview-stack,
+.work-items-my-work .work-items-home,
+.work-items-my-work .monday-table-surface,
+.work-items-my-work .monday-table-wrapper { height: auto; flex: none; }
+.work-items-my-work .monday-table-surface { min-height: 0; padding-top: 0; }
+.work-items-my-work .monday-table { --work-item-group-accent: inherit; --work-item-quick-add-accent: var(--work-item-group-accent); }
+
+/* 我的工作底部新增：整行可点，悬停整行高亮。 */
+.my-work-create-row::before {
+  position: absolute; top: 0; right: 0; bottom: 0; left: var(--work-item-quick-start);
+  background: var(--yp-bg-hover); content: ''; opacity: 0; pointer-events: none;
+  transition: opacity var(--yp-motion-fast) var(--yp-ease-standard);
+}
+.my-work-create-row:hover:not(:disabled)::before,
+.my-work-create-row:focus-visible::before { opacity: 1; }
+.my-work-create-row__label {
+  position: sticky; z-index: 1; left: var(--work-item-quick-title-left); grid-column: 4;
+  display: inline-flex; align-items: center; gap: 6px; padding-left: 32px;
+  color: var(--yp-text-secondary); font-size: 13px;
+  transition: color var(--yp-motion-fast) var(--yp-ease-standard), transform var(--yp-motion-fast) var(--yp-ease-standard);
+}
+.my-work-create-row:hover:not(:disabled) .my-work-create-row__label { color: var(--yp-action-primary); transform: translateX(2px); }
 .work-item-context-label { font-size: 11px; white-space: nowrap; color: var(--yp-text-secondary); padding: 0 5px; }
 :deep(.monday-table td.monday-column--collapsed > .cell),
 :deep(.monday-table th.monday-column-header--collapsed > .cell) { padding: 0; }

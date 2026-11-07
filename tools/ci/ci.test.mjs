@@ -40,19 +40,21 @@ test('merge gate accepts only complete successful executions', () => {
 test('workflow preserves mandatory gates, immutable actions and exact artifact handoff', () => {
   assertWorkflowSafety(workflow())
   const renamedStep = workflow()
-  renamedStep.jobs.linux.steps.find(step => step.run === 'pnpm ci:backend').name = 'Backend verification'
+  renamedStep.jobs.backend.steps.find(step => step.run === 'pnpm ci:backend').name = 'Backend verification'
   assert.doesNotThrow(() => assertWorkflowSafety(renamedStep))
   const brokenVariants = [
     value => { value.on.pull_request.branches = ['dev'] },
     value => { value.on.push.branches = ['dev'] },
     value => { value.on.push.paths = ['backend/**'] },
     value => { value.jobs.windows.needs = ['linux'] },
+    value => { value.jobs.windows.needs = value.jobs.windows.needs.filter(id => id !== 'static') },
+    value => { value.jobs.linux.needs = ['backend'] },
     value => { delete value.jobs.windows.if },
     value => { value.jobs.windows.steps = value.jobs.windows.steps.filter(step => step.if !== '${{ cancelled() }}') },
     value => { value.jobs.windows.steps.find(step => step.run === 'node tools/ci/gate.mjs').env.WORKFLOW_CANCELLED = '${{ cancelled() }}' },
     value => { value.jobs.windows_delivery.if = '${{ false }}' },
-    value => { value.jobs.linux.steps.find(step => step.run === 'pnpm ci:backend').if = '${{ false }}' },
-    value => { value.jobs.linux.steps.find(step => step.run === 'pnpm ci:backend')['continue-on-error'] = true },
+    value => { value.jobs.backend.steps.find(step => step.run === 'pnpm ci:backend').if = '${{ false }}' },
+    value => { value.jobs.backend.steps.find(step => step.run === 'pnpm ci:backend')['continue-on-error'] = true },
     value => { value.jobs.linux.steps = value.jobs.linux.steps.filter(step => step.run !== 'pnpm ci:portable') },
     value => { value.jobs.extra = { steps: [] } },
     value => { value.on.pull_request.paths = ['frontend/**'] },
@@ -105,7 +107,7 @@ test('flat static plan runs shared capabilities once and Windows reuses the test
   assert.deepEqual(assetSteps.map(step => step.id), ['brand-assets', 'deployment-config'])
   assert.deepEqual(plan('portable').map(step => step.id), [
     'monitor-alert-rules',
-    'backup-restore-output', 'packaged-http', 'packaged-http-report', 'create-handoff', 'verify-handoff',
+    'backup-restore-output', 'packaged-http', 'packaged-http-report', 'browser-smoke', 'create-handoff', 'verify-handoff',
   ])
   assert.deepEqual(plan('windows').map(step => step.id), [
     'windows-toolchain', 'desktop-profile-tests', 'windows-release-restore', 'windows-handoff',
@@ -114,6 +116,7 @@ test('flat static plan runs shared capabilities once and Windows reuses the test
   ])
   assert.equal(steps.filter(step => step.id === 'event-compatibility').length, 1)
   assert.equal(steps.filter(step => step.id === 'generated-client').length, 1)
+  assert.deepEqual(plan('backend')[0].args, ['spotless:check'])
   assert.deepEqual(plan('backend').find(step => step.id === 'backend-regression').args, ['clean', 'verify'])
   assert(plan('backend').some(step => step.args.includes('-DargLine=-Xmx96m')))
   assert(!plan('windows').some(step => step.tool === 'maven' || step.args.includes('build')))

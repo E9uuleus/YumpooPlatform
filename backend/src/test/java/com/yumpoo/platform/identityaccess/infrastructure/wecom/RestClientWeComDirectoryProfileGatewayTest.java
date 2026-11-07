@@ -1,8 +1,17 @@
 package com.yumpoo.platform.identityaccess.infrastructure.wecom;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+
 import com.yumpoo.platform.identityaccess.application.directory.DirectoryOptionalField;
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncException;
 import com.yumpoo.platform.identityaccess.application.directory.WeComRawMemberProfile;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.time.Clock;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -11,16 +20,6 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
-
-import java.io.PrintWriter;
-import java.io.StringWriter;
-import java.time.Clock;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 class RestClientWeComDirectoryProfileGatewayTest {
 
@@ -36,7 +35,8 @@ class RestClientWeComDirectoryProfileGatewayTest {
         expectMember(fixture.server(), "token-a", """
                 {"errcode":0,"userid":"member-a","name":"Alice","department":[3],"status":%s}
                 """.formatted(status));
-        assertThat(fixture.gateway().fetchMemberProfile("member-a").accountDisabled()).isEqualTo(disabled);
+        assertThat(fixture.gateway().fetchMemberProfile("member-a").accountDisabled())
+                .isEqualTo(disabled);
         fixture.server().verify();
     }
 
@@ -49,7 +49,8 @@ class RestClientWeComDirectoryProfileGatewayTest {
                 {"errcode":0,"userid":"member-a","name":"Alice","department":[3],"status":%s}
                 """.formatted(status));
         assertThatThrownBy(() -> fixture.gateway().fetchMemberProfile("member-a"))
-                .isInstanceOfSatisfying(DirectorySyncException.class,
+                .isInstanceOfSatisfying(
+                        DirectorySyncException.class,
                         error -> assertThat(error.errorCode()).isEqualTo("DIRECTORY_PROFILE_STATUS_INVALID"));
         fixture.server().verify();
     }
@@ -58,16 +59,16 @@ class RestClientWeComDirectoryProfileGatewayTest {
     void readsDepartmentAndMemberWithOneProfileTokenAndPreservesVisibilityStates() {
         Fixture fixture = fixture();
         expectToken(fixture.server(), "token-a");
-        fixture.server().expect(requestTo(BASE
-                        + "/cgi-bin/department/list?access_token=token-a"))
+        fixture.server()
+                .expect(requestTo(BASE + "/cgi-bin/department/list?access_token=token-a"))
                 .andExpect(method(HttpMethod.GET))
                 .andRespond(withSuccess("""
                         {"errcode":0,"errmsg":"ok","department":[
                           {"id":20,"name":"华东区"},{"id":3,"name":"研发部"}
                         ]}
                         """, MediaType.APPLICATION_JSON));
-        fixture.server().expect(requestTo(BASE
-                        + "/cgi-bin/user/get?access_token=token-a&userid=member-a"))
+        fixture.server()
+                .expect(requestTo(BASE + "/cgi-bin/user/get?access_token=token-a&userid=member-a"))
                 .andExpect(method(HttpMethod.GET))
                 .andRespond(withSuccess("""
                         {"errcode":0,"errmsg":"ok","userid":"member-a","name":"Alice",
@@ -114,19 +115,13 @@ class RestClientWeComDirectoryProfileGatewayTest {
                 """);
 
         DirectorySyncException exception = org.assertj.core.api.Assertions.catchThrowableOfType(
-                () -> fixture.gateway().fetchMemberProfile("member-a"),
-                DirectorySyncException.class
-        );
+                () -> fixture.gateway().fetchMemberProfile("member-a"), DirectorySyncException.class);
         StringWriter trace = new StringWriter();
         exception.printStackTrace(new PrintWriter(trace));
 
         assertThat(exception.errorCode()).isEqualTo("DIRECTORY_PROFILE_NAME_UNAVAILABLE");
-        assertThat(trace.toString()).doesNotContain(
-                PROFILE_SECRET,
-                "sensitive-token",
-                "sensitive-member",
-                "sensitive-provider-body"
-        );
+        assertThat(trace.toString())
+                .doesNotContain(PROFILE_SECRET, "sensitive-token", "sensitive-member", "sensitive-provider-body");
         assertThat(exception).hasNoCause();
         fixture.server().verify();
     }
@@ -138,9 +133,9 @@ class RestClientWeComDirectoryProfileGatewayTest {
         expectMember(fixture.server(), "token-a", "{\"errcode\":48002,\"errmsg\":\"forbidden\"}");
 
         assertThatThrownBy(() -> fixture.gateway().fetchMemberProfile("member-a"))
-                .isInstanceOfSatisfying(DirectorySyncException.class,
-                        error -> assertThat(error.errorCode())
-                                .isEqualTo("DIRECTORY_PROFILE_PERMISSION_DENIED"));
+                .isInstanceOfSatisfying(
+                        DirectorySyncException.class,
+                        error -> assertThat(error.errorCode()).isEqualTo("DIRECTORY_PROFILE_PERMISSION_DENIED"));
         fixture.server().verify();
     }
 
@@ -148,38 +143,22 @@ class RestClientWeComDirectoryProfileGatewayTest {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         return new Fixture(
-                new RestClientWeComDirectoryProfileGateway(
-                        builder,
-                        CORP_ID,
-                        PROFILE_SECRET,
-                        Clock.systemUTC()
-                ),
-                server
-        );
+                new RestClientWeComDirectoryProfileGateway(builder, CORP_ID, PROFILE_SECRET, Clock.systemUTC()),
+                server);
     }
 
     private static void expectToken(MockRestServiceServer server, String token) {
-        server.expect(requestTo(BASE + "/cgi-bin/gettoken?corpid=" + CORP_ID
-                        + "&corpsecret=" + PROFILE_SECRET))
-                .andRespond(withSuccess("{\"errcode\":0,\"errmsg\":\"ok\","
-                                + "\"access_token\":\"" + token + "\",\"expires_in\":7200}",
+        server.expect(requestTo(BASE + "/cgi-bin/gettoken?corpid=" + CORP_ID + "&corpsecret=" + PROFILE_SECRET))
+                .andRespond(withSuccess(
+                        "{\"errcode\":0,\"errmsg\":\"ok\"," + "\"access_token\":\"" + token + "\",\"expires_in\":7200}",
                         MediaType.APPLICATION_JSON));
     }
 
-    private static void expectMember(
-            MockRestServiceServer server,
-            String token,
-            String response
-    ) {
-        server.expect(requestTo(BASE + "/cgi-bin/user/get?access_token=" + token
-                        + "&userid=member-a"))
+    private static void expectMember(MockRestServiceServer server, String token, String response) {
+        server.expect(requestTo(BASE + "/cgi-bin/user/get?access_token=" + token + "&userid=member-a"))
                 .andExpect(method(HttpMethod.GET))
                 .andRespond(withSuccess(response, MediaType.APPLICATION_JSON));
     }
 
-    private record Fixture(
-            RestClientWeComDirectoryProfileGateway gateway,
-            MockRestServiceServer server
-    ) {
-    }
+    private record Fixture(RestClientWeComDirectoryProfileGateway gateway, MockRestServiceServer server) {}
 }

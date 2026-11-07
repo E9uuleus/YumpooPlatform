@@ -1,14 +1,15 @@
 package com.yumpoo.platform.workitem.api;
 
-import jakarta.validation.Validation;
-import jakarta.validation.Validator;
-import org.junit.jupiter.api.Test;
-import java.util.UUID;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
+import jakarta.validation.Validation;
+import jakarta.validation.Validator;
+import java.util.UUID;
+import org.junit.jupiter.api.Test;
+
 class WorkItemCreateRequestTest {
-    private final Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
+    private final Validator validator =
+            Validation.buildDefaultValidatorFactory().getValidator();
 
     @Test
     void priorityAcceptsProjectLabelCodesAndRejectsMalformedValues() {
@@ -18,6 +19,7 @@ class WorkItemCreateRequestTest {
     }
 
     private static WorkItemCreateRequest request(String priority) {
-        return new WorkItemCreateRequest(UUID.randomUUID(), "标题", priority, null, null, null, null, null, null, null, null);
+        return new WorkItemCreateRequest(
+                UUID.randomUUID(), "标题", priority, null, null, null, null, null, null, null, null);
     }
 }

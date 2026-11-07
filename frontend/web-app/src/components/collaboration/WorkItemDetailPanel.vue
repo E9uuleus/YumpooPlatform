@@ -54,7 +54,11 @@ async function beforeTabLeave(_next: string | number, previous: string | number)
   return true
 }
 
-defineExpose({ hasDraft, busy, discardDraft })
+async function openActivity(): Promise<void> {
+  if (await beforeTabLeave('activity', tab.value)) tab.value = 'activity'
+}
+
+defineExpose({ hasDraft, busy, discardDraft, openActivity })
 </script>
 
 <template>

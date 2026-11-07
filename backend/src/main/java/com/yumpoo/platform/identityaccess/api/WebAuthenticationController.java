@@ -11,6 +11,9 @@ import com.yumpoo.platform.identityaccess.application.authentication.WebLogoutSe
 import com.yumpoo.platform.identityaccess.application.session.IssuedSession;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.time.Clock;
+import java.time.Duration;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
@@ -19,16 +22,13 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
-import java.io.IOException;
-import java.time.Clock;
-import java.time.Duration;
-
 @ApiV1Controller
 public final class WebAuthenticationController {
 
     public static final String OAUTH_NONCE_COOKIE = "__Host-yumpoo-oauth-nonce";
     /** 「7 天内免登录」的选择与 nonce 一起绑定到本次浏览器登录，回调签发会话时读取。 */
     public static final String OAUTH_REMEMBER_COOKIE = "__Host-yumpoo-oauth-remember";
+
     private static final String NO_STORE = "no-store, no-cache, must-revalidate";
 
     private final WebAuthenticationService authenticationService;
@@ -44,8 +44,7 @@ public final class WebAuthenticationController {
             CurrentAuthenticationQueryService currentQuery,
             CurrentActorProvider currentActorProvider,
             ApiErrorWriter errorWriter,
-            Clock clock
-    ) {
+            Clock clock) {
         this.authenticationService = authenticationService;
         this.logoutService = logoutService;
         this.currentQuery = currentQuery;
@@ -58,33 +57,32 @@ public final class WebAuthenticationController {
     void authorize(
             @RequestParam(defaultValue = "true") boolean remember,
             HttpServletRequest request,
-            HttpServletResponse response
-    ) throws IOException {
+            HttpServletResponse response)
+            throws IOException {
         applySecurityHeaders(response);
         String requestId = requestId(request);
         try {
             WebLoginAuthorization authorization = authenticationService.begin(requestId);
             response.setStatus(HttpStatus.FOUND.value());
             response.setHeader(
-                    HttpHeaders.LOCATION,
-                    authorization.authorizationUri().toASCIIString()
-            );
+                    HttpHeaders.LOCATION, authorization.authorizationUri().toASCIIString());
             response.addHeader(
                     HttpHeaders.SET_COOKIE,
-                    attemptCookie(OAUTH_NONCE_COOKIE, authorization.nonce().value()).toString()
-            );
+                    attemptCookie(OAUTH_NONCE_COOKIE, authorization.nonce().value())
+                            .toString());
             response.addHeader(
                     HttpHeaders.SET_COOKIE,
-                    attemptCookie(OAUTH_REMEMBER_COOKIE, Boolean.toString(remember)).toString()
-            );
+                    attemptCookie(OAUTH_REMEMBER_COOKIE, Boolean.toString(remember))
+                            .toString());
         } catch (ApplicationException exception) {
             response.setStatus(HttpStatus.FOUND.value());
             response.setHeader(
                     HttpHeaders.LOCATION,
-                    exception.errorCode() == com.yumpoo.platform.foundation.application.error.StandardErrorCode.DEPENDENCY_UNAVAILABLE
+                    exception.errorCode()
+                                    == com.yumpoo.platform.foundation.application.error.StandardErrorCode
+                                            .DEPENDENCY_UNAVAILABLE
                             ? "/login?reason=unavailable"
-                            : "/login?reason=authentication"
-            );
+                            : "/login?reason=authentication");
         }
     }
 
@@ -95,51 +93,47 @@ public final class WebAuthenticationController {
             @CookieValue(name = OAUTH_NONCE_COOKIE, required = false) String nonce,
             @CookieValue(name = OAUTH_REMEMBER_COOKIE, defaultValue = "true") boolean remember,
             HttpServletRequest request,
-            HttpServletResponse response
-    ) throws IOException {
+            HttpServletResponse response)
+            throws IOException {
         applySecurityHeaders(response);
-        response.addHeader(HttpHeaders.SET_COOKIE, clearAttemptCookie(OAUTH_NONCE_COOKIE).toString());
-        response.addHeader(HttpHeaders.SET_COOKIE, clearAttemptCookie(OAUTH_REMEMBER_COOKIE).toString());
+        response.addHeader(
+                HttpHeaders.SET_COOKIE, clearAttemptCookie(OAUTH_NONCE_COOKIE).toString());
+        response.addHeader(
+                HttpHeaders.SET_COOKIE,
+                clearAttemptCookie(OAUTH_REMEMBER_COOKIE).toString());
         String requestId = requestId(request);
         try {
             IssuedSession issued = authenticationService.complete(code, state, nonce, remember);
-            Duration remaining = SessionHttpCookies.maxAge(
-                    remember,
-                    issued.absoluteExpiresAt(),
-                    clock.instant()
-            );
+            Duration remaining = SessionHttpCookies.maxAge(remember, issued.absoluteExpiresAt(), clock.instant());
             response.addHeader(
                     HttpHeaders.SET_COOKIE,
-                    SessionHttpCookies.session(
-                            issued.sessionCredential().value(),
-                            remaining
-                    ).toString()
-            );
+                    SessionHttpCookies.session(issued.sessionCredential().value(), remaining)
+                            .toString());
             response.addHeader(
                     HttpHeaders.SET_COOKIE,
-                    SessionHttpCookies.csrf(
-                            issued.csrfCredential().value(),
-                            remaining
-                    ).toString()
-            );
+                    SessionHttpCookies.csrf(issued.csrfCredential().value(), remaining)
+                            .toString());
             response.setStatus(HttpStatus.FOUND.value());
             response.setHeader(HttpHeaders.LOCATION, "/");
         } catch (ApplicationException exception) {
             response.setStatus(HttpStatus.FOUND.value());
             response.setHeader(
                     HttpHeaders.LOCATION,
-                    exception.errorCode() == com.yumpoo.platform.foundation.application.error.StandardErrorCode.DEPENDENCY_UNAVAILABLE
+                    exception.errorCode()
+                                    == com.yumpoo.platform.foundation.application.error.StandardErrorCode
+                                            .DEPENDENCY_UNAVAILABLE
                             ? "/login?reason=unavailable"
-                            : "/login?reason=authentication"
-            );
+                            : "/login?reason=authentication");
         }
     }
 
     @PostMapping("/auth/logout")
     void logout(HttpServletRequest request, HttpServletResponse response) {
         logoutService.logout(SessionRequestContext.required(request));
-        response.addHeader(HttpHeaders.SET_COOKIE, SessionHttpCookies.clearSession().toString());
-        response.addHeader(HttpHeaders.SET_COOKIE, SessionHttpCookies.clearCsrf().toString());
+        response.addHeader(
+                HttpHeaders.SET_COOKIE, SessionHttpCookies.clearSession().toString());
+        response.addHeader(
+                HttpHeaders.SET_COOKIE, SessionHttpCookies.clearCsrf().toString());
         response.setStatus(HttpStatus.NO_CONTENT.value());
     }
 
@@ -147,9 +141,7 @@ public final class WebAuthenticationController {
     CurrentAuthenticationResponse me(HttpServletRequest request) {
         CurrentActor actor = currentActorProvider.requiredActive();
         return CurrentAuthenticationResponse.from(
-                currentQuery.current(SessionRequestContext.required(request)),
-                actor.platformRoles()
-        );
+                currentQuery.current(SessionRequestContext.required(request)), actor.platformRoles());
     }
 
     private static void applySecurityHeaders(HttpServletResponse response) {
@@ -157,10 +149,7 @@ public final class WebAuthenticationController {
         response.setHeader(HttpHeaders.PRAGMA, "no-cache");
         response.setHeader("Referrer-Policy", "no-referrer");
         response.setHeader("X-Content-Type-Options", "nosniff");
-        response.setHeader(
-                "Content-Security-Policy",
-                "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
-        );
+        response.setHeader("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
     }
 
     private static ResponseCookie attemptCookie(String name, String value) {

@@ -1,5 +1,10 @@
 package com.yumpoo.platform.workitem.application;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
 import com.yumpoo.platform.catalog.api.ProjectAccessSnapshot;
 import com.yumpoo.platform.catalog.api.ProjectAccessSnapshotQuery;
 import com.yumpoo.platform.catalog.api.ProjectActiveMembershipQuery;
@@ -15,15 +20,14 @@ import com.yumpoo.platform.foundation.application.idempotency.RequestHash;
 import com.yumpoo.platform.foundation.application.idempotency.StoredCommandResult;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.MinimalUserSnapshotQuery;
+import com.yumpoo.platform.workitem.application.content.ContentModels;
+import com.yumpoo.platform.workitem.application.content.ContentRepository;
+import com.yumpoo.platform.workitem.application.label.WorkItemLabelModels;
+import com.yumpoo.platform.workitem.application.label.WorkItemLabelRepository;
 import com.yumpoo.platform.workitem.domain.Content;
 import com.yumpoo.platform.workitem.domain.KanbanRank;
 import com.yumpoo.platform.workitem.domain.WorkItem;
 import com.yumpoo.platform.workitem.domain.WorkItemStatusCategory;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import tools.jackson.databind.json.JsonMapper;
-
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -35,11 +39,10 @@ import java.util.OptionalLong;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import tools.jackson.databind.json.JsonMapper;
 
 class WorkItemCreationCoreTest {
     private final UUID company = UUID.randomUUID();
@@ -56,34 +59,60 @@ class WorkItemCreationCoreTest {
     private final WorkItemLabelRepository labels = mock(WorkItemLabelRepository.class);
     private final TransactionalEventPort events = mock(TransactionalEventPort.class);
     private final CollaborationHtmlSanitizer sanitizer = mock(CollaborationHtmlSanitizer.class);
-    private final Content content = Content.initial(UUID.randomUUID(), company, project,
-            "TASKS", "任务", "BRIGHT_GREEN", 10, user, now).markUsed(user, now);
-    private WorkItemService service;
+    private final Content content = Content.initial(
+                    UUID.randomUUID(), company, project, "TASKS", "任务", "BRIGHT_GREEN", 10, user, now)
+            .markUsed(user, now);
+    private WorkItemCommandService service;
 
     @BeforeEach
     void setUp() {
         var idempotency = mock(IdempotentCommandExecutor.class);
-        when(idempotency.execute(any(), any())).thenAnswer(call ->
-                IdempotencyExecutionResult.executed(call.<Supplier<StoredCommandResult>>getArgument(1).get()));
-        service = new WorkItemService(items, relations, contents, mock(WorkItemUpdateRepository.class),
-                access, guard, members, labels, mock(MinimalUserSnapshotQuery.class), idempotency,
-                events, JsonMapper.builder().build(), Clock.fixed(now, ZoneOffset.UTC),
-                mock(TimeTrackingRepository.class), sanitizer,
-                mock(com.yumpoo.platform.catalog.api.ProjectConnectionTargetQuery.class));
-        when(access.findVisible(actor, project)).thenReturn(Optional.of(new ProjectAccessSnapshot(
-                project, company, ProjectAccessSnapshot.ProjectLifecycle.ACTIVE,
-                ProjectAccessSnapshot.ActorProjectAccess.MEMBER, 0, OptionalLong.of(0))));
-        when(guard.lockForFactWrite(actor, project)).thenReturn(new ProjectFactWriteSnapshot(
-                project, company, "P019", ProjectFactWriteSnapshot.ProjectLifecycle.ACTIVE,
-                ProjectFactWriteSnapshot.ActorProjectAccess.MEMBER));
-        when(contents.findLocator(company, content.id())).thenReturn(Optional.of(
-                new ContentModels.ContentLocator(content.id(), project)));
+        when(idempotency.execute(any(), any()))
+                .thenAnswer(call -> IdempotencyExecutionResult.executed(
+                        call.<Supplier<StoredCommandResult>>getArgument(1).get()));
+        var json = JsonMapper.builder().build();
+        var clock = Clock.fixed(now, ZoneOffset.UTC);
+        var views = new WorkItemViews(contents, access, mock(MinimalUserSnapshotQuery.class), json);
+        var workItemEvents = new WorkItemEvents(events, json);
+        var ordering = new WorkItemOrderingService(
+                items, relations, contents, guard, labels, idempotency, clock, views, workItemEvents);
+        service = new WorkItemCommandService(
+                items,
+                relations,
+                contents,
+                guard,
+                members,
+                labels,
+                idempotency,
+                clock,
+                sanitizer,
+                ordering,
+                views,
+                workItemEvents);
+        when(access.findVisible(actor, project))
+                .thenReturn(Optional.of(new ProjectAccessSnapshot(
+                        project,
+                        company,
+                        ProjectAccessSnapshot.ProjectLifecycle.ACTIVE,
+                        ProjectAccessSnapshot.ActorProjectAccess.MEMBER,
+                        0,
+                        OptionalLong.of(0))));
+        when(guard.lockForFactWrite(actor, project))
+                .thenReturn(new ProjectFactWriteSnapshot(
+                        project,
+                        company,
+                        "P019",
+                        ProjectFactWriteSnapshot.ProjectLifecycle.ACTIVE,
+                        ProjectFactWriteSnapshot.ActorProjectAccess.MEMBER));
+        when(contents.findLocator(company, content.id()))
+                .thenReturn(Optional.of(new ContentModels.ContentLocator(content.id(), project)));
         when(contents.find(company, project, content.id())).thenReturn(Optional.of(content));
         when(contents.lockForShare(company, project, content.id())).thenReturn(Optional.of(content));
-        when(labels.statuses(company, project)).thenReturn(List.of(new WorkItemLabelModels.StatusLabel(
-                "NOT_STARTED", "未开始", "GRAY", "TODO", 0, true, true, false)));
-        when(labels.priorities(company, project)).thenReturn(List.of(new WorkItemLabelModels.PriorityLabel(
-                "HIGH", "高", "ORANGE", 30, true, false)));
+        when(labels.statuses(company, project))
+                .thenReturn(List.of(new WorkItemLabelModels.StatusLabel(
+                        "NOT_STARTED", "未开始", "GRAY", "TODO", 0, true, true, false)));
+        when(labels.priorities(company, project))
+                .thenReturn(List.of(new WorkItemLabelModels.PriorityLabel("HIGH", "高", "ORANGE", 30, true, false)));
         when(items.nextSequence(company, project)).thenReturn(36L);
         when(items.insert(any())).thenReturn(true);
     }
@@ -93,9 +122,22 @@ class WorkItemCreationCoreTest {
         when(members.findActiveMemberIds(company, project, List.of(user))).thenReturn(Set.of(user));
         when(sanitizer.sanitizeDescription("<p>正文</p>")).thenReturn("<p>正文</p>");
         LocalDate date = LocalDate.of(2026, 10, 3);
-        var result = service.create(new WorkItemCommands.Create(actor, project, content.id(), "  回归事项  ",
-                "HIGH", user, "<p>正文</p>", "备注", date, date, date, UUID.randomUUID(), hash(),
-                new DueTimeChange(true, LocalTime.of(14, 30)))).result();
+        var result = service.create(new WorkItemCommands.Create(
+                        actor,
+                        project,
+                        content.id(),
+                        "  回归事项  ",
+                        "HIGH",
+                        user,
+                        "<p>正文</p>",
+                        "备注",
+                        date,
+                        date,
+                        date,
+                        UUID.randomUUID(),
+                        hash(),
+                        new DueTimeChange(true, LocalTime.of(14, 30))))
+                .result();
         var capture = ArgumentCaptor.forClass(WorkItem.class);
         verify(items).insert(capture.capture());
         WorkItem item = capture.getValue();
@@ -127,15 +169,45 @@ class WorkItemCreationCoreTest {
     @Test
     void subitemCreationStillUsesSharedKernelAndCreatesOneParentRelation() {
         UUID parentId = UUID.randomUUID();
-        WorkItem parent = WorkItem.create(parentId, company, project, content.id(), 1, "P019-1",
-                "父事项", "NOT_STARTED", WorkItemStatusCategory.TODO, null, null, null, null,
-                null, null, null, KanbanRank.between(null, null).orElseThrow(), user, now);
-        when(items.findLocator(company, parentId)).thenReturn(Optional.of(
-                new WorkItemModels.WorkItemLocator(parentId, project, content.id())));
+        WorkItem parent = WorkItem.create(
+                parentId,
+                company,
+                project,
+                content.id(),
+                1,
+                "P019-1",
+                "父事项",
+                "NOT_STARTED",
+                WorkItemStatusCategory.TODO,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                KanbanRank.between(null, null).orElseThrow(),
+                user,
+                now);
+        when(items.findLocator(company, parentId))
+                .thenReturn(Optional.of(new WorkItemModels.WorkItemLocator(parentId, project, content.id())));
         when(items.lock(company, project, content.id(), parentId)).thenReturn(Optional.of(parent));
         when(relations.insertParentChild(any())).thenReturn(true);
-        service.createSubitem(new WorkItemCommands.CreateSubitem(actor, parentId, content.id(), "子事项",
-                null, null, null, null, null, null, null, UUID.randomUUID(), hash(), DueTimeChange.unchanged()));
+        service.createSubitem(new WorkItemCommands.CreateSubitem(
+                actor,
+                parentId,
+                content.id(),
+                "子事项",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                UUID.randomUUID(),
+                hash(),
+                DueTimeChange.unchanged()));
         var item = ArgumentCaptor.forClass(WorkItem.class);
         verify(items).insert(item.capture());
         assertThat(item.getValue().itemNo()).isEqualTo("P019-36");
@@ -144,22 +216,39 @@ class WorkItemCreationCoreTest {
         var relation = ArgumentCaptor.forClass(WorkItemRelationRepository.ParentChildRelation.class);
         verify(relations).insertParentChild(relation.capture());
         assertThat(relation.getValue().parentWorkItemId()).isEqualTo(parentId);
-        assertThat(relation.getValue().childWorkItemId()).isEqualTo(item.getValue().id());
+        assertThat(relation.getValue().childWorkItemId())
+                .isEqualTo(item.getValue().id());
         var event = ArgumentCaptor.forClass(EventDraft.class);
         verify(events, times(2)).append(event.capture());
-        assertThat(event.getAllValues()).extracting(EventDraft::eventType)
+        assertThat(event.getAllValues())
+                .extracting(EventDraft::eventType)
                 .containsExactly("workitem.work_item_created", "workitem.work_item_relation_created");
     }
 
     @Test
     void invalidAssigneeStillFailsBeforeAllocatingNumberOrWritingEvents() {
-        assertThatThrownBy(() -> service.create(new WorkItemCommands.Create(actor, project, content.id(),
-                "事项", null, user, null, null, null, null, null, UUID.randomUUID(), hash(),
-                DueTimeChange.unchanged()))).isInstanceOf(ApplicationException.class);
+        assertThatThrownBy(() -> service.create(new WorkItemCommands.Create(
+                        actor,
+                        project,
+                        content.id(),
+                        "事项",
+                        null,
+                        user,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        UUID.randomUUID(),
+                        hash(),
+                        DueTimeChange.unchanged())))
+                .isInstanceOf(ApplicationException.class);
         verify(items, never()).nextSequence(any(), any());
         verify(items, never()).insert(any());
         verifyNoInteractions(events);
     }
 
-    private static RequestHash hash() { return new RequestHash("0".repeat(64)); }
+    private static RequestHash hash() {
+        return new RequestHash("0".repeat(64));
+    }
 }

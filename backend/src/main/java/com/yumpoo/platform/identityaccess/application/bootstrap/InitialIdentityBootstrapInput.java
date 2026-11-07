@@ -1,10 +1,7 @@
 package com.yumpoo.platform.identityaccess.application.bootstrap;
 
 public record InitialIdentityBootstrapInput(
-        String expectedCorpId,
-        String appManagerWeComUserId,
-        String companyAdminWeComUserId
-) {
+        String expectedCorpId, String appManagerWeComUserId, String companyAdminWeComUserId) {
     public InitialIdentityBootstrapInput {
         expectedCorpId = requireText(expectedCorpId, "expectedCorpId");
         appManagerWeComUserId = requireText(appManagerWeComUserId, "appManagerWeComUserId");
@@ -13,8 +10,7 @@ public record InitialIdentityBootstrapInput(
             throw new InitialIdentityBootstrapException(
                     "INPUT",
                     "INITIAL_IDENTITY_BOOTSTRAP_TARGETS_NOT_DISTINCT",
-                    "Initial bootstrap role holders must be distinct"
-            );
+                    "Initial bootstrap role holders must be distinct");
         }
     }
 
@@ -26,18 +22,12 @@ public record InitialIdentityBootstrapInput(
     private static String requireText(String value, String field) {
         if (value == null) {
             throw new InitialIdentityBootstrapException(
-                    "INPUT",
-                    "INITIAL_IDENTITY_BOOTSTRAP_INPUT_INVALID",
-                    "Initial bootstrap input is invalid"
-            );
+                    "INPUT", "INITIAL_IDENTITY_BOOTSTRAP_INPUT_INVALID", "Initial bootstrap input is invalid");
         }
         String normalized = value.strip();
         if (normalized.isEmpty() || normalized.length() > 256) {
             throw new InitialIdentityBootstrapException(
-                    "INPUT",
-                    "INITIAL_IDENTITY_BOOTSTRAP_INPUT_INVALID",
-                    "Initial bootstrap input is invalid"
-            );
+                    "INPUT", "INITIAL_IDENTITY_BOOTSTRAP_INPUT_INVALID", "Initial bootstrap input is invalid");
         }
         return normalized;
     }

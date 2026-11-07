@@ -24,44 +24,37 @@ public final class LogRecordMapper {
 
     private static final java.util.regex.Pattern INVALID_KEY = java.util.regex.Pattern.compile("[^a-zA-Z0-9_]");
     static final java.util.regex.Pattern IDENTIFIER = java.util.regex.Pattern.compile("[A-Za-z0-9._:-]{1,128}");
-    private static final DateTimeFormatter TIME = new DateTimeFormatterBuilder().appendInstant(3).toFormatter();
+    private static final DateTimeFormatter TIME =
+            new DateTimeFormatterBuilder().appendInstant(3).toFormatter();
     /** Frames of each throwable kept regardless of package, so the actual throw site survives the filter below. */
     private static final int UNFILTERED_TOP_FRAMES = 8;
-    private static final Set<String> RESERVED = Set.of(
-        "schema",
-        "time",
-        "level",
-        "module",
-        "msg",
-        "logger",
-        "thread",
-        "error"
-    );
+
+    private static final Set<String> RESERVED =
+            Set.of("schema", "time", "level", "module", "msg", "logger", "thread", "error");
 
     public LogRecord map(ILoggingEvent source) {
         Map<String, Object> context = new LinkedHashMap<>();
         source.getMDCPropertyMap().forEach((key, value) -> put(context, key, value));
-        if (source.getKeyValuePairs() != null) for (KeyValuePair pair : source.getKeyValuePairs())
-            put(context, pair.key, pair.value);
+        if (source.getKeyValuePairs() != null)
+            for (KeyValuePair pair : source.getKeyValuePairs()) put(context, pair.key, pair.value);
         String event = identifier(take(context, "event"));
         String requestId = identifier(take(context, "requestId"));
         String correlationId = identifier(take(context, "correlationId"));
         String userId = identifier(take(context, "userId"));
         if (Objects.equals(requestId, correlationId)) correlationId = null;
         return new LogRecord(
-            source.getInstant().truncatedTo(ChronoUnit.MILLIS),
-            source.getLevel().toString(),
-            module(source.getLoggerName()),
-            event,
-            LogSanitizer.text(source.getFormattedMessage(), 2048),
-            LogSanitizer.text(source.getLoggerName(), 256),
-            LogSanitizer.text(source.getThreadName(), 128),
-            requestId,
-            correlationId,
-            userId,
-            context,
-            error(source.getThrowableProxy())
-        );
+                source.getInstant().truncatedTo(ChronoUnit.MILLIS),
+                source.getLevel().toString(),
+                module(source.getLoggerName()),
+                event,
+                LogSanitizer.text(source.getFormattedMessage(), 2048),
+                LogSanitizer.text(source.getLoggerName(), 256),
+                LogSanitizer.text(source.getThreadName(), 128),
+                requestId,
+                correlationId,
+                userId,
+                context,
+                error(source.getThrowableProxy()));
     }
 
     public static Map<String, Object> json(LogRecord record) {
@@ -78,19 +71,18 @@ public final class LogRecordMapper {
         optional(value, "correlationId", record.correlationId());
         optional(value, "userId", record.userId());
         value.putAll(record.fields());
-        if (record.error() != null) value.put(
-            "error",
-            Map.of(
-                "type",
-                record.error().type(),
-                "msg",
-                record.error().msg(),
-                "stack",
-                record.error().stack(),
-                "hash",
-                record.error().hash()
-            )
-        );
+        if (record.error() != null)
+            value.put(
+                    "error",
+                    Map.of(
+                            "type",
+                            record.error().type(),
+                            "msg",
+                            record.error().msg(),
+                            "stack",
+                            record.error().stack(),
+                            "hash",
+                            record.error().hash()));
         return value;
     }
 
@@ -104,11 +96,9 @@ public final class LogRecordMapper {
         if (logger.startsWith("com.zaxxer.hikari")) return "hikari";
         if (logger.startsWith("org.flywaydb")) return "flyway";
         if (logger.startsWith("org.postgresql")) return "postgres";
-        if (
-            logger.startsWith("org.apache.catalina") ||
-            logger.startsWith("org.apache.tomcat") ||
-            logger.startsWith("org.apache.coyote")
-        ) return "tomcat";
+        if (logger.startsWith("org.apache.catalina")
+                || logger.startsWith("org.apache.tomcat")
+                || logger.startsWith("org.apache.coyote")) return "tomcat";
         return "other";
     }
 
@@ -122,21 +112,19 @@ public final class LogRecordMapper {
             for (int suffix = 2; fields.containsKey(name); suffix++) name = base + "_" + suffix;
         }
         Object safe = LogSanitizer.sensitive(name)
-            ? "***"
-            : value instanceof Number number && Double.isFinite(number.doubleValue())
-              ? number
-              : value instanceof Boolean
-                ? value
-                : value instanceof Enum<?> enumeration
-                  ? enumeration.name()
-                  : value instanceof CharSequence || value instanceof UUID
-                    ? LogSanitizer.field(name, value.toString())
-                    : "[unsupported value]";
-        int used = fields
-            .entrySet()
-            .stream()
-            .mapToInt(e -> e.getKey().length() + e.getValue().toString().length())
-            .sum();
+                ? "***"
+                : value instanceof Number number && Double.isFinite(number.doubleValue())
+                        ? number
+                        : value instanceof Boolean
+                                ? value
+                                : value instanceof Enum<?> enumeration
+                                        ? enumeration.name()
+                                        : value instanceof CharSequence || value instanceof UUID
+                                                ? LogSanitizer.field(name, value.toString())
+                                                : "[unsupported value]";
+        int used = fields.entrySet().stream()
+                .mapToInt(e -> e.getKey().length() + e.getValue().toString().length())
+                .sum();
         if (used + name.length() + safe.toString().length() <= 8192) fields.put(name, safe);
     }
 
@@ -157,55 +145,49 @@ public final class LogRecordMapper {
         if (throwable == null) return null;
         List<IThrowableProxy> chain = new ArrayList<>();
         Set<IThrowableProxy> visited = Collections.newSetFromMap(new IdentityHashMap<>());
-        for (
-            IThrowableProxy part = throwable;
-            part != null && visited.add(part) && chain.size() < 12;
-            part = part.getCause()
-        ) chain.add(part);
+        for (IThrowableProxy part = throwable;
+                part != null && visited.add(part) && chain.size() < 12;
+                part = part.getCause()) chain.add(part);
         Collections.reverse(chain);
         StringBuilder stack = new StringBuilder();
         StringBuilder frames = new StringBuilder();
         for (IThrowableProxy part : chain) {
             if (!stack.isEmpty()) stack.append("Wrapped by: ");
-            stack
-                .append(part.getClassName())
-                .append(": ")
-                .append(LogSanitizer.text(part.getMessage(), 2048))
-                .append('\n');
+            stack.append(part.getClassName())
+                    .append(": ")
+                    .append(LogSanitizer.text(part.getMessage(), 2048))
+                    .append('\n');
             frames.append(part.getClassName()).append('\n');
             int count = 0;
             int position = 0;
-            if (part.getStackTraceElementProxyArray() != null) for (var proxy : part.getStackTraceElementProxyArray()) {
-                var frame = proxy.getStackTraceElement();
-                frames.append(frame).append('\n');
-                if (count >= 40) continue;
-                String name = frame.getClassName();
-                if (
-                    position++ >= UNFILTERED_TOP_FRAMES && (
-                    name.startsWith("org.apache.") ||
-                    name.startsWith("org.springframework.web.filter.") ||
-                    name.startsWith("org.springframework.security.web.") ||
-                    name.startsWith("jdk.internal.reflect."))
-                ) continue;
-                stack.append("  at ").append(frame).append('\n');
-                count++;
-            }
+            if (part.getStackTraceElementProxyArray() != null)
+                for (var proxy : part.getStackTraceElementProxyArray()) {
+                    var frame = proxy.getStackTraceElement();
+                    frames.append(frame).append('\n');
+                    if (count >= 40) continue;
+                    String name = frame.getClassName();
+                    if (position++ >= UNFILTERED_TOP_FRAMES
+                            && (name.startsWith("org.apache.")
+                                    || name.startsWith("org.springframework.web.filter.")
+                                    || name.startsWith("org.springframework.security.web.")
+                                    || name.startsWith("jdk.internal.reflect."))) continue;
+                    stack.append("  at ").append(frame).append('\n');
+                    count++;
+                }
         }
         String hash;
         try {
             hash = HexFormat.of()
-                .formatHex(
-                    MessageDigest.getInstance("SHA-256").digest(frames.toString().getBytes(StandardCharsets.UTF_8))
-                )
-                .substring(0, 32);
+                    .formatHex(MessageDigest.getInstance("SHA-256")
+                            .digest(frames.toString().getBytes(StandardCharsets.UTF_8)))
+                    .substring(0, 32);
         } catch (java.security.NoSuchAlgorithmException exception) {
             throw new IllegalStateException(exception);
         }
         return new LogRecord.LogError(
-            throwable.getClassName(),
-            LogSanitizer.text(throwable.getMessage(), 2048),
-            LogSanitizer.text(stack.toString(), 8192),
-            hash
-        );
+                throwable.getClassName(),
+                LogSanitizer.text(throwable.getMessage(), 2048),
+                LogSanitizer.text(stack.toString(), 8192),
+                hash);
     }
 }

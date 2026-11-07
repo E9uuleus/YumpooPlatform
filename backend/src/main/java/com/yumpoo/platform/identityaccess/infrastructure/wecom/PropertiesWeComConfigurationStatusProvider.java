@@ -5,16 +5,13 @@ import com.yumpoo.platform.identityaccess.application.administration.WeComConfig
 import org.springframework.stereotype.Component;
 
 @Component
-public final class PropertiesWeComConfigurationStatusProvider
-        implements WeComConfigurationStatusProvider {
+public final class PropertiesWeComConfigurationStatusProvider implements WeComConfigurationStatusProvider {
 
     private final WebOAuthProperties oauth;
     private final DirectorySyncWeComProperties directory;
 
     public PropertiesWeComConfigurationStatusProvider(
-            WebOAuthProperties oauth,
-            DirectorySyncWeComProperties directory
-    ) {
+            WebOAuthProperties oauth, DirectorySyncWeComProperties directory) {
         this.oauth = oauth;
         this.directory = directory;
     }
@@ -32,24 +29,20 @@ public final class PropertiesWeComConfigurationStatusProvider
         return new WeComConfigurationStatus(
                 new WeComConfigurationStatus.OAuthStatus(
                         oauth.isEnabled(),
-                        oauthCorpConfigured && agentConfigured
-                                && appSecretConfigured && callbackConfigured,
+                        oauthCorpConfigured && agentConfigured && appSecretConfigured && callbackConfigured,
                         mask(oauth.getCorpId()),
                         agentConfigured,
                         appSecretConfigured,
-                        callbackConfigured
-                ),
+                        callbackConfigured),
                 new WeComConfigurationStatus.DirectoryStatus(
                         directory.isEnabled(),
-                        directoryCorpConfigured && directorySecretConfigured
-                                && profileSecretConfigured,
+                        directoryCorpConfigured && directorySecretConfigured && profileSecretConfigured,
                         mask(directory.getCorpId()),
                         directorySecretConfigured,
-                        profileSecretConfigured
-                ),
-                !oauthCorpConfigured || !directoryCorpConfigured
-                        || oauth.getCorpId().equals(directory.getCorpId())
-        );
+                        profileSecretConfigured),
+                !oauthCorpConfigured
+                        || !directoryCorpConfigured
+                        || oauth.getCorpId().equals(directory.getCorpId()));
     }
 
     private static boolean present(String value) {

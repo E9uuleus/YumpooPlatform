@@ -17,8 +17,7 @@ public record Workspace(
         Instant createdAt,
         UUID createdByUserId,
         Instant updatedAt,
-        UUID updatedByUserId
-) {
+        UUID updatedByUserId) {
 
     private static final Pattern CODE = Pattern.compile("^[A-Z][A-Z0-9_]{1,31}$");
 
@@ -42,15 +41,20 @@ public record Workspace(
         }
     }
 
-    public Workspace updateDetails(
-            String newName,
-            String newDescription,
-            UUID actorUserId,
-            Instant now
-    ) {
+    public Workspace updateDetails(String newName, String newDescription, UUID actorUserId, Instant now) {
         return new Workspace(
-                id, companyId, code, newName, newDescription, sortOrder, status,
-                rowVersion + 1, createdAt, createdByUserId, now, actorUserId);
+                id,
+                companyId,
+                code,
+                newName,
+                newDescription,
+                sortOrder,
+                status,
+                rowVersion + 1,
+                createdAt,
+                createdByUserId,
+                now,
+                actorUserId);
     }
 
     public boolean hasSameDetails(String candidateName, String candidateDescription) {

@@ -1,14 +1,14 @@
 package com.yumpoo.platform.identityaccess.infrastructure.wecom;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+
 import com.yumpoo.platform.identityaccess.application.oauth.WeComAuthenticationFailedException;
 import com.yumpoo.platform.identityaccess.application.oauth.WeComDependencyUnavailableException;
 import com.yumpoo.platform.identityaccess.application.oauth.WeComMemberIdentity;
-import org.junit.jupiter.api.Test;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.test.web.client.MockRestServiceServer;
-import org.springframework.web.client.RestClient;
-
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.SocketTimeoutException;
@@ -18,14 +18,11 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
-import java.util.Set;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
-import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.RestClient;
 
 class RestClientWeComIdentityGatewayTest {
 
@@ -38,11 +35,7 @@ class RestClientWeComIdentityGatewayTest {
     @Test
     void clientSettingsNeverExposeAppSecretInToString() {
         WeComOAuthClientSettings settings = new WeComOAuthClientSettings(
-                CORP_ID,
-                AGENT_ID,
-                APP_SECRET,
-                URI.create("https://login.example.test/_m0/m0-12/wecom/callback")
-        );
+                CORP_ID, AGENT_ID, APP_SECRET, URI.create("https://login.example.test/_m0/m0-12/wecom/callback"));
 
         assertThat(settings.toString())
                 .contains("appSecret=REDACTED")
@@ -54,9 +47,9 @@ class RestClientWeComIdentityGatewayTest {
     void buildsOfficialQrConnectAuthorizationUriWithFixedCallback() {
         GatewayFixture fixture = fixture(new MutableClock(INITIAL_TIME));
 
-        URI authorizationUri = fixture.gateway().buildQrAuthorizationUri(
-                "state-123", URI.create("https://login.example.test/_m0/m0-12/wecom/callback")
-        );
+        URI authorizationUri = fixture.gateway()
+                .buildQrAuthorizationUri(
+                        "state-123", URI.create("https://login.example.test/_m0/m0-12/wecom/callback"));
 
         assertThat(authorizationUri.getScheme()).isEqualTo("https");
         assertThat(authorizationUri.getHost()).isEqualTo("open.work.weixin.qq.com");
@@ -72,8 +65,7 @@ class RestClientWeComIdentityGatewayTest {
 
     @Test
     void preservesMobileAuthorizationForM0DiagnosticCompatibility() {
-        URI authorizationUri = fixture(new MutableClock(INITIAL_TIME))
-                .gateway().buildAuthorizationUri("state-123");
+        URI authorizationUri = fixture(new MutableClock(INITIAL_TIME)).gateway().buildAuthorizationUri("state-123");
 
         assertThat(authorizationUri.toASCIIString())
                 .startsWith("https://open.weixin.qq.com/connect/oauth2/authorize?")
@@ -118,11 +110,11 @@ class RestClientWeComIdentityGatewayTest {
     void rejectsExternalOpenIdOnlyIdentityAsAuthenticationFailure() {
         GatewayFixture fixture = fixture(new MutableClock(INITIAL_TIME));
         expectToken(fixture.server(), "token-a", 7200);
-        fixture.server().expect(requestTo(userInfoUri("token-a", "external-code")))
+        fixture.server()
+                .expect(requestTo(userInfoUri("token-a", "external-code")))
                 .andRespond(withSuccess(
                         "{\"errcode\":0,\"errmsg\":\"ok\",\"openid\":\"external-open-id\"}",
-                        MediaType.APPLICATION_JSON
-                ));
+                        MediaType.APPLICATION_JSON));
 
         assertThatThrownBy(() -> fixture.gateway().exchangeCode("external-code"))
                 .isInstanceOf(WeComAuthenticationFailedException.class)
@@ -134,11 +126,9 @@ class RestClientWeComIdentityGatewayTest {
     void classifiesInvalidOrReusedCodeAsAuthenticationFailure() {
         GatewayFixture fixture = fixture(new MutableClock(INITIAL_TIME));
         expectToken(fixture.server(), "token-a", 7200);
-        fixture.server().expect(requestTo(userInfoUri("token-a", "used-code")))
-                .andRespond(withSuccess(
-                        "{\"errcode\":40029,\"errmsg\":\"invalid code\"}",
-                        MediaType.APPLICATION_JSON
-                ));
+        fixture.server()
+                .expect(requestTo(userInfoUri("token-a", "used-code")))
+                .andRespond(withSuccess("{\"errcode\":40029,\"errmsg\":\"invalid code\"}", MediaType.APPLICATION_JSON));
 
         assertThatThrownBy(() -> fixture.gateway().exchangeCode("used-code"))
                 .isInstanceOf(WeComAuthenticationFailedException.class);
@@ -193,11 +183,10 @@ class RestClientWeComIdentityGatewayTest {
     void classifiesUnknownProviderErrorAsDependencyFailure() {
         GatewayFixture fixture = fixture(new MutableClock(INITIAL_TIME));
         expectToken(fixture.server(), "token-a", 7200);
-        fixture.server().expect(requestTo(userInfoUri("token-a", "provider-code")))
+        fixture.server()
+                .expect(requestTo(userInfoUri("token-a", "provider-code")))
                 .andRespond(withSuccess(
-                        "{\"errcode\":999999,\"errmsg\":\"unexpected provider failure\"}",
-                        MediaType.APPLICATION_JSON
-                ));
+                        "{\"errcode\":999999,\"errmsg\":\"unexpected provider failure\"}", MediaType.APPLICATION_JSON));
 
         assertThatThrownBy(() -> fixture.gateway().exchangeCode("provider-code"))
                 .isInstanceOf(WeComDependencyUnavailableException.class)
@@ -208,11 +197,10 @@ class RestClientWeComIdentityGatewayTest {
     @Test
     void classifiesTokenConfigurationErrorAsDependencyFailure() {
         GatewayFixture fixture = fixture(new MutableClock(INITIAL_TIME));
-        fixture.server().expect(requestTo(tokenUri()))
-                .andRespond(withSuccess(
-                        "{\"errcode\":40013,\"errmsg\":\"invalid corpid\"}",
-                        MediaType.APPLICATION_JSON
-                ));
+        fixture.server()
+                .expect(requestTo(tokenUri()))
+                .andRespond(
+                        withSuccess("{\"errcode\":40013,\"errmsg\":\"invalid corpid\"}", MediaType.APPLICATION_JSON));
 
         assertThatThrownBy(() -> fixture.gateway().exchangeCode("code-a"))
                 .isInstanceOf(WeComDependencyUnavailableException.class);
@@ -222,10 +210,9 @@ class RestClientWeComIdentityGatewayTest {
     @Test
     void classifiesTimeoutAsDependencyFailure() {
         GatewayFixture fixture = fixture(new MutableClock(INITIAL_TIME));
-        fixture.server().expect(requestTo(tokenUri()))
-                .andRespond(request -> {
-                    throw new SocketTimeoutException("simulated timeout");
-                });
+        fixture.server().expect(requestTo(tokenUri())).andRespond(request -> {
+            throw new SocketTimeoutException("simulated timeout");
+        });
 
         assertThatThrownBy(() -> fixture.gateway().exchangeCode("code-a"))
                 .isInstanceOf(WeComDependencyUnavailableException.class);
@@ -237,122 +224,53 @@ class RestClientWeComIdentityGatewayTest {
         String authorizationCode = "sensitive-authorization-code";
         String responseSecret = "sensitive-provider-response";
         GatewayFixture fixture = fixture(new MutableClock(INITIAL_TIME));
-        fixture.server().expect(requestTo(tokenUri()))
+        fixture.server()
+                .expect(requestTo(tokenUri()))
                 .andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR)
                         .contentType(MediaType.APPLICATION_JSON)
                         .body("{\"errmsg\":\"" + responseSecret + "\"}"));
 
         WeComDependencyUnavailableException exception = org.assertj.core.api.Assertions.catchThrowableOfType(
-                () -> fixture.gateway().exchangeCode(authorizationCode),
-                WeComDependencyUnavailableException.class
-        );
+                () -> fixture.gateway().exchangeCode(authorizationCode), WeComDependencyUnavailableException.class);
 
         StringWriter stackTrace = new StringWriter();
         exception.printStackTrace(new PrintWriter(stackTrace));
-        assertThat(stackTrace.toString())
-                .doesNotContain(APP_SECRET, CORP_ID, authorizationCode, responseSecret);
+        assertThat(stackTrace.toString()).doesNotContain(APP_SECRET, CORP_ID, authorizationCode, responseSecret);
         assertThat(exception).hasNoCause();
         fixture.server().verify();
-    }
-
-    @Test
-    void validatesEnabledConfigurationButLeavesDisabledDefaultsUsable() {
-        M012WeComProperties disabled = new M012WeComProperties();
-        assertThatCode(disabled::validateForEnabled).doesNotThrowAnyException();
-
-        M012WeComProperties valid = validProperties();
-        assertThatCode(valid::validateForEnabled).doesNotThrowAnyException();
-
-        valid.setAgentId("agent-1");
-        assertThatThrownBy(valid::validateForEnabled)
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage("M0-12 WeCom live verification configuration is invalid");
-
-        valid = validProperties();
-        valid.setCallbackUri(URI.create("https://login.example.test/different/callback"));
-        assertThatThrownBy(valid::validateForEnabled).isInstanceOf(IllegalStateException.class);
-
-        valid = validProperties();
-        valid.setCallbackUri(URI.create(
-                "https://login.example.test/_m0/m0-12/wecom/callback?returnUrl=https://evil.example"
-        ));
-        assertThatThrownBy(valid::validateForEnabled).isInstanceOf(IllegalStateException.class);
-    }
-
-    @Test
-    void trimsIdentifiersAndRejectsBlankAllowlistEntry() {
-        M012WeComProperties properties = validProperties();
-        properties.setCorpId("  " + CORP_ID + "  ");
-        properties.setAgentId("  " + AGENT_ID + "  ");
-        properties.setAppSecret("  " + APP_SECRET + "  ");
-        properties.setAllowedMemberIds(Set.of("  member-a  "));
-
-        properties.validateForEnabled();
-
-        assertThat(properties.getCorpId()).isEqualTo(CORP_ID);
-        assertThat(properties.getAgentId()).isEqualTo(AGENT_ID);
-        assertThat(properties.getAppSecret()).isEqualTo(APP_SECRET);
-        assertThat(properties.getAllowedMemberIds()).containsExactly("member-a");
-
-        properties.setAllowedMemberIds(Set.of("   "));
-        assertThatThrownBy(properties::validateForEnabled).isInstanceOf(IllegalStateException.class);
     }
 
     private static GatewayFixture fixture(MutableClock clock) {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        RestClientWeComIdentityGateway gateway = new RestClientWeComIdentityGateway(
-                builder,
-                validProperties(),
-                clock
-        );
+        RestClientWeComIdentityGateway gateway = new RestClientWeComIdentityGateway(builder, validSettings(), clock);
         return new GatewayFixture(gateway, server);
     }
 
-    private static M012WeComProperties validProperties() {
-        M012WeComProperties properties = new M012WeComProperties();
-        properties.setEnabled(true);
-        properties.setCorpId(CORP_ID);
-        properties.setAgentId(AGENT_ID);
-        properties.setAppSecret(APP_SECRET);
-        properties.setCallbackUri(URI.create("https://login.example.test/_m0/m0-12/wecom/callback"));
-        properties.setAllowedMemberIds(Set.of("member-a"));
-        return properties;
+    private static WeComOAuthClientSettings validSettings() {
+        return new WeComOAuthClientSettings(
+                CORP_ID, AGENT_ID, APP_SECRET, URI.create("https://login.example.test/_m0/m0-12/wecom/callback"));
     }
 
     private static void expectToken(MockRestServiceServer server, String token, long expiresIn) {
         server.expect(requestTo(tokenUri()))
                 .andRespond(withSuccess(
-                        "{\"errcode\":0,\"errmsg\":\"ok\",\"access_token\":\""
-                                + token + "\",\"expires_in\":" + expiresIn + "}",
-                        MediaType.APPLICATION_JSON
-                ));
+                        "{\"errcode\":0,\"errmsg\":\"ok\",\"access_token\":\"" + token + "\",\"expires_in\":"
+                                + expiresIn + "}",
+                        MediaType.APPLICATION_JSON));
     }
 
-    private static void expectMember(
-            MockRestServiceServer server,
-            String token,
-            String code,
-            String memberId
-    ) {
+    private static void expectMember(MockRestServiceServer server, String token, String code, String memberId) {
         server.expect(requestTo(userInfoUri(token, code)))
                 .andRespond(withSuccess(
                         "{\"errcode\":0,\"errmsg\":\"ok\",\"userid\":\"" + memberId + "\"}",
-                        MediaType.APPLICATION_JSON
-                ));
+                        MediaType.APPLICATION_JSON));
     }
 
-    private static void expectMemberError(
-            MockRestServiceServer server,
-            String token,
-            String code,
-            long errorCode
-    ) {
+    private static void expectMemberError(MockRestServiceServer server, String token, String code, long errorCode) {
         server.expect(requestTo(userInfoUri(token, code)))
                 .andRespond(withSuccess(
-                        "{\"errcode\":" + errorCode + ",\"errmsg\":\"provider error\"}",
-                        MediaType.APPLICATION_JSON
-                ));
+                        "{\"errcode\":" + errorCode + ",\"errmsg\":\"provider error\"}", MediaType.APPLICATION_JSON));
     }
 
     private static String tokenUri() {
@@ -363,8 +281,7 @@ class RestClientWeComIdentityGatewayTest {
         return API_BASE_URL + "/cgi-bin/auth/getuserinfo?access_token=" + token + "&code=" + code;
     }
 
-    private record GatewayFixture(RestClientWeComIdentityGateway gateway, MockRestServiceServer server) {
-    }
+    private record GatewayFixture(RestClientWeComIdentityGateway gateway, MockRestServiceServer server) {}
 
     private static final class MutableClock extends Clock {
 

@@ -1,26 +1,17 @@
 package com.yumpoo.platform.organization.infrastructure;
 
-import com.yumpoo.platform.organization.api.CalendarDayType;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.yumpoo.platform.organization.api.CalendarDaySource;
+import com.yumpoo.platform.organization.api.CalendarDayType;
 import com.yumpoo.platform.organization.api.CompanyCalendarCommand;
 import com.yumpoo.platform.organization.api.CompanyCalendarDaySnapshot;
 import com.yumpoo.platform.organization.api.CompanyCalendarQuery;
 import com.yumpoo.platform.organization.api.CompanyConfigurationCommand;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
 import com.yumpoo.platform.organization.api.CompanyConfigurationSnapshot;
-import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.jdbc.core.simple.JdbcClient;
-
+import com.yumpoo.platform.testing.JdbcIntegrationTest;
 import java.sql.Types;
 import java.time.DayOfWeek;
 import java.time.Instant;
@@ -32,13 +23,17 @@ import java.util.List;
 import java.util.OptionalLong;
 import java.util.UUID;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.simple.JdbcClient;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
-@Import(PostgreSqlTestContainerConfiguration.class)
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE,
-        properties = "yumpoo.outbox.enabled=false")
+@JdbcIntegrationTest
 class OrganizationQueriesIT {
 
     private static final UUID COMPANY_ID = UUID.fromString("00000000-0000-4000-8000-000000000001");
@@ -62,7 +57,8 @@ class OrganizationQueriesIT {
     @BeforeEach
     void resetCompanyAndCalendar() {
         jdbcClient.sql("TRUNCATE TABLE yumpoo.company CASCADE").update();
-        jdbcClient.sql("""
+        jdbcClient
+                .sql("""
                         INSERT INTO yumpoo.company (
                             id, singleton_slot, display_name, timezone, week_start_day,
                             default_workday_minutes, row_version, created_at, updated_at
@@ -85,13 +81,21 @@ class OrganizationQueriesIT {
     void replacesYearWithVersionCheck() {
         LocalDate date = LocalDate.parse("2026-10-01");
         UUID actor = UUID.randomUUID();
-        assertThat(companyCalendarCommand.replaceYear(2026, 0,
-                List.of(new CompanyCalendarCommand.Day(date, CalendarDayType.HOLIDAY, null, "国庆节", CalendarDaySource.MANUAL)), actor, NOW)).isTrue();
+        assertThat(companyCalendarCommand.replaceYear(
+                        2026,
+                        0,
+                        List.of(new CompanyCalendarCommand.Day(
+                                date, CalendarDayType.HOLIDAY, null, "国庆节", CalendarDaySource.MANUAL)),
+                        actor,
+                        NOW))
+                .isTrue();
         assertThat(companyCalendarCommand.yearVersion(2026)).isEqualTo(1);
         assertThat(companyCalendarQuery.day(date).dayType()).isEqualTo(CalendarDayType.HOLIDAY);
         assertThat(companyCalendarQuery.day(date).note()).isEqualTo("国庆节");
-        assertThat(companyCalendarCommand.replaceYear(2026, 0, List.of(), actor, NOW)).isFalse();
-        assertThat(companyCalendarCommand.replaceYear(2026, 1, List.of(), actor, NOW)).isTrue();
+        assertThat(companyCalendarCommand.replaceYear(2026, 0, List.of(), actor, NOW))
+                .isFalse();
+        assertThat(companyCalendarCommand.replaceYear(2026, 1, List.of(), actor, NOW))
+                .isTrue();
         assertThat(companyCalendarQuery.day(date).dayType()).isEqualTo(CalendarDayType.WORKDAY);
         assertThat(companyCalendarQuery.day(date).explicitOverride()).isFalse();
     }
@@ -109,19 +113,27 @@ class OrganizationQueriesIT {
     void roundTripsALeapYearWithoutFreezingInheritedMinutesOrLosingImportSources() {
         UUID actor = UUID.randomUUID();
         LocalDate first = LocalDate.of(2028, 1, 1), fixed = first.plusDays(1);
-        var inputs = first.datesUntil(first.plusYears(1)).map(date -> new CompanyCalendarCommand.Day(
-                date, CalendarDayType.WORKDAY, date.equals(fixed) ? 480 : null, "补班", CalendarDaySource.IMPORT)).toList();
-        assertThat(companyCalendarCommand.replaceYear(2028, 0, inputs, actor, NOW)).isTrue();
+        var inputs = first.datesUntil(first.plusYears(1))
+                .map(date -> new CompanyCalendarCommand.Day(
+                        date, CalendarDayType.WORKDAY, date.equals(fixed) ? 480 : null, "补班", CalendarDaySource.IMPORT))
+                .toList();
+        assertThat(companyCalendarCommand.replaceYear(2028, 0, inputs, actor, NOW))
+                .isTrue();
         var read = companyCalendarQuery.days(first, first.plusYears(1).minusDays(1));
         assertThat(read).hasSize(366);
         assertThat(read).allSatisfy(day -> {
             assertThat(day.standardMinutes()).isEqualTo(480);
             assertThat(day.source()).isEqualTo(CalendarDaySource.IMPORT);
         });
-        var saved = read.stream().map(day -> new CompanyCalendarCommand.Day(day.date(), day.dayType(),
-                day.configuredStandardMinutes(), day.note(), day.source())).toList();
-        assertThat(companyCalendarCommand.replaceYear(2028, 1, saved, actor, NOW)).isTrue();
-        jdbcClient.sql("UPDATE yumpoo.company SET default_workday_minutes = 420, row_version = row_version + 1").update();
+        var saved = read.stream()
+                .map(day -> new CompanyCalendarCommand.Day(
+                        day.date(), day.dayType(), day.configuredStandardMinutes(), day.note(), day.source()))
+                .toList();
+        assertThat(companyCalendarCommand.replaceYear(2028, 1, saved, actor, NOW))
+                .isTrue();
+        jdbcClient
+                .sql("UPDATE yumpoo.company SET default_workday_minutes = 420, row_version = row_version + 1")
+                .update();
         assertThat(companyCalendarQuery.day(first).standardMinutes()).isEqualTo(420);
         assertThat(companyCalendarQuery.day(first).configuredStandardMinutes()).isNull();
         assertThat(companyCalendarQuery.day(first).source()).isEqualTo(CalendarDaySource.IMPORT);
@@ -146,24 +158,19 @@ class OrganizationQueriesIT {
         insertCalendarDay("2026-10-09", "NON_WORKDAY", 0, "IMPORT", 7);
         insertCalendarDay("2026-10-10", "WORKDAY", null, "MANUAL", 8);
 
-        List<CompanyCalendarDaySnapshot> days = companyCalendarQuery.days(
-                LocalDate.parse("2026-10-09"),
-                LocalDate.parse("2026-10-11")
-        );
+        List<CompanyCalendarDaySnapshot> days =
+                companyCalendarQuery.days(LocalDate.parse("2026-10-09"), LocalDate.parse("2026-10-11"));
 
-        assertThat(days).extracting(CompanyCalendarDaySnapshot::date).containsExactly(
-                LocalDate.parse("2026-10-09"),
-                LocalDate.parse("2026-10-10"),
-                LocalDate.parse("2026-10-11")
-        );
-        assertThat(days).extracting(CompanyCalendarDaySnapshot::dayType).containsExactly(
-                CalendarDayType.NON_WORKDAY,
-                CalendarDayType.WORKDAY,
-                CalendarDayType.NON_WORKDAY
-        );
-        assertThat(days).extracting(CompanyCalendarDaySnapshot::standardMinutes)
-                .containsExactly(0, 480, 0);
-        assertThat(days).extracting(CompanyCalendarDaySnapshot::explicitOverride)
+        assertThat(days)
+                .extracting(CompanyCalendarDaySnapshot::date)
+                .containsExactly(
+                        LocalDate.parse("2026-10-09"), LocalDate.parse("2026-10-10"), LocalDate.parse("2026-10-11"));
+        assertThat(days)
+                .extracting(CompanyCalendarDaySnapshot::dayType)
+                .containsExactly(CalendarDayType.NON_WORKDAY, CalendarDayType.WORKDAY, CalendarDayType.NON_WORKDAY);
+        assertThat(days).extracting(CompanyCalendarDaySnapshot::standardMinutes).containsExactly(0, 480, 0);
+        assertThat(days)
+                .extracting(CompanyCalendarDaySnapshot::explicitOverride)
                 .containsExactly(true, true, false);
         assertThat(days.get(0).calendarDayRowVersion()).hasValue(7);
         assertThat(days.get(1).calendarDayRowVersion()).hasValue(8);
@@ -181,8 +188,7 @@ class OrganizationQueriesIT {
         CompanyCalendarDaySnapshot lastWorkday = companyCalendarQuery
                 .lastWorkdayInWeek(LocalDate.parse("2026-09-30"))
                 .orElseThrow();
-        CompanyCalendarDaySnapshot firstAfterHoliday = companyCalendarQuery
-                .firstWorkdayOnOrAfter(firstHoliday);
+        CompanyCalendarDaySnapshot firstAfterHoliday = companyCalendarQuery.firstWorkdayOnOrAfter(firstHoliday);
 
         assertThat(lastWorkday.date()).isEqualTo(LocalDate.parse("2026-10-03"));
         assertThat(lastWorkday.standardMinutes()).isEqualTo(420);
@@ -192,7 +198,8 @@ class OrganizationQueriesIT {
 
     @Test
     void convertsInstantsAndWeekBoundariesUsingStoredCompanyTimezone() {
-        jdbcClient.sql("UPDATE yumpoo.company SET timezone = 'America/New_York', row_version = 1")
+        jdbcClient
+                .sql("UPDATE yumpoo.company SET timezone = 'America/New_York', row_version = 1")
                 .update();
 
         LocalDate date = companyCalendarQuery.companyDate(Instant.parse("2027-01-01T03:30:00Z"));
@@ -225,7 +232,8 @@ class OrganizationQueriesIT {
 
     @Test
     void databasePreventsASecondCompanyAndDuplicateCalendarDate() {
-        assertThatThrownBy(() -> jdbcClient.sql("""
+        assertThatThrownBy(() -> jdbcClient
+                        .sql("""
                         INSERT INTO yumpoo.company (
                             id, singleton_slot, display_name, timezone, week_start_day,
                             default_workday_minutes, row_version, created_at, updated_at
@@ -233,7 +241,9 @@ class OrganizationQueriesIT {
                             '00000000-0000-4000-8000-000000000002', 1, 'Second',
                             'UTC', 'MONDAY', 480, 0, :now, :now
                         )
-                        """).param("now", OffsetDateTime.ofInstant(NOW, ZoneOffset.UTC)).update())
+                        """)
+                        .param("now", OffsetDateTime.ofInstant(NOW, ZoneOffset.UTC))
+                        .update())
                 .isInstanceOf(DataIntegrityViolationException.class);
 
         insertCalendarDay("2026-08-13", "WORKDAY", 480, "MANUAL", 0);
@@ -243,26 +253,18 @@ class OrganizationQueriesIT {
 
     @Test
     void databaseRejectsNonMondayWeekStart() {
-        assertThatThrownBy(() -> jdbcClient.sql(
-                        "UPDATE yumpoo.company SET week_start_day = 'SUNDAY' WHERE id = :id"
-                ).param("id", COMPANY_ID).update())
+        assertThatThrownBy(() -> jdbcClient
+                        .sql("UPDATE yumpoo.company SET week_start_day = 'SUNDAY' WHERE id = :id")
+                        .param("id", COMPANY_ID)
+                        .update())
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @ParameterizedTest
     @MethodSource("invalidCalendarDayCombinations")
-    void databaseRejectsInvalidCalendarDayCombinations(
-            String dayType,
-            Integer standardMinutes,
-            String source
-    ) {
-        assertThatThrownBy(() -> insertCalendarDay(
-                "2026-08-14",
-                dayType,
-                standardMinutes,
-                source,
-                0
-        )).isInstanceOf(DataIntegrityViolationException.class);
+    void databaseRejectsInvalidCalendarDayCombinations(String dayType, Integer standardMinutes, String source) {
+        assertThatThrownBy(() -> insertCalendarDay("2026-08-14", dayType, standardMinutes, source, 0))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     static Stream<Arguments> invalidCalendarDayCombinations() {
@@ -272,18 +274,13 @@ class OrganizationQueriesIT {
                 Arguments.of("NON_WORKDAY", null, "MANUAL"),
                 Arguments.of("NON_WORKDAY", 480, "MANUAL"),
                 Arguments.of("UNKNOWN", 0, "MANUAL"),
-                Arguments.of("WORKDAY", 480, "REMOTE")
-        );
+                Arguments.of("WORKDAY", 480, "REMOTE"));
     }
 
     private void insertCalendarDay(
-            String date,
-            String dayType,
-            Integer standardMinutes,
-            String source,
-            long rowVersion
-    ) {
-        jdbcClient.sql("""
+            String date, String dayType, Integer standardMinutes, String source, long rowVersion) {
+        jdbcClient
+                .sql("""
                         INSERT INTO yumpoo.company_calendar_day (
                             company_id, calendar_date, day_type, standard_minutes,
                             source, note, row_version, created_at, updated_at

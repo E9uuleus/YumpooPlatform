@@ -67,9 +67,27 @@
 }
 .table-settings-back:hover, .table-settings-icon-button:hover { color: var(--yp-text-primary); background: var(--yp-bg-hover); }
 .table-settings-empty { margin: 0; padding: 12px 0; color: var(--yp-text-secondary); font-size: 13px; text-align: center; }
-.table-settings-pin-list { display: grid; gap: 2px; max-height: min(420px, calc(100dvh - 240px)); overflow-y: auto; }
-.table-settings-pin-option { height: 34px; margin: 0; padding: 0 8px; border-radius: var(--yp-radius-sm); }
+/* 固定列面板：工作项列与子项列分两组，各自滚动；每行为字段图标、列名与右侧勾选框。 */
+.table-settings-pin-group { display: grid; gap: 4px; }
+.table-settings-pin-group__title { margin: 0; padding: 0 8px; color: var(--yp-text-secondary); font-size: 13px; font-weight: 400; line-height: 20px; }
+.table-settings-pin-list { display: grid; gap: 2px; max-height: min(216px, calc((100dvh - 300px) / 2)); overflow-y: auto; }
+.table-settings-pin-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--yp-menu-row-height);
+  margin: 0;
+  padding: 0 8px;
+  border-radius: var(--yp-radius-sm);
+  color: var(--yp-text-primary);
+  font-size: 14px;
+  cursor: pointer;
+}
 .table-settings-pin-option:hover { background: var(--yp-bg-hover); }
+.table-settings-pin-option--locked, .table-settings-pin-option--locked:hover { background: var(--yp-bg-selected); cursor: default; }
+.table-settings-pin-option--disabled { color: var(--yp-text-disabled); cursor: not-allowed; }
+.table-settings-pin-option__label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.table-settings-pin-option .el-checkbox { height: auto; margin: 0; }
 .table-settings-rules { display: grid; gap: 10px; max-height: min(440px, calc(100dvh - 260px)); overflow-y: auto; }
 .table-settings-rule {
   display: grid;

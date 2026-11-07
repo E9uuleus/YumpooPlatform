@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DetailEmptyState from './DetailEmptyState.vue'
 import { useEditor } from '@tiptap/vue-3'
 import { ErrorCode, readCsrfToken, type WorkItemDetail } from '@yumpoo/api-client'
 import { ElButton, ElMessage, ElMessageBox } from 'element-plus'
@@ -272,16 +273,22 @@ defineExpose({ hasDraft, busy, discardDraft, editor, startEdit, save })
         class="work-item-description__empty"
         @click="startEdit"
       >
-        <edit-pen aria-hidden="true" />
-        <span>添加描述</span>
-        <small>记录背景、目标与验收标准，可粘贴或拖入截图</small>
+        <detail-empty-state
+          variant="description"
+          title="添加描述"
+          description="记录背景、目标与验收标准，可粘贴或拖入截图"
+        />
       </button>
-      <p
+      <div
         v-else
         class="work-item-description__none"
       >
-        暂无描述
-      </p>
+        <detail-empty-state
+          variant="description"
+          title="暂无描述"
+          description="有编辑权限的成员可以补充背景、目标与验收标准。"
+        />
+      </div>
     </template>
     <attachment-image-viewer
       v-if="viewerIndex !== undefined"
@@ -298,17 +305,16 @@ defineExpose({ hasDraft, busy, discardDraft, editor, startEdit, save })
 .work-item-description__header h3 { margin: 0; color: var(--yp-text-primary); font-size: 15px; font-weight: 650; }
 .work-item-description__edit { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 0; border-radius: 4px; color: var(--yp-text-secondary); background: transparent; cursor: pointer; font: inherit; font-size: 13px; }
 .work-item-description__edit:hover { color: var(--yp-action-primary); background: var(--yp-bg-selected); }
-.work-item-description__edit svg, .work-item-description__empty svg { width: 16px; height: 16px; }
+.work-item-description__edit svg { width: 16px; height: 16px; }
 .work-item-description__body { min-height: 48px; margin: 0 -12px; padding: 8px 12px; border-radius: var(--yp-radius-md); color: var(--yp-text-primary); font-size: 14px; }
 .work-item-description__body--editable { cursor: text; transition: background-color .15s ease; }
 .work-item-description__body--editable:hover { background: var(--yp-bg-sunken); }
 .work-item-description__body :deep(img) { cursor: zoom-in; }
-.work-item-description__empty { display: grid; justify-items: center; gap: 4px; width: 100%; padding: 28px 16px; border: 1px dashed var(--yp-border-strong); border-radius: var(--yp-radius-md); color: var(--yp-text-secondary); background: transparent; cursor: pointer; font: inherit; }
-.work-item-description__empty span { color: var(--yp-text-primary); font-weight: 600; }
-.work-item-description__empty small { color: var(--yp-text-muted); font-size: 12px; }
-.work-item-description__empty:hover { border-color: var(--yp-action-primary); color: var(--yp-action-primary); background: var(--yp-bg-selected); }
+.work-item-description__empty { display: block; width: 100%; padding: 0; border: 1px dashed transparent; border-radius: var(--yp-radius-md); background: transparent; cursor: pointer; font: inherit; transition: border-color var(--yp-motion-fast) var(--yp-ease-standard), background-color var(--yp-motion-fast) var(--yp-ease-standard); }
+.work-item-description__empty:hover { border-color: var(--yp-border-default); background: var(--yp-bg-sunken); }
+.work-item-description__empty:hover .detail-empty { transform: translateY(-2px); }
+.work-item-description__none { color: var(--yp-text-muted); }
 .work-item-description__empty:focus-visible, .work-item-description__edit:focus-visible { outline: 2px solid var(--yp-action-primary); outline-offset: 2px; }
-.work-item-description__none { margin: 0; color: var(--yp-text-muted); }
 .work-item-description__editor { display: grid; gap: 10px; min-width: 0; }
 .work-item-description__editor :deep(.discussion-editor .ProseMirror) { min-height: 220px; }
 .work-item-description__file { display: none; }

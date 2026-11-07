@@ -24,37 +24,38 @@ public final class ApplicationException extends RuntimeException {
         this(errorCode, safeMessage, List.of(), null, List.of());
     }
 
-    public ApplicationException(
-            StandardErrorCode errorCode,
-            String safeMessage,
-            List<FieldViolation> fieldViolations
-    ) {
+    public ApplicationException(StandardErrorCode errorCode, String safeMessage, List<FieldViolation> fieldViolations) {
         this(errorCode, safeMessage, fieldViolations, null, List.of());
+    }
+
+    public ApplicationException(
+            StandardErrorCode errorCode, String safeMessage, List<FieldViolation> fieldViolations, String reason) {
+        this(errorCode, safeMessage, fieldViolations, reason, List.of());
     }
 
     public ApplicationException(
             StandardErrorCode errorCode,
             String safeMessage,
             List<FieldViolation> fieldViolations,
-            String reason
-    ) {
-        this(errorCode, safeMessage, fieldViolations, reason, List.of());
-    }
-
-    public ApplicationException(StandardErrorCode errorCode, String safeMessage,
-            List<FieldViolation> fieldViolations, String reason, List<SafeBlocker> blockers) {
+            String reason,
+            List<SafeBlocker> blockers) {
         this(errorCode, safeMessage, fieldViolations, reason, blockers, Map.of());
     }
 
-    private ApplicationException(StandardErrorCode errorCode, String safeMessage,
-            List<FieldViolation> fieldViolations, String reason, List<SafeBlocker> blockers,
+    private ApplicationException(
+            StandardErrorCode errorCode,
+            String safeMessage,
+            List<FieldViolation> fieldViolations,
+            String reason,
+            List<SafeBlocker> blockers,
             Map<String, ?> safeDetails) {
         super(requireSafeMessage(safeMessage));
         this.errorCode = Objects.requireNonNull(errorCode, "errorCode must not be null");
         this.fieldViolations = List.copyOf(fieldViolations);
         this.reason = normalizeReason(reason);
         this.blockers = List.copyOf(blockers).stream()
-                .sorted(java.util.Comparator.comparing(SafeBlocker::code)).toList();
+                .sorted(java.util.Comparator.comparing(SafeBlocker::code))
+                .toList();
         this.safeDetails = copySafeDetails(safeDetails);
     }
 
@@ -74,20 +75,23 @@ public final class ApplicationException extends RuntimeException {
         return blockers;
     }
 
-    public Map<String, Object> safeDetails() { return safeDetails; }
+    public Map<String, Object> safeDetails() {
+        return safeDetails;
+    }
 
     /** Only explicitly reviewed, contract-defined public scalar values may be supplied by application code. */
-    public static ApplicationException withSafeDetails(StandardErrorCode errorCode, String reason,
-            Map<String, ?> safeDetails) {
-        return new ApplicationException(errorCode, errorCode.defaultMessage(), List.of(), reason, List.of(), safeDetails);
+    public static ApplicationException withSafeDetails(
+            StandardErrorCode errorCode, String reason, Map<String, ?> safeDetails) {
+        return new ApplicationException(
+                errorCode, errorCode.defaultMessage(), List.of(), reason, List.of(), safeDetails);
     }
 
     public static ApplicationException withReason(StandardErrorCode errorCode, String reason) {
         return new ApplicationException(errorCode, errorCode.defaultMessage(), List.of(), reason);
     }
 
-    public static ApplicationException withBlockers(StandardErrorCode errorCode, String reason,
-            List<SafeBlocker> blockers) {
+    public static ApplicationException withBlockers(
+            StandardErrorCode errorCode, String reason, List<SafeBlocker> blockers) {
         return new ApplicationException(errorCode, errorCode.defaultMessage(), List.of(), reason, blockers);
     }
 
@@ -95,8 +99,7 @@ public final class ApplicationException extends RuntimeException {
         return new ApplicationException(
                 StandardErrorCode.VALIDATION_FAILED,
                 StandardErrorCode.VALIDATION_FAILED.defaultMessage(),
-                List.of(violations)
-        );
+                List.of(violations));
     }
 
     private static String requireSafeMessage(String message) {
@@ -112,8 +115,7 @@ public final class ApplicationException extends RuntimeException {
             return null;
         }
         String normalized = reason.strip();
-        if (normalized.isEmpty() || normalized.length() > 80
-                || !normalized.matches("^[A-Z][A-Z0-9_]{1,79}$")) {
+        if (normalized.isEmpty() || normalized.length() > 80 || !normalized.matches("^[A-Z][A-Z0-9_]{1,79}$")) {
             throw new IllegalArgumentException("reason must be a stable uppercase code");
         }
         return normalized;
@@ -123,8 +125,11 @@ public final class ApplicationException extends RuntimeException {
         details.forEach((key, value) -> {
             if (key == null || !key.matches("[a-z][a-zA-Z0-9]*") || key.equals("reason") || key.equals("blockers"))
                 throw new IllegalArgumentException("additional detail keys must not replace standard details");
-            if (!(value instanceof String || value instanceof UUID || value instanceof Boolean
-                    || value instanceof Integer || value instanceof Long))
+            if (!(value instanceof String
+                    || value instanceof UUID
+                    || value instanceof Boolean
+                    || value instanceof Integer
+                    || value instanceof Long))
                 throw new IllegalArgumentException("additional details must contain immutable public scalar values");
         });
         return Map.copyOf(details);

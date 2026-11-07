@@ -1,34 +1,50 @@
 package com.yumpoo.platform.catalog.application.project;
 
 import com.yumpoo.platform.catalog.domain.project.Project;
-
-import java.util.Optional;
-import java.util.List;
-import java.util.UUID;
-import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
+import com.yumpoo.platform.identityaccess.api.CurrentActor;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 public interface ProjectRepository {
     default java.util.List<Project> findAll(UUID companyId, java.util.Collection<UUID> ids) {
-        return ids.stream().map(id->findById(companyId,id)).flatMap(java.util.Optional::stream).toList();
+        return ids.stream()
+                .map(id -> findById(companyId, id))
+                .flatMap(java.util.Optional::stream)
+                .toList();
     }
+
     boolean insert(Project project);
+
     long nextGeneratedCodeSequence(UUID companyId);
+
     Optional<Project> findById(UUID companyId, UUID projectId);
+
     Optional<Project> lockById(UUID companyId, UUID projectId);
+
     Optional<Project> lockByIdForShare(UUID companyId, UUID projectId);
+
     Optional<Project> reassignOwner(Project project, long expectedVersion);
+
     Optional<Project> updateDetails(Project project, long expectedVersion);
+
     Optional<Project> changeEnded(Project project, long expectedVersion);
 
     Optional<Project> archive(Project project, long expectedVersion);
+
     Optional<Project> reopen(Project project, long expectedVersion);
+
     long countCurrentByWorkspace(UUID companyId, UUID workspaceId);
+
     Optional<ProjectQueryRow> findVisibleById(CurrentActor actor, UUID projectId);
-    ProjectPageResult findVisible(CurrentActor actor, ProjectSearchCriteria criteria,
-                                  OffsetPageRequest page);
+
+    ProjectPageResult findVisible(CurrentActor actor, ProjectSearchCriteria criteria, OffsetPageRequest page);
+
     List<UUID> findVisibleOwnerIds(CurrentActor actor);
-    java.util.Map<UUID, Long> countVisibleCurrentByWorkspace(CurrentActor actor,
-                                                             java.util.Collection<UUID> workspaceIds);
+
+    java.util.Map<UUID, Long> countVisibleCurrentByWorkspace(
+            CurrentActor actor, java.util.Collection<UUID> workspaceIds);
+
     List<Project> findGovernedByOwner(UUID companyId, UUID ownerUserId);
 }

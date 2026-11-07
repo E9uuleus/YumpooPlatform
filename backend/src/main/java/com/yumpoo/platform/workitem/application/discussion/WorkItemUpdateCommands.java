@@ -1,0 +1,23 @@
+package com.yumpoo.platform.workitem.application.discussion;
+
+import com.yumpoo.platform.foundation.application.idempotency.RequestHash;
+import com.yumpoo.platform.identityaccess.api.CurrentActor;
+import java.util.UUID;
+
+public final class WorkItemUpdateCommands {
+    private WorkItemUpdateCommands() {}
+
+    public record Publish(
+            CurrentActor actor,
+            UUID workItemId,
+            String bodyHtml,
+            UUID parentUpdateId,
+            UUID idempotencyKey,
+            RequestHash requestHash) {}
+
+    public record Edit(CurrentActor actor, UUID updateId, long expectedVersion, String bodyHtml) {}
+
+    public record Delete(CurrentActor actor, UUID updateId, long expectedVersion) {}
+
+    public record Pin(CurrentActor actor, UUID updateId, long expectedVersion, boolean pinned) {}
+}

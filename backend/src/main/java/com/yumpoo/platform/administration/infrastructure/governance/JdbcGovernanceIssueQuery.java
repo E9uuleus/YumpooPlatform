@@ -6,15 +6,14 @@ import com.yumpoo.platform.administration.application.governance.GovernanceIssue
 import com.yumpoo.platform.administration.application.governance.GovernanceIssueStatus;
 import com.yumpoo.platform.administration.application.governance.GovernanceIssueType;
 import com.yumpoo.platform.administration.application.governance.GovernanceIssueView;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Repository;
-
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Repository;
 
 @Repository
 public class JdbcGovernanceIssueQuery implements GovernanceIssueQueryUseCase {
@@ -29,15 +28,16 @@ public class JdbcGovernanceIssueQuery implements GovernanceIssueQueryUseCase {
     public GovernanceIssuePage find(GovernanceIssueQuery query) {
         List<Object> parameters = new ArrayList<>();
         String predicates = predicates(query, parameters);
-        JdbcClient.StatementSpec countStatement = jdbcClient.sql(
-                "SELECT count(*) FROM yumpoo.governance_issue WHERE company_id = ?" + predicates)
+        JdbcClient.StatementSpec countStatement = jdbcClient
+                .sql("SELECT count(*) FROM yumpoo.governance_issue WHERE company_id = ?" + predicates)
                 .param(query.companyId());
         for (Object parameter : parameters) {
             countStatement = countStatement.param(parameter);
         }
         long total = countStatement.query(Long.class).single();
 
-        JdbcClient.StatementSpec pageStatement = jdbcClient.sql("""
+        JdbcClient.StatementSpec pageStatement = jdbcClient
+                .sql("""
                         SELECT id, company_id, issue_type, target_type, target_id,
                                status, safe_summary_code,
                                detected_event_id, detected_at, resolved_event_id, resolved_at,
@@ -70,8 +70,7 @@ public class JdbcGovernanceIssueQuery implements GovernanceIssueQueryUseCase {
         return sql.toString();
     }
 
-    private static GovernanceIssueView map(ResultSet resultSet, int rowNumber)
-            throws SQLException {
+    private static GovernanceIssueView map(ResultSet resultSet, int rowNumber) throws SQLException {
         return new GovernanceIssueView(
                 resultSet.getObject("id", UUID.class),
                 resultSet.getObject("company_id", UUID.class),
@@ -84,8 +83,10 @@ public class JdbcGovernanceIssueQuery implements GovernanceIssueQueryUseCase {
                 resultSet.getObject("detected_at", OffsetDateTime.class).toInstant(),
                 resultSet.getObject("resolved_event_id", UUID.class),
                 resultSet.getObject("resolved_at", OffsetDateTime.class) == null
-                        ? null : resultSet.getObject("resolved_at", OffsetDateTime.class).toInstant(),
-                resultSet.getLong("row_version")
-        );
+                        ? null
+                        : resultSet
+                                .getObject("resolved_at", OffsetDateTime.class)
+                                .toInstant(),
+                resultSet.getLong("row_version"));
     }
 }

@@ -5,6 +5,5 @@ package com.yumpoo.platform.filestorage.application;
  */
 final class LayerMarker {
 
-    private LayerMarker() {
-    }
+    private LayerMarker() {}
 }

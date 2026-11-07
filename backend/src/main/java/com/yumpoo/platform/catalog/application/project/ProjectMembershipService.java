@@ -5,7 +5,6 @@ import com.yumpoo.platform.catalog.domain.project.Project;
 import com.yumpoo.platform.catalog.domain.project.ProjectLifecycle;
 import com.yumpoo.platform.catalog.domain.project.ProjectMembership;
 import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
-import com.yumpoo.platform.foundation.application.concurrency.StrongEtag;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
@@ -13,16 +12,15 @@ import com.yumpoo.platform.identityaccess.api.MinimalUserPage;
 import com.yumpoo.platform.identityaccess.api.MinimalUserSnapshot;
 import com.yumpoo.platform.identityaccess.api.MinimalUserSnapshotQuery;
 import com.yumpoo.platform.identityaccess.api.PlatformRoleCode;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Collection;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ProjectMembershipService {
@@ -31,9 +29,11 @@ public class ProjectMembershipService {
     private final MinimalUserSnapshotQuery users;
     private final Clock clock;
 
-    public ProjectMembershipService(ProjectRepository projectRepository,
-                                    ProjectMembershipRepository membershipRepository,
-                                    MinimalUserSnapshotQuery users, Clock clock) {
+    public ProjectMembershipService(
+            ProjectRepository projectRepository,
+            ProjectMembershipRepository membershipRepository,
+            MinimalUserSnapshotQuery users,
+            Clock clock) {
         this.projectRepository = projectRepository;
         this.membershipRepository = membershipRepository;
         this.users = users;
@@ -42,7 +42,8 @@ public class ProjectMembershipService {
 
     @Transactional(readOnly = true)
     public Access requireVisible(CurrentActor actor, UUID projectId) {
-        return membershipRepository.findVisible(actor, projectId)
+        return membershipRepository
+                .findVisible(actor, projectId)
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
     }
 
@@ -59,7 +60,8 @@ public class ProjectMembershipService {
     @Transactional(readOnly = true)
     public java.util.List<ProjectApplicationSnapshot> findGovernedByOwner(UUID companyId, UUID ownerUserId) {
         return projectRepository.findGovernedByOwner(companyId, ownerUserId).stream()
-                .map(ProjectMembershipService::project).toList();
+                .map(ProjectMembershipService::project)
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -68,8 +70,10 @@ public class ProjectMembershipService {
     }
 
     @Transactional(readOnly = true)
-    public List<ProjectApplicationSnapshot> findProjects(UUID companyId,Collection<UUID> ids) {
-        return projectRepository.findAll(companyId,ids).stream().map(ProjectMembershipService::project).toList();
+    public List<ProjectApplicationSnapshot> findProjects(UUID companyId, Collection<UUID> ids) {
+        return projectRepository.findAll(companyId, ids).stream()
+                .map(ProjectMembershipService::project)
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -78,8 +82,7 @@ public class ProjectMembershipService {
     }
 
     @Transactional(readOnly = true)
-    public Set<UUID> findActiveMemberIds(UUID companyId, UUID projectId,
-            Collection<UUID> userIds) {
+    public Set<UUID> findActiveMemberIds(UUID companyId, UUID projectId, Collection<UUID> userIds) {
         return membershipRepository.findByUsers(companyId, projectId, userIds).values().stream()
                 .filter(membership -> membership.status()
                         == com.yumpoo.platform.catalog.domain.project.ProjectMembershipStatus.ACTIVE)
@@ -88,18 +91,18 @@ public class ProjectMembershipService {
     }
 
     @Transactional(readOnly = true)
-    public MemberPage findMembers(CurrentActor actor, UUID projectId, ListStatus status,
-            OffsetPageRequest page) {
+    public MemberPage findMembers(CurrentActor actor, UUID projectId, ListStatus status, OffsetPageRequest page) {
         return findMembers(actor, projectId, status, null, page);
     }
 
     @Transactional(readOnly = true)
-    public MemberPage findMembers(CurrentActor actor, UUID projectId, ListStatus status,
-            String query, OffsetPageRequest page) {
+    public MemberPage findMembers(
+            CurrentActor actor, UUID projectId, ListStatus status, String query, OffsetPageRequest page) {
         Access access = requireVisible(actor, projectId);
-        List<ProjectMembership> memberships = membershipRepository.findPage(
-                actor.companyId(), projectId, status, query, page);
-        Map<UUID, MinimalUserSnapshot> identities = users.findByUserIds(actor.companyId(),
+        List<ProjectMembership> memberships =
+                membershipRepository.findPage(actor.companyId(), projectId, status, query, page);
+        Map<UUID, MinimalUserSnapshot> identities = users.findByUserIds(
+                actor.companyId(),
                 memberships.stream().map(ProjectMembership::userId).toList());
         Project project = requiredProject(actor.companyId(), projectId);
         List<Member> items = memberships.stream()
@@ -110,34 +113,44 @@ public class ProjectMembershipService {
     }
 
     @Transactional(readOnly = true)
-    public CandidatePage findCandidates(CurrentActor actor, UUID projectId,
-                                                     String name, OffsetPageRequest page) {
+    public CandidatePage findCandidates(CurrentActor actor, UUID projectId, String name, OffsetPageRequest page) {
         Access access = requireVisible(actor, projectId);
-        if (access.actorAccess() != ActorAccess.OWNER
-                && !actor.hasRole(PlatformRoleCode.COMPANY_ADMIN)) {
+        if (access.actorAccess() != ActorAccess.OWNER && !actor.hasRole(PlatformRoleCode.COMPANY_ADMIN)) {
             throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
         }
         MinimalUserPage userPage = users.findActiveEnabledByName(actor.companyId(), name, page);
         Map<UUID, ProjectMembership> memberships = membershipRepository.findByUsers(
-                actor.companyId(), projectId, userPage.items().stream().map(MinimalUserSnapshot::userId).toList());
+                actor.companyId(),
+                projectId,
+                userPage.items().stream().map(MinimalUserSnapshot::userId).toList());
         Project project = requiredProject(actor.companyId(), projectId);
-        List<Candidate> items = userPage.items().stream().map(user -> {
-            ProjectMembership membership = memberships.get(user.userId());
-            return new Candidate(user.userId(), user.displayName(),
-                    user.employmentStatus(), user.accountStatus(),
-                    membership == null ? null : membership.status().name(),
-                    project.ownerUserId().equals(user.userId()),
-                    membership == null ? null : membership.rowVersion());
-        }).toList();
-        return new CandidatePage(items, page.page(), page.size(), userPage.totalElements(),
+        List<Candidate> items = userPage.items().stream()
+                .map(user -> {
+                    ProjectMembership membership = memberships.get(user.userId());
+                    return new Candidate(
+                            user.userId(),
+                            user.displayName(),
+                            user.employmentStatus(),
+                            user.accountStatus(),
+                            membership == null ? null : membership.status().name(),
+                            project.ownerUserId().equals(user.userId()),
+                            membership == null ? null : membership.rowVersion());
+                })
+                .toList();
+        return new CandidatePage(
+                items,
+                page.page(),
+                page.size(),
+                userPage.totalElements(),
                 pages(userPage.totalElements(), page.size()));
     }
 
     @Transactional
     public MemberResult add(MemberCommand mutation) {
         Project project = lockWritableProject(mutation.companyId(), mutation.projectId());
-        ProjectMembership existing = membershipRepository.lock(mutation.companyId(), mutation.projectId(),
-                mutation.userId()).orElse(null);
+        ProjectMembership existing = membershipRepository
+                .lock(mutation.companyId(), mutation.projectId(), mutation.userId())
+                .orElse(null);
         Instant now = clock.instant();
         ProjectMembership changed;
         boolean created;
@@ -145,8 +158,13 @@ public class ProjectMembershipService {
             if (mutation.expectedMembershipVersion() != null) {
                 throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
             }
-            changed = ProjectMembership.activeMember(UUID.randomUUID(), mutation.companyId(),
-                    mutation.projectId(), mutation.userId(), mutation.actorUserId(), now);
+            changed = ProjectMembership.activeMember(
+                    UUID.randomUUID(),
+                    mutation.companyId(),
+                    mutation.projectId(),
+                    mutation.userId(),
+                    mutation.actorUserId(),
+                    now);
             if (!membershipRepository.insert(changed)) {
                 throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
             }
@@ -159,13 +177,14 @@ public class ProjectMembershipService {
                 throw new ApplicationException(StandardErrorCode.PRECONDITION_REQUIRED);
             }
             requireVersion(existing, mutation.expectedMembershipVersion());
-            changed = membershipRepository.update(existing.reactivate(mutation.actorUserId(), now),
-                            mutation.expectedMembershipVersion())
+            changed = membershipRepository
+                    .update(existing.reactivate(mutation.actorUserId(), now), mutation.expectedMembershipVersion())
                     .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
             created = false;
         }
-        return new MemberResult(snapshot(changed, project.ownerUserId(),
-                requiredIdentity(mutation.companyId(), mutation.userId())), created);
+        return new MemberResult(
+                snapshot(changed, project.ownerUserId(), requiredIdentity(mutation.companyId(), mutation.userId())),
+                created);
     }
 
     @Transactional
@@ -174,8 +193,8 @@ public class ProjectMembershipService {
         if (project.ownerUserId().equals(mutation.userId())) {
             throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
         }
-        ProjectMembership existing = membershipRepository.lock(mutation.companyId(), mutation.projectId(),
-                        mutation.userId())
+        ProjectMembership existing = membershipRepository
+                .lock(mutation.companyId(), mutation.projectId(), mutation.userId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
         if (mutation.expectedMembershipVersion() == null) {
             throw new ApplicationException(StandardErrorCode.PRECONDITION_REQUIRED);
@@ -184,12 +203,14 @@ public class ProjectMembershipService {
         if (existing.status() != com.yumpoo.platform.catalog.domain.project.ProjectMembershipStatus.ACTIVE) {
             throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
         }
-        ProjectMembership changed = membershipRepository.update(
+        ProjectMembership changed = membershipRepository
+                .update(
                         existing.remove(mutation.actorUserId(), mutation.reason(), clock.instant()),
                         mutation.expectedMembershipVersion())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
-        return new MemberResult(snapshot(changed, project.ownerUserId(),
-                requiredIdentity(mutation.companyId(), mutation.userId())), false);
+        return new MemberResult(
+                snapshot(changed, project.ownerUserId(), requiredIdentity(mutation.companyId(), mutation.userId())),
+                false);
     }
 
     @Transactional
@@ -201,34 +222,47 @@ public class ProjectMembershipService {
         if (before.ownerUserId().equals(mutation.newOwnerUserId())) {
             throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
         }
-        ProjectMembership membership = membershipRepository.lock(mutation.companyId(), mutation.projectId(),
-                mutation.newOwnerUserId()).orElse(null);
+        ProjectMembership membership = membershipRepository
+                .lock(mutation.companyId(), mutation.projectId(), mutation.newOwnerUserId())
+                .orElse(null);
         boolean added = false;
         if (membership == null) {
-            membership = ProjectMembership.activeMember(UUID.randomUUID(), mutation.companyId(),
-                    mutation.projectId(), mutation.newOwnerUserId(), mutation.actorUserId(), clock.instant());
+            membership = ProjectMembership.activeMember(
+                    UUID.randomUUID(),
+                    mutation.companyId(),
+                    mutation.projectId(),
+                    mutation.newOwnerUserId(),
+                    mutation.actorUserId(),
+                    clock.instant());
             if (!membershipRepository.insert(membership)) {
                 throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
             }
             added = true;
-        } else if (membership.status()
-                == com.yumpoo.platform.catalog.domain.project.ProjectMembershipStatus.REMOVED) {
+        } else if (membership.status() == com.yumpoo.platform.catalog.domain.project.ProjectMembershipStatus.REMOVED) {
             long expected = membership.rowVersion();
-            membership = membershipRepository.update(membership.reactivate(mutation.actorUserId(), clock.instant()),
-                            expected).orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
+            membership = membershipRepository
+                    .update(membership.reactivate(mutation.actorUserId(), clock.instant()), expected)
+                    .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
             added = true;
         }
-        Project after = projectRepository.reassignOwner(
+        Project after = projectRepository
+                .reassignOwner(
                         before.reassignOwner(mutation.newOwnerUserId(), mutation.actorUserId(), clock.instant()),
                         mutation.expectedProjectVersion())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
-        return new OwnerResult(project(before), project(after),
-                snapshot(membership, after.ownerUserId(),
-                        requiredIdentity(mutation.companyId(), mutation.newOwnerUserId())), added);
+        return new OwnerResult(
+                project(before),
+                project(after),
+                snapshot(
+                        membership,
+                        after.ownerUserId(),
+                        requiredIdentity(mutation.companyId(), mutation.newOwnerUserId())),
+                added);
     }
 
     private Project lockWritableProject(UUID companyId, UUID projectId) {
-        Project project = projectRepository.lockById(companyId, projectId)
+        Project project = projectRepository
+                .lockById(companyId, projectId)
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
         if (project.lifecycle() == ProjectLifecycle.ARCHIVED || project.ended()) {
             throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
@@ -237,7 +271,8 @@ public class ProjectMembershipService {
     }
 
     private Project requiredProject(UUID companyId, UUID projectId) {
-        return projectRepository.findById(companyId, projectId)
+        return projectRepository
+                .findById(companyId, projectId)
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
     }
 
@@ -252,21 +287,40 @@ public class ProjectMembershipService {
         return user;
     }
 
-    private static Member snapshot(ProjectMembership membership, UUID ownerUserId,
-                                                  MinimalUserSnapshot user) {
-        return new Member(membership.id(), membership.projectId(), membership.userId(),
-                user.displayName(), user.employmentStatus(), user.accountStatus(), membership.status().name(),
-                ownerUserId.equals(membership.userId()), membership.joinedAt(), membership.joinedByUserId(),
-                membership.removedAt(), membership.removedByUserId(), membership.rowVersion());
+    private static Member snapshot(ProjectMembership membership, UUID ownerUserId, MinimalUserSnapshot user) {
+        return new Member(
+                membership.id(),
+                membership.projectId(),
+                membership.userId(),
+                user.displayName(),
+                user.employmentStatus(),
+                user.accountStatus(),
+                membership.status().name(),
+                ownerUserId.equals(membership.userId()),
+                membership.joinedAt(),
+                membership.joinedByUserId(),
+                membership.removedAt(),
+                membership.removedByUserId(),
+                membership.rowVersion());
     }
 
     private static ProjectApplicationSnapshot project(Project project) {
-        return new ProjectApplicationSnapshot(project.id(), project.companyId(), project.workspaceId(), project.code(),
-                project.name(), project.description(), project.lifecycle().name(),
-                project.ownerUserId(), project.rowVersion(), project.endedAt());
+        return new ProjectApplicationSnapshot(
+                project.id(),
+                project.companyId(),
+                project.workspaceId(),
+                project.code(),
+                project.name(),
+                project.description(),
+                project.lifecycle().name(),
+                project.ownerUserId(),
+                project.rowVersion(),
+                project.endedAt());
     }
 
-    private static int pages(long total, int size) { return (int) ((total + size - 1) / size); }
+    private static int pages(long total, int size) {
+        return (int) ((total + size - 1) / size);
+    }
 
     private static void requireVersion(ProjectMembership membership, long expected) {
         if (membership.rowVersion() != expected) {

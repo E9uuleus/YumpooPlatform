@@ -1,37 +1,44 @@
 <script setup lang="ts">
 import './workItemTableSettings.css'
-import { WorkItemTableHeight, type WorkItemTableSettingsUpdateRequest } from '@yumpoo/api-client'
-import { ElCheckbox, ElPopover } from 'element-plus'
+import { WorkItemTableHeight } from '@yumpoo/api-client'
+import { ElCheckbox, ElPopover, ElTooltip } from 'element-plus'
 import { computed, onBeforeUnmount, ref, useId, watch } from 'vue'
 import WorkItemColoringRulesPanel from './WorkItemColoringRulesPanel.vue'
 import WorkItemDefaultValuesPanel from './WorkItemDefaultValuesPanel.vue'
+import WorkItemFieldGlyph from './WorkItemFieldGlyph.vue'
 import type { TableSettingsSaveState } from './useWorkItemTableSettings'
 import {
   HEIGHT_OPTIONS,
   heightOption,
   isColoringRuleComplete,
   type DefaultValueColumnKey,
+  type TableSettings,
   type TableSettingsCatalog,
 } from './workItemTableSettings'
 
 type Panel = 'menu' | 'pin' | 'coloring' | 'defaults'
 type HeightField = 'headerHeight' | 'rowHeight'
+type PinColumn = { key: string; label: string; width: number }
+type PinTable = 'items' | 'subitems'
 
 const props = defineProps<{
-  settings: WorkItemTableSettingsUpdateRequest
+  settings: TableSettings
   state: 'loading' | 'ready' | 'error'
   saveState: TableSettingsSaveState
   saveError?: string | undefined
   disabled: boolean
   /** 当前从左到右的可见列，第一项为恒固定的工作项名称列。 */
-  pinColumns: Array<{ key: string; label: string; width: number }>
+  pinColumns: PinColumn[]
   /** 固定区可用宽度；返回 0 表示无法测量、不限制。 */
   pinWidthBudget: () => number
+  /** 子项表从左到右的可见列，第一项为恒固定的工作项名称列；不传时不显示子项列分组。 */
+  subitemPinColumns?: PinColumn[] | undefined
+  subitemPinWidthBudget?: (() => number) | undefined
   defaultsCount: number
   catalog: TableSettingsCatalog
   defaultColumns: Array<{ key: DefaultValueColumnKey; label: string }>
 }>()
-const emit = defineEmits<{ update: [patch: Partial<WorkItemTableSettingsUpdateRequest>]; retry: []; retrySave: [] }>()
+const emit = defineEmits<{ update: [patch: Partial<TableSettings>]; retry: []; retrySave: [] }>()
 
 const PANEL_WIDTHS: Record<Panel, number> = { menu: 240, pin: 300, coloring: 820, defaults: 480 }
 const HEIGHT_FIELDS: Array<{ field: HeightField; label: string; icon: string }> = [
@@ -42,22 +49,30 @@ const root = ref<HTMLElement>()
 const open = ref(false)
 const panel = ref<Panel>('menu')
 const widthBudget = ref(0)
+const subitemWidthBudget = ref(0)
 const openHeight = ref<HeightField | null>(null)
 const popperClass = `table-settings-owner-${useId().replace(/[^\w-]/g, '-')}`
 
 const pinnedCount = computed(() => Math.min(props.settings.pinnedColumnCount, Math.max(0, props.pinColumns.length - 1)))
+const subitemPinnedCount = computed(() => Math.min(props.settings.subitemPinnedColumnCount,
+  Math.max(0, (props.subitemPinColumns?.length ?? 0) - 1)))
+const totalPinnedCount = computed(() => pinnedCount.value + subitemPinnedCount.value)
 const coloringCount = computed(() => props.settings.coloringRules.filter(isColoringRuleComplete).length)
-const customized = computed(() => pinnedCount.value > 0 || coloringCount.value > 0 || props.defaultsCount > 0
+const customized = computed(() => totalPinnedCount.value > 0 || coloringCount.value > 0 || props.defaultsCount > 0
   || props.settings.headerHeight !== WorkItemTableHeight.Single || props.settings.rowHeight !== WorkItemTableHeight.Single)
-const pinOptions = computed(() => {
+function pinOptionsFor(columns: PinColumn[], count: number, budget: number) {
   let width = 0
-  return props.pinColumns.map((column, index) => {
+  return columns.map((column, index) => {
     width += column.width
-    const pinned = index <= pinnedCount.value
-    return { key: column.key, label: column.label, index, pinned,
-      tooWide: !pinned && widthBudget.value > 0 && width > widthBudget.value }
+    const pinned = index <= count
+    return { key: column.key, label: column.label, index, pinned, tooWide: !pinned && budget > 0 && width > budget }
   })
-})
+}
+const pinGroups = computed(() => [
+  { table: 'items' as PinTable, title: '工作项列', options: pinOptionsFor(props.pinColumns, pinnedCount.value, widthBudget.value) },
+  ...props.subitemPinColumns ? [{ table: 'subitems' as PinTable, title: '子项列',
+    options: pinOptionsFor(props.subitemPinColumns, subitemPinnedCount.value, subitemWidthBudget.value) }] : [],
+])
 
 function toggle(): void {
   if (open.value) {
@@ -71,12 +86,16 @@ function toggle(): void {
 
 function showPanel(next: Panel): void {
   if (props.state !== 'ready') return
-  if (next === 'pin') widthBudget.value = props.pinWidthBudget()
+  if (next === 'pin') {
+    widthBudget.value = props.pinWidthBudget()
+    subitemWidthBudget.value = props.subitemPinWidthBudget?.() ?? 0
+  }
   panel.value = next
 }
 
-function setPinned(index: number, checked: boolean): void {
-  emit('update', { pinnedColumnCount: checked ? index : index - 1 })
+function setPinned(table: PinTable, index: number, checked: boolean): void {
+  const count = checked ? index : index - 1
+  emit('update', table === 'items' ? { pinnedColumnCount: count } : { subitemPinnedColumnCount: count })
 }
 
 function setHeight(field: HeightField, value: WorkItemTableHeight): void {
@@ -172,7 +191,7 @@ onBeforeUnmount(unbind)
             stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M7.5 3h5M8.5 3v4.5L6 11h8l-2.5-3.5V3M10 11v6" />
           </svg>
-          <span>固定列<template v-if="pinnedCount"> / {{ pinnedCount }}</template></span>
+          <span>固定列<template v-if="totalPinnedCount"> / {{ totalPinnedCount }}</template></span>
         </button>
         <el-popover
           v-for="item in HEIGHT_FIELDS"
@@ -233,19 +252,44 @@ onBeforeUnmount(unbind)
           <strong>选择要固定的列</strong>
         </header>
         <p class="table-settings-panel__hint">勾选某列会同时固定它左侧的所有列，固定列不随左右滚动。可直接拖动列头调整顺序。</p>
-        <div class="table-settings-pin-list">
-          <el-checkbox
-            v-for="option in pinOptions"
-            :key="option.key"
-            class="table-settings-pin-option"
-            :model-value="option.pinned"
-            :disabled="option.index === 0 || option.tooWide"
-            :title="option.tooWide ? '固定区域将超出表格可视宽度' : undefined"
-            @change="setPinned(option.index, Boolean($event))"
-          >
-            {{ option.label }}
-          </el-checkbox>
-        </div>
+        <section
+          v-for="group in pinGroups"
+          :key="group.table"
+          class="table-settings-pin-group"
+          :aria-label="group.title"
+        >
+          <h4 class="table-settings-pin-group__title">
+            {{ group.title }}
+          </h4>
+          <div class="table-settings-pin-list">
+            <el-tooltip
+              v-for="option in group.options"
+              :key="option.key"
+              content="固定区域将超出表格可视宽度"
+              placement="left"
+              :show-after="300"
+              :enterable="false"
+              :disabled="!option.tooWide"
+            >
+              <label
+                class="table-settings-pin-option"
+                :class="{
+                  'table-settings-pin-option--locked': option.index === 0,
+                  'table-settings-pin-option--disabled': option.tooWide,
+                }"
+              >
+                <work-item-field-glyph :field="option.key" />
+                <span class="table-settings-pin-option__label">{{ option.label }}</span>
+                <el-checkbox
+                  :model-value="option.pinned"
+                  :disabled="option.index === 0 || option.tooWide"
+                  :aria-label="`固定${group.title === '子项列' ? '子项' : ''}列：${option.label}`"
+                  @change="setPinned(group.table, option.index, Boolean($event))"
+                />
+              </label>
+            </el-tooltip>
+          </div>
+        </section>
       </section>
 
       <work-item-coloring-rules-panel

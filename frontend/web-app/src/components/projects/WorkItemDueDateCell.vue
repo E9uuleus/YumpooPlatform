@@ -3,13 +3,20 @@ import { ElButton, ElDatePicker, ElPopover, ElTimePicker, ElTooltip } from 'elem
 import { computed, ref } from 'vue'
 import { useSession } from '../../composables/useSession'
 import { companyDate, dueDateKey, presentDueDate, type DueDateValue, type WorkItemDueDateFacts } from './workItemDueDate'
-import { useWorkItemDueClock } from './useWorkItemDueClock'
+import WorkItemFieldGlyph from './WorkItemFieldGlyph.vue'
+import { useMinuteClock } from '../../composables/useMinuteClock'
 
-const props = defineProps<{ item: WorkItemDueDateFacts; canEdit: boolean; busy?: boolean; clearLabel?: string | undefined }>()
+const props = defineProps<{
+  item: WorkItemDueDateFacts; canEdit: boolean; busy?: boolean; clearLabel?: string | undefined
+  /** tag：看板卡片上的标签外观，弹窗与表格单元格相同。 */
+  variant?: 'cell' | 'tag'
+  /** 标签无日期时显示的占位文字。 */
+  placeholder?: string | undefined
+}>()
 const emit = defineEmits<{ select: []; change: [value: DueDateValue] }>()
 const session = useSession()
 const timezone = computed(() => session.authentication.value?.company.timezone ?? 'Asia/Shanghai')
-const now = useWorkItemDueClock()
+const now = useMinuteClock()
 const presentation = computed(() => presentDueDate(props.item, timezone.value, now.value))
 const date = computed(() => dueDateKey(props.item.dueDate))
 const disabled = computed(() => !props.canEdit || Boolean(props.busy))
@@ -43,7 +50,7 @@ function clearDate(): void {
 </script>
 
 <template>
-  <span class="work-item-due-date" @pointerdown.stop @click.stop @keydown.stop>
+  <span class="work-item-due-date" :class="{ 'work-item-due-date--tag': variant === 'tag' }" @pointerdown.stop @click.stop @keydown.stop>
     <el-popover
       :persistent="false" v-model:visible="visible" placement="bottom" :width="300" trigger="click"
       :disabled="disabled" popper-class="work-items-popover work-item-deadline-popover"
@@ -51,22 +58,26 @@ function clearDate(): void {
     >
       <template #reference>
         <button
-          type="button" class="monday-due-date-cell cell-editor-trigger" :disabled="disabled"
+          type="button" class="cell-editor-trigger" :disabled="disabled"
+          :class="variant === 'tag' ? ['work-item-kanban-tag', placeholder ? 'work-item-kanban-tag--placeholder' : 'work-item-kanban-tag--plain'] : 'monday-due-date-cell'"
           :aria-description="presentation.tooltip" aria-label="编辑截止日期" @click="emit('select')"
         >
-          <el-tooltip v-if="presentation.tone !== 'none'" :content="presentation.tooltip" placement="top" :show-after="200">
+          <work-item-field-glyph v-if="variant === 'tag'" field="dueDate" plain />
+          <el-tooltip v-if="variant !== 'tag' && presentation.tone !== 'none'" :content="presentation.tooltip" placement="top" :show-after="200">
             <span class="deadline-indicator" :class="`deadline-indicator--${presentation.tone}`">
               <svg v-if="presentation.tone === 'today'" width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3.5" fill="currentColor" /></svg>
               <svg v-else width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.2" /><path d="M8 4.2V8.5M8 11.2V11.8" class="deadline-exclamation" stroke-width="1.2" stroke-linecap="round" /></svg>
             </span>
           </el-tooltip>
-          <span class="deadline-text" :class="{ 'deadline-text--late': presentation.tone === 'red', 'deadline-text--done': presentation.strike }">{{ presentation.text }}</span>
+          <span v-if="variant === 'tag' && placeholder" class="deadline-text">{{ placeholder }}</span>
+          <span v-else class="deadline-text" :class="{ 'deadline-text--late': presentation.tone === 'red', 'deadline-text--done': presentation.strike }">{{ presentation.text }}</span>
         </button>
       </template>
       <div class="deadline-editor" @pointerdown.stop @click.stop @keydown.stop>
         <slot name="header" />
         <div class="deadline-editor__toolbar">
           <el-button text :disabled="disabled" @click="commitDate(companyDate(now, timezone))">Today</el-button>
+          <el-button v-if="variant === 'tag' && date && canEdit" text :disabled="disabled" @click="clearDate">{{ clearLabel ?? '清空' }}</el-button>
           <button type="button" class="deadline-clock" :class="{ 'is-active': timeOpen }" :disabled="disabled || !date" :aria-expanded="timeOpen" aria-label="设置截止时间" :title="date ? '设置截止时间' : '请先选择截止日期'" @click="timeOpen = !timeOpen">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><path d="M12 6.5V12l3.5 2" /></svg>
           </button>
@@ -78,7 +89,7 @@ function clearDate(): void {
         </div>
       </div>
     </el-popover>
-    <button v-if="date && canEdit" type="button" class="deadline-clear" :disabled="busy" :aria-label="clearLabel ?? '清空截止日期'" :title="clearLabel ?? '清空截止日期'" @click.stop="clearDate">
+    <button v-if="date && canEdit && variant !== 'tag'" type="button" class="deadline-clear" :disabled="busy" :aria-label="clearLabel ?? '清空截止日期'" :title="clearLabel ?? '清空截止日期'" @click.stop="clearDate">
       <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" /></svg>
     </button>
   </span>
@@ -86,6 +97,8 @@ function clearDate(): void {
 
 <style scoped>
 .work-item-due-date { position: relative; display: flex; align-items: stretch; width: 100%; height: 100%; min-width: 0; }
+.work-item-due-date--tag { display: inline-flex; width: auto; height: auto; }
+.deadline-editor__toolbar :deep(.el-button + .el-button) { margin-left: auto; }
 .monday-due-date-cell { position: relative; display: flex; align-items: center; justify-content: center; width: 100%; min-width: 0; min-height: var(--deadline-cell-height, var(--work-item-table-row-height, 36px)); padding: 0 24px; border: 0; background: transparent; color: var(--yp-text-primary); font: inherit; font-size: 13px; cursor: pointer; }
 .monday-due-date-cell:disabled { cursor: default; }
 .monday-due-date-cell:focus-visible, .deadline-clear:focus-visible, .deadline-clock:focus-visible { outline: 2px solid var(--yp-action-primary); outline-offset: -2px; }

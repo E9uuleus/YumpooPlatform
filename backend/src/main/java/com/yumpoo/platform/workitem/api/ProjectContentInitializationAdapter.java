@@ -1,10 +1,9 @@
 package com.yumpoo.platform.workitem.api;
 
-import com.yumpoo.platform.workitem.application.ContentInitializationService;
-import com.yumpoo.platform.workitem.application.ContentInitializationCommand;
-import org.springframework.stereotype.Component;
-
+import com.yumpoo.platform.workitem.application.content.ContentInitializationCommand;
+import com.yumpoo.platform.workitem.application.content.ContentInitializationService;
 import java.util.List;
+import org.springframework.stereotype.Component;
 
 @Component
 public class ProjectContentInitializationAdapter implements InitializeProjectContentsPort {
@@ -18,11 +17,14 @@ public class ProjectContentInitializationAdapter implements InitializeProjectCon
     @Override
     public List<InitializedProjectContent> initialize(ProjectContentInitialization initialization) {
         ContentInitializationCommand command = new ContentInitializationCommand(
-                initialization.companyId(), initialization.projectId(), initialization.actorUserId(),
-                initialization.colors().categories(), initialization.colors().statuses(), initialization.colors().priorities());
+                initialization.companyId(),
+                initialization.projectId(),
+                initialization.actorUserId(),
+                initialization.colors().categories(),
+                initialization.colors().statuses(),
+                initialization.colors().priorities());
         return service.initialize(command).stream()
-                .map(content -> new InitializedProjectContent(
-                        content.contentId(), content.code()))
+                .map(content -> new InitializedProjectContent(content.contentId(), content.code()))
                 .toList();
     }
 }

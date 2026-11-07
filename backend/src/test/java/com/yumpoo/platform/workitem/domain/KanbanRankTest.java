@@ -1,9 +1,9 @@
 package com.yumpoo.platform.workitem.domain;
 
-import org.junit.jupiter.api.Test;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import org.junit.jupiter.api.Test;
 
 class KanbanRankTest {
 
@@ -15,15 +15,18 @@ class KanbanRankTest {
 
         assertThat(first.compareTo(second)).isNegative();
         assertThat(second.compareTo(third)).isNegative();
-        assertThat(KanbanRank.between(null, first)).isPresent()
-                .get().satisfies(value -> assertThat(value.compareTo(first)).isNegative());
-        assertThat(KanbanRank.between(first, second)).isPresent()
-                .get().satisfies(value -> {
-                    assertThat(value.compareTo(first)).isPositive();
-                    assertThat(value.compareTo(second)).isNegative();
-                });
-        assertThat(KanbanRank.between(third, null)).isPresent()
-                .get().satisfies(value -> assertThat(value.compareTo(third)).isPositive());
+        assertThat(KanbanRank.between(null, first))
+                .isPresent()
+                .get()
+                .satisfies(value -> assertThat(value.compareTo(first)).isNegative());
+        assertThat(KanbanRank.between(first, second)).isPresent().get().satisfies(value -> {
+            assertThat(value.compareTo(first)).isPositive();
+            assertThat(value.compareTo(second)).isNegative();
+        });
+        assertThat(KanbanRank.between(third, null))
+                .isPresent()
+                .get()
+                .satisfies(value -> assertThat(value.compareTo(third)).isPositive());
     }
 
     @Test
@@ -36,8 +39,7 @@ class KanbanRankTest {
 
     @Test
     void rejectsMalformedAndSentinelRanks() {
-        assertThatThrownBy(() -> KanbanRank.require("123"))
-                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> KanbanRank.require("123")).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> KanbanRank.require("0".repeat(KanbanRank.WIDTH)))
                 .isInstanceOf(IllegalArgumentException.class);
     }

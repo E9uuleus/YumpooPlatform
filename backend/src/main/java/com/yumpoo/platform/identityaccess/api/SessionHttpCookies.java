@@ -2,21 +2,19 @@ package com.yumpoo.platform.identityaccess.api;
 
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.http.ResponseCookie;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.http.ResponseCookie;
 
 final class SessionHttpCookies {
 
     static final String SESSION_COOKIE = "__Host-yumpoo-session";
     static final String CSRF_COOKIE = "__Host-yumpoo-csrf";
 
-    private SessionHttpCookies() {
-    }
+    private SessionHttpCookies() {}
 
     static Optional<String> single(HttpServletRequest request, String name) {
         Cookie[] cookies = request.getCookies();
@@ -62,11 +60,7 @@ final class SessionHttpCookies {
         return base(CSRF_COOKIE, "", Duration.ZERO).httpOnly(false).build();
     }
 
-    private static ResponseCookie.ResponseCookieBuilder base(
-            String name,
-            String value,
-            Duration maxAge
-    ) {
+    private static ResponseCookie.ResponseCookieBuilder base(String name, String value, Duration maxAge) {
         return ResponseCookie.from(name, value)
                 .secure(true)
                 .sameSite("Lax")

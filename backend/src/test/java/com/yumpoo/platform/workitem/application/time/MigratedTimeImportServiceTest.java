@@ -1,0 +1,382 @@
+package com.yumpoo.platform.workitem.application.time;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.*;
+
+import com.yumpoo.platform.audit.api.SecurityAuditAppendPort;
+import com.yumpoo.platform.audit.api.SecurityAuditDraft;
+import com.yumpoo.platform.catalog.api.CompanyProjectQuery;
+import com.yumpoo.platform.catalog.api.MemberProjectQuery;
+import com.yumpoo.platform.catalog.api.ProjectActiveMembershipQuery;
+import com.yumpoo.platform.catalog.api.ProjectDeletionQuery;
+import com.yumpoo.platform.foundation.application.error.ApplicationException;
+import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
+import com.yumpoo.platform.foundation.application.idempotency.*;
+import com.yumpoo.platform.identityaccess.api.CurrentActor;
+import com.yumpoo.platform.identityaccess.api.MinimalUserSnapshot;
+import com.yumpoo.platform.identityaccess.api.MinimalUserSnapshotQuery;
+import com.yumpoo.platform.identityaccess.api.PlatformRoleCode;
+import com.yumpoo.platform.workitem.application.WorkItemRepository;
+import com.yumpoo.platform.workitem.application.time.MigratedTimeImportService.Request;
+import com.yumpoo.platform.workitem.application.time.MigratedTimeImportService.Row;
+import java.time.*;
+import java.util.*;
+import java.util.function.Supplier;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import tools.jackson.databind.ObjectMapper;
+
+class MigratedTimeImportServiceTest {
+    private static final Instant NOW = Instant.parse("2026-10-28T02:00:00Z");
+    private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
+    private static final LocalDate DAY = LocalDate.of(2026, 10, 20);
+    private final UUID company = UUID.randomUUID(),
+            admin = UUID.randomUUID(),
+            member = UUID.randomUUID(),
+            gone = UUID.randomUUID();
+    private final UUID project = UUID.randomUUID(), itemA = UUID.randomUUID(), itemB = UUID.randomUUID();
+    private final CurrentActor actor = new CurrentActor(admin, company, 0, Set.of(PlatformRoleCode.COMPANY_ADMIN));
+    private final TimeTrackingRepository timers = mock(TimeTrackingRepository.class);
+    private final TimeShareMaintainer shares = mock(TimeShareMaintainer.class);
+    private final CompanyProjectQuery projects = mock(CompanyProjectQuery.class);
+    private final ProjectDeletionQuery deletion = mock(ProjectDeletionQuery.class);
+    private final WorkItemRepository items = mock(WorkItemRepository.class);
+    private final ProjectActiveMembershipQuery memberships = mock(ProjectActiveMembershipQuery.class);
+    private final MinimalUserSnapshotQuery users = mock(MinimalUserSnapshotQuery.class);
+    private final SecurityAuditAppendPort audits = mock(SecurityAuditAppendPort.class);
+    private final ObjectMapper json = new ObjectMapper();
+    private final MigratedTimeImportService service;
+
+    MigratedTimeImportServiceTest() {
+        var executor = mock(IdempotentCommandExecutor.class);
+        when(executor.execute(any(), any()))
+                .thenAnswer(call -> IdempotencyExecutionResult.executed(
+                        call.<Supplier<StoredCommandResult>>getArgument(1).get()));
+        when(users.findByUserIds(eq(company), any()))
+                .thenReturn(Map.of(
+                        member, new MinimalUserSnapshot(member, company, "成员", "ACTIVE", "ENABLED"),
+                        gone, new MinimalUserSnapshot(gone, company, "离职", "LEFT", "ENABLED")));
+        when(projects.listForAdministrator(actor))
+                .thenReturn(List.of(
+                        new MemberProjectQuery.Project(project, "交付项目", "P001", "ACTIVE"),
+                        new MemberProjectQuery.Project(UUID.randomUUID(), "旧项目", "P002", "ARCHIVED")));
+        when(deletion.lockForProjection(eq(company), any()))
+                .thenAnswer(call -> Optional.of(projectState(call.getArgument(1), "ACTIVE")));
+        when(items.findTitles(company, project))
+                .thenReturn(List.of(
+                        new WorkItemRepository.WorkItemTitle(itemA, "接口开发", false),
+                        new WorkItemRepository.WorkItemTitle(itemB, "联调测试", false)));
+        when(memberships.findActiveMemberIds(eq(company), eq(project), any())).thenReturn(Set.of(member, gone));
+        when(timers.preferences(company, member)).thenReturn(Optional.empty());
+        when(timers.mySessions(eq(company), eq(member), any(), any())).thenReturn(List.of());
+        when(shares.rebuild(eq(company), eq(member), any(), any())).thenReturn(Set.of(project));
+        service = new MigratedTimeImportService(
+                timers,
+                shares,
+                projects,
+                deletion,
+                items,
+                memberships,
+                users,
+                executor,
+                audits,
+                json,
+                Clock.fixed(NOW, ZoneOffset.UTC));
+    }
+
+    private StoredCommandResult run(CurrentActor who, Request request) {
+        return service.execute(who, ZONE, request, UUID.randomUUID(), new RequestHash("a".repeat(64)));
+    }
+
+    @Test
+    void onlyAdministratorsMayImport() {
+        var plainMember = new CurrentActor(member, company, 0, Set.of());
+        assertThatThrownBy(() -> run(plainMember, new Request(true, List.of(new Row(member, DAY, "交付项目", "接口开发", 60)))))
+                .isInstanceOfSatisfying(
+                        ApplicationException.class,
+                        e -> assertThat(e.errorCode()).isEqualTo(StandardErrorCode.ACCESS_DENIED));
+    }
+
+    @Test
+    void dryRunMatchesWorkItemsAndListsRowsThatCannotBeImported() {
+        var result = json.readTree(run(
+                        actor,
+                        new Request(
+                                true,
+                                List.of(
+                                        new Row(member, DAY, "交付项目", "接口开发", 60),
+                                                new Row(member, DAY, "交付项目", "联调测试", 60),
+                                        new Row(member, DAY, "旧项目", "接口开发", 30),
+                                                new Row(member, DAY, "交付项目", "不存在", 30),
+                                        new Row(gone, DAY, "交付项目", "接口开发", 60),
+                                                new Row(UUID.randomUUID(), DAY, "交付项目", "接口开发", 60))))
+                .responseJson());
+        assertThat(result.path("importedDayCount").asInt()).isEqualTo(1);
+        assertThat(result.path("failedDayCount").asInt()).isEqualTo(1);
+        assertThat(result.path("importedMinutes").asLong()).isEqualTo(120);
+        assertThat(result.path("skippedMinutes").asLong()).isEqualTo(120);
+        assertThat(result.path("skippedRows"))
+                .isEqualTo(json.valueToTree(List.of(
+                        new MigratedTimeImportService.SkippedRow(2, "PROJECT_NOT_FOUND"),
+                        new MigratedTimeImportService.SkippedRow(3, "WORK_ITEM_NOT_FOUND"),
+                        new MigratedTimeImportService.SkippedRow(5, "NOT_PROJECT_MEMBER"))));
+        var days = new HashMap<String, tools.jackson.databind.JsonNode>();
+        result.path("days").forEach(day -> days.put(day.path("userId").asText(), day));
+        assertThat(days.get(member.toString()).path("startedAt").asText()).isEqualTo("2026-10-20T01:00:00Z");
+        assertThat(days.get(member.toString()).path("stoppedAt").asText()).isEqualTo("2026-10-20T03:00:00Z");
+        assertThat(days.get(gone.toString()).path("outcome").asText()).isEqualTo("ERROR");
+        assertThat(days.get(gone.toString()).path("issues").get(0).path("code").asText())
+                .isEqualTo("USER_INVALID");
+        verify(timers, never()).save(any());
+        verify(timers, never()).stateVersion(any(), any(), eq(true));
+        verifyNoInteractions(audits, shares, deletion);
+    }
+
+    @Test
+    void commitReplacesTheDaysMigratedTimeWithReadOnlyWorkItemRecordsInFileOrder() {
+        var old = new TimeTrackingModels.Session(
+                UUID.randomUUID(),
+                company,
+                null,
+                null,
+                member,
+                DAY.atTime(9, 0).atZone(ZONE).toInstant(),
+                DAY.atTime(10, 0).atZone(ZONE).toInstant(),
+                "MANUAL",
+                0,
+                null,
+                null,
+                TimeCategory.MIGRATED,
+                null);
+        when(timers.mySessions(eq(company), eq(member), any(), any()))
+                .thenReturn(List.of(new TimeTrackingModels.MySessionRow(old, null, null, null, false)));
+        var rows = List.of(new Row(member, DAY, "交付项目", "接口开发", 60), new Row(member, DAY, "交付项目", "联调测试", 30));
+        var result = json.readTree(run(actor, new Request(false, rows)).responseJson());
+
+        assertThat(result.path("replacedMinutes").asLong()).isEqualTo(60);
+        assertThat(result.path("days").get(0).path("issues").get(0).path("code").asText())
+                .isEqualTo("REPLACES_PREVIOUS");
+        verify(timers).stateVersion(company, member, true);
+        var saved = ArgumentCaptor.forClass(TimeTrackingModels.Session.class);
+        verify(timers, times(3)).save(saved.capture());
+        assertThat(saved.getAllValues().getFirst().id()).isEqualTo(old.id());
+        assertThat(saved.getAllValues().getFirst().deletedAt()).isEqualTo(NOW);
+        var first = saved.getAllValues().get(1);
+        var second = saved.getAllValues().get(2);
+        assertThat(first.workItemId()).isEqualTo(itemA);
+        assertThat(first.startedAt()).isEqualTo(DAY.atTime(9, 0).atZone(ZONE).toInstant());
+        assertThat(first.stoppedAt()).isEqualTo(DAY.atTime(10, 0).atZone(ZONE).toInstant());
+        assertThat(second.workItemId()).isEqualTo(itemB);
+        assertThat(second.startedAt()).isEqualTo(DAY.atTime(10, 0).atZone(ZONE).toInstant());
+        assertThat(second.stoppedAt()).isEqualTo(DAY.atTime(10, 30).atZone(ZONE).toInstant());
+        for (var created : List.of(first, second)) {
+            assertThat(created.timeCategory()).isNull();
+            assertThat(created.source()).isEqualTo("MANUAL");
+            assertThat(created.projectId()).isEqualTo(project);
+            assertThat(created.migrated()).isTrue();
+        }
+        verify(shares, times(1)).rebuild(eq(company), eq(member), any(), any());
+        verify(timers).advanceProjects(company, Set.of(project));
+        verify(audits, times(1)).append(any(SecurityAuditDraft.class));
+    }
+
+    @Test
+    void reimportOverwritesEveryEarlierMigratedRecordOfTheDay() {
+        var oldA = migratedRecord(itemA, DAY, 9, 10);
+        var oldB = migratedRecord(itemB, DAY, 10, 11);
+        when(timers.mySessions(eq(company), eq(member), any(), any())).thenReturn(rowsOf(oldA, oldB));
+        var rows = List.of(new Row(member, DAY, "交付项目", "接口开发", 90), new Row(member, DAY, "交付项目", "不存在", 30));
+        var result = json.readTree(run(actor, new Request(false, rows)).responseJson());
+
+        assertThat(result.path("replacedMinutes").asLong()).isEqualTo(120);
+        var saved = ArgumentCaptor.forClass(TimeTrackingModels.Session.class);
+        verify(timers, times(3)).save(saved.capture());
+        assertThat(saved.getAllValues().subList(0, 2))
+                .extracting(TimeTrackingModels.Session::id)
+                .containsExactly(oldA.id(), oldB.id());
+        assertThat(saved.getAllValues().subList(0, 2)).allMatch(session -> NOW.equals(session.deletedAt()));
+        var created = saved.getAllValues().get(2);
+        assertThat(created.workItemId()).isEqualTo(itemA);
+        assertThat(created.startedAt()).isEqualTo(DAY.atTime(9, 0).atZone(ZONE).toInstant());
+        assertThat(created.stoppedAt())
+                .isEqualTo(DAY.atTime(10, 30).atZone(ZONE).toInstant());
+    }
+
+    @Test
+    void rejectsDaysThatAlreadyHoldTheMembersOwnTime() {
+        var crossing = new TimeTrackingModels.Session(
+                UUID.randomUUID(),
+                company,
+                project,
+                itemB,
+                member,
+                DAY.minusDays(1).atTime(23, 30).atZone(ZONE).toInstant(),
+                DAY.atTime(0, 30).atZone(ZONE).toInstant(),
+                "TIMER",
+                1,
+                null,
+                null);
+        var migrated = migratedRecord(itemA, DAY, 9, 10);
+        when(timers.mySessions(eq(company), eq(member), any(), any())).thenReturn(rowsOf(crossing, migrated));
+        var rows =
+                List.of(new Row(member, DAY, "交付项目", "接口开发", 60), new Row(member, DAY.plusDays(1), "交付项目", "联调测试", 60));
+        var result = json.readTree(run(actor, new Request(false, rows)).responseJson());
+
+        assertThat(result.path("importedDayCount").asInt()).isEqualTo(1);
+        assertThat(result.path("failedDayCount").asInt()).isEqualTo(1);
+        assertThat(result.path("days").get(0).path("issues").get(0).path("code").asText())
+                .isEqualTo("DAY_HAS_TIME");
+        var saved = ArgumentCaptor.forClass(TimeTrackingModels.Session.class);
+        verify(timers, times(1)).save(saved.capture());
+        assertThat(saved.getValue().workItemId()).isEqualTo(itemB);
+        assertThat(saved.getValue().startedAt())
+                .isEqualTo(DAY.plusDays(1).atTime(9, 0).atZone(ZONE).toInstant());
+    }
+
+    @Test
+    void prefersTheOnlyOpenItemOverArchivedNamesakes() {
+        when(items.findTitles(company, project))
+                .thenReturn(List.of(
+                        new WorkItemRepository.WorkItemTitle(itemA, "接口开发", false),
+                        new WorkItemRepository.WorkItemTitle(UUID.randomUUID(), "接口开发", true),
+                        new WorkItemRepository.WorkItemTitle(itemB, "联调测试", false),
+                        new WorkItemRepository.WorkItemTitle(UUID.randomUUID(), "联调测试", false)));
+        var rows = List.of(new Row(member, DAY, "交付项目", "接口开发", 60), new Row(member, DAY, "交付项目", "联调测试", 30));
+        var result = json.readTree(run(actor, new Request(false, rows)).responseJson());
+
+        assertThat(result.path("skippedRows"))
+                .isEqualTo(
+                        json.valueToTree(List.of(new MigratedTimeImportService.SkippedRow(1, "WORK_ITEM_AMBIGUOUS"))));
+        var saved = ArgumentCaptor.forClass(TimeTrackingModels.Session.class);
+        verify(timers, times(1)).save(saved.capture());
+        assertThat(saved.getValue().workItemId()).isEqualTo(itemA);
+    }
+
+    @Test
+    void commitShareLocksProjectsBeforeTimerStates() {
+        run(actor, new Request(false, List.of(new Row(member, DAY, "交付项目", "接口开发", 60))));
+
+        var ordered = inOrder(deletion, timers);
+        ordered.verify(deletion).lockForProjection(company, project);
+        ordered.verify(timers).stateVersion(company, member, true);
+        ordered.verify(timers).save(any());
+    }
+
+    @Test
+    void commitSkipsRowsWhoseProjectWasArchivedBeforeItsLock() {
+        when(deletion.lockForProjection(company, project)).thenReturn(Optional.of(projectState(project, "ARCHIVED")));
+        var rows = List.of(
+                new Row(member, DAY, "交付项目", "接口开发", 60),
+                new Row(member, DAY, "交付项目", "不存在", 30),
+                new Row(member, DAY.plusDays(1), "交付项目", "联调测试", 60));
+        var result = json.readTree(run(actor, new Request(false, rows)).responseJson());
+
+        assertThat(result.path("importedDayCount").asInt()).isZero();
+        assertThat(result.path("skippedMinutes").asLong()).isEqualTo(150);
+        assertThat(result.path("skippedRows"))
+                .isEqualTo(json.valueToTree(List.of(
+                        new MigratedTimeImportService.SkippedRow(0, "PROJECT_NOT_FOUND"),
+                        new MigratedTimeImportService.SkippedRow(1, "WORK_ITEM_NOT_FOUND"),
+                        new MigratedTimeImportService.SkippedRow(2, "PROJECT_NOT_FOUND"))));
+        verify(timers, never()).stateVersion(any(), any(), eq(true));
+        verify(timers, never()).save(any());
+    }
+
+    private ProjectDeletionQuery.State projectState(UUID id, String lifecycle) {
+        return new ProjectDeletionQuery.State(id, company, "P001", lifecycle, admin, 1, null, null, null, null);
+    }
+
+    @Test
+    void commitLocksMembersInTheOrderOfSqlOrderByUserId() {
+        var low = UUID.fromString("7fffffff-ffff-4fff-bfff-ffffffffffff");
+        var high = UUID.fromString("80000000-0000-4000-8000-000000000000");
+        assertThat(high.compareTo(low)).isNegative();
+        when(users.findByUserIds(eq(company), any()))
+                .thenReturn(Map.of(
+                        low, new MinimalUserSnapshot(low, company, "甲", "ACTIVE", "ENABLED"),
+                        high, new MinimalUserSnapshot(high, company, "乙", "ACTIVE", "ENABLED")));
+        when(memberships.findActiveMemberIds(eq(company), eq(project), any())).thenReturn(Set.of(low, high));
+
+        run(
+                actor,
+                new Request(
+                        false, List.of(new Row(high, DAY, "交付项目", "接口开发", 60), new Row(low, DAY, "交付项目", "接口开发", 60))));
+
+        var ordered = inOrder(timers);
+        ordered.verify(timers).stateVersion(company, low, true);
+        ordered.verify(timers).stateVersion(company, high, true);
+    }
+
+    @Test
+    void databaseOrderMatchesPostgresUnsignedByteComparison() {
+        var random = new Random(42);
+        var ids = new ArrayList<>(List.of(
+                new UUID(0, 0),
+                new UUID(-1, -1),
+                new UUID(Long.MAX_VALUE, -1),
+                new UUID(Long.MIN_VALUE, 0),
+                new UUID(1, Long.MAX_VALUE),
+                new UUID(1, Long.MIN_VALUE)));
+        for (int i = 0; i < 500; i++) ids.add(new UUID(random.nextLong(), random.nextLong()));
+        Comparator<UUID> bytewise = (a, b) -> Arrays.compareUnsigned(bytes(a), bytes(b));
+
+        assertThat(ids.stream().sorted(MigratedTimeImportService.DATABASE_ORDER).toList())
+                .isEqualTo(ids.stream().sorted(bytewise).toList());
+    }
+
+    private static byte[] bytes(UUID id) {
+        return java.nio.ByteBuffer.allocate(16)
+                .putLong(id.getMostSignificantBits())
+                .putLong(id.getLeastSignificantBits())
+                .array();
+    }
+
+    private TimeTrackingModels.Session migratedRecord(UUID item, LocalDate day, int fromHour, int toHour) {
+        return new TimeTrackingModels.Session(
+                UUID.randomUUID(),
+                company,
+                project,
+                item,
+                member,
+                day.atTime(fromHour, 0).atZone(ZONE).toInstant(),
+                day.atTime(toHour, 0).atZone(ZONE).toInstant(),
+                "MANUAL",
+                0,
+                null,
+                null,
+                null,
+                null,
+                true);
+    }
+
+    private static List<TimeTrackingModels.MySessionRow> rowsOf(TimeTrackingModels.Session... sessions) {
+        return java.util.Arrays.stream(sessions)
+                .map(session -> new TimeTrackingModels.MySessionRow(session, null, null, null, false))
+                .toList();
+    }
+
+    @Test
+    void rejectsRowsOutsideTheMinuteRange() {
+        assertThatThrownBy(() -> run(actor, new Request(true, List.of(new Row(member, DAY, "交付项目", "接口开发", 0)))))
+                .isInstanceOfSatisfying(
+                        ApplicationException.class,
+                        e -> assertThat(e.fieldViolations())
+                                .extracting(v -> v.code())
+                                .containsExactly("INVALID_RANGE"));
+        assertThatThrownBy(() -> run(
+                        actor,
+                        new Request(
+                                true,
+                                List.of(
+                                        new Row(member, DAY, "交付项目", "接口开发", 800),
+                                        new Row(member, DAY, "交付项目", "联调测试", 700)))))
+                .isInstanceOfSatisfying(
+                        ApplicationException.class,
+                        e -> assertThat(e.fieldViolations())
+                                .extracting(v -> v.code())
+                                .containsExactly("INVALID_RANGE"));
+    }
+}

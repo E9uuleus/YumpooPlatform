@@ -5,6 +5,11 @@ public enum ProjectLifecycleFilter {
     ARCHIVED,
     ALL;
 
-    public boolean includeActive() { return this == ACTIVE || this == ALL; }
-    public boolean includeArchived() { return this == ARCHIVED || this == ALL; }
+    public boolean includeActive() {
+        return this == ACTIVE || this == ALL;
+    }
+
+    public boolean includeArchived() {
+        return this == ARCHIVED || this == ALL;
+    }
 }

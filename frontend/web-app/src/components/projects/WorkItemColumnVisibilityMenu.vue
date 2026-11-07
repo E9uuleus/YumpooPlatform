@@ -1,6 +1,8 @@
 <script setup lang="ts" generic="T extends string">
 import { ElCheckbox } from 'element-plus'
 import { onBeforeUnmount, ref, watch } from 'vue'
+import WorkItemFieldGlyph from './WorkItemFieldGlyph.vue'
+import './workItemViewOptions.css'
 
 const props = defineProps<{ columns: { key: T; label: string }[]; hidden: Set<T>; disabled?: boolean }>()
 const emit = defineEmits<{ toggle: [key: T, visible: boolean] }>()
@@ -32,15 +34,22 @@ onBeforeUnmount(() => pending.forEach(change => {
 </script>
 
 <template>
-  <div class="column-visibility-menu">
+  <div class="column-visibility-menu work-item-view-options-scroll">
     <strong>显示列</strong>
-    <el-checkbox v-for="column in columns" :key="column.key" class="column-option"
-      :model-value="!hidden.has(column.key)" :disabled="disabled || column.key === 'title'"
-      @change="toggle(column.key, Boolean($event))">{{ column.label }}</el-checkbox>
+    <el-checkbox
+      v-for="column in columns"
+      :key="column.key"
+      class="work-item-view-option"
+      :model-value="!hidden.has(column.key)"
+      :disabled="disabled || column.key === 'title'"
+      @change="toggle(column.key, Boolean($event))"
+    >
+      <work-item-field-glyph :field="column.key" />{{ column.label }}
+    </el-checkbox>
   </div>
 </template>
 
 <style scoped>
-.column-visibility-menu { display: grid; gap: 6px; }
-.column-option { margin: 0; }
+.column-visibility-menu { display: grid; gap: 4px; }
+.column-visibility-menu > strong { margin-bottom: 4px; }
 </style>

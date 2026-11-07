@@ -7,16 +7,15 @@ import com.yumpoo.platform.identityaccess.application.audit.IdentitySecurityAudi
 import com.yumpoo.platform.identityaccess.application.session.SessionRevocationService;
 import com.yumpoo.platform.identityaccess.application.session.SessionRevocationTarget;
 import com.yumpoo.platform.identityaccess.domain.session.SessionRevocationReason;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
-import tools.jackson.databind.ObjectMapper;
-
 import java.time.Clock;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.ObjectMapper;
 
 @Service
 public class DirectoryAccountStatusService {
@@ -30,8 +29,13 @@ public class DirectoryAccountStatusService {
     private final ObjectMapper mapper;
     private final Clock clock;
 
-    public DirectoryAccountStatusService(AccountStatusRepository repository, TransactionalEventPort events,
-            SessionRevocationService sessions, IdentitySecurityAuditRecorder audit, ObjectMapper mapper, Clock clock) {
+    public DirectoryAccountStatusService(
+            AccountStatusRepository repository,
+            TransactionalEventPort events,
+            SessionRevocationService sessions,
+            IdentitySecurityAuditRecorder audit,
+            ObjectMapper mapper,
+            Clock clock) {
         this.repository = repository;
         this.events = events;
         this.sessions = sessions;
@@ -47,17 +51,49 @@ public class DirectoryAccountStatusService {
         }
         var changed = repository.disableFromDirectory(companyId, userId, reason, clock.instant());
         changed.ifPresent(user -> {
-            events.append(new EventDraft(AccountStatusService.USER_ACCOUNT_DISABLED, 2, "User", userId,
-                    user.rowVersion(), companyId, actor, mapper.valueToTree(Map.of(
-                            "userId", userId, "fromStatus", "ENABLED", "toStatus", "DISABLED",
-                            "reasonCode", reason, "authorizationVersion", user.authorizationVersion()))));
-            sessions.revokeActive(new SessionRevocationTarget(userId, companyId,
-                    user.authorizationVersion(), user.rowVersion()), SessionRevocationReason.ACCOUNT_DISABLED, actor);
-            audit.succeeded(companyId, "account-status:" + userId + ":" + user.rowVersion(),
-                    "ACCOUNT_DISABLED", actor, Set.of(), "USER", userId, reason,
+            events.append(new EventDraft(
+                    AccountStatusService.USER_ACCOUNT_DISABLED,
+                    2,
+                    "User",
+                    userId,
+                    user.rowVersion(),
+                    companyId,
+                    actor,
+                    mapper.valueToTree(Map.of(
+                            "userId",
+                            userId,
+                            "fromStatus",
+                            "ENABLED",
+                            "toStatus",
+                            "DISABLED",
+                            "reasonCode",
+                            reason,
+                            "authorizationVersion",
+                            user.authorizationVersion()))));
+            sessions.revokeActive(
+                    new SessionRevocationTarget(userId, companyId, user.authorizationVersion(), user.rowVersion()),
+                    SessionRevocationReason.ACCOUNT_DISABLED,
+                    actor);
+            audit.succeeded(
+                    companyId,
+                    "account-status:" + userId + ":" + user.rowVersion(),
+                    "ACCOUNT_DISABLED",
+                    actor,
+                    Set.of(),
+                    "USER",
+                    userId,
+                    reason,
                     Map.of("accountStatus", "ENABLED"),
-                    Map.of("accountStatus", "DISABLED", "reasonCode", reason,
-                            "authorizationVersion", user.authorizationVersion()), null, null, null);
+                    Map.of(
+                            "accountStatus",
+                            "DISABLED",
+                            "reasonCode",
+                            reason,
+                            "authorizationVersion",
+                            user.authorizationVersion()),
+                    null,
+                    null,
+                    null);
         });
         return changed;
     }

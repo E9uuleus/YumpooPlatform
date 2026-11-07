@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import { useMinuteClock } from '../../composables/useMinuteClock'
 import YpSkeleton from '../yp/YpSkeleton.vue'
 import { usePageLoad } from '../../brand/page-progress'
 import { Refresh } from '@element-plus/icons-vue'
 import type { ActivityItem } from '@yumpoo/api-client'
 import { ElButton, ElDatePicker, ElIcon, ElTooltip } from 'element-plus'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { activityApi } from '../../api/client'
 import { toApiProblem, type ApiProblem } from '../../api/problems'
 import { useSession } from '../../composables/useSession'
@@ -33,8 +34,8 @@ const loading = ref(false)
 const loadingOlder = ref(false)
 const error = ref<ApiProblem>()
 let requestSequence = 0
-const now = ref(Date.now())
-let clock: ReturnType<typeof setInterval> | undefined
+const minute = useMinuteClock()
+const now = computed(() => minute.value.getTime())
 
 const categoryOptions = [
   { value: 'all' as const, label: '全部' },
@@ -134,9 +135,7 @@ watch([category, dateRange], () => void load())
 onMounted(() => {
   if (props.workItemId) void load()
   else void pageLoad.track(load)
-  clock = setInterval(() => { now.value = Date.now() }, 60_000)
 })
-onBeforeUnmount(() => clearInterval(clock))
 </script>
 
 <template>

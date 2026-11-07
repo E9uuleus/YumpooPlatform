@@ -11,7 +11,6 @@ import com.yumpoo.platform.filestorage.application.UploadIncompleteException;
 import com.yumpoo.platform.filestorage.application.UploadRejectedException;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.Duration;
@@ -44,27 +43,15 @@ public final class M014AttachmentProbeService {
             M014ParentAccessResolver accessResolver,
             QuarantineStorage storage,
             AttachmentSafetyProcessor safetyProcessor,
-            ExecutorService executor
-    ) {
+            ExecutorService executor) {
         this.repository = Objects.requireNonNull(repository, "repository must not be null");
-        this.accessResolver = Objects.requireNonNull(
-                accessResolver,
-                "accessResolver must not be null"
-        );
+        this.accessResolver = Objects.requireNonNull(accessResolver, "accessResolver must not be null");
         this.storage = Objects.requireNonNull(storage, "storage must not be null");
-        this.safetyProcessor = Objects.requireNonNull(
-                safetyProcessor,
-                "safetyProcessor must not be null"
-        );
+        this.safetyProcessor = Objects.requireNonNull(safetyProcessor, "safetyProcessor must not be null");
         this.executor = Objects.requireNonNull(executor, "executor must not be null");
     }
 
-    public Metadata createIntent(
-            UUID ownerId,
-            UUID actorId,
-            String originalFileName,
-            String declaredMime
-    ) {
+    public Metadata createIntent(UUID ownerId, UUID actorId, String originalFileName, String declaredMime) {
         Objects.requireNonNull(ownerId, "ownerId must not be null");
         Objects.requireNonNull(actorId, "actorId must not be null");
         if (!accessResolver.canWrite(ownerId, actorId)) {
@@ -80,21 +67,11 @@ public final class M014AttachmentProbeService {
         if (!fileName.expectedType().acceptsDeclaredMime(normalizedMime)) {
             throw new ApplicationException(StandardErrorCode.FILE_TYPE_NOT_ALLOWED);
         }
-        UUID attachmentId = repository.createIntent(
-                ownerId,
-                actorId,
-                fileName.displayName(),
-                normalizedMime
-        );
+        UUID attachmentId = repository.createIntent(ownerId, actorId, fileName.displayName(), normalizedMime);
         return metadata(repository.find(attachmentId).orElseThrow());
     }
 
-    public Metadata receive(
-            UUID attachmentId,
-            UUID actorId,
-            InputStream source,
-            OptionalLong contentLength
-    ) {
+    public Metadata receive(UUID attachmentId, UUID actorId, InputStream source, OptionalLong contentLength) {
         Objects.requireNonNull(source, "source must not be null");
         M014AttachmentProbeRepository.ProbeRow row = visibleRow(attachmentId, actorId, true);
         if (!actorId.equals(row.uploaderActor()) || !repository.claimReceive(attachmentId, actorId)) {
@@ -124,17 +101,13 @@ public final class M014AttachmentProbeService {
         }
 
         try {
-            CompletableFuture<Void> future = CompletableFuture.runAsync(
-                    () -> process(attachmentId),
-                    executor
-            );
+            CompletableFuture<Void> future = CompletableFuture.runAsync(() -> process(attachmentId), executor);
             processing.put(attachmentId, future);
         } catch (RejectedExecutionException exception) {
             repository.finalizeRejected(
                     attachmentId,
                     com.yumpoo.platform.filestorage.domain.AttachmentRejectedCode.INTEGRITY_CHECK_FAILED,
-                    true
-            );
+                    true);
             throw new ApplicationException(StandardErrorCode.DEPENDENCY_UNAVAILABLE);
         }
         return metadata(repository.find(attachmentId).orElseThrow());
@@ -145,11 +118,7 @@ public final class M014AttachmentProbeService {
     }
 
     public Download openDownload(UUID attachmentId, UUID actorId) {
-        M014AttachmentProbeRepository.ProbeRow row = visibleRow(
-                attachmentId,
-                actorId,
-                false
-        );
+        M014AttachmentProbeRepository.ProbeRow row = visibleRow(attachmentId, actorId, false);
         if (row.status() != AttachmentStatus.AVAILABLE) {
             throw notFound();
         }
@@ -162,15 +131,13 @@ public final class M014AttachmentProbeService {
                     row.originalFileName(),
                     row.detectedMime(),
                     row.sizeBytes(),
-                    row.sha256()
-            );
+                    row.sha256());
         } catch (IOException exception) {
             throw notFound();
         }
     }
 
-    public void awaitProcessing(UUID attachmentId, Duration timeout)
-            throws InterruptedException, TimeoutException {
+    public void awaitProcessing(UUID attachmentId, Duration timeout) throws InterruptedException, TimeoutException {
         CompletableFuture<Void> future = processing.get(attachmentId);
         if (future == null) {
             throw new IllegalStateException("M0-14 attachment has no async processing task");
@@ -199,8 +166,8 @@ public final class M014AttachmentProbeService {
     }
 
     private void process(UUID attachmentId) {
-        M014AttachmentProbeRepository.ProbeRow row = repository.find(attachmentId)
-                .orElseThrow();
+        M014AttachmentProbeRepository.ProbeRow row =
+                repository.find(attachmentId).orElseThrow();
         repository.markScanning(attachmentId);
         AttachmentFileName fileName = AttachmentFileNamePolicy.normalize(row.originalFileName());
 
@@ -210,44 +177,30 @@ public final class M014AttachmentProbeService {
                     row.sealedUpload(),
                     fileName,
                     row.declaredMime(),
-                    () -> accessResolver.canWrite(row.ownerId(), row.uploaderActor())
-            );
+                    () -> accessResolver.canWrite(row.ownerId(), row.uploaderActor()));
         } catch (RuntimeException exception) {
             repository.finalizeRejected(
                     attachmentId,
                     com.yumpoo.platform.filestorage.domain.AttachmentRejectedCode.INTEGRITY_CHECK_FAILED,
-                    true
-            );
+                    true);
             throw exception;
         }
 
         if (outcome instanceof AttachmentProcessingOutcome.Available available) {
             repository.markFinalizing(attachmentId);
             repository.finalizeAvailable(
-                    attachmentId,
-                    available.blob(),
-                    available.detectedContent().detectedMime()
-            );
+                    attachmentId, available.blob(), available.detectedContent().detectedMime());
             return;
         }
-        AttachmentProcessingOutcome.Rejected rejected =
-                (AttachmentProcessingOutcome.Rejected) outcome;
-        repository.finalizeRejected(
-                attachmentId,
-                rejected.rejectedCode(),
-                rejected.quarantinedContentRetained()
-        );
+        AttachmentProcessingOutcome.Rejected rejected = (AttachmentProcessingOutcome.Rejected) outcome;
+        repository.finalizeRejected(attachmentId, rejected.rejectedCode(), rejected.quarantinedContentRetained());
     }
 
-    private M014AttachmentProbeRepository.ProbeRow visibleRow(
-            UUID attachmentId,
-            UUID actorId,
-            boolean requireWrite
-    ) {
+    private M014AttachmentProbeRepository.ProbeRow visibleRow(UUID attachmentId, UUID actorId, boolean requireWrite) {
         Objects.requireNonNull(attachmentId, "attachmentId must not be null");
         Objects.requireNonNull(actorId, "actorId must not be null");
-        M014AttachmentProbeRepository.ProbeRow row = repository.find(attachmentId)
-                .orElseThrow(M014AttachmentProbeService::notFound);
+        M014AttachmentProbeRepository.ProbeRow row =
+                repository.find(attachmentId).orElseThrow(M014AttachmentProbeService::notFound);
         boolean allowed = requireWrite
                 ? accessResolver.canWrite(row.ownerId(), actorId)
                 : accessResolver.canRead(row.ownerId(), actorId);
@@ -270,8 +223,7 @@ public final class M014AttachmentProbeService {
                 row.detectedMime(),
                 row.rejectedCode() == null ? null : row.rejectedCode().name(),
                 row.lastFailureCode() == null ? null : row.lastFailureCode().name(),
-                row.rowVersion()
-        );
+                row.rowVersion());
     }
 
     private static String normalizeMime(String declaredMime) {
@@ -285,9 +237,7 @@ public final class M014AttachmentProbeService {
         return normalized;
     }
 
-    private static ApplicationException publicUploadRejection(
-            UploadRejectedException exception
-    ) {
+    private static ApplicationException publicUploadRejection(UploadRejectedException exception) {
         StandardErrorCode code = switch (exception.rejectedCode()) {
             case FILE_TOO_LARGE -> StandardErrorCode.FILE_TOO_LARGE;
             default -> StandardErrorCode.FILE_TYPE_NOT_ALLOWED;
@@ -311,17 +261,10 @@ public final class M014AttachmentProbeService {
             String detectedMime,
             String rejectedCode,
             String lastFailureCode,
-            long rowVersion
-    ) {
-    }
+            long rowVersion) {}
 
     public record Download(
-            InputStream inputStream,
-            String fileName,
-            String detectedMime,
-            long sizeBytes,
-            String sha256
-    ) {
+            InputStream inputStream, String fileName, String detectedMime, long sizeBytes, String sha256) {
         public Download {
             Objects.requireNonNull(inputStream, "inputStream must not be null");
         }

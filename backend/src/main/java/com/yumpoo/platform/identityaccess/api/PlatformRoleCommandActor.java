@@ -4,11 +4,7 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
-public record PlatformRoleCommandActor(
-        UUID userId,
-        long sessionAuthorizationVersion,
-        Instant authenticatedAt
-) {
+public record PlatformRoleCommandActor(UUID userId, long sessionAuthorizationVersion, Instant authenticatedAt) {
 
     public PlatformRoleCommandActor {
         Objects.requireNonNull(userId, "userId must not be null");

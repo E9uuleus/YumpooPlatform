@@ -4,14 +4,15 @@ import com.yumpoo.platform.catalog.application.workspace.WorkspaceListStatus;
 import com.yumpoo.platform.catalog.application.workspace.WorkspaceService;
 import com.yumpoo.platform.catalog.application.workspace.WorkspaceUpdateCommand;
 import com.yumpoo.platform.catalog.application.workspace.WorkspaceView;
-import com.yumpoo.platform.foundation.api.http.IfMatchParser;
 import com.yumpoo.platform.foundation.api.http.IdempotencyKeyParser;
+import com.yumpoo.platform.foundation.api.http.IfMatchParser;
 import com.yumpoo.platform.foundation.api.web.ApiV1Controller;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.CurrentActorProvider;
 import jakarta.validation.Valid;
+import java.util.UUID;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,7 +22,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
-import java.util.UUID;
 
 @ApiV1Controller
 public final class WorkspaceController {
@@ -35,8 +35,7 @@ public final class WorkspaceController {
             CurrentActorProvider currentActorProvider,
             WorkspaceService service,
             IfMatchParser ifMatchParser,
-            IdempotencyKeyParser idempotencyKeyParser
-    ) {
+            IdempotencyKeyParser idempotencyKeyParser) {
         this.currentActorProvider = currentActorProvider;
         this.service = service;
         this.ifMatchParser = ifMatchParser;
@@ -44,8 +43,7 @@ public final class WorkspaceController {
     }
 
     @GetMapping("/workspaces")
-    ResponseEntity<WorkspaceListResponse> list(
-            @RequestParam(defaultValue = "ACTIVE") WorkspaceListStatus status) {
+    ResponseEntity<WorkspaceListResponse> list(@RequestParam(defaultValue = "ACTIVE") WorkspaceListStatus status) {
         CurrentActor actor = currentActorProvider.requiredActive();
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
@@ -54,9 +52,9 @@ public final class WorkspaceController {
 
     @Deprecated(forRemoval = false)
     @PostMapping("/workspaces")
-    ResponseEntity<Void> legacyCreate(@Valid @RequestBody WorkspaceCreateRequest body,
-            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false)
-            String idempotencyKey) {
+    ResponseEntity<Void> legacyCreate(
+            @Valid @RequestBody WorkspaceCreateRequest body,
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String idempotencyKey) {
         service.findAll(currentActorProvider.requiredActive(), WorkspaceListStatus.ALL);
         idempotencyKeyParser.parseRequired(idempotencyKey);
         throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
@@ -76,14 +74,12 @@ public final class WorkspaceController {
     ResponseEntity<WorkspaceView> update(
             @PathVariable UUID workspaceId,
             @Valid @RequestBody WorkspaceUpdateRequest body,
-            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatch
-    ) {
+            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatch) {
         CurrentActor actor = currentActorProvider.requiredActive();
         service.findForAdministration(actor, workspaceId);
         long expectedVersion = ifMatchParser.parseForVisibleResource(true, ifMatch);
-        WorkspaceView workspace = service.update(new WorkspaceUpdateCommand(
-                actor, workspaceId, expectedVersion,
-                body.name(), body.description()));
+        WorkspaceView workspace = service.update(
+                new WorkspaceUpdateCommand(actor, workspaceId, expectedVersion, body.name(), body.description()));
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
                 .eTag(Long.toString(workspace.rowVersion()))
@@ -95,8 +91,7 @@ public final class WorkspaceController {
     ResponseEntity<Void> legacyArchive(
             @PathVariable UUID workspaceId,
             @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatch,
-            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false)
-            String idempotencyKey) {
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String idempotencyKey) {
         rejectLegacyLifecycle(workspaceId, ifMatch, idempotencyKey);
         return ResponseEntity.noContent().build();
     }
@@ -106,8 +101,7 @@ public final class WorkspaceController {
     ResponseEntity<Void> legacyRestore(
             @PathVariable UUID workspaceId,
             @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatch,
-            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false)
-            String idempotencyKey) {
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String idempotencyKey) {
         rejectLegacyLifecycle(workspaceId, ifMatch, idempotencyKey);
         return ResponseEntity.noContent().build();
     }
@@ -119,5 +113,4 @@ public final class WorkspaceController {
         idempotencyKeyParser.parseRequired(idempotencyKey);
         throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
     }
-
 }

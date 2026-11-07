@@ -14,20 +14,18 @@ public interface RoleGovernanceRepository {
     Optional<RoleUserSnapshot> findAvailableAppManager(UUID companyId);
 
     Optional<RoleAssignmentSnapshot> lockAssignment(
-            UUID companyId, UUID assignmentId, ManagedPlatformRole expectedRole
-    );
+            UUID companyId, UUID assignmentId, ManagedPlatformRole expectedRole);
 
-    Optional<RoleAssignmentSnapshot> findActiveAssignment(
-            UUID companyId, UUID userId, ManagedPlatformRole role
-    );
+    Optional<RoleAssignmentSnapshot> findActiveAssignment(UUID companyId, UUID userId, ManagedPlatformRole role);
 
     default java.util.List<RoleAssignmentSnapshot> findActiveAssignments(UUID companyId, UUID userId) {
         return java.util.Arrays.stream(ManagedPlatformRole.values())
-                .flatMap(role -> findActiveAssignment(companyId, userId, role).stream()).toList();
+                .flatMap(role -> findActiveAssignment(companyId, userId, role).stream())
+                .toList();
     }
 
-    RoleAssignmentSnapshot revokeBySystem(RoleAssignmentSnapshot assignment,
-            String systemCode, String reasonReference, Instant now);
+    RoleAssignmentSnapshot revokeBySystem(
+            RoleAssignmentSnapshot assignment, String systemCode, String reasonReference, Instant now);
 
     boolean hasAppManagerHistory(UUID companyId);
 
@@ -36,15 +34,18 @@ public interface RoleGovernanceRepository {
     int countAvailableAppManagers(UUID companyId);
 
     RoleAssignmentSnapshot grant(
-            UUID assignmentId, UUID companyId, UUID userId, ManagedPlatformRole role,
-            String actorType, UUID actorUserId, String systemCode,
-            String reasonReference, Instant now
-    );
+            UUID assignmentId,
+            UUID companyId,
+            UUID userId,
+            ManagedPlatformRole role,
+            String actorType,
+            UUID actorUserId,
+            String systemCode,
+            String reasonReference,
+            Instant now);
 
     RoleAssignmentSnapshot revoke(
-            RoleAssignmentSnapshot assignment, UUID actorUserId,
-            String reasonReference, Instant now
-    );
+            RoleAssignmentSnapshot assignment, UUID actorUserId, String reasonReference, Instant now);
 
     RoleUserSnapshot incrementAuthorizationVersion(UUID companyId, UUID userId, long expectedRowVersion);
 

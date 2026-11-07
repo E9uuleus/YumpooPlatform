@@ -3,9 +3,8 @@ package com.yumpoo.platform.identityaccess.application.event;
 import com.yumpoo.platform.foundation.application.event.DomainEventEnvelope;
 import com.yumpoo.platform.foundation.application.event.EventSubscription;
 import com.yumpoo.platform.foundation.application.event.OutboxEventConsumer;
-import org.springframework.stereotype.Component;
-
 import java.util.Set;
+import org.springframework.stereotype.Component;
 
 @Component
 public class IdentityCommittedFactConsumer implements OutboxEventConsumer {
@@ -20,8 +19,7 @@ public class IdentityCommittedFactConsumer implements OutboxEventConsumer {
             new EventSubscription("identity.user_sessions_revoked", 1),
             new EventSubscription("identity.user_sessions_revoked", 2),
             new EventSubscription("identity.platform_role_granted", 1),
-            new EventSubscription("identity.platform_role_revoked", 1)
-    );
+            new EventSubscription("identity.platform_role_revoked", 1));
 
     @Override
     public String consumerName() {

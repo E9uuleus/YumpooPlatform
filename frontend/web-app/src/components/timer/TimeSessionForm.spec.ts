@@ -30,6 +30,7 @@ describe('手动计时日历', () => {
     expect(wrapper.emitted('update:end')?.[0]).toEqual(['2026-09-06T00:30:00'])
     await wrapper.setProps({ start: '2026-09-06T23:30:00', end: '2026-09-06T00:30:00' })
     expect(wrapper.get('.save-session').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('.existing-sessions').exists()).toBe(false)
     wrapper.unmount()
   })
   it('浏览其他月份后收起恢复选中日期的两周视图', async () => {
@@ -43,14 +44,29 @@ describe('手动计时日历', () => {
   })
   it('只有与已有记录重叠时才显示处理方式，默认只填空白', async () => {
     const wrapper = mount(TimeSessionForm, { props: { ...props, workItemId: 'item' } })
+    expect(wrapper.get('.existing-sessions').text()).toBe('正在加载…')
     await flushPromises()
+    expect(wrapper.get('.existing-sessions').text()).toBe('暂无记录')
     expect(wrapper.find('.overlap-mode').exists()).toBe(false)
-    api.listMyTimeSessions.mockResolvedValue({ items: [{ session: { id: 's', workItemId: 'other', projectId: 'p', startedAt: new Date('2026-09-07T05:30:00Z'),
+    api.listMyTimeSessions.mockResolvedValueOnce({ items: [{ session: { id: 's', workItemId: 'other', projectId: 'p', startedAt: new Date('2026-09-07T05:30:00Z'),
       stoppedAt: new Date('2026-09-07T06:30:00Z'), canEdit: true, etag: '"0"' }, title: '其他工作', itemNo: 'T-9', projectName: '项目', contentColorToken: null }] })
     await wrapper.setProps({ end: '2026-09-07T14:30:00' })
     await flushPromises()
+    expect(wrapper.get('.existing-sessions').text()).toContain('该时段已有记录')
+    expect(wrapper.get('.existing-sessions').text()).toContain('13:30–14:30 #T-9 其他工作')
     expect(wrapper.get('.overlap-mode [aria-checked="true"]').text()).toBe('只填空白')
     expect(wrapper.get('.overlap-mode__effect').text()).toContain('补录 30m，跳过已有记录的 1h')
+    await wrapper.setProps({ start: '2026-09-07T14:30:00', end: '2026-09-07T15:30:00' })
+    await flushPromises()
+    expect(wrapper.get('.existing-sessions').text()).toBe('暂无记录')
+    expect(wrapper.find('.overlap-mode').exists()).toBe(false)
+    wrapper.unmount()
+  })
+  it('查询时段记录失败时仅显示加载失败提示', async () => {
+    api.listMyTimeSessions.mockRejectedValueOnce(new Error('offline'))
+    const wrapper = mount(TimeSessionForm, { props })
+    await flushPromises()
+    expect(wrapper.get('.existing-sessions').text()).toBe('无法加载该时段记录。')
     wrapper.unmount()
   })
 })

@@ -4,12 +4,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 public record MinimalUserSnapshot(
-        UUID userId,
-        UUID companyId,
-        String displayName,
-        String employmentStatus,
-        String accountStatus
-) {
+        UUID userId, UUID companyId, String displayName, String employmentStatus, String accountStatus) {
     public MinimalUserSnapshot {
         Objects.requireNonNull(userId, "userId must not be null");
         Objects.requireNonNull(companyId, "companyId must not be null");

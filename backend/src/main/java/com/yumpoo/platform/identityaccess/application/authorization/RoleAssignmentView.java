@@ -13,6 +13,4 @@ public record RoleAssignmentView(
         RoleAssignmentStatus status,
         Instant grantedAt,
         Instant revokedAt,
-        long rowVersion
-) {
-}
+        long rowVersion) {}

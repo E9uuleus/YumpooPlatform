@@ -1,36 +1,39 @@
 package com.yumpoo.platform.workitem.infrastructure;
 
-import org.flywaydb.core.Flyway;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
-import org.springframework.jdbc.datasource.DataSourceTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.postgresql.PostgreSQLContainer;
-import org.testcontainers.utility.DockerImageName;
+import static org.assertj.core.api.Assertions.assertThat;
 
-import java.time.Instant;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 import com.yumpoo.platform.workitem.domain.Content;
 import com.yumpoo.platform.workitem.domain.KanbanRank;
 import com.yumpoo.platform.workitem.domain.WorkItem;
 import com.yumpoo.platform.workitem.domain.WorkItemRelation;
 import com.yumpoo.platform.workitem.domain.WorkItemRelationType;
 import com.yumpoo.platform.workitem.domain.WorkItemStatusCategory;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import com.yumpoo.platform.workitem.infrastructure.content.JdbcContentRepository;
+import com.yumpoo.platform.workitem.infrastructure.label.JdbcWorkItemLabelRepository;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+import org.testcontainers.utility.DockerImageName;
 
 @Testcontainers
 class ConnectionMigrationIT {
     private static final UUID COMPANY = UUID.fromString("00000000-0000-4000-8000-000000000001");
+
     @Container
-    private final PostgreSQLContainer postgres = new PostgreSQLContainer(
-            DockerImageName.parse("postgres:17.10-alpine"));
+    private final PostgreSQLContainer postgres =
+            new PostgreSQLContainer(DockerImageName.parse("postgres:17.10-alpine"));
+
     private DriverManagerDataSource dataSource;
     private JdbcClient jdbc;
     private UUID owner;
@@ -86,9 +89,15 @@ class ConnectionMigrationIT {
 
     @Test
     void referenceTablesExposeCompanyScopedKeys() throws Exception {
-        for (String table : new String[] { "project", "identity_user", "work_item" }) {
-            var result = postgres.execInContainer("psql", "-U", postgres.getUsername(), "-d",
-                    postgres.getDatabaseName(), "-c", "\\d yumpoo." + table);
+        for (String table : new String[] {"project", "identity_user", "work_item"}) {
+            var result = postgres.execInContainer(
+                    "psql",
+                    "-U",
+                    postgres.getUsername(),
+                    "-d",
+                    postgres.getDatabaseName(),
+                    "-c",
+                    "\\d yumpoo." + table);
             assertThat(result.getExitCode()).isZero();
             System.out.println(result.getStdout());
             assertThat(result.getStdout()).contains("company_id", "PRIMARY KEY");
@@ -112,34 +121,82 @@ class ConnectionMigrationIT {
         UUID second = UUID.randomUUID();
         for (int i = 1; i <= 2; i++) {
             UUID id = i == 1 ? first : second;
-            items.insert(WorkItem.create(id, COMPANY, project, contentId, i, "LEGACY-" + i,
-                    "保留事项" + i, "NOT_STARTED", WorkItemStatusCategory.TODO, null, null, null, null,
-                    null, null, null, KanbanRank.evenlySpaced(i, 2),
-                    com.yumpoo.platform.workitem.domain.ProjectSortKey.evenlySpaced(i, 2), owner, now));
+            items.insert(WorkItem.create(
+                    id,
+                    COMPANY,
+                    project,
+                    contentId,
+                    i,
+                    "LEGACY-" + i,
+                    "保留事项" + i,
+                    "NOT_STARTED",
+                    WorkItemStatusCategory.TODO,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    KanbanRank.evenlySpaced(i, 2),
+                    com.yumpoo.platform.workitem.domain.ProjectSortKey.evenlySpaced(i, 2),
+                    owner,
+                    now));
         }
-        new JdbcWorkItemRelationRepository(jdbc).insert(WorkItemRelation.create(UUID.randomUUID(), COMPANY,
-                WorkItemRelationType.RELATED, first, second, project, project, owner, now));
+        new JdbcWorkItemRelationRepository(jdbc)
+                .insert(WorkItemRelation.create(
+                        UUID.randomUUID(),
+                        COMPANY,
+                        WorkItemRelationType.RELATED,
+                        first,
+                        second,
+                        project,
+                        project,
+                        owner,
+                        now));
         Map<String, List<Map<String, Object>>> before = new java.util.LinkedHashMap<>();
-        for (String table : List.of("project", "project_membership", "work_item", "work_item_relation", "content",
-                "project_work_item_status_label", "project_work_item_priority_label", "activity_event"))
+        for (String table : List.of(
+                "project",
+                "project_membership",
+                "work_item",
+                "work_item_relation",
+                "content",
+                "project_work_item_status_label",
+                "project_work_item_priority_label",
+                "activity_event"))
             before.put(table, jdbc.sql("SELECT * FROM yumpoo." + table).query().listOfRows());
         assertThat(flyway("62").migrate().migrationsExecuted).isEqualTo(1);
-        before.forEach((table, rows) -> assertThat(jdbc.sql("SELECT * FROM yumpoo." + table).query().listOfRows())
-                .as(table).containsExactlyInAnyOrderElementsOf(rows));
-        for (String table : List.of("work_item_connect_column_catalog", "work_item_connect_column",
-                "work_item_connect_column_target", "work_item_connection"))
-            assertThat(jdbc.sql("SELECT count(*) FROM yumpoo." + table).query(Long.class).single()).isZero();
+        before.forEach((table, rows) -> assertThat(
+                        jdbc.sql("SELECT * FROM yumpoo." + table).query().listOfRows())
+                .as(table)
+                .containsExactlyInAnyOrderElementsOf(rows));
+        for (String table : List.of(
+                "work_item_connect_column_catalog",
+                "work_item_connect_column",
+                "work_item_connect_column_target",
+                "work_item_connection"))
+            assertThat(jdbc.sql("SELECT count(*) FROM yumpoo." + table)
+                            .query(Long.class)
+                            .single())
+                    .isZero();
         assertThat(flyway("62").migrate().migrationsExecuted).isZero();
     }
 
     private JdbcClient.StatementSpec sql(String statement) {
-        return jdbc.sql(statement).param("company", COMPANY).param("owner", owner)
-                .param("project", project).param("id", UUID.randomUUID());
+        return jdbc.sql(statement)
+                .param("company", COMPANY)
+                .param("owner", owner)
+                .param("project", project)
+                .param("id", UUID.randomUUID());
     }
 
     private Flyway flyway(String target) {
-        return Flyway.configure().dataSource(dataSource).schemas("yumpoo").defaultSchema("yumpoo")
+        return Flyway.configure()
+                .dataSource(dataSource)
+                .schemas("yumpoo")
+                .defaultSchema("yumpoo")
                 .locations("classpath:db/migration")
-                .target(target).load();
+                .target(target)
+                .load();
     }
 }

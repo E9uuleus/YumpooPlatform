@@ -724,7 +724,7 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
-     * 返回与 [from, to) 相交的本人未删除记录，按开始时间排序。to 必须晚于 from，且区间不超过 7 天，否则返回 INVALID_RANGE。不可见项目的标题、编号、名称和颜色不披露。非项目分类记录的 session.timeCategory 有值，项目与工作项字段均为 null，且总是可编辑。
+     * 返回与 [from, to) 相交的本人未删除记录，按开始时间排序；已删除工作项上的记录不返回，工作项恢复后重新返回。to 必须晚于 from，且区间不超过 7 天，否则返回 INVALID_RANGE。不可见项目的标题、编号、名称和颜色不披露。非项目分类记录的 session.timeCategory 有值，项目与工作项字段均为 null，且总是可编辑。
      * 查询本人时间段内的计时记录
      */
     async listMyTimeSessionsRaw(requestParameters: ListMyTimeSessionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<MyTimeSessionPage>> {
@@ -768,7 +768,7 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
-     * 返回与 [from, to) 相交的本人未删除记录，按开始时间排序。to 必须晚于 from，且区间不超过 7 天，否则返回 INVALID_RANGE。不可见项目的标题、编号、名称和颜色不披露。非项目分类记录的 session.timeCategory 有值，项目与工作项字段均为 null，且总是可编辑。
+     * 返回与 [from, to) 相交的本人未删除记录，按开始时间排序；已删除工作项上的记录不返回，工作项恢复后重新返回。to 必须晚于 from，且区间不超过 7 天，否则返回 INVALID_RANGE。不可见项目的标题、编号、名称和颜色不披露。非项目分类记录的 session.timeCategory 有值，项目与工作项字段均为 null，且总是可编辑。
      * 查询本人时间段内的计时记录
      */
     async listMyTimeSessions(requestParameters: ListMyTimeSessionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<MyTimeSessionPage> {

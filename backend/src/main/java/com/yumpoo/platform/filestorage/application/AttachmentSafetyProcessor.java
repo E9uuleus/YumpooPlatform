@@ -1,7 +1,6 @@
 package com.yumpoo.platform.filestorage.application;
 
 import com.yumpoo.platform.filestorage.domain.AttachmentRejectedCode;
-
 import java.io.IOException;
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
@@ -14,20 +13,13 @@ public final class AttachmentSafetyProcessor {
     private final QuarantineStorage storage;
     private final AttachmentContentDetector detector;
 
-    public AttachmentSafetyProcessor(
-            QuarantineStorage storage,
-            AttachmentContentDetector detector
-    ) {
+    public AttachmentSafetyProcessor(QuarantineStorage storage, AttachmentContentDetector detector) {
         this.storage = Objects.requireNonNull(storage, "storage must not be null");
         this.detector = Objects.requireNonNull(detector, "detector must not be null");
     }
 
     public AttachmentProcessingOutcome process(
-            SealedUpload upload,
-            AttachmentFileName fileName,
-            String declaredMime,
-            BooleanSupplier parentWritable
-    ) {
+            SealedUpload upload, AttachmentFileName fileName, String declaredMime, BooleanSupplier parentWritable) {
         Objects.requireNonNull(upload, "upload must not be null");
         Objects.requireNonNull(fileName, "fileName must not be null");
         Objects.requireNonNull(parentWritable, "parentWritable must not be null");
@@ -52,11 +44,7 @@ public final class AttachmentSafetyProcessor {
         try {
             published = storage.publish(upload);
         } catch (IOException exception) {
-            return rejected(
-                    AttachmentRejectedCode.INTEGRITY_CHECK_FAILED,
-                    true,
-                    false
-            );
+            return rejected(AttachmentRejectedCode.INTEGRITY_CHECK_FAILED, true, false);
         }
 
         boolean writable;
@@ -79,10 +67,7 @@ public final class AttachmentSafetyProcessor {
     }
 
     private static AttachmentProcessingOutcome.Rejected rejected(
-            AttachmentRejectedCode code,
-            boolean quarantinedRetained,
-            boolean orphanRetained
-    ) {
+            AttachmentRejectedCode code, boolean quarantinedRetained, boolean orphanRetained) {
         return new AttachmentProcessingOutcome.Rejected(code, quarantinedRetained, orphanRetained);
     }
 }

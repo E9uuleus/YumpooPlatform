@@ -1,17 +1,16 @@
 package com.yumpoo.platform.identityaccess.api;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.yumpoo.platform.identityaccess.application.account.AccountStatusChangeCommand;
 import com.yumpoo.platform.identityaccess.application.authorization.RevokePlatformRoleCommand;
+import java.lang.reflect.RecordComponent;
+import java.util.Arrays;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
-
-import java.lang.reflect.RecordComponent;
-import java.util.Arrays;
-import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 class M110IdentityGovernanceContractTest {
 
@@ -19,10 +18,10 @@ class M110IdentityGovernanceContractTest {
     void writeBodiesContainOnlyServerApprovedBusinessFields() {
         assertThat(componentNames(RoleGrantRequest.class)).containsExactly("userId", "reason");
         assertThat(componentNames(GovernanceReasonRequest.class)).containsExactly("reason");
-        assertThat(componentNames(RoleGrantRequest.class)).doesNotContain(
-                "actor", "actorUserId", "role", "scope", "expectedVersion", "rowVersion");
-        assertThat(componentNames(GovernanceReasonRequest.class)).doesNotContain(
-                "actor", "actorUserId", "role", "scope", "expectedVersion", "rowVersion");
+        assertThat(componentNames(RoleGrantRequest.class))
+                .doesNotContain("actor", "actorUserId", "role", "scope", "expectedVersion", "rowVersion");
+        assertThat(componentNames(GovernanceReasonRequest.class))
+                .doesNotContain("actor", "actorUserId", "role", "scope", "expectedVersion", "rowVersion");
     }
 
     @Test
@@ -36,14 +35,27 @@ class M110IdentityGovernanceContractTest {
 
     @Test
     void publicRoleCommandPortCarriesOnlyStableApiTypes() {
-        assertThat(componentNames(PlatformRoleGrantCommand.class)).containsExactly(
-                "companyId", "targetUserId", "role", "expectedTargetRowVersion",
-                "actor", "idempotencyKey", "requestHash", "reasonReference");
-        assertThat(componentNames(PlatformRoleRevokeCommand.class)).containsExactly(
-                "companyId", "assignmentId", "expectedRole", "expectedAssignmentRowVersion",
-                "actor", "idempotencyKey", "requestHash", "reasonReference");
-        assertThat(componentNames(PlatformRoleCommandReceipt.class))
-                .containsExactly("mutation", "replayed");
+        assertThat(componentNames(PlatformRoleGrantCommand.class))
+                .containsExactly(
+                        "companyId",
+                        "targetUserId",
+                        "role",
+                        "expectedTargetRowVersion",
+                        "actor",
+                        "idempotencyKey",
+                        "requestHash",
+                        "reasonReference");
+        assertThat(componentNames(PlatformRoleRevokeCommand.class))
+                .containsExactly(
+                        "companyId",
+                        "assignmentId",
+                        "expectedRole",
+                        "expectedAssignmentRowVersion",
+                        "actor",
+                        "idempotencyKey",
+                        "requestHash",
+                        "reasonReference");
+        assertThat(componentNames(PlatformRoleCommandReceipt.class)).containsExactly("mutation", "replayed");
         assertThat(PlatformRoleCode.values())
                 .containsExactly(PlatformRoleCode.COMPANY_ADMIN, PlatformRoleCode.APP_MANAGER);
     }
@@ -52,28 +64,34 @@ class M110IdentityGovernanceContractTest {
     void controllerPublishesOnlyApprovedGovernancePaths() {
         List<String> getPaths = Arrays.stream(IdentityGovernanceController.class.getDeclaredMethods())
                 .filter(method -> method.isAnnotationPresent(GetMapping.class))
-                .flatMap(method -> Arrays.stream(method.getAnnotation(GetMapping.class).value()))
-                .sorted().toList();
+                .flatMap(method ->
+                        Arrays.stream(method.getAnnotation(GetMapping.class).value()))
+                .sorted()
+                .toList();
         List<String> postPaths = Arrays.stream(IdentityGovernanceController.class.getDeclaredMethods())
                 .filter(method -> method.isAnnotationPresent(PostMapping.class))
-                .flatMap(method -> Arrays.stream(method.getAnnotation(PostMapping.class).value()))
-                .sorted().toList();
+                .flatMap(method ->
+                        Arrays.stream(method.getAnnotation(PostMapping.class).value()))
+                .sorted()
+                .toList();
         List<String> deletePaths = Arrays.stream(IdentityGovernanceController.class.getDeclaredMethods())
                 .filter(method -> method.isAnnotationPresent(DeleteMapping.class))
-                .flatMap(method -> Arrays.stream(method.getAnnotation(DeleteMapping.class).value()))
-                .sorted().toList();
+                .flatMap(method ->
+                        Arrays.stream(method.getAnnotation(DeleteMapping.class).value()))
+                .sorted()
+                .toList();
 
-        assertThat(getPaths).containsExactly(
-                "/admin/members/{userId}/governance-state",
-                "/admin/role-assignments");
-        assertThat(postPaths).containsExactly(
-                "/admin/app-manager-assignments",
-                "/admin/company-admin-assignments",
-                "/admin/members/{userId}/account-disable",
-                "/admin/members/{userId}/account-enable");
-        assertThat(deletePaths).containsExactly(
-                "/admin/app-manager-assignments/{assignmentId}",
-                "/admin/company-admin-assignments/{assignmentId}");
+        assertThat(getPaths).containsExactly("/admin/members/{userId}/governance-state", "/admin/role-assignments");
+        assertThat(postPaths)
+                .containsExactly(
+                        "/admin/app-manager-assignments",
+                        "/admin/company-admin-assignments",
+                        "/admin/members/{userId}/account-disable",
+                        "/admin/members/{userId}/account-enable");
+        assertThat(deletePaths)
+                .containsExactly(
+                        "/admin/app-manager-assignments/{assignmentId}",
+                        "/admin/company-admin-assignments/{assignmentId}");
         assertThat(getPaths).noneMatch(path -> path.contains("security-audit"));
     }
 

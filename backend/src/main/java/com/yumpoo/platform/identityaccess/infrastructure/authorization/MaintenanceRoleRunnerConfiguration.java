@@ -5,11 +5,6 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Configuration;
 
 @Configuration(proxyBeanMethods = false)
-@ConditionalOnProperty(
-        prefix = "yumpoo.maintenance.app-manager",
-        name = "enabled",
-        havingValue = "true"
-)
+@ConditionalOnProperty(prefix = "yumpoo.maintenance.app-manager", name = "enabled", havingValue = "true")
 @EnableConfigurationProperties(MaintenanceRoleRunnerProperties.class)
-public class MaintenanceRoleRunnerConfiguration {
-}
+public class MaintenanceRoleRunnerConfiguration {}

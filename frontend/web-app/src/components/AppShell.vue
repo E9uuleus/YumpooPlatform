@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Calendar, DataLine, DataAnalysis, Box, Clock, Close, FolderOpened, Grid, House, Menu as MenuIcon, Search, Setting, User, OfficeBuilding, Monitor } from '@element-plus/icons-vue'
+import { Calendar, DataLine, DataAnalysis, Box, Clock, Close, FolderOpened, Finished, Grid, House, Menu as MenuIcon, Search, Setting, User, OfficeBuilding, Monitor } from '@element-plus/icons-vue'
 import { AuthenticationClientType, ProjectLifecycleFilter, ProjectActorAccess, type Project, type ProjectSummary } from '@yumpoo/api-client'
 import {
   ElButton,
@@ -44,7 +44,7 @@ import ProjectNavigationMore from './shell/ProjectNavigationMore.vue'
 interface ModuleItem {
   section: ShellSection
   label: string
-  routeName: 'home' | 'workspace' | 'team-entry' | 'company-overview' | 'operations-overview'
+  routeName: 'home' | 'workspace' | 'dashboards' | 'my-time' | 'my-work' | 'team-entry' | 'company-overview' | 'operations-overview'
   icon: Component
 }
 
@@ -89,10 +89,10 @@ const releaseLabel = computed(() => releaseVersion.value
   ? `版本 ${releaseVersion.value.release} · ${releaseVersion.value.commit.slice(0, 8)}`
   : '')
 const activeSection = computed<ShellSection>(() => route.meta.shellSection ?? 'work')
-const myTimeActive = computed(() => route.name === 'my-time' || route.name === 'my-time-day')
 const fixedFrame = computed(() => route.meta.frame === 'fixed')
 const isWorkspaceSection = computed(() => activeSection.value === 'work')
-const hasContextNavigation = computed(() => activeSection.value !== 'home')
+const CONTEXTLESS_SECTIONS: ReadonlySet<ShellSection> = new Set(['home', 'dashboards', 'my-time', 'my-work'])
+const hasContextNavigation = computed(() => !CONTEXTLESS_SECTIONS.has(activeSection.value))
 const projectRecentScope = computed(() => {
   const authentication = session.authentication.value
   return authentication ? `${authentication.company.id}:${authentication.user.id}` : undefined
@@ -118,6 +118,9 @@ onBeforeUnmount(() => window.removeEventListener('yumpoo-operations-alerts-chang
 const moduleItems = computed<ModuleItem[]>(() => [
   { section: 'home', label: '首页', routeName: 'home', icon: House },
   { section: 'work', label: '工作台', routeName: 'workspace', icon: Grid },
+  { section: 'dashboards', label: '仪表板', routeName: 'dashboards', icon: DataAnalysis },
+  { section: 'my-time', label: '我的工时', routeName: 'my-time', icon: Calendar },
+  { section: 'my-work', label: '我的工作', routeName: 'my-work', icon: Finished },
   ...(session.isCompanyAdmin.value ? [{ section: 'team', label: '团队', routeName: 'team-entry', icon: DataLine } as const] : []),
   ...(session.isIdentityReader.value
     ? [{ section: 'company', label: '公司管理', routeName: 'company-overview', icon: OfficeBuilding } as const]
@@ -127,6 +130,9 @@ const moduleItems = computed<ModuleItem[]>(() => [
 const contextTitle = computed(() => ({
   home: '首页',
   work: '工作台',
+  dashboards: '仪表板',
+  'my-time': '我的工时',
+  'my-work': '我的工作',
   team: '团队视图',
   company: '公司管理',
   inbox: '收件箱',
@@ -701,26 +707,6 @@ onBeforeUnmount(() => {
         data-tour="context-nav"
       >
         <template v-if="isWorkspaceSection">
-          <button
-            type="button"
-            :class="{ active: route.name === 'dashboards' }"
-            :aria-current="route.name === 'dashboards' ? 'page' : undefined"
-            @click="navigate('dashboards')"
-          >
-            <el-icon aria-hidden="true">
-              <grid />
-            </el-icon><span>仪表板</span>
-          </button>
-          <button
-            type="button"
-            :class="{ active: myTimeActive }"
-            :aria-current="myTimeActive ? 'page' : undefined"
-            @click="navigate('my-time')"
-          >
-            <el-icon aria-hidden="true">
-              <calendar />
-            </el-icon><span>我的工时</span>
-          </button>
           <template v-if="currentProjectItems.length">
             <div class="context-navigation__group-label">
               当前项目
@@ -1040,26 +1026,6 @@ onBeforeUnmount(() => {
         aria-label="移动端当前区域导航"
       >
         <template v-if="isWorkspaceSection">
-          <button
-            type="button"
-            :class="{ active: route.name === 'dashboards' }"
-            :aria-current="route.name === 'dashboards' ? 'page' : undefined"
-            @click="navigate('dashboards')"
-          >
-            <el-icon aria-hidden="true">
-              <grid />
-            </el-icon><span>仪表板</span>
-          </button>
-          <button
-            type="button"
-            :class="{ active: myTimeActive }"
-            :aria-current="myTimeActive ? 'page' : undefined"
-            @click="navigate('my-time')"
-          >
-            <el-icon aria-hidden="true">
-              <calendar />
-            </el-icon><span>我的工时</span>
-          </button>
           <template v-if="currentProjectItems.length">
             <div class="context-navigation__group-label">
               当前项目

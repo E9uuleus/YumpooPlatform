@@ -1,28 +1,13 @@
 package com.yumpoo.platform;
 
+import static com.yumpoo.platform.testing.MigrationAssertions.assertMigrateToLatest;
+import static com.yumpoo.platform.testing.MigrationAssertions.migrationVersions;
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.yumpoo.platform.filestorage.testing.M014AttachmentProbeController;
 import com.yumpoo.platform.foundation.application.event.EventSubscription;
 import com.yumpoo.platform.foundation.application.event.OutboxEventConsumer;
-import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
-import org.flywaydb.core.Flyway;
-import org.flywaydb.core.api.configuration.Configuration;
-import org.flywaydb.core.api.output.MigrateResult;
-import org.flywaydb.core.api.output.ValidateResult;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Import;
-import org.springframework.context.ApplicationContext;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.testcontainers.containers.Container;
-import org.testcontainers.postgresql.PostgreSQLContainer;
-import org.yaml.snakeyaml.LoaderOptions;
-import org.yaml.snakeyaml.Yaml;
-import org.yaml.snakeyaml.constructor.SafeConstructor;
-import tools.jackson.databind.ObjectMapper;
-
+import com.yumpoo.platform.testing.DedicatedPostgreSqlContainerConfiguration;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -41,12 +26,26 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.configuration.Configuration;
+import org.flywaydb.core.api.output.MigrateResult;
+import org.flywaydb.core.api.output.ValidateResult;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.testcontainers.containers.Container;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+import org.yaml.snakeyaml.LoaderOptions;
+import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
+import tools.jackson.databind.ObjectMapper;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static com.yumpoo.platform.testing.MigrationAssertions.assertMigrateToLatest;
-import static com.yumpoo.platform.testing.MigrationAssertions.migrationVersions;
-
-@Import(PostgreSqlTestContainerConfiguration.class)
+@Import(DedicatedPostgreSqlContainerConfiguration.class)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class YumpooServerApplicationIT {
 
@@ -77,27 +76,31 @@ class YumpooServerApplicationIT {
         Set<EventSubscription> current = new HashSet<>();
         for (Object entry : (List<?>) catalog.get("events")) {
             Map<?, ?> event = (Map<?, ?>) entry;
-            current.add(new EventSubscription((String) event.get("eventType"),
-                    ((Number) event.get("eventVersion")).intValue()));
+            current.add(new EventSubscription(
+                    (String) event.get("eventType"), ((Number) event.get("eventVersion")).intValue()));
         }
         Set<EventSubscription> retired = new HashSet<>();
-        var manifest = new ObjectMapper().readTree(Files.readString(
-                Path.of("../tools/events/retired-event-contracts.json")));
+        var manifest =
+                new ObjectMapper().readTree(Files.readString(Path.of("../tools/events/retired-event-contracts.json")));
         for (var event : manifest.get("retired")) {
-            retired.add(new EventSubscription(event.get("eventType").asString(),
-                    event.get("eventVersion").asInt()));
+            retired.add(new EventSubscription(
+                    event.get("eventType").asString(), event.get("eventVersion").asInt()));
         }
         assertThat(current).isNotEmpty();
         assertThat(retired).isNotEmpty();
-        var consumers = applicationContext.getBeansOfType(OutboxEventConsumer.class).values();
+        var consumers =
+                applicationContext.getBeansOfType(OutboxEventConsumer.class).values();
         assertThat(consumers).isNotEmpty();
         for (OutboxEventConsumer consumer : consumers) {
-            assertThat(consumer.subscriptions()).as("subscriptions of %s", consumer.consumerName())
+            assertThat(consumer.subscriptions())
+                    .as("subscriptions of %s", consumer.consumerName())
                     .isNotEmpty();
             for (EventSubscription subscription : consumer.subscriptions()) {
-                assertThat(current).as("current contract for %s: %s", consumer.consumerName(), subscription)
+                assertThat(current)
+                        .as("current contract for %s: %s", consumer.consumerName(), subscription)
                         .contains(subscription);
-                assertThat(retired).as("retired contract for %s: %s", consumer.consumerName(), subscription)
+                assertThat(retired)
+                        .as("retired contract for %s: %s", consumer.consumerName(), subscription)
                         .doesNotContain(subscription);
             }
         }
@@ -160,8 +163,7 @@ class YumpooServerApplicationIT {
                 "-d",
                 postgresContainer.getDatabaseName(),
                 "-tAc",
-                "SHOW TimeZone"
-        );
+                "SHOW TimeZone");
 
         assertThat(version).startsWith("17.10");
         assertThat(Integer.parseInt(versionNumber)).isBetween(170000, 179999);
@@ -178,20 +180,16 @@ class YumpooServerApplicationIT {
         List<String> successfulMigrationVersions = jdbcTemplate.queryForList(
                 "SELECT version FROM yumpoo.flyway_schema_history "
                         + "WHERE success AND version IS NOT NULL ORDER BY installed_rank",
-                String.class
-        );
+                String.class);
         String schemaComment = jdbcTemplate.queryForObject(
-                "SELECT obj_description(oid, 'pg_namespace') "
-                        + "FROM pg_namespace WHERE nspname = 'yumpoo'",
-                String.class
-        );
+                "SELECT obj_description(oid, 'pg_namespace') " + "FROM pg_namespace WHERE nspname = 'yumpoo'",
+                String.class);
         List<String> applicationTableNames = jdbcTemplate.queryForList(
                 "SELECT table_name FROM information_schema.tables "
                         + "WHERE table_schema = 'yumpoo' "
                         + "AND table_name <> 'flyway_schema_history' "
                         + "ORDER BY table_name",
-                String.class
-        );
+                String.class);
         List<String> outboxConstraintNames = jdbcTemplate.queryForList(
                 "SELECT constraint_record.conname "
                         + "FROM pg_constraint constraint_record "
@@ -203,14 +201,12 @@ class YumpooServerApplicationIT {
                         + "AND table_record.relname IN "
                         + "('outbox_event', 'outbox_consumer_receipt') "
                         + "AND constraint_record.contype <> 'n'",
-                String.class
-        );
+                String.class);
         List<String> outboxIndexNames = jdbcTemplate.queryForList(
                 "SELECT indexname FROM pg_indexes "
                         + "WHERE schemaname = 'yumpoo' "
                         + "AND tablename IN ('outbox_event', 'outbox_consumer_receipt')",
-                String.class
-        );
+                String.class);
         List<String> oauthAttemptConstraintNames = jdbcTemplate.queryForList(
                 "SELECT constraint_record.conname "
                         + "FROM pg_constraint constraint_record "
@@ -221,14 +217,12 @@ class YumpooServerApplicationIT {
                         + "WHERE schema_record.nspname = 'yumpoo' "
                         + "AND table_record.relname = 'wecom_oauth_attempt' "
                         + "AND constraint_record.contype <> 'n'",
-                String.class
-        );
+                String.class);
         List<String> oauthAttemptIndexNames = jdbcTemplate.queryForList(
                 "SELECT indexname FROM pg_indexes "
                         + "WHERE schemaname = 'yumpoo' "
                         + "AND tablename = 'wecom_oauth_attempt'",
-                String.class
-        );
+                String.class);
         List<String> desktopAttemptConstraintNames = jdbcTemplate.queryForList(
                 "SELECT constraint_record.conname "
                         + "FROM pg_constraint constraint_record "
@@ -239,14 +233,12 @@ class YumpooServerApplicationIT {
                         + "WHERE schema_record.nspname = 'yumpoo' "
                         + "AND table_record.relname = 'desktop_auth_attempt' "
                         + "AND constraint_record.contype <> 'n'",
-                String.class
-        );
+                String.class);
         List<String> desktopAttemptIndexNames = jdbcTemplate.queryForList(
                 "SELECT indexname FROM pg_indexes "
                         + "WHERE schemaname = 'yumpoo' "
                         + "AND tablename = 'desktop_auth_attempt'",
-                String.class
-        );
+                String.class);
         List<String> organizationConstraintNames = jdbcTemplate.queryForList(
                 "SELECT constraint_record.conname "
                         + "FROM pg_constraint constraint_record "
@@ -257,14 +249,12 @@ class YumpooServerApplicationIT {
                         + "WHERE schema_record.nspname = 'yumpoo' "
                         + "AND table_record.relname IN ('company', 'company_calendar_day') "
                         + "AND constraint_record.contype <> 'n'",
-                String.class
-        );
+                String.class);
         List<String> organizationIndexNames = jdbcTemplate.queryForList(
                 "SELECT indexname FROM pg_indexes "
                         + "WHERE schemaname = 'yumpoo' "
                         + "AND tablename IN ('company', 'company_calendar_day')",
-                String.class
-        );
+                String.class);
         List<String> identityConstraintNames = jdbcTemplate.queryForList(
                 "SELECT constraint_record.conname "
                         + "FROM pg_constraint constraint_record "
@@ -275,14 +265,12 @@ class YumpooServerApplicationIT {
                         + "WHERE schema_record.nspname = 'yumpoo' "
                         + "AND table_record.relname IN ('identity_user', 'external_identity') "
                         + "AND constraint_record.contype <> 'n'",
-                String.class
-        );
+                String.class);
         List<String> identityIndexNames = jdbcTemplate.queryForList(
                 "SELECT indexname FROM pg_indexes "
                         + "WHERE schemaname = 'yumpoo' "
                         + "AND tablename IN ('identity_user', 'external_identity')",
-                String.class
-        );
+                String.class);
         List<String> sessionConstraintNames = jdbcTemplate.queryForList(
                 "SELECT constraint_record.conname "
                         + "FROM pg_constraint constraint_record "
@@ -293,14 +281,12 @@ class YumpooServerApplicationIT {
                         + "WHERE schema_record.nspname = 'yumpoo' "
                         + "AND table_record.relname = 'login_session' "
                         + "AND constraint_record.contype <> 'n'",
-                String.class
-        );
+                String.class);
         List<String> sessionIndexNames = jdbcTemplate.queryForList(
                 "SELECT indexname FROM pg_indexes "
                         + "WHERE schemaname = 'yumpoo' "
                         + "AND tablename = 'login_session'",
-                String.class
-        );
+                String.class);
         List<String> platformRoleConstraintNames = jdbcTemplate.queryForList(
                 "SELECT constraint_record.conname "
                         + "FROM pg_constraint constraint_record "
@@ -311,31 +297,24 @@ class YumpooServerApplicationIT {
                         + "WHERE schema_record.nspname = 'yumpoo' "
                         + "AND table_record.relname = 'platform_role_assignment' "
                         + "AND constraint_record.contype <> 'n'",
-                String.class
-        );
+                String.class);
         List<String> platformRoleIndexNames = jdbcTemplate.queryForList(
                 "SELECT indexname FROM pg_indexes "
                         + "WHERE schemaname = 'yumpoo' "
                         + "AND tablename = 'platform_role_assignment'",
-                String.class
-        );
+                String.class);
         List<String> workItemIndexNames = jdbcTemplate.queryForList(
-                "SELECT indexname FROM pg_indexes WHERE schemaname = 'yumpoo' "
-                        + "AND tablename = 'work_item'",
-                String.class
-        );
+                "SELECT indexname FROM pg_indexes WHERE schemaname = 'yumpoo' " + "AND tablename = 'work_item'",
+                String.class);
         List<String> workItemUpdateIndexNames = jdbcTemplate.queryForList(
-                "SELECT indexname FROM pg_indexes WHERE schemaname = 'yumpoo' "
-                        + "AND tablename = 'work_item_update'",
-                String.class
-        );
+                "SELECT indexname FROM pg_indexes WHERE schemaname = 'yumpoo' " + "AND tablename = 'work_item_update'",
+                String.class);
         List<String> companySeeds = jdbcTemplate.queryForList(
                 "SELECT id::text || '|' || singleton_slot || '|' || display_name || '|' "
                         + "|| timezone || '|' || week_start_day || '|' "
                         + "|| default_workday_minutes || '|' || row_version "
                         + "FROM yumpoo.company",
-                String.class
-        );
+                String.class);
 
         assertThat(configuration.getDefaultSchema()).isEqualTo(PLATFORM_SCHEMA);
         assertThat(configuration.getSchemas()).containsExactly(PLATFORM_SCHEMA);
@@ -358,270 +337,273 @@ class YumpooServerApplicationIT {
                 SELECT accepted_from IS NOT NULL FROM yumpoo.activity_projection_state
                 WHERE projection_code = 'ACTIVITY_V1'
                 """, Boolean.class)).isTrue();
-        assertThat(applicationTableNames).containsExactly(
-                "activity_event",
-                "activity_projection_state",
-                "admin_override",
-                "app_manager_governance_state",
-                "attachment",
-                "attachment_blob",
-                "attachment_maintenance_run",
-                "attachment_project_purge",
-                "attachment_quota_usage",
-                "attachment_reconciliation_issue",
-                "attachment_scan_task",
-                "company",
-                "company_calendar_day",
-                "company_calendar_year",
-                "content",
-                "content_catalog_version",
-                "desktop_auth_attempt",
-                "directory_sync_item",
-                "directory_sync_run",
-                "directory_sync_staging_member",
-                "external_identity",
-                "governance_issue",
-                "idempotency_record",
-                "identity_user",
-                "login_session",
-                "notification_event",
-                "notification_projection_state",
-                "ops_alert",
-                "ops_alert_event",
-                "ops_alert_rule",
-                "ops_metric_minute",
-                "ops_process_run",
-                "outbox_consumer_receipt",
-                "outbox_event",
-                "personal_dashboard",
-                "platform_role_assignment",
-                "project",
-                "project_membership",
-                "project_notification_preference",
-                "project_purge_run",
-                "project_work_item_label_catalog",
-                "project_work_item_priority_label",
-                "project_work_item_status_label",
-                "scheduled_job",
-                "security_audit_event",
-                "user_notification",
-                "user_onboarding_tour",
-                "wecom_oauth_attempt",
-                "work_hours_alert",
-                "work_hours_alert_setting",
-                "work_item",
-                "work_item_assignee",
-                "work_item_cell_activity",
-                "work_item_connect_column",
-                "work_item_connect_column_catalog",
-                "work_item_connect_column_target",
-                "work_item_connection",
-                "work_item_project_counter",
-                "work_item_project_order",
-                "work_item_rank_lane",
-                "work_item_relation",
-                "work_item_table_settings",
-                "work_item_time_revision",
-                "work_item_time_session",
-                "work_item_time_share",
-                "work_item_timer_state",
-                "work_item_update",
-                "work_item_update_mention",
-                "workspace"
-        );
-        assertThat(outboxConstraintNames).containsExactlyInAnyOrder(
-                "outbox_event_pkey",
-                "uq_outbox_event_aggregate_fact",
-                "ck_outbox_event_id_v4",
-                "ck_outbox_event_type",
-                "ck_outbox_event_version",
-                "ck_outbox_event_aggregate_type",
-                "ck_outbox_event_aggregate_version",
-                "ck_outbox_event_actor",
-                "ck_outbox_event_request_id",
-                "ck_outbox_event_correlation_id",
-                "ck_outbox_event_payload",
-                "ck_outbox_event_status",
-                "ck_outbox_event_attempt_count",
-                "ck_outbox_event_last_error",
-                "ck_outbox_event_lifecycle",
-                "ck_outbox_event_times",
-                "outbox_consumer_receipt_pkey",
-                "fk_outbox_consumer_receipt_event",
-                "ck_outbox_consumer_receipt_name"
-        );
-        assertThat(outboxIndexNames).containsExactlyInAnyOrder(
-                "outbox_event_pkey",
-                "uq_outbox_event_aggregate_fact",
-                "idx_outbox_event_available",
-                "idx_outbox_event_expired_lease",
-                "idx_outbox_event_aggregate_order",
-                "outbox_consumer_receipt_pkey",
-                "idx_outbox_consumer_receipt_event"
-        );
-        assertThat(oauthAttemptConstraintNames).containsExactlyInAnyOrder(
-                "wecom_oauth_attempt_pkey",
-                "uq_wecom_oauth_attempt_nonce_hash",
-                "ck_wecom_oauth_attempt_state_hash",
-                "ck_wecom_oauth_attempt_nonce_hash",
-                "ck_wecom_oauth_attempt_request_id",
-                "ck_wecom_oauth_attempt_expires_at",
-                "ck_wecom_oauth_attempt_consumed_at"
-        );
-        assertThat(oauthAttemptIndexNames).containsExactlyInAnyOrder(
-                "wecom_oauth_attempt_pkey",
-                "uq_wecom_oauth_attempt_nonce_hash",
-                "idx_wecom_oauth_attempt_expires_at"
-        );
-        assertThat(desktopAttemptConstraintNames).containsExactlyInAnyOrder(
-                "desktop_auth_attempt_pkey",
-                "uq_desktop_auth_attempt_oauth_state_hash",
-                "uq_desktop_auth_attempt_handoff_code_hash",
-                "ck_desktop_auth_attempt_desktop_state_hash",
-                "ck_desktop_auth_attempt_oauth_state_hash",
-                "ck_desktop_auth_attempt_pkce_s256_challenge",
-                "ck_desktop_auth_attempt_request_id",
-                "ck_desktop_auth_attempt_authorize_window",
-                "ck_desktop_auth_attempt_handoff_code_hash",
-                "ck_desktop_auth_attempt_corp_fingerprint",
-                "ck_desktop_auth_attempt_member_fingerprint",
-                "fk_desktop_auth_attempt_authenticated_user",
-                "ck_desktop_auth_attempt_client_binding",
-                "ck_desktop_auth_attempt_authorization_claim",
-                "ck_desktop_auth_attempt_handoff_lifecycle",
-                "ck_desktop_auth_attempt_handoff_window",
-                "ck_desktop_auth_attempt_consumed_at"
-        );
-        assertThat(desktopAttemptIndexNames).containsExactlyInAnyOrder(
-                "desktop_auth_attempt_pkey",
-                "uq_desktop_auth_attempt_oauth_state_hash",
-                "uq_desktop_auth_attempt_handoff_code_hash",
-                "idx_desktop_auth_attempt_authorize_expires_at",
-                "idx_desktop_auth_attempt_handoff_expires_at",
-                "idx_desktop_auth_attempt_authenticated_user"
-        );
-        assertThat(organizationConstraintNames).containsExactlyInAnyOrder(
-                "company_pkey",
-                "uq_company_singleton_slot",
-                "ck_company_id_v4",
-                "ck_company_singleton_slot",
-                "ck_company_display_name",
-                "ck_company_timezone",
-                "ck_company_week_start_day",
-                "ck_company_default_workday_minutes",
-                "ck_company_row_version",
-                "ck_company_timestamps",
-                "company_calendar_day_pkey",
-                "fk_company_calendar_day_company",
-                "ck_company_calendar_day_type",
-                "ck_company_calendar_day_minutes",
-                "ck_company_calendar_day_source",
-                "ck_company_calendar_day_note",
-                "ck_company_calendar_day_row_version",
-                "ck_company_calendar_day_timestamps"
-        );
-        assertThat(organizationIndexNames).containsExactlyInAnyOrder(
-                "company_pkey",
-                "uq_company_singleton_slot",
-                "company_calendar_day_pkey"
-        );
-        assertThat(identityConstraintNames).containsExactlyInAnyOrder(
-                "identity_user_pkey",
-                "uq_identity_user_id_company",
-                "fk_identity_user_company",
-                "fk_identity_user_disabled_by",
-                "ck_identity_user_id_v4",
-                "ck_identity_user_employment_status",
-                "ck_identity_user_account_status",
-                "ck_identity_user_display_name",
-                "ck_identity_user_email",
-                "ck_identity_user_mobile",
-                "ck_identity_user_department_summary",
-                "ck_identity_user_left_facts",
-                "ck_identity_user_disabled_facts",
-                "ck_identity_user_authorization_version",
-                "uq_identity_user_company_workspace_slug",
-                "ck_identity_user_workspace_slug",
-                "ck_identity_user_row_version",
-                "ck_identity_user_timestamps",
-                "external_identity_pkey",
-                "fk_external_identity_user_company",
-                "uq_external_identity_provider_member",
-                "uq_external_identity_user_provider",
-                "ck_external_identity_id_v4",
-                "ck_external_identity_provider",
-                "ck_external_identity_external_user_id",
-                "ck_external_identity_employment_status",
-                "ck_external_identity_raw_profile_hash",
-                "ck_external_identity_timestamps"
-        );
-        assertThat(identityIndexNames).containsExactlyInAnyOrder(
-                "identity_user_pkey",
-                "uq_identity_user_id_company",
-                "uq_identity_user_company_workspace_slug",
-                "idx_identity_user_company_status_created",
-                "external_identity_pkey",
-                "uq_external_identity_provider_member",
-                "uq_external_identity_user_provider"
-        );
-        assertThat(sessionConstraintNames).containsExactlyInAnyOrder(
-                "login_session_pkey",
-                "fk_login_session_user_company",
-                "uq_login_session_token_fingerprint",
-                "ck_login_session_id_v4",
-                "ck_login_session_status",
-                "ck_login_session_token_fingerprint",
-                "ck_login_session_session_key_version",
-                "ck_login_session_csrf_fingerprint",
-                "ck_login_session_authorization_version",
-                "ck_login_session_client",
-                "ck_login_session_lifecycle",
-                "ck_login_session_revocation"
-        );
-        assertThat(sessionIndexNames).containsExactlyInAnyOrder(
-                "login_session_pkey",
-                "uq_login_session_token_fingerprint",
-                "idx_login_session_user_active",
-                "idx_login_session_purge_after"
-        );
-        assertThat(platformRoleConstraintNames).containsExactlyInAnyOrder(
-                "platform_role_assignment_pkey",
-                "fk_platform_role_assignment_company",
-                "fk_platform_role_assignment_user_company",
-                "fk_platform_role_assignment_grantor_company",
-                "fk_platform_role_assignment_revoker_company",
-                "ck_platform_role_assignment_id_v4",
-                "ck_platform_role_assignment_role_scope",
-                "ck_platform_role_assignment_scope_company",
-                "ck_platform_role_assignment_status",
-                "ck_platform_role_assignment_grant_actor",
-                "ck_platform_role_assignment_grant_reason",
-                "ck_platform_role_assignment_revocation",
-                "ck_platform_role_assignment_row_version",
-                "ck_platform_role_assignment_timestamps"
-        );
-        assertThat(platformRoleIndexNames).containsExactlyInAnyOrder(
-                "platform_role_assignment_pkey",
-                "uq_platform_role_assignment_active",
-                "idx_platform_role_assignment_user_status"
-        );
-        assertThat(jdbcTemplate.queryForObject("SELECT indexdef FROM pg_indexes WHERE schemaname='yumpoo' AND indexname='uq_platform_role_assignment_active'",String.class))
-                .contains("(company_id, user_id)").doesNotContain("role_code");
-        assertThat(workItemIndexNames).contains(
-                "idx_work_item_content_page",
-                "idx_work_item_content_status_page",
-                "idx_work_item_content_updated_page",
-                "idx_work_item_content_assignee",
-                "idx_work_item_content_due_date"
-        );
-        assertThat(workItemUpdateIndexNames).containsExactlyInAnyOrder(
-                "work_item_update_pkey",
-                "uq_work_item_update_company_id",
-                "idx_work_item_update_page", "idx_update_pinned", "idx_update_root_page", "idx_update_thread_page", "uq_update_thread_scope"
-        );
-        assertThat(companySeeds).containsExactly(
-                "00000000-0000-4000-8000-000000000001|1|Yumpoo|Asia/Shanghai|MONDAY|480|0"
-        );
+        assertThat(applicationTableNames)
+                .containsExactly(
+                        "activity_event",
+                        "activity_projection_state",
+                        "admin_override",
+                        "app_manager_governance_state",
+                        "attachment",
+                        "attachment_blob",
+                        "attachment_maintenance_run",
+                        "attachment_project_purge",
+                        "attachment_quota_usage",
+                        "attachment_reconciliation_issue",
+                        "attachment_scan_task",
+                        "company",
+                        "company_calendar_day",
+                        "company_calendar_year",
+                        "content",
+                        "content_catalog_version",
+                        "desktop_auth_attempt",
+                        "directory_sync_item",
+                        "directory_sync_run",
+                        "directory_sync_staging_member",
+                        "external_identity",
+                        "governance_issue",
+                        "idempotency_record",
+                        "identity_user",
+                        "login_session",
+                        "notification_event",
+                        "notification_projection_state",
+                        "ops_alert",
+                        "ops_alert_event",
+                        "ops_alert_rule",
+                        "ops_metric_minute",
+                        "ops_process_run",
+                        "outbox_consumer_receipt",
+                        "outbox_event",
+                        "personal_dashboard",
+                        "platform_role_assignment",
+                        "project",
+                        "project_membership",
+                        "project_notification_preference",
+                        "project_purge_run",
+                        "project_work_item_label_catalog",
+                        "project_work_item_priority_label",
+                        "project_work_item_status_label",
+                        "scheduled_job",
+                        "security_audit_event",
+                        "user_notification",
+                        "user_onboarding_tour",
+                        "wecom_oauth_attempt",
+                        "work_hours_alert",
+                        "work_hours_alert_setting",
+                        "work_item",
+                        "work_item_assignee",
+                        "work_item_cell_activity",
+                        "work_item_connect_column",
+                        "work_item_connect_column_catalog",
+                        "work_item_connect_column_target",
+                        "work_item_connection",
+                        "work_item_project_counter",
+                        "work_item_project_order",
+                        "work_item_rank_lane",
+                        "work_item_relation",
+                        "work_item_table_settings",
+                        "work_item_time_revision",
+                        "work_item_time_session",
+                        "work_item_time_share",
+                        "work_item_timer_state",
+                        "work_item_update",
+                        "work_item_update_mention",
+                        "workspace");
+        assertThat(outboxConstraintNames)
+                .containsExactlyInAnyOrder(
+                        "outbox_event_pkey",
+                        "uq_outbox_event_aggregate_fact",
+                        "ck_outbox_event_id_v4",
+                        "ck_outbox_event_type",
+                        "ck_outbox_event_version",
+                        "ck_outbox_event_aggregate_type",
+                        "ck_outbox_event_aggregate_version",
+                        "ck_outbox_event_actor",
+                        "ck_outbox_event_request_id",
+                        "ck_outbox_event_correlation_id",
+                        "ck_outbox_event_payload",
+                        "ck_outbox_event_status",
+                        "ck_outbox_event_attempt_count",
+                        "ck_outbox_event_last_error",
+                        "ck_outbox_event_lifecycle",
+                        "ck_outbox_event_times",
+                        "outbox_consumer_receipt_pkey",
+                        "fk_outbox_consumer_receipt_event",
+                        "ck_outbox_consumer_receipt_name");
+        assertThat(outboxIndexNames)
+                .containsExactlyInAnyOrder(
+                        "outbox_event_pkey",
+                        "uq_outbox_event_aggregate_fact",
+                        "idx_outbox_event_available",
+                        "idx_outbox_event_expired_lease",
+                        "idx_outbox_event_aggregate_order",
+                        "outbox_consumer_receipt_pkey",
+                        "idx_outbox_consumer_receipt_event");
+        assertThat(oauthAttemptConstraintNames)
+                .containsExactlyInAnyOrder(
+                        "wecom_oauth_attempt_pkey",
+                        "uq_wecom_oauth_attempt_nonce_hash",
+                        "ck_wecom_oauth_attempt_state_hash",
+                        "ck_wecom_oauth_attempt_nonce_hash",
+                        "ck_wecom_oauth_attempt_request_id",
+                        "ck_wecom_oauth_attempt_expires_at",
+                        "ck_wecom_oauth_attempt_consumed_at");
+        assertThat(oauthAttemptIndexNames)
+                .containsExactlyInAnyOrder(
+                        "wecom_oauth_attempt_pkey",
+                        "uq_wecom_oauth_attempt_nonce_hash",
+                        "idx_wecom_oauth_attempt_expires_at");
+        assertThat(desktopAttemptConstraintNames)
+                .containsExactlyInAnyOrder(
+                        "desktop_auth_attempt_pkey",
+                        "uq_desktop_auth_attempt_oauth_state_hash",
+                        "uq_desktop_auth_attempt_handoff_code_hash",
+                        "ck_desktop_auth_attempt_desktop_state_hash",
+                        "ck_desktop_auth_attempt_oauth_state_hash",
+                        "ck_desktop_auth_attempt_pkce_s256_challenge",
+                        "ck_desktop_auth_attempt_request_id",
+                        "ck_desktop_auth_attempt_authorize_window",
+                        "ck_desktop_auth_attempt_handoff_code_hash",
+                        "ck_desktop_auth_attempt_corp_fingerprint",
+                        "ck_desktop_auth_attempt_member_fingerprint",
+                        "fk_desktop_auth_attempt_authenticated_user",
+                        "ck_desktop_auth_attempt_client_binding",
+                        "ck_desktop_auth_attempt_authorization_claim",
+                        "ck_desktop_auth_attempt_handoff_lifecycle",
+                        "ck_desktop_auth_attempt_handoff_window",
+                        "ck_desktop_auth_attempt_consumed_at");
+        assertThat(desktopAttemptIndexNames)
+                .containsExactlyInAnyOrder(
+                        "desktop_auth_attempt_pkey",
+                        "uq_desktop_auth_attempt_oauth_state_hash",
+                        "uq_desktop_auth_attempt_handoff_code_hash",
+                        "idx_desktop_auth_attempt_authorize_expires_at",
+                        "idx_desktop_auth_attempt_handoff_expires_at",
+                        "idx_desktop_auth_attempt_authenticated_user");
+        assertThat(organizationConstraintNames)
+                .containsExactlyInAnyOrder(
+                        "company_pkey",
+                        "uq_company_singleton_slot",
+                        "ck_company_id_v4",
+                        "ck_company_singleton_slot",
+                        "ck_company_display_name",
+                        "ck_company_timezone",
+                        "ck_company_week_start_day",
+                        "ck_company_default_workday_minutes",
+                        "ck_company_row_version",
+                        "ck_company_timestamps",
+                        "company_calendar_day_pkey",
+                        "fk_company_calendar_day_company",
+                        "ck_company_calendar_day_type",
+                        "ck_company_calendar_day_minutes",
+                        "ck_company_calendar_day_source",
+                        "ck_company_calendar_day_note",
+                        "ck_company_calendar_day_row_version",
+                        "ck_company_calendar_day_timestamps");
+        assertThat(organizationIndexNames)
+                .containsExactlyInAnyOrder("company_pkey", "uq_company_singleton_slot", "company_calendar_day_pkey");
+        assertThat(identityConstraintNames)
+                .containsExactlyInAnyOrder(
+                        "identity_user_pkey",
+                        "uq_identity_user_id_company",
+                        "fk_identity_user_company",
+                        "fk_identity_user_disabled_by",
+                        "ck_identity_user_id_v4",
+                        "ck_identity_user_employment_status",
+                        "ck_identity_user_account_status",
+                        "ck_identity_user_display_name",
+                        "ck_identity_user_email",
+                        "ck_identity_user_mobile",
+                        "ck_identity_user_department_summary",
+                        "ck_identity_user_left_facts",
+                        "ck_identity_user_disabled_facts",
+                        "ck_identity_user_authorization_version",
+                        "uq_identity_user_company_workspace_slug",
+                        "ck_identity_user_workspace_slug",
+                        "ck_identity_user_row_version",
+                        "ck_identity_user_timestamps",
+                        "external_identity_pkey",
+                        "fk_external_identity_user_company",
+                        "uq_external_identity_provider_member",
+                        "uq_external_identity_user_provider",
+                        "ck_external_identity_id_v4",
+                        "ck_external_identity_provider",
+                        "ck_external_identity_external_user_id",
+                        "ck_external_identity_employment_status",
+                        "ck_external_identity_raw_profile_hash",
+                        "ck_external_identity_timestamps");
+        assertThat(identityIndexNames)
+                .containsExactlyInAnyOrder(
+                        "identity_user_pkey",
+                        "uq_identity_user_id_company",
+                        "uq_identity_user_company_workspace_slug",
+                        "idx_identity_user_company_status_created",
+                        "external_identity_pkey",
+                        "uq_external_identity_provider_member",
+                        "uq_external_identity_user_provider");
+        assertThat(sessionConstraintNames)
+                .containsExactlyInAnyOrder(
+                        "login_session_pkey",
+                        "fk_login_session_user_company",
+                        "uq_login_session_token_fingerprint",
+                        "ck_login_session_id_v4",
+                        "ck_login_session_status",
+                        "ck_login_session_token_fingerprint",
+                        "ck_login_session_session_key_version",
+                        "ck_login_session_csrf_fingerprint",
+                        "ck_login_session_authorization_version",
+                        "ck_login_session_client",
+                        "ck_login_session_lifecycle",
+                        "ck_login_session_revocation");
+        assertThat(sessionIndexNames)
+                .containsExactlyInAnyOrder(
+                        "login_session_pkey",
+                        "uq_login_session_token_fingerprint",
+                        "idx_login_session_user_active",
+                        "idx_login_session_purge_after");
+        assertThat(platformRoleConstraintNames)
+                .containsExactlyInAnyOrder(
+                        "platform_role_assignment_pkey",
+                        "fk_platform_role_assignment_company",
+                        "fk_platform_role_assignment_user_company",
+                        "fk_platform_role_assignment_grantor_company",
+                        "fk_platform_role_assignment_revoker_company",
+                        "ck_platform_role_assignment_id_v4",
+                        "ck_platform_role_assignment_role_scope",
+                        "ck_platform_role_assignment_scope_company",
+                        "ck_platform_role_assignment_status",
+                        "ck_platform_role_assignment_grant_actor",
+                        "ck_platform_role_assignment_grant_reason",
+                        "ck_platform_role_assignment_revocation",
+                        "ck_platform_role_assignment_row_version",
+                        "ck_platform_role_assignment_timestamps");
+        assertThat(platformRoleIndexNames)
+                .containsExactlyInAnyOrder(
+                        "platform_role_assignment_pkey",
+                        "uq_platform_role_assignment_active",
+                        "idx_platform_role_assignment_user_status");
+        assertThat(jdbcTemplate.queryForObject(
+                        "SELECT indexdef FROM pg_indexes WHERE schemaname='yumpoo' AND indexname='uq_platform_role_assignment_active'",
+                        String.class))
+                .contains("(company_id, user_id)")
+                .doesNotContain("role_code");
+        assertThat(workItemIndexNames)
+                .contains(
+                        "idx_work_item_content_page",
+                        "idx_work_item_content_status_page",
+                        "idx_work_item_content_updated_page",
+                        "idx_work_item_content_assignee",
+                        "idx_work_item_content_due_date");
+        assertThat(workItemUpdateIndexNames)
+                .containsExactlyInAnyOrder(
+                        "work_item_update_pkey",
+                        "uq_work_item_update_company_id",
+                        "idx_work_item_update_page",
+                        "idx_update_pinned",
+                        "idx_update_root_page",
+                        "idx_update_thread_page",
+                        "uq_update_thread_scope");
+        assertThat(companySeeds)
+                .containsExactly("00000000-0000-4000-8000-000000000001|1|Yumpoo|Asia/Shanghai|MONDAY|480|0");
     }
 
     @Test
@@ -641,36 +623,44 @@ class YumpooServerApplicationIT {
     @Test
     void v29DatabaseUpgradesThroughV48WithContentCategories() throws Exception {
         String database = "yumpoo_m213_" + UUID.randomUUID().toString().replace("-", "");
-        Container.ExecResult created = postgresContainer.execInContainer(
-                "createdb", "-U", postgresContainer.getUsername(), database);
+        Container.ExecResult created =
+                postgresContainer.execInContainer("createdb", "-U", postgresContainer.getUsername(), database);
         assertThat(created.getExitCode()).as(created.getStderr()).isZero();
-        String jdbcUrl = postgresContainer.getJdbcUrl().replace(
-                "/" + postgresContainer.getDatabaseName(), "/" + database);
+        String jdbcUrl =
+                postgresContainer.getJdbcUrl().replace("/" + postgresContainer.getDatabaseName(), "/" + database);
         try {
             Flyway toV29 = migrationFlyway(jdbcUrl, "29");
             assertThat(toV29.migrate().targetSchemaVersion).hasToString("29");
-            assertThat(workItemIndexes(jdbcUrl)).doesNotContain(
-                    "idx_work_item_content_updated_page",
-                    "idx_work_item_content_assignee",
-                    "idx_work_item_content_due_date");
+            assertThat(workItemIndexes(jdbcUrl))
+                    .doesNotContain(
+                            "idx_work_item_content_updated_page",
+                            "idx_work_item_content_assignee",
+                            "idx_work_item_content_due_date");
 
             Flyway latest = migrationFlyway(jdbcUrl, null);
             assertMigrateToLatest(latest);
-            assertThat(workItemIndexes(jdbcUrl)).contains(
-                    "idx_work_item_content_page",
-                    "idx_work_item_content_status_page",
-                    "idx_work_item_content_updated_page",
-                    "idx_work_item_content_assignee",
-                    "idx_work_item_content_due_date",
-                    "idx_work_item_project_status_rank_page",
-                    "idx_work_item_project_sort_page");
+            assertThat(workItemIndexes(jdbcUrl))
+                    .contains(
+                            "idx_work_item_content_page",
+                            "idx_work_item_content_status_page",
+                            "idx_work_item_content_updated_page",
+                            "idx_work_item_content_assignee",
+                            "idx_work_item_content_due_date",
+                            "idx_work_item_project_status_rank_page",
+                            "idx_work_item_project_sort_page");
             assertThat(workspaceFacts(jdbcUrl)).containsExactly("MAIN|0|ACTIVE|1");
-            assertThat(generatedWorkItemColumns(jdbcUrl)).containsExactlyInAnyOrder(
-                    "active_lane_rank", "active_project_sort_key");
+            assertThat(generatedWorkItemColumns(jdbcUrl))
+                    .containsExactlyInAnyOrder("active_lane_rank", "active_project_sort_key");
             assertThat(workItemPriorityNullable(jdbcUrl)).isTrue();
-            assertThat(workItemUpdateIndexes(jdbcUrl)).containsExactlyInAnyOrder(
-                    "idx_work_item_update_page", "idx_update_pinned", "idx_update_root_page", "idx_update_thread_page", "uq_update_thread_scope", "uq_work_item_update_company_id",
-                    "work_item_update_pkey");
+            assertThat(workItemUpdateIndexes(jdbcUrl))
+                    .containsExactlyInAnyOrder(
+                            "idx_work_item_update_page",
+                            "idx_update_pinned",
+                            "idx_update_root_page",
+                            "idx_update_thread_page",
+                            "uq_update_thread_scope",
+                            "uq_work_item_update_company_id",
+                            "work_item_update_pkey");
         } finally {
             Container.ExecResult dropped = postgresContainer.execInContainer(
                     "dropdb", "--force", "-U", postgresContainer.getUsername(), database);
@@ -681,17 +671,17 @@ class YumpooServerApplicationIT {
     @Test
     void v48MigratesExistingContentsAndProjectRanksDeterministically() throws Exception {
         String database = "yumpoo_v48_content_" + UUID.randomUUID().toString().replace("-", "");
-        Container.ExecResult created = postgresContainer.execInContainer(
-                "createdb", "-U", postgresContainer.getUsername(), database);
+        Container.ExecResult created =
+                postgresContainer.execInContainer("createdb", "-U", postgresContainer.getUsername(), database);
         assertThat(created.getExitCode()).as(created.getStderr()).isZero();
-        String jdbcUrl = postgresContainer.getJdbcUrl().replace(
-                "/" + postgresContainer.getDatabaseName(), "/" + database);
+        String jdbcUrl =
+                postgresContainer.getJdbcUrl().replace("/" + postgresContainer.getDatabaseName(), "/" + database);
         try {
             assertThat(migrationFlyway(jdbcUrl, "47").migrate().targetSchemaVersion)
                     .hasToString("47");
-            try (Connection connection = DriverManager.getConnection(jdbcUrl,
-                    postgresContainer.getUsername(), postgresContainer.getPassword());
-                 Statement statement = connection.createStatement()) {
+            try (Connection connection = DriverManager.getConnection(
+                            jdbcUrl, postgresContainer.getUsername(), postgresContainer.getPassword());
+                    Statement statement = connection.createStatement()) {
                 connection.setAutoCommit(false);
                 statement.executeUpdate("""
                         INSERT INTO yumpoo.identity_user (
@@ -788,10 +778,13 @@ class YumpooServerApplicationIT {
             }
 
             assertMigrateToLatest(migrationFlyway(jdbcUrl, null));
-            try (Connection connection = DriverManager.getConnection(jdbcUrl,
-                    postgresContainer.getUsername(), postgresContainer.getPassword());
-                 Statement statement = connection.createStatement()) {
-                assertThat(queryStrings(statement, "SELECT body_text || '|' || (parent_update_id IS NULL)::text || '|' || (pinned_at IS NULL)::text FROM yumpoo.work_item_update"))
+            try (Connection connection = DriverManager.getConnection(
+                            jdbcUrl, postgresContainer.getUsername(), postgresContainer.getPassword());
+                    Statement statement = connection.createStatement()) {
+                assertThat(
+                                queryStrings(
+                                        statement,
+                                        "SELECT body_text || '|' || (parent_update_id IS NULL)::text || '|' || (pinned_at IS NULL)::text FROM yumpoo.work_item_update"))
                         .containsExactly("历史评论|true|true");
                 assertThat(queryStrings(statement, """
                         SELECT code || '|' || color_token || '|' || sort_order || '|'
@@ -799,23 +792,25 @@ class YumpooServerApplicationIT {
                         FROM yumpoo.content
                         WHERE project_id='48000000-0000-4000-8000-000000000002'
                         ORDER BY sort_order
-                        """)).containsExactly(
-                        "REQUIREMENTS|BRIGHT_BLUE|10|true|true|false",
-                        "TASKS|BRIGHT_GREEN|20|false|true|false",
-                        "DEFECTS|DARK_RED|30|false|true|false",
-                        "CUSTOM_TASK|BRIGHT_GREEN|40|false|false|true");
+                        """))
+                        .containsExactly(
+                                "REQUIREMENTS|BRIGHT_BLUE|10|true|true|false",
+                                "TASKS|BRIGHT_GREEN|20|false|true|false",
+                                "DEFECTS|DARK_RED|30|false|true|false",
+                                "CUSTOM_TASK|BRIGHT_GREEN|40|false|false|true");
                 assertThat(queryStrings(statement, """
                         SELECT rank || '|' || project_sort_key
                         FROM yumpoo.work_item
                         WHERE id='48000000-0000-4000-8000-000000000007'
-                        """)).containsExactly(
-                        "444444444444444444444444444444444444444|444444444444444444444444444444444444444");
+                        """))
+                        .containsExactly(
+                                "444444444444444444444444444444444444444|444444444444444444444444444444444444444");
                 assertThat(queryStrings(statement, """
                         SELECT project_id || '|' || status_code
                         FROM yumpoo.work_item_rank_lane
                         WHERE project_id='48000000-0000-4000-8000-000000000002'
-                        """)).containsExactly(
-                        "48000000-0000-4000-8000-000000000002|NOT_STARTED");
+                        """))
+                        .containsExactly("48000000-0000-4000-8000-000000000002|NOT_STARTED");
                 assertThat(queryStrings(statement, """
                         SELECT column_name FROM information_schema.columns
                         WHERE table_schema='yumpoo'
@@ -833,17 +828,17 @@ class YumpooServerApplicationIT {
     @Test
     void v37DatabaseUpgradesForwardThroughV48AndBackfillsBlobRegistry() throws Exception {
         String database = "yumpoo_m217_" + UUID.randomUUID().toString().replace("-", "");
-        Container.ExecResult created = postgresContainer.execInContainer(
-                "createdb", "-U", postgresContainer.getUsername(), database);
+        Container.ExecResult created =
+                postgresContainer.execInContainer("createdb", "-U", postgresContainer.getUsername(), database);
         assertThat(created.getExitCode()).as(created.getStderr()).isZero();
-        String jdbcUrl = postgresContainer.getJdbcUrl().replace(
-                "/" + postgresContainer.getDatabaseName(), "/" + database);
+        String jdbcUrl =
+                postgresContainer.getJdbcUrl().replace("/" + postgresContainer.getDatabaseName(), "/" + database);
         try {
             Flyway toV36 = migrationFlyway(jdbcUrl, "37");
             assertThat(toV36.migrate().targetSchemaVersion).hasToString("37");
-            try (Connection connection=DriverManager.getConnection(jdbcUrl,
-                    postgresContainer.getUsername(),postgresContainer.getPassword());
-                 Statement statement=connection.createStatement()) {
+            try (Connection connection = DriverManager.getConnection(
+                            jdbcUrl, postgresContainer.getUsername(), postgresContainer.getPassword());
+                    Statement statement = connection.createStatement()) {
                 statement.executeUpdate("""
                         INSERT INTO yumpoo.attachment (
                             id,company_id,quota_project_id,owner_type,owner_id,original_file_name,
@@ -864,11 +859,12 @@ class YumpooServerApplicationIT {
             }
 
             assertMigrateToLatest(migrationFlyway(jdbcUrl, null));
-            assertThat(migrationFlyway(jdbcUrl, null).validateWithResult().validationSuccessful).isTrue();
-            try (Connection connection=DriverManager.getConnection(jdbcUrl,
-                    postgresContainer.getUsername(),postgresContainer.getPassword());
-                 Statement statement=connection.createStatement();
-                 ResultSet result=statement.executeQuery("SELECT count(*) FROM yumpoo.attachment_blob")) {
+            assertThat(migrationFlyway(jdbcUrl, null).validateWithResult().validationSuccessful)
+                    .isTrue();
+            try (Connection connection = DriverManager.getConnection(
+                            jdbcUrl, postgresContainer.getUsername(), postgresContainer.getPassword());
+                    Statement statement = connection.createStatement();
+                    ResultSet result = statement.executeQuery("SELECT count(*) FROM yumpoo.attachment_blob")) {
                 assertThat(result.next()).isTrue();
                 assertThat(result.getInt(1)).isOne();
             }
@@ -897,24 +893,29 @@ class YumpooServerApplicationIT {
     }
 
     @Test
-    void additionalForwardMigrationIsDiscoveredWithoutUpdatingVersionAssertions(@TempDir Path extraMigrations) throws Exception {
+    void additionalForwardMigrationIsDiscoveredWithoutUpdatingVersionAssertions(@TempDir Path extraMigrations)
+            throws Exception {
         String database = "yumpoo_ci_" + UUID.randomUUID().toString().replace("-", "");
-        Container.ExecResult created = postgresContainer.execInContainer(
-                "createdb", "-U", postgresContainer.getUsername(), database);
+        Container.ExecResult created =
+                postgresContainer.execInContainer("createdb", "-U", postgresContainer.getUsername(), database);
         assertThat(created.getExitCode()).as(created.getStderr()).isZero();
-        String jdbcUrl = postgresContainer.getJdbcUrl().replace(
-                "/" + postgresContainer.getDatabaseName(), "/" + database);
+        String jdbcUrl =
+                postgresContainer.getJdbcUrl().replace("/" + postgresContainer.getDatabaseName(), "/" + database);
         try {
             migrationFlyway(jdbcUrl, null).migrate();
-            Files.writeString(extraMigrations.resolve("V1000__forward_evolution_probe.sql"),
-                    "CREATE TABLE yumpoo.forward_evolution_probe (id integer PRIMARY KEY);\n", StandardCharsets.UTF_8);
-            Flyway extended = Flyway.configure().configuration(migrationFlyway(jdbcUrl, null).getConfiguration())
-                    .locations("classpath:db/migration", "filesystem:" + extraMigrations.toAbsolutePath()).load();
+            Files.writeString(
+                    extraMigrations.resolve("V1000__forward_evolution_probe.sql"),
+                    "CREATE TABLE yumpoo.forward_evolution_probe (id integer PRIMARY KEY);\n",
+                    StandardCharsets.UTF_8);
+            Flyway extended = Flyway.configure()
+                    .configuration(migrationFlyway(jdbcUrl, null).getConfiguration())
+                    .locations("classpath:db/migration", "filesystem:" + extraMigrations.toAbsolutePath())
+                    .load();
             assertMigrateToLatest(extended);
-            try (Connection connection = DriverManager.getConnection(jdbcUrl,
-                    postgresContainer.getUsername(), postgresContainer.getPassword());
-                 Statement statement = connection.createStatement();
-                 ResultSet result = statement.executeQuery("SELECT count(*) FROM yumpoo.forward_evolution_probe")) {
+            try (Connection connection = DriverManager.getConnection(
+                            jdbcUrl, postgresContainer.getUsername(), postgresContainer.getPassword());
+                    Statement statement = connection.createStatement();
+                    ResultSet result = statement.executeQuery("SELECT count(*) FROM yumpoo.forward_evolution_probe")) {
                 assertThat(result.next()).isTrue();
                 assertThat(result.getInt(1)).isZero();
             }
@@ -929,10 +930,7 @@ class YumpooServerApplicationIT {
     void changedMigrationChecksumIsRejected(@TempDir Path migrationDirectory) throws IOException {
         Path migration = migrationDirectory.resolve("V1__create_checksum_probe.sql");
         Files.writeString(
-                migration,
-                "CREATE TABLE checksum_probe.probe (id integer PRIMARY KEY);\n",
-                StandardCharsets.UTF_8
-        );
+                migration, "CREATE TABLE checksum_probe.probe (id integer PRIMARY KEY);\n", StandardCharsets.UTF_8);
         Flyway original = checksumProbeFlyway(migrationDirectory);
 
         MigrateResult firstMigration = original.migrate();
@@ -940,9 +938,9 @@ class YumpooServerApplicationIT {
         Files.writeString(
                 migration,
                 "CREATE TABLE checksum_probe.probe (id integer PRIMARY KEY, note text);\n",
-                StandardCharsets.UTF_8
-        );
-        ValidateResult changedValidation = checksumProbeFlyway(migrationDirectory).validateWithResult();
+                StandardCharsets.UTF_8);
+        ValidateResult changedValidation =
+                checksumProbeFlyway(migrationDirectory).validateWithResult();
 
         assertThat(firstMigration.success).isTrue();
         assertThat(firstMigration.migrationsExecuted).isOne();
@@ -954,16 +952,15 @@ class YumpooServerApplicationIT {
     @Test
     void v46DatabaseUpgradesThroughV48AndKeepsTheFacetIndexContentFree() throws Exception {
         String database = "yumpoo_v47_" + UUID.randomUUID().toString().replace("-", "");
-        Container.ExecResult created = postgresContainer.execInContainer(
-                "createdb", "-U", postgresContainer.getUsername(), database);
+        Container.ExecResult created =
+                postgresContainer.execInContainer("createdb", "-U", postgresContainer.getUsername(), database);
         assertThat(created.getExitCode()).as(created.getStderr()).isZero();
-        String jdbcUrl = postgresContainer.getJdbcUrl().replace(
-                "/" + postgresContainer.getDatabaseName(), "/" + database);
+        String jdbcUrl =
+                postgresContainer.getJdbcUrl().replace("/" + postgresContainer.getDatabaseName(), "/" + database);
         try {
             MigrateResult toV46 = migrationFlyway(jdbcUrl, "46").migrate();
             assertThat(toV46.targetSchemaVersion).hasToString("46");
-            assertThat(cellActivityFacetIndexDefinition(jdbcUrl))
-                    .contains("actor_user_id, content_id, column_code");
+            assertThat(cellActivityFacetIndexDefinition(jdbcUrl)).contains("actor_user_id, content_id, column_code");
 
             Flyway latest = migrationFlyway(jdbcUrl, null);
             assertMigrateToLatest(latest);
@@ -979,14 +976,13 @@ class YumpooServerApplicationIT {
     }
 
     private Flyway checksumProbeFlyway(Path migrationDirectory) {
-        String location = "filesystem:"
-                + migrationDirectory.toAbsolutePath().toString().replace('\\', '/');
+        String location =
+                "filesystem:" + migrationDirectory.toAbsolutePath().toString().replace('\\', '/');
         return Flyway.configure()
                 .dataSource(
                         postgresContainer.getJdbcUrl(),
                         postgresContainer.getUsername(),
-                        postgresContainer.getPassword()
-                )
+                        postgresContainer.getPassword())
                 .locations(location)
                 .defaultSchema("checksum_probe")
                 .schemas("checksum_probe")
@@ -1012,10 +1008,10 @@ class YumpooServerApplicationIT {
     }
 
     private String cellActivityFacetIndexDefinition(String jdbcUrl) throws Exception {
-        try (Connection connection = DriverManager.getConnection(jdbcUrl,
-                postgresContainer.getUsername(), postgresContainer.getPassword());
-             Statement statement = connection.createStatement();
-             ResultSet result = statement.executeQuery("""
+        try (Connection connection = DriverManager.getConnection(
+                        jdbcUrl, postgresContainer.getUsername(), postgresContainer.getPassword());
+                Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("""
                      SELECT indexdef
                      FROM pg_indexes
                      WHERE schemaname = 'yumpoo'
@@ -1034,19 +1030,22 @@ class YumpooServerApplicationIT {
         return List.copyOf(values);
     }
 
-    private void verifyWorkspaceConsolidation(String label, String workspaceValues,
-            String expectedWorkspaceId, boolean includeProjects) throws Exception {
-        String database = "yumpoo_main_" + label + "_" + UUID.randomUUID().toString().replace("-", "");
-        Container.ExecResult created = postgresContainer.execInContainer(
-                "createdb", "-U", postgresContainer.getUsername(), database);
+    private void verifyWorkspaceConsolidation(
+            String label, String workspaceValues, String expectedWorkspaceId, boolean includeProjects)
+            throws Exception {
+        String database =
+                "yumpoo_main_" + label + "_" + UUID.randomUUID().toString().replace("-", "");
+        Container.ExecResult created =
+                postgresContainer.execInContainer("createdb", "-U", postgresContainer.getUsername(), database);
         assertThat(created.getExitCode()).as(created.getStderr()).isZero();
-        String jdbcUrl = postgresContainer.getJdbcUrl().replace(
-                "/" + postgresContainer.getDatabaseName(), "/" + database);
+        String jdbcUrl =
+                postgresContainer.getJdbcUrl().replace("/" + postgresContainer.getDatabaseName(), "/" + database);
         try {
-            assertThat(migrationFlyway(jdbcUrl, "31").migrate().targetSchemaVersion).hasToString("31");
-            try (Connection connection = DriverManager.getConnection(jdbcUrl,
-                    postgresContainer.getUsername(), postgresContainer.getPassword());
-                 Statement statement = connection.createStatement()) {
+            assertThat(migrationFlyway(jdbcUrl, "31").migrate().targetSchemaVersion)
+                    .hasToString("31");
+            try (Connection connection = DriverManager.getConnection(
+                            jdbcUrl, postgresContainer.getUsername(), postgresContainer.getPassword());
+                    Statement statement = connection.createStatement()) {
                 connection.setAutoCommit(false);
                 statement.execute("""
                         INSERT INTO yumpoo.identity_user (
@@ -1106,9 +1105,9 @@ class YumpooServerApplicationIT {
                 connection.commit();
             }
             assertMigrateToLatest(migrationFlyway(jdbcUrl, null));
-            try (Connection connection = DriverManager.getConnection(jdbcUrl,
-                    postgresContainer.getUsername(), postgresContainer.getPassword());
-                 Statement statement = connection.createStatement()) {
+            try (Connection connection = DriverManager.getConnection(
+                            jdbcUrl, postgresContainer.getUsername(), postgresContainer.getPassword());
+                    Statement statement = connection.createStatement()) {
                 try (ResultSet workspace = statement.executeQuery("""
                         SELECT id, code, sort_order, status, row_version FROM yumpoo.workspace
                         """)) {
@@ -1132,8 +1131,9 @@ class YumpooServerApplicationIT {
                         assertThat(projects.getInt("total")).isEqualTo(3);
                         assertThat(projects.getInt("workspace_count")).isOne();
                         assertThat(projects.getString("workspace_id")).isEqualTo(expectedWorkspaceId);
-                        assertThat(projects.getString("facts")).isEqualTo(
-                                "MIGRATE_ACTIVE:ACTIVE:8,MIGRATE_ARCHIVED:ARCHIVED:9,MIGRATE_DRAFT:ACTIVE:7");
+                        assertThat(projects.getString("facts"))
+                                .isEqualTo(
+                                        "MIGRATE_ACTIVE:ACTIVE:8,MIGRATE_ARCHIVED:ARCHIVED:9,MIGRATE_DRAFT:ACTIVE:7");
                     }
                 }
             }
@@ -1145,11 +1145,11 @@ class YumpooServerApplicationIT {
     }
 
     private List<String> workItemIndexes(String jdbcUrl) throws Exception {
-        try (Connection connection = DriverManager.getConnection(jdbcUrl,
-                postgresContainer.getUsername(), postgresContainer.getPassword());
-             Statement statement = connection.createStatement();
-             ResultSet result = statement.executeQuery("SELECT indexname FROM pg_indexes "
-                     + "WHERE schemaname='yumpoo' AND tablename='work_item' ORDER BY indexname")) {
+        try (Connection connection = DriverManager.getConnection(
+                        jdbcUrl, postgresContainer.getUsername(), postgresContainer.getPassword());
+                Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("SELECT indexname FROM pg_indexes "
+                        + "WHERE schemaname='yumpoo' AND tablename='work_item' ORDER BY indexname")) {
             List<String> indexes = new java.util.ArrayList<>();
             while (result.next()) indexes.add(result.getString(1));
             return List.copyOf(indexes);
@@ -1157,11 +1157,11 @@ class YumpooServerApplicationIT {
     }
 
     private List<String> workItemUpdateIndexes(String jdbcUrl) throws Exception {
-        try (Connection connection = DriverManager.getConnection(jdbcUrl,
-                postgresContainer.getUsername(), postgresContainer.getPassword());
-             Statement statement = connection.createStatement();
-             ResultSet result = statement.executeQuery("SELECT indexname FROM pg_indexes "
-                     + "WHERE schemaname='yumpoo' AND tablename='work_item_update' ORDER BY indexname")) {
+        try (Connection connection = DriverManager.getConnection(
+                        jdbcUrl, postgresContainer.getUsername(), postgresContainer.getPassword());
+                Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("SELECT indexname FROM pg_indexes "
+                        + "WHERE schemaname='yumpoo' AND tablename='work_item_update' ORDER BY indexname")) {
             List<String> indexes = new java.util.ArrayList<>();
             while (result.next()) indexes.add(result.getString(1));
             return List.copyOf(indexes);
@@ -1169,12 +1169,12 @@ class YumpooServerApplicationIT {
     }
 
     private List<String> generatedWorkItemColumns(String jdbcUrl) throws Exception {
-        try (Connection connection = DriverManager.getConnection(jdbcUrl,
-                postgresContainer.getUsername(), postgresContainer.getPassword());
-             Statement statement = connection.createStatement();
-             ResultSet result = statement.executeQuery("SELECT column_name FROM "
-                     + "information_schema.columns WHERE table_schema='yumpoo' "
-                     + "AND table_name='work_item' AND is_generated='ALWAYS' ORDER BY column_name")) {
+        try (Connection connection = DriverManager.getConnection(
+                        jdbcUrl, postgresContainer.getUsername(), postgresContainer.getPassword());
+                Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("SELECT column_name FROM "
+                        + "information_schema.columns WHERE table_schema='yumpoo' "
+                        + "AND table_name='work_item' AND is_generated='ALWAYS' ORDER BY column_name")) {
             List<String> columns = new java.util.ArrayList<>();
             while (result.next()) columns.add(result.getString(1));
             return List.copyOf(columns);
@@ -1182,22 +1182,22 @@ class YumpooServerApplicationIT {
     }
 
     private boolean workItemPriorityNullable(String jdbcUrl) throws Exception {
-        try (Connection connection = DriverManager.getConnection(jdbcUrl,
-                postgresContainer.getUsername(), postgresContainer.getPassword());
-             Statement statement = connection.createStatement();
-             ResultSet result = statement.executeQuery("SELECT is_nullable='YES' FROM "
-                     + "information_schema.columns WHERE table_schema='yumpoo' "
-                     + "AND table_name='work_item' AND column_name='priority'")) {
+        try (Connection connection = DriverManager.getConnection(
+                        jdbcUrl, postgresContainer.getUsername(), postgresContainer.getPassword());
+                Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("SELECT is_nullable='YES' FROM "
+                        + "information_schema.columns WHERE table_schema='yumpoo' "
+                        + "AND table_name='work_item' AND column_name='priority'")) {
             assertThat(result.next()).isTrue();
             return result.getBoolean(1);
         }
     }
 
     private List<String> workspaceFacts(String jdbcUrl) throws Exception {
-        try (Connection connection = DriverManager.getConnection(jdbcUrl,
-                postgresContainer.getUsername(), postgresContainer.getPassword());
-             Statement statement = connection.createStatement();
-             ResultSet result = statement.executeQuery("""
+        try (Connection connection = DriverManager.getConnection(
+                        jdbcUrl, postgresContainer.getUsername(), postgresContainer.getPassword());
+                Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery("""
                      SELECT code || '|' || sort_order || '|' || status || '|' || count(*) OVER ()
                      FROM yumpoo.workspace ORDER BY company_id
                      """)) {
@@ -1208,10 +1208,7 @@ class YumpooServerApplicationIT {
     }
 
     private int migrationHistoryCount() {
-        return jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM yumpoo.flyway_schema_history",
-                Integer.class
-        );
+        return jdbcTemplate.queryForObject("SELECT count(*) FROM yumpoo.flyway_schema_history", Integer.class);
     }
 
     private HttpResponse<String> get(String path) throws IOException, InterruptedException {

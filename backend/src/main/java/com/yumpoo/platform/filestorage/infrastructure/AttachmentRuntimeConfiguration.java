@@ -1,18 +1,17 @@
 package com.yumpoo.platform.filestorage.infrastructure;
 
 import com.yumpoo.platform.filestorage.application.AttachmentContentDetector;
-import com.yumpoo.platform.filestorage.application.QuarantineStorage;
 import com.yumpoo.platform.filestorage.application.AttachmentRuntimeSettings;
+import com.yumpoo.platform.filestorage.application.QuarantineStorage;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.Path;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.LinkOption;
-import java.nio.file.Path;
 
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(AttachmentProperties.class)
@@ -20,24 +19,26 @@ public class AttachmentRuntimeConfiguration {
     @Bean
     AttachmentRuntimeSettings attachmentRuntimeSettings(AttachmentProperties properties) {
         validateMaintenance(properties);
-        return new AttachmentRuntimeSettings(properties.getCompanyQuotaBytes(),
-                properties.getProjectQuotaBytes(), properties.getScanLease(),
+        return new AttachmentRuntimeSettings(
+                properties.getCompanyQuotaBytes(),
+                properties.getProjectQuotaBytes(),
+                properties.getScanLease(),
                 properties.getUploadLease());
     }
 
     private static void validateMaintenance(AttachmentProperties properties) {
-        if(properties.isCleanupDeleteEnabled()
-                &&(properties.getCleanupApprovalReference()==null
-                ||properties.getCleanupApprovalReference().isBlank())) {
+        if (properties.isCleanupDeleteEnabled()
+                && (properties.getCleanupApprovalReference() == null
+                        || properties.getCleanupApprovalReference().isBlank())) {
             throw new IllegalStateException("attachment cleanup deletion requires a non-empty approval reference");
         }
-        if(properties.getMaintenanceBatchSize()<1||properties.getMaintenanceBatchSize()>100) {
+        if (properties.getMaintenanceBatchSize() < 1 || properties.getMaintenanceBatchSize() > 100) {
             throw new IllegalStateException("attachment maintenance batch size must be between 1 and 100");
         }
     }
+
     @Bean
-    QuarantineStorage attachmentStorage(AttachmentProperties properties,
-            Environment environment) throws IOException {
+    QuarantineStorage attachmentStorage(AttachmentProperties properties, Environment environment) throws IOException {
         Path uploadRoot = Path.of(properties.getUploadTempRoot());
         Path attachmentRoot = Path.of(properties.getAttachmentRoot());
         if (environment.acceptsProfiles(Profiles.of("prod"))) {
@@ -53,10 +54,9 @@ public class AttachmentRuntimeConfiguration {
     }
 
     private static void requirePrevalidatedDirectory(Path directory, String property) {
-        if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)
-                || Files.isSymbolicLink(directory)) {
-            throw new IllegalStateException("production attachment " + property
-                    + " must be an existing real directory");
+        if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(directory)) {
+            throw new IllegalStateException(
+                    "production attachment " + property + " must be an existing real directory");
         }
     }
 }

@@ -1,7 +1,7 @@
 package com.yumpoo.platform.identityaccess.application.directory;
 
-import java.util.List;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Objects;
 
 public record DirectoryScanResult(
@@ -9,15 +9,13 @@ public record DirectoryScanResult(
         CursorTerminationMode terminationMode,
         int pageCount,
         String memberSetHash,
-        String pageTrajectoryHash
-) {
+        String pageTrajectoryHash) {
 
     public DirectoryScanResult {
         Objects.requireNonNull(externalUserIds, "externalUserIds must not be null");
         externalUserIds = List.copyOf(externalUserIds);
         for (String externalUserId : externalUserIds) {
-            if (externalUserId == null || externalUserId.isBlank()
-                    || externalUserId.length() > 256) {
+            if (externalUserId == null || externalUserId.isBlank() || externalUserId.length() > 256) {
                 throw new IllegalArgumentException("externalUserIds contains an invalid ID");
             }
         }

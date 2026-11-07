@@ -101,11 +101,15 @@ code {
   z-index: 30;
   display: flex;
   grid-area: rail;
+  overflow-y: auto;
+  scrollbar-width: none;
   flex-direction: column;
   align-items: center;
   border-right: 1px solid var(--yp-border-default);
   background: var(--yp-bg-surface);
 }
+
+.module-rail::-webkit-scrollbar { display: none; }
 
 .module-rail__brand,
 .module-rail__item,
@@ -196,6 +200,17 @@ code {
   width: 20px;
   height: 20px;
   font-size: 20px;
+}
+
+/* 矮视口：模块栏最多 8 项，收紧行高与间距，仍放不下时模块栏内滚动。断点与工作台菜单的矮视口规则一致。 */
+@media (min-width: 960px) and (max-height: 820px) {
+  .module-rail__items { gap: var(--yp-space-1); margin-top: var(--yp-space-4); }
+  .module-rail__item, .module-rail__expand { height: 44px; }
+  .module-rail__expand { top: -52px; }
+  .module-rail__items--shifted { transform: translateY(52px); }
+  /* 44px 放不下图标、名称与告警数三行，告警数改为右上角标。 */
+  .module-rail__item { position: relative; }
+  .module-rail__item .operations-badge { position: absolute; top: 2px; right: 2px; }
 }
 
 .app-topbar {

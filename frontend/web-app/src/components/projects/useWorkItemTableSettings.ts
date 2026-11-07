@@ -47,6 +47,7 @@ function apply(base: TableSettings, patch: SettingsPatch): TableSettings {
   return {
     pinnedColumnCount: base.pinnedColumnCount, headerHeight: base.headerHeight, rowHeight: base.rowHeight,
     coloringRules: base.coloringRules, grouping: base.grouping, completedStatusCodes: base.completedStatusCodes,
+    subitemPinnedColumnCount: base.subitemPinnedColumnCount ?? 0,
     ...patch, defaultValues: { ...base.defaultValues, ...patch.defaultValues },
   }
 }
@@ -173,7 +174,8 @@ export function useWorkItemTableSettings(projectId: () => string) {
     void flush(current)
   }
 
-  watch(projectId, () => void load(), { immediate: true })
+  let projectLoad: Promise<void>
+  watch(projectId, () => { projectLoad = load() }, { immediate: true })
   onBeforeUnmount(() => { revision++; if (current) void flush(current) })
-  return { settings, state, saveState, saveError, load, update, retrySave }
+  return { settings, state, saveState, saveError, load, update, retrySave, whenLoaded: () => projectLoad }
 }

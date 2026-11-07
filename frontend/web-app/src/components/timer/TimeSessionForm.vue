@@ -137,21 +137,26 @@ function setOffset(value: number) {
       :item-count="1"
       @update:model-value="setMode"
     />
-    <div class="existing-sessions">
-      <strong>该时段已有记录</strong>
+    <div
+      v-if="range"
+      class="existing-sessions"
+    >
       <span v-if="existingLoading">正在加载…</span>
       <span v-else-if="existingProblem">{{ existingProblem }}</span>
-      <ul v-else-if="existing.length">
-        <li
-          v-for="item in existing.slice(0, 3)"
-          :key="item.session.id"
-        >
-          {{ clock(item.session.startedAt) }}–{{ item.session.stoppedAt ? clock(item.session.stoppedAt) : '计时中' }} {{ item.itemNo ? `#${item.itemNo} ` : '' }}{{ item.title ?? '不可见工作项' }}
-        </li>
-        <li v-if="existing.length > 3">
-          等 {{ existing.length }} 条
-        </li>
-      </ul>
+      <template v-else-if="existing.length">
+        <strong>该时段已有记录</strong>
+        <ul>
+          <li
+            v-for="item in existing.slice(0, 3)"
+            :key="item.session.id"
+          >
+            {{ clock(item.session.startedAt) }}–{{ item.session.stoppedAt ? clock(item.session.stoppedAt) : '计时中' }} {{ item.itemNo ? `#${item.itemNo} ` : '' }}{{ item.title ?? '不可见工作项' }}
+          </li>
+          <li v-if="existing.length > 3">
+            等 {{ existing.length }} 条
+          </li>
+        </ul>
+      </template>
       <span v-else>暂无记录</span>
     </div>
     <p

@@ -2,7 +2,6 @@ package com.yumpoo.platform.identityaccess.application.oauth;
 
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
-
 import java.net.URI;
 import java.time.Clock;
 import java.time.Duration;
@@ -34,8 +33,7 @@ public final class WeComOAuthVerificationService {
             OAuthAttemptHasher attemptHasher,
             Clock clock,
             String expectedCorpId,
-            Set<String> allowedMemberIds
-    ) {
+            Set<String> allowedMemberIds) {
         this(
                 attemptStore,
                 identityGateway,
@@ -44,8 +42,7 @@ public final class WeComOAuthVerificationService {
                 clock,
                 DEFAULT_ATTEMPT_TTL,
                 expectedCorpId,
-                allowedMemberIds
-        );
+                allowedMemberIds);
     }
 
     public WeComOAuthVerificationService(
@@ -56,8 +53,7 @@ public final class WeComOAuthVerificationService {
             Clock clock,
             Duration attemptTtl,
             String expectedCorpId,
-            Set<String> allowedMemberIds
-    ) {
+            Set<String> allowedMemberIds) {
         this.attemptStore = Objects.requireNonNull(attemptStore, "attemptStore must not be null");
         this.identityGateway = Objects.requireNonNull(identityGateway, "identityGateway must not be null");
         this.tokenGenerator = Objects.requireNonNull(tokenGenerator, "tokenGenerator must not be null");
@@ -82,9 +78,7 @@ public final class WeComOAuthVerificationService {
         URI authorizationUri;
         try {
             authorizationUri = Objects.requireNonNull(
-                    identityGateway.buildAuthorizationUri(state.value()),
-                    "authorization URI must not be null"
-            );
+                    identityGateway.buildAuthorizationUri(state.value()), "authorization URI must not be null");
         } catch (WeComAuthenticationFailedException exception) {
             throw authenticationRequired();
         } catch (WeComDependencyUnavailableException exception) {
@@ -93,32 +87,19 @@ public final class WeComOAuthVerificationService {
             throw dependencyUnavailable();
         }
 
-        attemptStore.create(new OAuthAttempt(
-                stateHash,
-                nonceHash,
-                requestId,
-                createdAt,
-                expiresAt
-        ));
+        attemptStore.create(new OAuthAttempt(stateHash, nonceHash, requestId, createdAt, expiresAt));
         return new WeComOAuthAuthorization(authorizationUri, state, nonce, expiresAt);
     }
 
-    public VerifiedWeComIdentity verify(
-            String authorizationCode,
-            String state,
-            String nonce
-    ) {
+    public VerifiedWeComIdentity verify(String authorizationCode, String state, String nonce) {
         OAuthAttemptToken stateToken = parseCallbackToken(state);
         OAuthAttemptToken nonceToken = parseCallbackToken(nonce);
         if (!validAuthorizationCode(authorizationCode)) {
             throw authenticationRequired();
         }
 
-        boolean consumed = attemptStore.consume(
-                attemptHasher.hash(stateToken),
-                attemptHasher.hash(nonceToken),
-                clock.instant()
-        );
+        boolean consumed =
+                attemptStore.consume(attemptHasher.hash(stateToken), attemptHasher.hash(nonceToken), clock.instant());
         if (!consumed) {
             throw authenticationRequired();
         }
@@ -126,9 +107,7 @@ public final class WeComOAuthVerificationService {
         WeComMemberIdentity identity;
         try {
             identity = Objects.requireNonNull(
-                    identityGateway.exchangeCode(authorizationCode),
-                    "WeCom identity must not be null"
-            );
+                    identityGateway.exchangeCode(authorizationCode), "WeCom identity must not be null");
         } catch (WeComAuthenticationFailedException exception) {
             throw authenticationRequired();
         } catch (WeComDependencyUnavailableException exception) {
@@ -137,8 +116,7 @@ public final class WeComOAuthVerificationService {
             throw dependencyUnavailable();
         }
 
-        if (!expectedCorpId.equals(identity.corpId())
-                || !allowedMemberIds.contains(identity.memberId())) {
+        if (!expectedCorpId.equals(identity.corpId()) || !allowedMemberIds.contains(identity.memberId())) {
             throw authenticationRequired();
         }
         return new VerifiedWeComIdentity(identity.corpId(), identity.memberId());

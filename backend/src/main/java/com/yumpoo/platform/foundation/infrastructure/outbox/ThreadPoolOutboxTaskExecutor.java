@@ -1,11 +1,10 @@
 package com.yumpoo.platform.foundation.infrastructure.outbox;
 
 import com.yumpoo.platform.foundation.application.outbox.OutboxTaskExecutor;
-import org.springframework.beans.factory.DisposableBean;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
-
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import org.springframework.beans.factory.DisposableBean;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 final class ThreadPoolOutboxTaskExecutor implements OutboxTaskExecutor, DisposableBean {
 

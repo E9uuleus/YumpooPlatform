@@ -2,6 +2,11 @@ package com.yumpoo.platform.filestorage.testing;
 
 import com.yumpoo.platform.filestorage.application.AttachmentUploadPolicy;
 import jakarta.servlet.http.HttpServletRequest;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.OptionalLong;
+import java.util.UUID;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ContentDisposition;
@@ -19,12 +24,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.util.OptionalLong;
-import java.util.UUID;
-
 /** Test-only HTTP 探针；不打包进生产 JAR，也不进入正式 OpenAPI paths。 */
 @Profile("m0-14-probe")
 @RestController
@@ -41,33 +40,20 @@ public final class M014AttachmentProbeController {
 
     @PostMapping
     ResponseEntity<M014AttachmentProbeService.Metadata> createIntent(
-            @RequestHeader(ACTOR_HEADER) UUID actorId,
-            @RequestBody CreateIntentRequest request
-    ) {
-        M014AttachmentProbeService.Metadata metadata = service.createIntent(
-                request.ownerId(),
-                actorId,
-                request.fileName(),
-                request.declaredMime()
-        );
+            @RequestHeader(ACTOR_HEADER) UUID actorId, @RequestBody CreateIntentRequest request) {
+        M014AttachmentProbeService.Metadata metadata =
+                service.createIntent(request.ownerId(), actorId, request.fileName(), request.declaredMime());
         return ResponseEntity.status(HttpStatus.CREATED)
-                .header(
-                        HttpHeaders.LOCATION,
-                        "/api/v1/__test/m0-14/attachments/" + metadata.id()
-                )
+                .header(HttpHeaders.LOCATION, "/api/v1/__test/m0-14/attachments/" + metadata.id())
                 .body(metadata);
     }
 
     @PutMapping(path = "/{attachmentId}/content", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE)
     ResponseEntity<M014AttachmentProbeService.Metadata> uploadContent(
-            @PathVariable UUID attachmentId,
-            @RequestHeader(ACTOR_HEADER) UUID actorId,
-            HttpServletRequest request
-    ) throws IOException {
+            @PathVariable UUID attachmentId, @RequestHeader(ACTOR_HEADER) UUID actorId, HttpServletRequest request)
+            throws IOException {
         long declaredLength = request.getContentLengthLong();
-        OptionalLong contentLength = declaredLength < 0
-                ? OptionalLong.empty()
-                : OptionalLong.of(declaredLength);
+        OptionalLong contentLength = declaredLength < 0 ? OptionalLong.empty() : OptionalLong.of(declaredLength);
         M014AttachmentProbeService.Metadata metadata;
         try (InputStream input = request.getInputStream()) {
             metadata = service.receive(attachmentId, actorId, input, contentLength);
@@ -77,21 +63,14 @@ public final class M014AttachmentProbeController {
 
     @GetMapping("/{attachmentId}")
     M014AttachmentProbeService.Metadata metadata(
-            @PathVariable UUID attachmentId,
-            @RequestHeader(ACTOR_HEADER) UUID actorId
-    ) {
+            @PathVariable UUID attachmentId, @RequestHeader(ACTOR_HEADER) UUID actorId) {
         return service.findMetadata(attachmentId, actorId);
     }
 
     @GetMapping("/{attachmentId}/content")
     ResponseEntity<StreamingResponseBody> download(
-            @PathVariable UUID attachmentId,
-            @RequestHeader(ACTOR_HEADER) UUID actorId
-    ) {
-        M014AttachmentProbeService.Download download = service.openDownload(
-                attachmentId,
-                actorId
-        );
+            @PathVariable UUID attachmentId, @RequestHeader(ACTOR_HEADER) UUID actorId) {
+        M014AttachmentProbeService.Download download = service.openDownload(attachmentId, actorId);
         StreamingResponseBody body = output -> {
             try (InputStream input = download.inputStream()) {
                 byte[] buffer = new byte[AttachmentUploadPolicy.BUFFER_BYTES];
@@ -113,15 +92,9 @@ public final class M014AttachmentProbeController {
                         ContentDisposition.attachment()
                                 .filename(download.fileName(), StandardCharsets.UTF_8)
                                 .build()
-                                .toString()
-                )
+                                .toString())
                 .body(body);
     }
 
-    public record CreateIntentRequest(
-            UUID ownerId,
-            String fileName,
-            String declaredMime
-    ) {
-    }
+    public record CreateIntentRequest(UUID ownerId, String fileName, String declaredMime) {}
 }

@@ -1,13 +1,8 @@
 package com.yumpoo.platform.foundation.consistency;
 
-import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
-import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Import;
-import org.springframework.test.annotation.DirtiesContext;
-import org.testcontainers.postgresql.PostgreSQLContainer;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import com.yumpoo.platform.testing.DedicatedPostgreSqlContainerConfiguration;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -15,23 +10,22 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.annotation.DirtiesContext;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
-@Import(PostgreSqlTestContainerConfiguration.class)
+@Import(DedicatedPostgreSqlContainerConfiguration.class)
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = {
-                "yumpoo.m016.readiness-failure-probe=true",
-                "spring.datasource.hikari.connection-timeout=1000"
-        }
-)
+        properties = {"yumpoo.m016.readiness-failure-probe=true", "spring.datasource.hikari.connection-timeout=1000"})
 class M016ReadinessFailureIT {
 
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(2))
-            .build();
+    private final HttpClient httpClient =
+            HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
 
     @LocalServerPort
     private int port;

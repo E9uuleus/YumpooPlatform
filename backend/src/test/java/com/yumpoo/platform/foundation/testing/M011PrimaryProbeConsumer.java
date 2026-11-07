@@ -5,14 +5,13 @@ import com.yumpoo.platform.foundation.application.event.EventSubscription;
 import com.yumpoo.platform.foundation.application.event.OutboxEventConsumer;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelation;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelationContext;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Component;
-
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Component;
 
 @Component
 public class M011PrimaryProbeConsumer implements OutboxEventConsumer {
@@ -54,7 +53,8 @@ public class M011PrimaryProbeConsumer implements OutboxEventConsumer {
 
     private void insertProjection(DomainEventEnvelope event, String consumerName) {
         RequestCorrelation correlation = RequestCorrelationContext.required();
-        jdbcClient.sql("""
+        jdbcClient
+                .sql("""
                         INSERT INTO yumpoo.m011_projection (
                             consumer_name, event_id, probe_id, request_id,
                             correlation_id, consumer_causation_id, created_at

@@ -10,8 +10,7 @@ public record GovernanceMemberState(
         String accountStatus,
         Set<ManagedPlatformRole> platformRoles,
         long authorizationVersion,
-        long rowVersion
-) {
+        long rowVersion) {
     public GovernanceMemberState {
         platformRoles = Set.copyOf(platformRoles);
     }

@@ -1,5 +1,7 @@
 package com.yumpoo.platform.administration.api;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.yumpoo.platform.foundation.application.request.RequestCorrelation;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelationContext;
 import com.yumpoo.platform.identityaccess.api.PlatformRoleCode;
@@ -14,54 +16,64 @@ import com.yumpoo.platform.identityaccess.application.session.IssuedSession;
 import com.yumpoo.platform.identityaccess.application.session.SessionService;
 import com.yumpoo.platform.identityaccess.application.verification.IdentityAcceptanceFixtureProvisioner;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
-import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
-import tools.jackson.databind.ObjectMapper;
-
+import com.yumpoo.platform.testing.HttpIntegrationTest;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Clock;
 import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+import tools.jackson.databind.ObjectMapper;
 
 @ActiveProfiles("test")
-@Import(PostgreSqlTestContainerConfiguration.class)
-@SpringBootTest(
-        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "yumpoo.outbox.enabled=false"
-)
+@HttpIntegrationTest
 class ProjectCreationHttpIT {
 
     private static final UUID COMPANY_ID = UUID.fromString("00000000-0000-4000-8000-000000000001");
     private static final String SESSION_COOKIE = "__Host-yumpoo-session";
     private static final String CSRF_COOKIE = "__Host-yumpoo-csrf";
 
-    private final HttpClient client = HttpClient.newBuilder()
-            .followRedirects(HttpClient.Redirect.NEVER).build();
+    private final HttpClient client =
+            HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build();
 
-    @LocalServerPort private int port;
-    @Autowired private IdentityAcceptanceFixtureProvisioner provisioner;
-    @Autowired private PlatformRoleMaintenanceUseCase maintenanceUseCase;
-    @Autowired private PlatformRoleCommandPort roleCommands;
-    @Autowired private CompanyConfigurationQuery companyQuery;
-    @Autowired private SessionService sessionService;
-    @Autowired private JdbcClient jdbcClient;
-    @Autowired private Clock clock;
-    @Autowired private ObjectMapper objectMapper;
-    @Autowired private PlatformTransactionManager transactionManager;
+    @LocalServerPort
+    private int port;
+
+    @Autowired
+    private IdentityAcceptanceFixtureProvisioner provisioner;
+
+    @Autowired
+    private PlatformRoleMaintenanceUseCase maintenanceUseCase;
+
+    @Autowired
+    private PlatformRoleCommandPort roleCommands;
+
+    @Autowired
+    private CompanyConfigurationQuery companyQuery;
+
+    @Autowired
+    private SessionService sessionService;
+
+    @Autowired
+    private JdbcClient jdbcClient;
+
+    @Autowired
+    private Clock clock;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
 
     private ActorFixture member;
     private ActorFixture admin;
@@ -69,26 +81,29 @@ class ProjectCreationHttpIT {
     @BeforeEach
     void setUp() {
         cleanUp();
-        try (RequestCorrelationContext.Scope ignored = RequestCorrelationContext.open(
-                RequestCorrelation.root("m204-http-" + UUID.randomUUID()))) {
-            DirectoryMemberProvisioningResult memberUser = provisioner.provision(
-                    "m204-member", "M2-04 Member");
-            DirectoryMemberProvisioningResult managerUser = provisioner.provision(
-                    "m204-manager", "M2-04 App Manager");
-            DirectoryMemberProvisioningResult adminUser = provisioner.provision(
-                    "m204-admin", "M2-04 Company Admin");
+        try (RequestCorrelationContext.Scope ignored =
+                RequestCorrelationContext.open(RequestCorrelation.root("m204-http-" + UUID.randomUUID()))) {
+            DirectoryMemberProvisioningResult memberUser = provisioner.provision("m204-member", "M2-04 Member");
+            DirectoryMemberProvisioningResult managerUser = provisioner.provision("m204-manager", "M2-04 App Manager");
+            DirectoryMemberProvisioningResult adminUser = provisioner.provision("m204-admin", "M2-04 Company Admin");
 
             var managerRole = maintenanceUseCase.execute(new MaintenanceRoleCommand(
-                    companyQuery.current().companyId(), managerUser.userId(),
-                    MaintenanceRoleMode.BOOTSTRAP, "M2-04 HTTP fixture"));
+                    companyQuery.current().companyId(),
+                    managerUser.userId(),
+                    MaintenanceRoleMode.BOOTSTRAP,
+                    "M2-04 HTTP fixture"));
             roleCommands.grant(new PlatformRoleGrantCommand(
-                    COMPANY_ID, adminUser.userId(), PlatformRoleCode.COMPANY_ADMIN,
-                    adminUser.rowVersion(), new PlatformRoleCommandActor(
-                    managerUser.userId(), managerRole.authorizationVersion(), clock.instant()),
-                    UUID.randomUUID(), "a".repeat(64), "M2-04 HTTP fixture"));
+                    COMPANY_ID,
+                    adminUser.userId(),
+                    PlatformRoleCode.COMPANY_ADMIN,
+                    adminUser.rowVersion(),
+                    new PlatformRoleCommandActor(
+                            managerUser.userId(), managerRole.authorizationVersion(), clock.instant()),
+                    UUID.randomUUID(),
+                    "a".repeat(64),
+                    "M2-04 HTTP fixture"));
             member = actor(memberUser.userId());
             admin = actor(adminUser.userId());
-
         }
     }
 
@@ -117,9 +132,9 @@ class ProjectCreationHttpIT {
             HttpResponse<String> created = post(body, member, key, true);
             assertThat(created.statusCode()).as("body=%s", created.body()).isEqualTo(201);
             assertThat(created.headers().firstValue("etag")).contains("\"0\"");
-            assertThat(created.headers().firstValue("location").orElseThrow())
-                    .startsWith("/api/v1/projects/");
-            assertThat(created.body()).contains("\"lifecycle\":\"ACTIVE\"", "\"rowVersion\":0")
+            assertThat(created.headers().firstValue("location").orElseThrow()).startsWith("/api/v1/projects/");
+            assertThat(created.body())
+                    .contains("\"lifecycle\":\"ACTIVE\"", "\"rowVersion\":0")
                     .doesNotContain("contents", "contentCount");
 
             HttpResponse<String> replay = post(body, member, key, true);
@@ -129,33 +144,50 @@ class ProjectCreationHttpIT {
             assertThat(replay.body()).isEqualTo(created.body());
         }
         assertThat(projectCount()).isEqualTo(4);
-        assertThat(jdbcClient.sql("SELECT count(*) FROM yumpoo.content")
-                .query(Integer.class).single()).isEqualTo(12);
+        assertThat(jdbcClient
+                        .sql("SELECT count(*) FROM yumpoo.content")
+                        .query(Integer.class)
+                        .single())
+                .isEqualTo(12);
     }
 
     @Test
     void removedRequestFieldsAreRejectedAndIdempotencyKeyReuseIsStable() throws Exception {
-        for (String field : java.util.List.of("code", "workspaceId", "projectType", "ownerUserId", "templateKey",
-                "templateVersion", "customerName", "customerReference", "deliverySite", "contactNote")) {
-            var input=objectMapper.createObjectNode().put("name","Rejected").put(field,"deleted");
-            var response=post(objectMapper.writeValueAsString(input),member,UUID.randomUUID(),true);
-            assertThat(response.statusCode()).as("field=%s body=%s",field,response.body()).isIn(400,422);
+        for (String field : java.util.List.of(
+                "code",
+                "workspaceId",
+                "projectType",
+                "ownerUserId",
+                "templateKey",
+                "templateVersion",
+                "customerName",
+                "customerReference",
+                "deliverySite",
+                "contactNote")) {
+            var input = objectMapper.createObjectNode().put("name", "Rejected").put(field, "deleted");
+            var response = post(objectMapper.writeValueAsString(input), member, UUID.randomUUID(), true);
+            assertThat(response.statusCode())
+                    .as("field=%s body=%s", field, response.body())
+                    .isIn(400, 422);
         }
-        UUID key=UUID.randomUUID();
-        assertThat(post("{\"name\":\"First\"}",member,key,true).statusCode()).isEqualTo(201);
-        var reused=post("{\"name\":\"Second\"}",member,key,true);
+        UUID key = UUID.randomUUID();
+        assertThat(post("{\"name\":\"First\"}", member, key, true).statusCode()).isEqualTo(201);
+        var reused = post("{\"name\":\"Second\"}", member, key, true);
         assertThat(reused.statusCode()).isEqualTo(409);
         assertThat(reused.body()).contains("IDEMPOTENCY_KEY_REUSED");
     }
 
     @Test
     void removedActivationEndpointDoesNotExist() throws Exception {
-        var created=post("{\"name\":\"Active\"}",member,UUID.randomUUID(),true);
-        String id=objectMapper.readTree(created.body()).path("id").asText();
-        var request=HttpRequest.newBuilder(uri("/api/v1/projects/"+id+"/activate"))
-                .header("Cookie",cookies(member)).header("X-XSRF-TOKEN",member.session().csrfCredential().value())
-                .POST(HttpRequest.BodyPublishers.noBody()).build();
-        assertThat(client.send(request,HttpResponse.BodyHandlers.ofString()).statusCode()).isIn(404,405);
+        var created = post("{\"name\":\"Active\"}", member, UUID.randomUUID(), true);
+        String id = objectMapper.readTree(created.body()).path("id").asText();
+        var request = HttpRequest.newBuilder(uri("/api/v1/projects/" + id + "/activate"))
+                .header("Cookie", cookies(member))
+                .header("X-XSRF-TOKEN", member.session().csrfCredential().value())
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build();
+        assertThat(client.send(request, HttpResponse.BodyHandlers.ofString()).statusCode())
+                .isIn(404, 405);
     }
 
     private void assertValidation(String body, UUID key, String field, String reason) throws Exception {
@@ -168,9 +200,8 @@ class ProjectCreationHttpIT {
         return new ActorFixture(userId, sessionService.issueWebSession(userId, "m204-http"));
     }
 
-    private HttpResponse<String> post(
-            String json, ActorFixture actor, UUID idempotencyKey, boolean includeCsrf
-    ) throws Exception {
+    private HttpResponse<String> post(String json, ActorFixture actor, UUID idempotencyKey, boolean includeCsrf)
+            throws Exception {
         HttpRequest.Builder request = HttpRequest.newBuilder(uri("/api/v1/projects"))
                 .header("Content-Type", "application/json")
                 .header("Idempotency-Key", idempotencyKey.toString());
@@ -180,8 +211,8 @@ class ProjectCreationHttpIT {
                 request.header("X-XSRF-TOKEN", actor.session().csrfCredential().value());
             }
         }
-        return client.send(request.POST(HttpRequest.BodyPublishers.ofString(json)).build(),
-                HttpResponse.BodyHandlers.ofString());
+        return client.send(
+                request.POST(HttpRequest.BodyPublishers.ofString(json)).build(), HttpResponse.BodyHandlers.ofString());
     }
 
     private URI uri(String path) {
@@ -196,44 +227,66 @@ class ProjectCreationHttpIT {
     }
 
     private static String cookies(ActorFixture actor) {
-        return SESSION_COOKIE + "=" + actor.session().sessionCredential().value()
-                + "; " + CSRF_COOKIE + "=" + actor.session().csrfCredential().value();
+        return SESSION_COOKIE + "=" + actor.session().sessionCredential().value() + "; " + CSRF_COOKIE + "="
+                + actor.session().csrfCredential().value();
     }
 
     private int projectCount() {
-        return jdbcClient.sql("SELECT count(*) FROM yumpoo.project")
-                .query(Integer.class).single();
+        return jdbcClient
+                .sql("SELECT count(*) FROM yumpoo.project")
+                .query(Integer.class)
+                .single();
     }
 
     private void cleanUp() {
-        jdbcClient.sql("DELETE FROM yumpoo.content_catalog_version WHERE company_id = :companyId")
-                .param("companyId", COMPANY_ID).update();
-        jdbcClient.sql("DELETE FROM yumpoo.content WHERE company_id = :companyId")
-                .param("companyId", COMPANY_ID).update();
+        jdbcClient
+                .sql("DELETE FROM yumpoo.content_catalog_version WHERE company_id = :companyId")
+                .param("companyId", COMPANY_ID)
+                .update();
+        jdbcClient
+                .sql("DELETE FROM yumpoo.content WHERE company_id = :companyId")
+                .param("companyId", COMPANY_ID)
+                .update();
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
-            jdbcClient.sql("DELETE FROM yumpoo.project_membership WHERE company_id = :companyId")
-                    .param("companyId", COMPANY_ID).update();
-            jdbcClient.sql("DELETE FROM yumpoo.project WHERE company_id = :companyId")
-                    .param("companyId", COMPANY_ID).update();
+            jdbcClient
+                    .sql("DELETE FROM yumpoo.project_membership WHERE company_id = :companyId")
+                    .param("companyId", COMPANY_ID)
+                    .update();
+            jdbcClient
+                    .sql("DELETE FROM yumpoo.project WHERE company_id = :companyId")
+                    .param("companyId", COMPANY_ID)
+                    .update();
         });
         jdbcClient.sql("DELETE FROM yumpoo.outbox_consumer_receipt").update();
-        jdbcClient.sql("DELETE FROM yumpoo.security_audit_event WHERE company_id = :companyId")
-                .param("companyId", COMPANY_ID).update();
+        jdbcClient
+                .sql("DELETE FROM yumpoo.security_audit_event WHERE company_id = :companyId")
+                .param("companyId", COMPANY_ID)
+                .update();
         jdbcClient.sql("""
                         DELETE FROM yumpoo.idempotency_record
                         WHERE actor_user_id IN (
                             SELECT id FROM yumpoo.identity_user WHERE company_id = :companyId)
                         """).param("companyId", COMPANY_ID).update();
-        jdbcClient.sql("DELETE FROM yumpoo.login_session WHERE company_id = :companyId")
-                .param("companyId", COMPANY_ID).update();
-        jdbcClient.sql("DELETE FROM yumpoo.outbox_event WHERE company_id = :companyId")
-                .param("companyId", COMPANY_ID).update();
-        jdbcClient.sql("DELETE FROM yumpoo.platform_role_assignment WHERE company_id = :companyId")
-                .param("companyId", COMPANY_ID).update();
-        jdbcClient.sql("DELETE FROM yumpoo.external_identity WHERE company_id = :companyId")
-                .param("companyId", COMPANY_ID).update();
-        jdbcClient.sql("DELETE FROM yumpoo.identity_user WHERE company_id = :companyId")
-                .param("companyId", COMPANY_ID).update();
+        jdbcClient
+                .sql("DELETE FROM yumpoo.login_session WHERE company_id = :companyId")
+                .param("companyId", COMPANY_ID)
+                .update();
+        jdbcClient
+                .sql("DELETE FROM yumpoo.outbox_event WHERE company_id = :companyId")
+                .param("companyId", COMPANY_ID)
+                .update();
+        jdbcClient
+                .sql("DELETE FROM yumpoo.platform_role_assignment WHERE company_id = :companyId")
+                .param("companyId", COMPANY_ID)
+                .update();
+        jdbcClient
+                .sql("DELETE FROM yumpoo.external_identity WHERE company_id = :companyId")
+                .param("companyId", COMPANY_ID)
+                .update();
+        jdbcClient
+                .sql("DELETE FROM yumpoo.identity_user WHERE company_id = :companyId")
+                .param("companyId", COMPANY_ID)
+                .update();
         jdbcClient.sql("""
                         UPDATE yumpoo.app_manager_governance_state
                            SET lifecycle_status = 'UNINITIALIZED', initialized_at = NULL,
@@ -243,6 +296,5 @@ class ProjectCreationHttpIT {
                         """).param("companyId", COMPANY_ID).update();
     }
 
-    private record ActorFixture(UUID userId, IssuedSession session) {
-    }
+    private record ActorFixture(UUID userId, IssuedSession session) {}
 }

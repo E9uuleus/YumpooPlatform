@@ -1,5 +1,7 @@
 package com.yumpoo.platform.identityaccess.infrastructure.event;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.yumpoo.platform.foundation.application.event.DomainEventEnvelope;
 import com.yumpoo.platform.foundation.application.event.EventActor;
 import com.yumpoo.platform.foundation.application.event.EventSubscription;
@@ -10,19 +12,7 @@ import com.yumpoo.platform.foundation.application.outbox.OutboxDispatcher;
 import com.yumpoo.platform.foundation.application.outbox.OutboxFailure;
 import com.yumpoo.platform.foundation.application.outbox.OutboxStorePort;
 import com.yumpoo.platform.identityaccess.application.event.IdentityCommittedFactConsumer;
-import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.DefaultApplicationArguments;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
-import tools.jackson.databind.ObjectMapper;
-
+import com.yumpoo.platform.testing.JdbcIntegrationTest;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -33,14 +23,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.DefaultApplicationArguments;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+import tools.jackson.databind.ObjectMapper;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
-@Import(PostgreSqlTestContainerConfiguration.class)
-@SpringBootTest(
-        webEnvironment = SpringBootTest.WebEnvironment.NONE,
-        properties = "yumpoo.outbox.enabled=false"
-)
+@JdbcIntegrationTest
 class IdentityOutboxIT {
 
     private static final UUID COMPANY_ID = UUID.fromString("00000000-0000-4000-8000-000000000001");
@@ -53,20 +46,28 @@ class IdentityOutboxIT {
 
     @Autowired
     private JdbcClient jdbc;
+
     @Autowired
     private ObjectMapper json;
+
     @Autowired
     private OutboxStorePort store;
+
     @Autowired
     private OutboxDispatcher dispatcher;
+
     @Autowired
     private OutboxConsumerRegistry registry;
+
     @Autowired
     private OutboxConsumerExecutor executor;
+
     @Autowired
     private IdentityCommittedFactConsumer consumer;
+
     @Autowired
     private IdentityOutboxRecoveryRunner recovery;
+
     @Autowired
     private PlatformTransactionManager transactions;
 
@@ -74,12 +75,19 @@ class IdentityOutboxIT {
     @AfterEach
     void cleanUp() {
         jdbc.sql("DELETE FROM yumpoo.governance_issue WHERE target_id = :id")
-                .param("id", PROJECT_ID).update();
+                .param("id", PROJECT_ID)
+                .update();
         new TransactionTemplate(transactions).executeWithoutResult(status -> {
-            jdbc.sql("DELETE FROM yumpoo.project_membership WHERE project_id = :id").param("id", PROJECT_ID).update();
-            jdbc.sql("DELETE FROM yumpoo.project WHERE id = :id").param("id", PROJECT_ID).update();
+            jdbc.sql("DELETE FROM yumpoo.project_membership WHERE project_id = :id")
+                    .param("id", PROJECT_ID)
+                    .update();
+            jdbc.sql("DELETE FROM yumpoo.project WHERE id = :id")
+                    .param("id", PROJECT_ID)
+                    .update();
         });
-        jdbc.sql("DELETE FROM yumpoo.identity_user WHERE id = :id").param("id", USER_ID).update();
+        jdbc.sql("DELETE FROM yumpoo.identity_user WHERE id = :id")
+                .param("id", USER_ID)
+                .update();
         jdbc.sql("TRUNCATE yumpoo.outbox_event, yumpoo.outbox_consumer_receipt").update();
     }
 
@@ -89,7 +97,8 @@ class IdentityOutboxIT {
         assertThat(examples).isNotEmpty();
         for (DomainEventEnvelope event : examples) {
             assertThat(registry.consumersFor(event))
-                    .as("%s@%s", event.eventType(), event.eventVersion()).isNotEmpty();
+                    .as("%s@%s", event.eventType(), event.eventVersion())
+                    .isNotEmpty();
             if (GOVERNANCE_EVENTS.contains(event.eventType())) {
                 assertThat(registry.consumersFor(event)).doesNotContain(consumer);
             } else {
@@ -102,13 +111,21 @@ class IdentityOutboxIT {
     void committedFactsIncludingHistoricalVersionsCompleteWithIdempotentReceipts() throws IOException {
         List<DomainEventEnvelope> facts = new ArrayList<>();
         for (DomainEventEnvelope example : identityExamples()) {
-            if (consumer.subscriptions().contains(new EventSubscription(
-                    example.eventType(), example.eventVersion()))) {
+            if (consumer.subscriptions().contains(new EventSubscription(example.eventType(), example.eventVersion()))) {
                 DomainEventEnvelope fact = new DomainEventEnvelope(
-                        UUID.randomUUID(), example.eventType(), example.eventVersion(),
-                        example.occurredAt(), example.aggregateType(), UUID.randomUUID(),
-                        example.aggregateVersion(), COMPANY_ID, example.actor(), example.requestId(),
-                        example.correlationId(), null, example.payload());
+                        UUID.randomUUID(),
+                        example.eventType(),
+                        example.eventVersion(),
+                        example.occurredAt(),
+                        example.aggregateType(),
+                        UUID.randomUUID(),
+                        example.aggregateVersion(),
+                        COMPANY_ID,
+                        example.actor(),
+                        example.requestId(),
+                        example.correlationId(),
+                        null,
+                        example.payload());
                 store.append(fact);
                 facts.add(fact);
             }
@@ -144,7 +161,8 @@ class IdentityOutboxIT {
 
         assertThat(dispatcher.dispatchOnce()).isZero();
         recover();
-        assertThat(row(revoked)).containsEntry("status", "RETRY")
+        assertThat(row(revoked))
+                .containsEntry("status", "RETRY")
                 .containsEntry("attempt_count", 1)
                 .containsEntry("last_error_code", "NO_MATCHING_CONSUMER")
                 .containsEntry("dead_at", null);
@@ -158,8 +176,7 @@ class IdentityOutboxIT {
         assertThat(dispatcher.dispatchOnce()).isOne();
         assertThat(row(disabled)).containsEntry("status", "COMPLETED");
         assertThat(openIssues()).isOne();
-        assertThat(receipts(disabled)).containsExactly(
-                "administration-project-owner-governance-v1");
+        assertThat(receipts(disabled)).containsExactly("administration-project-owner-governance-v1");
         Map<String, Object> completed = row(revoked);
         recover();
         assertThat(row(revoked)).isEqualTo(completed);
@@ -170,8 +187,7 @@ class IdentityOutboxIT {
     void recoveryOnlyRequeuesExactPairsThatDiedFromMissingConsumerRegistration() throws IOException {
         List<DomainEventEnvelope> recoverable = new ArrayList<>();
         for (DomainEventEnvelope example : identityExamples()) {
-            if (consumer.subscriptions().contains(new EventSubscription(
-                    example.eventType(), example.eventVersion()))) {
+            if (consumer.subscriptions().contains(new EventSubscription(example.eventType(), example.eventVersion()))) {
                 DomainEventEnvelope event = append(example.eventType(), example.eventVersion(), UUID.randomUUID(), 0);
                 markDead(event, "outbox.dispatcher", "NO_MATCHING_CONSUMER", "ConsumerRegistryFailure");
                 recoverable.add(event);
@@ -183,7 +199,8 @@ class IdentityOutboxIT {
                 new EventSubscription("identity.unhandled", 1),
                 new EventSubscription("foundation.unhandled", 1),
                 new EventSubscription("identity.user_account_disabled", 1))) {
-            DomainEventEnvelope event = append(subscription.eventType(), subscription.eventVersion(), UUID.randomUUID(), 0);
+            DomainEventEnvelope event =
+                    append(subscription.eventType(), subscription.eventVersion(), UUID.randomUUID(), 0);
             markDead(event, "outbox.dispatcher", "NO_MATCHING_CONSUMER", "ConsumerRegistryFailure");
             excluded.add(event);
         }
@@ -200,8 +217,10 @@ class IdentityOutboxIT {
 
         recover();
 
-        assertThat(recoverable).hasSize(10).allSatisfy(event ->
-                assertThat(row(event)).containsEntry("status", "RETRY").containsEntry("attempt_count", 1));
+        assertThat(recoverable)
+                .hasSize(10)
+                .allSatisfy(event ->
+                        assertThat(row(event)).containsEntry("status", "RETRY").containsEntry("attempt_count", 1));
         assertThat(excluded.stream().map(this::row).toList()).isEqualTo(before);
         List<Map<String, Object>> queued = recoverable.stream().map(this::row).toList();
         recover();
@@ -213,14 +232,18 @@ class IdentityOutboxIT {
         DomainEventEnvelope completed = append("identity.login_succeeded", 1, UUID.randomUUID(), 0);
         assertThat(dispatcher.dispatchOnce()).isOne();
         DomainEventEnvelope processing = append("identity.login_succeeded", 1, UUID.randomUUID(), 0);
-        assertThat(store.claimBatch(1, "identity-recovery-test", UUID.randomUUID(), Instant.now(),
-                Duration.ofMinutes(1))).hasSize(1);
+        assertThat(store.claimBatch(
+                        1, "identity-recovery-test", UUID.randomUUID(), Instant.now(), Duration.ofMinutes(1)))
+                .hasSize(1);
         DomainEventEnvelope retry = append("identity.login_succeeded", 1, UUID.randomUUID(), 0);
-        var retryClaim = store.claimBatch(1, "identity-recovery-test", UUID.randomUUID(), Instant.now(),
-                Duration.ofMinutes(1)).getFirst();
-        assertThat(store.markRetry(retryClaim.lease(),
-                new OutboxFailure("identity.other", "TEMPORARY_FAILURE", "DatabaseFailure", true),
-                Instant.now().plusSeconds(60))).isTrue();
+        var retryClaim = store.claimBatch(
+                        1, "identity-recovery-test", UUID.randomUUID(), Instant.now(), Duration.ofMinutes(1))
+                .getFirst();
+        assertThat(store.markRetry(
+                        retryClaim.lease(),
+                        new OutboxFailure("identity.other", "TEMPORARY_FAILURE", "DatabaseFailure", true),
+                        Instant.now().plusSeconds(60)))
+                .isTrue();
         DomainEventEnvelope pending = append("identity.login_succeeded", 1, UUID.randomUUID(), 0);
         List<DomainEventEnvelope> events = List.of(completed, processing, retry, pending);
         List<Map<String, Object>> before = events.stream().map(this::row).toList();
@@ -236,13 +259,16 @@ class IdentityOutboxIT {
         DomainEventEnvelope unknown = append("identity.unhandled", 1, UUID.randomUUID(), 0);
         DomainEventEnvelope unsupported = append("identity.login_succeeded", 99, UUID.randomUUID(), 0);
         DomainEventEnvelope afterUnknown = append("identity.user_sessions_revoked", 2, unknown.aggregateId(), 1);
-        DomainEventEnvelope afterUnsupported = append("identity.user_sessions_revoked", 2, unsupported.aggregateId(), 1);
+        DomainEventEnvelope afterUnsupported =
+                append("identity.user_sessions_revoked", 2, unsupported.aggregateId(), 1);
 
         assertThat(dispatcher.dispatchOnce()).isEqualTo(2);
 
-        assertThat(row(unknown)).containsEntry("status", "DEAD")
+        assertThat(row(unknown))
+                .containsEntry("status", "DEAD")
                 .containsEntry("last_error_code", "NO_MATCHING_CONSUMER");
-        assertThat(row(unsupported)).containsEntry("status", "DEAD")
+        assertThat(row(unsupported))
+                .containsEntry("status", "DEAD")
                 .containsEntry("last_error_code", "UNSUPPORTED_EVENT_VERSION");
         recover();
         assertThat(dispatcher.dispatchOnce()).isZero();
@@ -253,16 +279,29 @@ class IdentityOutboxIT {
     private List<DomainEventEnvelope> identityExamples() throws IOException {
         try (var paths = Files.list(Path.of("../contracts/events/examples"))) {
             return paths.filter(path -> path.getFileName().toString().startsWith("identity."))
-                    .filter(path -> path.toString().endsWith(".json") && !path.toString().endsWith(".invalid.json"))
-                    .sorted().map(path -> json.readValue(path.toFile(), DomainEventEnvelope.class)).toList();
+                    .filter(path -> path.toString().endsWith(".json")
+                            && !path.toString().endsWith(".invalid.json"))
+                    .sorted()
+                    .map(path -> json.readValue(path.toFile(), DomainEventEnvelope.class))
+                    .toList();
         }
     }
 
     private DomainEventEnvelope append(String type, int version, UUID aggregateId, long aggregateVersion) {
-        DomainEventEnvelope event = new DomainEventEnvelope(UUID.randomUUID(), type, version,
-                Instant.now().minusSeconds(1), "User", aggregateId, aggregateVersion,
-                COMPANY_ID, EventActor.system("IDENTITY_OUTBOX_TEST"), "identity-outbox-test",
-                "identity-outbox-test", null, json.createObjectNode().put("userId", aggregateId.toString()));
+        DomainEventEnvelope event = new DomainEventEnvelope(
+                UUID.randomUUID(),
+                type,
+                version,
+                Instant.now().minusSeconds(1),
+                "User",
+                aggregateId,
+                aggregateVersion,
+                COMPANY_ID,
+                EventActor.system("IDENTITY_OUTBOX_TEST"),
+                "identity-outbox-test",
+                "identity-outbox-test",
+                null,
+                json.createObjectNode().put("userId", aggregateId.toString()));
         store.append(event);
         return event;
     }
@@ -274,8 +313,11 @@ class IdentityOutboxIT {
                             last_error_consumer = :consumer, last_error_code = :code, last_error_type = :type
                         WHERE event_id = :id
                         """)
-                .param("id", event.eventId()).param("consumer", failedConsumer)
-                .param("code", code).param("type", exceptionType).update();
+                .param("id", event.eventId())
+                .param("consumer", failedConsumer)
+                .param("code", code)
+                .param("type", exceptionType)
+                .update();
     }
 
     private void recover() {
@@ -284,19 +326,25 @@ class IdentityOutboxIT {
 
     private Map<String, Object> row(DomainEventEnvelope event) {
         return jdbc.sql("SELECT * FROM yumpoo.outbox_event WHERE event_id = :id")
-                .param("id", event.eventId()).query().singleRow();
+                .param("id", event.eventId())
+                .query()
+                .singleRow();
     }
 
     private List<String> receipts(DomainEventEnvelope event) {
         return jdbc.sql("SELECT consumer_name FROM yumpoo.outbox_consumer_receipt "
                         + "WHERE event_id = :id ORDER BY consumer_name")
-                .param("id", event.eventId()).query(String.class).list();
+                .param("id", event.eventId())
+                .query(String.class)
+                .list();
     }
 
     private int openIssues() {
         return jdbc.sql("SELECT count(*) FROM yumpoo.governance_issue "
                         + "WHERE target_id = :id AND status = 'OPEN' AND issue_type = 'OWNER_MISSING'")
-                .param("id", PROJECT_ID).query(Integer.class).single();
+                .param("id", PROJECT_ID)
+                .query(Integer.class)
+                .single();
     }
 
     private void insertProjectWithDisabledOwner() {
@@ -323,14 +371,21 @@ class IdentityOutboxIT {
                     ) SELECT :id, :companyId, id, 'IDENTITY_OUTBOX', 'Identity Outbox', 'ACTIVE', :ownerId,
                         0, transaction_timestamp(), :ownerId, transaction_timestamp(), :ownerId
                       FROM yumpoo.workspace WHERE company_id=:companyId AND code='MAIN'
-                    """).param("id", PROJECT_ID).param("companyId", COMPANY_ID)
-                    .param("ownerId", USER_ID).update();
+                    """)
+                    .param("id", PROJECT_ID)
+                    .param("companyId", COMPANY_ID)
+                    .param("ownerId", USER_ID)
+                    .update();
             jdbc.sql("""
                     INSERT INTO yumpoo.project_membership (
                         id, company_id, project_id, user_id, status, joined_at, joined_by_user_id, row_version
                     ) VALUES (:id, :companyId, :projectId, :ownerId, 'ACTIVE', transaction_timestamp(), :ownerId, 0)
-                    """).param("id", UUID.randomUUID()).param("companyId", COMPANY_ID)
-                    .param("projectId", PROJECT_ID).param("ownerId", USER_ID).update();
+                    """)
+                    .param("id", UUID.randomUUID())
+                    .param("companyId", COMPANY_ID)
+                    .param("projectId", PROJECT_ID)
+                    .param("ownerId", USER_ID)
+                    .update();
         });
     }
 }

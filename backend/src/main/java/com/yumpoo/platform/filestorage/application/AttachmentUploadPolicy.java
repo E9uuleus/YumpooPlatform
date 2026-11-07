@@ -6,6 +6,5 @@ public final class AttachmentUploadPolicy {
     public static final long MAX_BYTES = 100L * 1024L * 1024L;
     public static final int BUFFER_BYTES = 64 * 1024;
 
-    private AttachmentUploadPolicy() {
-    }
+    private AttachmentUploadPolicy() {}
 }

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import DetailEmptyState from './DetailEmptyState.vue'
+import { useMinuteClock } from '../../composables/useMinuteClock'
 import { useEditor } from '@tiptap/vue-3'
 import {
   ErrorCode,
@@ -78,10 +80,9 @@ const replyOpen = reactive<Record<string, boolean>>({})
 const repliesLoading = reactive<Record<string, boolean>>({})
 const replyProblems = reactive<Record<string, ApiProblem | undefined>>({})
 const replyComposers = new Map<string, InstanceType<typeof DiscussionReplyComposer>>()
-const now = ref(new Date())
+const now = useMinuteClock()
 let publishKey = crypto.randomUUID()
 let publishKeyBody = ''
-let clock: ReturnType<typeof setInterval> | undefined
 
 const draftAttachments = useEditorAttachments({
   editor: () => editor.value, ownerId: () => props.workItemId,
@@ -492,8 +493,7 @@ watch(editDialogVisible, visible => { if (!visible) editAttachments.abortUploads
 
 defineExpose({ hasDraft, busy, discardDraft, editor, editEditor, saveEdit, loadLatest, loadOlder })
 onMounted(() => {
-  clock = setInterval(() => { now.value = new Date() }, 60_000)
-  scrollRoot = timeline.value?.closest<HTMLElement>('.el-drawer__body') ?? undefined
+  scrollRoot = timeline.value?.closest<HTMLElement>('.el-drawer__body, [data-detail-scroll-root]') ?? undefined
   if (scrollRoot && typeof IntersectionObserver !== 'undefined' && sentinel.value) {
     observer = new IntersectionObserver(entries => {
       if (entries.some(entry => entry.isIntersecting)) void loadOlder()
@@ -517,7 +517,6 @@ onBeforeUnmount(() => {
   resizeObserver?.disconnect()
   scrollRoot?.removeEventListener('scroll', queueFill)
   if (frame !== undefined) cancelAnimationFrame(frame)
-  if (clock) clearInterval(clock)
 })
 </script>
 
@@ -655,12 +654,16 @@ onBeforeUnmount(() => {
           />
         </div>
       </discussion-comment-card>
-      <p
+      <div
         v-if="!loading && !loadProblem && !items.length"
         class="discussion__empty"
       >
-        还没有讨论，发布第一条消息吧。
-      </p>
+        <detail-empty-state
+          variant="discussion"
+          title="还没有讨论"
+          :description="canPublish ? '在上方发布第一条更新，@提及同事，或分享文件和图片。' : '这个工作项还没有讨论记录。'"
+        />
+      </div>
     </div>
     <div
       ref="sentinel"
@@ -746,6 +749,7 @@ onBeforeUnmount(() => {
 .discussion__refresh-icon { width: 16px; height: 16px; }
 .discussion__timeline { display: grid; min-width: 0; align-content: start; gap: 12px; }
 .discussion__state { min-height: 24px; text-align: center; color: var(--yp-text-muted); font-size: var(--yp-type-caption-size); }
-.discussion__empty, .discussion__readonly { color: var(--yp-text-secondary); text-align: center; }
+.discussion__empty { padding: var(--yp-space-2) 0; }
+.discussion__readonly { color: var(--yp-text-secondary); text-align: center; }
 .discussion-thread { display: grid; min-width: 0; gap: 16px; padding: 16px; border-top: 1px solid var(--yp-border-subtle); }
 </style>

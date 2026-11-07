@@ -20,8 +20,131 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  static:
+    name: Static Checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      YUMPOO_CI_BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || inputs.base_ref }}
+      YUMPOO_CI_HEAD_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+    outputs:
+      completed: ${{ steps.completed.outputs.completed }}
+    steps:
+      - name: Checkout tested commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.16.0
+          run_install: false
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Set up Java
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Contracts, policy, frontend and desktop regression
+        run: pnpm ci:static
+      - name: Upload static stage result
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-static-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            out/ci/static.json
+            out/contracts/
+            frontend/web-app/dist/
+          if-no-files-found: error
+          retention-days: 1
+      - name: Record complete static execution
+        id: completed
+        run: echo "completed=true" >> "$GITHUB_OUTPUT"
+      - name: Upload diagnostics even on failure
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: static-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: out/ci/*.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  backend:
+    name: Backend Checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      YUMPOO_CI_BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || inputs.base_ref }}
+      YUMPOO_CI_HEAD_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+    outputs:
+      completed: ${{ steps.completed.outputs.completed }}
+    steps:
+      - name: Checkout tested commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.16.0
+          run_install: false
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Set up Java
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Preflight Linux-container Docker
+        run: |
+          docker version
+          docker info
+          docker pull postgres:17.10-alpine
+      - name: Backend, migrations, security and backup restore
+        run: pnpm ci:backend
+      - name: Upload backend stage result
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-backend-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            out/ci/backend.json
+            out/backup-restore/
+            backend/target/yumpoo-server.jar
+          if-no-files-found: error
+          retention-days: 1
+      - name: Record complete backend execution
+        id: completed
+        run: echo "completed=true" >> "$GITHUB_OUTPUT"
+      - name: Upload diagnostics even on failure
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: backend-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            out/ci/*.json
+            backend/target/surefire-reports/
+            backend/target/failsafe-reports/
+          if-no-files-found: warn
+          retention-days: 14
+
   linux:
     name: M0 Portable Gate
+    needs: [static, backend]
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -54,15 +177,21 @@ jobs:
           cache: maven
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
-      - name: Contracts, policy, frontend and desktop regression
-        run: pnpm ci:static
       - name: Preflight Linux-container Docker
         run: |
           docker version
           docker info
           docker pull postgres:17.10-alpine
-      - name: Backend, migrations, security and backup restore
-        run: pnpm ci:backend
+      - name: Download static stage result
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ci-static-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .
+      - name: Download backend stage result
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ci-backend-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .
       - name: Packaged HTTP and portable handoff
         run: pnpm ci:portable
       - name: Upload portable HTTP report
@@ -94,8 +223,7 @@ jobs:
           name: linux-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             out/ci/*.json
-            backend/target/surefire-reports/
-            backend/target/failsafe-reports/
+            out/e2e/
           if-no-files-found: warn
           retention-days: 14
 
@@ -192,7 +320,7 @@ jobs:
 
   windows:
     name: M0 Windows x64 Gate
-    needs: [linux, windows_delivery]
+    needs: [static, backend, linux, windows_delivery]
     if: ${{ always() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5

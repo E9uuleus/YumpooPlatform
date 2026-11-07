@@ -1,5 +1,8 @@
 package com.yumpoo.platform.architecture;
 
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
+import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
+
 import com.tngtech.archunit.core.domain.Dependency;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
@@ -8,17 +11,13 @@ import com.tngtech.archunit.core.domain.JavaParameter;
 import com.tngtech.archunit.lang.ArchRule;
 import com.yumpoo.platform.foundation.api.http.IfMatchParser;
 import com.yumpoo.platform.foundation.api.web.ApiV1Controller;
-import org.springframework.web.bind.annotation.RequestHeader;
-
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-
-import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
-import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
+import org.springframework.web.bind.annotation.RequestHeader;
 
 final class ArchitectureRules {
 
@@ -36,19 +35,15 @@ final class ArchitectureRules {
             "audit",
             "reporting",
             "administration",
-            "operations"
-    );
+            "operations");
 
-    static final Set<String> LAYERS = Set.of(
-            "api", "application", "domain", "infrastructure"
-    );
+    static final Set<String> LAYERS = Set.of("api", "application", "domain", "infrastructure");
 
     private static final Map<String, Set<String>> ALLOWED_SAME_MODULE_LAYER_DEPENDENCIES = Map.of(
             "api", Set.of("api", "application"),
             "application", Set.of("application", "domain"),
             "domain", Set.of("domain"),
-            "infrastructure", Set.of("infrastructure", "application", "domain")
-    );
+            "infrastructure", Set.of("infrastructure", "application", "domain"));
 
     private static final Map<String, Set<String>> ALLOWED_MODULE_DEPENDENCIES = Map.ofEntries(
             Map.entry("operations", Set.of("foundation", "identityaccess", "audit")),
@@ -57,27 +52,37 @@ final class ArchitectureRules {
             Map.entry("identityaccess", Set.of("foundation", "organization", "audit")),
             Map.entry("catalog", Set.of("foundation", "identityaccess")),
             Map.entry("filestorage", Set.of("foundation")),
-            Map.entry("workitem", Set.of(
-                    "foundation", "catalog", "identityaccess", "filestorage", "audit"
-            )),
-            Map.entry("worklog", Set.of(
-                    "foundation", "organization", "catalog", "workitem", "identityaccess"
-            )),
+            Map.entry("workitem", Set.of("foundation", "catalog", "identityaccess", "filestorage", "audit")),
+            Map.entry("worklog", Set.of("foundation", "organization", "catalog", "workitem", "identityaccess")),
             Map.entry("notification", Set.of("foundation", "identityaccess")),
             Map.entry("audit", Set.of("foundation")),
-            Map.entry("reporting", Set.of(
-                    "foundation", "organization", "identityaccess", "catalog",
-                    "filestorage", "workitem", "worklog", "notification", "audit"
-            )),
-            Map.entry("administration", Set.of(
-                    "foundation", "organization", "identityaccess", "catalog",
-                    "filestorage", "workitem", "worklog", "notification", "audit",
-                    "reporting"
-            ))
-    );
+            Map.entry(
+                    "reporting",
+                    Set.of(
+                            "foundation",
+                            "organization",
+                            "identityaccess",
+                            "catalog",
+                            "filestorage",
+                            "workitem",
+                            "worklog",
+                            "notification",
+                            "audit")),
+            Map.entry(
+                    "administration",
+                    Set.of(
+                            "foundation",
+                            "organization",
+                            "identityaccess",
+                            "catalog",
+                            "filestorage",
+                            "workitem",
+                            "worklog",
+                            "notification",
+                            "audit",
+                            "reporting")));
 
-    private ArchitectureRules() {
-    }
+    private ArchitectureRules() {}
 
     static List<String> packageLayoutViolations(JavaClasses classes, String rootPackage) {
         List<String> violations = new ArrayList<>();
@@ -129,33 +134,30 @@ final class ArchitectureRules {
     }
 
     static ArchRule modulesAreAcyclic(String rootPackage) {
-        return slices()
-                .matching(rootPackage + ".(*)..")
-                .should().beFreeOfCycles()
+        return slices().matching(rootPackage + ".(*)..")
+                .should()
+                .beFreeOfCycles()
                 .as("一级业务模块之间不得形成循环依赖");
     }
 
     static ArchRule domainsAreFrameworkIndependent() {
         return noClasses()
-                .that().resideInAPackage("..domain..")
-                .should().dependOnClassesThat().resideInAnyPackage(
-                        "org.springframework..",
-                        "java.sql..",
-                        "javax.sql..",
-                        "jakarta.servlet..",
-                        "javax.servlet.."
-                )
+                .that()
+                .resideInAPackage("..domain..")
+                .should()
+                .dependOnClassesThat()
+                .resideInAnyPackage(
+                        "org.springframework..", "java.sql..", "javax.sql..", "jakarta.servlet..", "javax.servlet..")
                 .because("domain 层不得依赖 Spring、JDBC、HTTP 或 Servlet 技术");
     }
 
     static ArchRule apiDoesNotAccessPersistenceTechnology() {
         return noClasses()
-                .that().resideInAPackage("..api..")
-                .should().dependOnClassesThat().resideInAnyPackage(
-                        "java.sql..",
-                        "javax.sql..",
-                        "org.springframework.jdbc.."
-                )
+                .that()
+                .resideInAPackage("..api..")
+                .should()
+                .dependOnClassesThat()
+                .resideInAnyPackage("java.sql..", "javax.sql..", "org.springframework.jdbc..")
                 .because("Controller 和 API 适配层不得直接访问 SQL 或 JDBC");
     }
 
@@ -171,15 +173,10 @@ final class ArchitectureRules {
                         continue;
                     }
                     RequestHeader requestHeader = parameter.getAnnotationOfType(RequestHeader.class);
-                    String headerName = requestHeader.name().isBlank()
-                            ? requestHeader.value()
-                            : requestHeader.name();
-                    if (IfMatchParser.HEADER_NAME.equalsIgnoreCase(headerName)
-                            && requestHeader.required()) {
-                        violations.add(
-                                "If-Match 必须声明 required=false，并在资源可见性检查后交给 IfMatchParser: "
-                                        + method.getFullName() + " parameter[" + parameter.getIndex() + "]"
-                        );
+                    String headerName = requestHeader.name().isBlank() ? requestHeader.value() : requestHeader.name();
+                    if (IfMatchParser.HEADER_NAME.equalsIgnoreCase(headerName) && requestHeader.required()) {
+                        violations.add("If-Match 必须声明 required=false，并在资源可见性检查后交给 IfMatchParser: "
+                                + method.getFullName() + " parameter[" + parameter.getIndex() + "]");
                     }
                 }
             }
@@ -206,11 +203,7 @@ final class ArchitectureRules {
     }
 
     private static void validateDependency(
-            PackageLocation source,
-            PackageLocation target,
-            Dependency dependency,
-            List<String> violations
-    ) {
+            PackageLocation source, PackageLocation target, Dependency dependency, List<String> violations) {
         if (source.module().equals(target.module())) {
             if (!ALLOWED_SAME_MODULE_LAYER_DEPENDENCIES
                     .getOrDefault(source.layer(), Set.of())
@@ -222,8 +215,8 @@ final class ArchitectureRules {
 
         Set<String> allowedTargets = ALLOWED_MODULE_DEPENDENCIES.getOrDefault(source.module(), Set.of());
         if (!allowedTargets.contains(target.module())) {
-            violations.add("未允许的模块依赖 " + source.module() + " -> " + target.module()
-                    + ": " + dependency.getDescription());
+            violations.add(
+                    "未允许的模块依赖 " + source.module() + " -> " + target.module() + ": " + dependency.getDescription());
             return;
         }
 
@@ -258,6 +251,5 @@ final class ArchitectureRules {
         return Optional.of(new PackageLocation(segments[0], segments[1]));
     }
 
-    private record PackageLocation(String module, String layer) {
-    }
+    private record PackageLocation(String module, String layer) {}
 }

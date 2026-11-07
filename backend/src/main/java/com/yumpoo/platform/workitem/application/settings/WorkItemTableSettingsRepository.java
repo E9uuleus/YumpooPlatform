@@ -1,0 +1,14 @@
+package com.yumpoo.platform.workitem.application.settings;
+
+import com.yumpoo.platform.workitem.application.settings.WorkItemTableSettingsModels.Write;
+import java.time.Instant;
+import java.util.Optional;
+import java.util.UUID;
+
+public interface WorkItemTableSettingsRepository {
+    Optional<Stored> find(UUID companyId, UUID projectId, UUID userId);
+
+    Optional<Stored> save(UUID companyId, UUID projectId, UUID userId, Write settings, long expectedVersion);
+
+    record Stored(Write settings, Instant updatedAt) {}
+}

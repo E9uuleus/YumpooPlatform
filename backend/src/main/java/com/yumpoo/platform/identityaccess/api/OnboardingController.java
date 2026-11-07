@@ -39,8 +39,8 @@ public class OnboardingController {
         return response(service.complete(actor.companyId(), actor.userId(), tourId, body.version()));
     }
 
-    public record CompleteRequest(@NotNull @Min(1) @Max(1000) Integer version) {
-    }
+    public record CompleteRequest(
+            @NotNull @Min(1) @Max(1000) Integer version) {}
 
     private static <T> ResponseEntity<T> response(T value) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(value);

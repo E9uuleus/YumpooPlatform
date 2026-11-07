@@ -1,14 +1,15 @@
 package com.yumpoo.platform.reporting.application;
 
+import static com.yumpoo.platform.reporting.application.TeamDashboardModels.*;
+
 import com.yumpoo.platform.catalog.api.MemberProjectQuery;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.FieldViolation;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.MinimalUserSnapshotQuery;
-import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
 import com.yumpoo.platform.organization.api.CompanyCalendarQuery;
+import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
 import com.yumpoo.platform.workitem.api.TeamWorkQuery;
-import org.springframework.stereotype.Service;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -18,7 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import static com.yumpoo.platform.reporting.application.TeamDashboardModels.*;
+import org.springframework.stereotype.Service;
 
 /** The actor's own time and open work, limited to projects with an active membership; archived projects are excluded. Non-project category time needs no membership. */
 @Service
@@ -30,9 +31,20 @@ public class MyWorkService {
     private final CompanyConfigurationQuery company;
     private final CompanyCalendarQuery calendar;
     private final Clock clock;
-    public MyWorkService(MemberProjectQuery projects, TeamWorkQuery work, MinimalUserSnapshotQuery users,
-            CompanyConfigurationQuery company, CompanyCalendarQuery calendar, Clock clock) {
-        this.projects = projects; this.work = work; this.users = users; this.company = company; this.calendar = calendar; this.clock = clock;
+
+    public MyWorkService(
+            MemberProjectQuery projects,
+            TeamWorkQuery work,
+            MinimalUserSnapshotQuery users,
+            CompanyConfigurationQuery company,
+            CompanyCalendarQuery calendar,
+            Clock clock) {
+        this.projects = projects;
+        this.work = work;
+        this.users = users;
+        this.company = company;
+        this.calendar = calendar;
+        this.clock = clock;
     }
 
     public Timesheet timesheet(CurrentActor actor, LocalDate from, LocalDate to) {
@@ -42,13 +54,31 @@ public class MyWorkService {
         Instant asOf = clock.instant();
         var entries = work.ownTimeEntries(actor, List.copyOf(scope.keySet()), from, to, zone, asOf);
         Map<UUID, TimesheetWorkItem> items = new LinkedHashMap<>();
-        entries.forEach(e -> items.putIfAbsent(e.workItemId(),
-                new TimesheetWorkItem(e.workItemId(), e.projectId(), scope.get(e.projectId()).name(), e.itemNo(), e.title())));
+        entries.forEach(e -> items.putIfAbsent(
+                e.workItemId(),
+                new TimesheetWorkItem(
+                        e.workItemId(), e.projectId(), scope.get(e.projectId()).name(), e.itemNo(), e.title())));
         var categories = work.ownCategoryEntries(actor, from, to, zone, asOf);
-        var self = users.findByUserIds(actor.companyId(), List.of(actor.userId())).get(actor.userId());
-        return new Timesheet(from, to, zone.getId(), asOf, List.of(new Member(actor.userId(), self.displayName(), self.activeAndEnabled())),
-                List.copyOf(items.values()), entries.stream().map(e -> new TimesheetEntry(e.userId(), e.workItemId(), e.date(), e.durationMs(), e.migratedDurationMs())).toList(),
-                Timesheet.categories(categories, scope.entrySet().stream().collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().name()))), CalendarDay.of(calendar.days(from, to)));
+        var self =
+                users.findByUserIds(actor.companyId(), List.of(actor.userId())).get(actor.userId());
+        return new Timesheet(
+                from,
+                to,
+                zone.getId(),
+                asOf,
+                List.of(new Member(actor.userId(), self.displayName(), self.activeAndEnabled())),
+                List.copyOf(items.values()),
+                entries.stream()
+                        .map(e -> new TimesheetEntry(
+                                e.userId(), e.workItemId(), e.date(), e.durationMs(), e.migratedDurationMs()))
+                        .toList(),
+                Timesheet.categories(
+                        categories,
+                        scope.entrySet().stream()
+                                .collect(java.util.stream.Collectors.toMap(
+                                        Map.Entry::getKey,
+                                        entry -> entry.getValue().name()))),
+                CalendarDay.of(calendar.days(from, to)));
     }
 
     public TaskPage currentTasks(CurrentActor actor, int offset, int limit) {
@@ -56,17 +86,38 @@ public class MyWorkService {
         var scope = scope(actor);
         LocalDate today = LocalDate.ofInstant(clock.instant(), zone());
         var page = work.ownCurrentTasks(actor, List.copyOf(scope.keySet()), today, offset, limit);
-        return new TaskPage(page.items().stream().map(t -> new Task(t.id(), t.projectId(), scope.get(t.projectId()).name(), t.itemNo(), t.title(),
-                t.statusCode(), t.statusName(), t.statusCategory(), t.statusColor(), t.priorityName(), t.priorityColor(), t.dueDate(), t.overdue())).toList(),
+        return new TaskPage(
+                page.items().stream()
+                        .map(t -> new Task(
+                                t.id(),
+                                t.projectId(),
+                                scope.get(t.projectId()).name(),
+                                t.itemNo(),
+                                t.title(),
+                                t.statusCode(),
+                                t.statusName(),
+                                t.statusCategory(),
+                                t.statusColor(),
+                                t.priorityName(),
+                                t.priorityColor(),
+                                t.dueDate(),
+                                t.overdue()))
+                        .toList(),
                 page.totalElements());
     }
 
     private Map<UUID, MemberProjectQuery.Project> scope(CurrentActor actor) {
         Map<UUID, MemberProjectQuery.Project> result = new LinkedHashMap<>();
-        projects.search(actor, "", false, 0, MAX_PROJECTS).items().forEach(project -> result.put(project.id(), project));
+        projects.search(actor, "", false, 0, MAX_PROJECTS)
+                .items()
+                .forEach(project -> result.put(project.id(), project));
         return result;
     }
-    private ZoneId zone() { return company.current().timezone(); }
+
+    private ZoneId zone() {
+        return company.current().timezone();
+    }
+
     private static ApplicationException invalid(String field, String message) {
         return ApplicationException.validation(new FieldViolation(field, "INVALID_VALUE", message));
     }

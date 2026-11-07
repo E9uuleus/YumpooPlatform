@@ -1,8 +1,7 @@
 package com.yumpoo.platform.filestorage.infrastructure.backup;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Assumptions;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -11,12 +10,12 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class M017BackupSetTest {
 
@@ -31,19 +30,20 @@ class M017BackupSetTest {
 
         M017BackupSet.restoreAttachments(backup, restore);
 
-        assertThat(manifest.files()).extracting(M017BackupManifest.FileRecord::path)
+        assertThat(manifest.files())
+                .extracting(M017BackupManifest.FileRecord::path)
                 .containsExactly(
                         attachmentPath("synthetic attachment"),
                         "configuration/application.yml",
                         "database/yumpoo.dump",
-                        "recovery/secret-recovery.json"
-                );
+                        "recovery/secret-recovery.json");
         assertThat(Files.readString(
-                restore.resolve(attachmentPath("synthetic attachment").substring("attachments/".length())),
-                StandardCharsets.UTF_8
-        )).isEqualTo("synthetic attachment");
+                        restore.resolve(attachmentPath("synthetic attachment").substring("attachments/".length())),
+                        StandardCharsets.UTF_8))
+                .isEqualTo("synthetic attachment");
         assertThat(Files.exists(backup.resolve("manifest.json"))).isTrue();
-        assertThat(Files.exists(backup.getParent().resolve("backup-set.partial"))).isFalse();
+        assertThat(Files.exists(backup.getParent().resolve("backup-set.partial")))
+                .isFalse();
     }
 
     @Test
@@ -94,8 +94,8 @@ class M017BackupSetTest {
         writeManifest(collision, collisionManifest);
         assertThatThrownBy(() -> M017BackupSet.validate(collision))
                 .isInstanceOf(IOException.class)
-                .satisfies(exception -> assertThat(exception.getMessage())
-                        .containsAnyOf("sorted", "duplicate Windows"));
+                .satisfies(
+                        exception -> assertThat(exception.getMessage()).containsAnyOf("sorted", "duplicate Windows"));
     }
 
     @Test
@@ -106,8 +106,7 @@ class M017BackupSetTest {
                 "{\"schemaVersion\":1,\"secretValuesIncluded\":true,"
                         + "\"requiredSecretVariables\":[\"DATABASE_PASSWORD\"],"
                         + "\"recoveryProcess\":\"external\"}",
-                StandardCharsets.UTF_8
-        );
+                StandardCharsets.UTF_8);
         assertThatThrownBy(() -> M017BackupSet.create(request(fixture)))
                 .isInstanceOf(IOException.class)
                 .hasMessageContaining("exclude secret values");
@@ -118,17 +117,14 @@ class M017BackupSetTest {
         assertThatThrownBy(() -> M017BackupSet.restoreAttachments(backup, restore))
                 .isInstanceOf(IOException.class)
                 .hasMessageContaining("must be empty");
-        assertThat(Files.readString(restore.resolve("existing"), StandardCharsets.UTF_8)).isEqualTo("keep");
+        assertThat(Files.readString(restore.resolve("existing"), StandardCharsets.UTF_8))
+                .isEqualTo("keep");
     }
 
     @Test
     void rejectsSymbolicLinksInAttachmentSourcesAndBackupSets() throws Exception {
         Path fixture = fixture(tempDirectory.resolve("links/fixture"));
-        Path external = Files.writeString(
-                tempDirectory.resolve("links/external"),
-                "external",
-                StandardCharsets.UTF_8
-        );
+        Path external = Files.writeString(tempDirectory.resolve("links/external"), "external", StandardCharsets.UTF_8);
         Path link = fixture.resolve("blobs/link");
         try {
             Files.createSymbolicLink(link, external);
@@ -159,8 +155,7 @@ class M017BackupSetTest {
                 "{\"schemaVersion\":1,\"secretValuesIncluded\":false,"
                         + "\"requiredSecretVariables\":[\"DATABASE_PASSWORD\"],"
                         + "\"recoveryProcess\":\"restore from the approved external secret store\"}",
-                StandardCharsets.UTF_8
-        );
+                StandardCharsets.UTF_8);
         return root;
     }
 
@@ -179,16 +174,17 @@ class M017BackupSetTest {
                 fixture.resolve("application.yml"),
                 fixture.resolve("secret-recovery.json"),
                 List.of("daily"),
-                false
-        );
+                false);
     }
 
     private ObjectNode manifest(Path backup) throws IOException {
-        return (ObjectNode) M017BackupSet.json().readTree(backup.resolve("manifest.json").toFile());
+        return (ObjectNode)
+                M017BackupSet.json().readTree(backup.resolve("manifest.json").toFile());
     }
 
     private void writeManifest(Path backup, JsonNode manifest) throws IOException {
-        M017BackupSet.json().writerWithDefaultPrettyPrinter()
+        M017BackupSet.json()
+                .writerWithDefaultPrettyPrinter()
                 .writeValue(backup.resolve("manifest.json").toFile(), manifest);
     }
 
@@ -197,8 +193,7 @@ class M017BackupSetTest {
         try {
             Files.writeString(temporary, content, StandardCharsets.UTF_8);
             String digest = M017BackupSet.sha256(temporary);
-            return "attachments/sha256/" + digest.substring(0, 2) + "/"
-                    + digest.substring(2, 4) + "/" + digest;
+            return "attachments/sha256/" + digest.substring(0, 2) + "/" + digest.substring(2, 4) + "/" + digest;
         } finally {
             Files.deleteIfExists(temporary);
         }

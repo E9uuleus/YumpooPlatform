@@ -1,5 +1,7 @@
 package com.yumpoo.platform.reporting.api;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.yumpoo.platform.catalog.api.ProjectPurgeQueue;
 import com.yumpoo.platform.foundation.application.idempotency.RequestHash;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelation;
@@ -16,22 +18,8 @@ import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
 import com.yumpoo.platform.reporting.application.DashboardModels;
 import com.yumpoo.platform.reporting.application.DashboardService;
 import com.yumpoo.platform.reporting.infrastructure.JdbcReportingProjectDataPurger;
-import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
-import com.yumpoo.platform.workitem.application.WorkItemLabelRepository;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
-
+import com.yumpoo.platform.testing.HttpIntegrationTest;
+import com.yumpoo.platform.workitem.application.label.WorkItemLabelRepository;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -44,13 +32,22 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 @ActiveProfiles("test")
-@Import(PostgreSqlTestContainerConfiguration.class)
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = {"yumpoo.outbox.enabled=false","yumpoo.projects.deletion.purge-poll-delay=1h"})
+@HttpIntegrationTest
+@TestPropertySource(properties = "yumpoo.projects.deletion.purge-poll-delay=1h")
 class DashboardHttpIT {
     private static final UUID COMPANY_ID = UUID.fromString("00000000-0000-4000-8000-000000000001");
     private static final UUID WORKSPACE_ID = UUID.fromString("a460aa25-7180-490b-ab14-f9ec09049024");
@@ -59,20 +56,47 @@ class DashboardHttpIT {
     private static final String CSRF_COOKIE = "__Host-yumpoo-csrf";
     private static final String CSRF_HEADER = "X-XSRF-TOKEN";
 
-    private final HttpClient client = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build();
-    @LocalServerPort private int port;
-    @Autowired private IdentityAcceptanceFixtureProvisioner provisioner;
-    @Autowired private SessionService sessions;
-    @Autowired private JdbcClient jdbc;
-    @Autowired private Clock clock;
-    @Autowired private ObjectMapper json;
-    @Autowired private PlatformTransactionManager transactionManager;
-    @Autowired private WorkItemLabelRepository labels;
-    @Autowired private PlatformRoleMaintenanceUseCase maintenanceUseCase;
-    @Autowired private CompanyConfigurationQuery companyQuery;
-    @Autowired private DashboardService dashboards;
-    @Autowired private ProjectPurgeQueue purgeQueue;
-    @Autowired private JdbcReportingProjectDataPurger reportingPurger;
+    private final HttpClient client =
+            HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build();
+
+    @LocalServerPort
+    private int port;
+
+    @Autowired
+    private IdentityAcceptanceFixtureProvisioner provisioner;
+
+    @Autowired
+    private SessionService sessions;
+
+    @Autowired
+    private JdbcClient jdbc;
+
+    @Autowired
+    private Clock clock;
+
+    @Autowired
+    private ObjectMapper json;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
+
+    @Autowired
+    private WorkItemLabelRepository labels;
+
+    @Autowired
+    private PlatformRoleMaintenanceUseCase maintenanceUseCase;
+
+    @Autowired
+    private CompanyConfigurationQuery companyQuery;
+
+    @Autowired
+    private DashboardService dashboards;
+
+    @Autowired
+    private ProjectPurgeQueue purgeQueue;
+
+    @Autowired
+    private JdbcReportingProjectDataPurger reportingPurger;
 
     private ActorFixture owner;
     private ActorFixture member;
@@ -84,8 +108,10 @@ class DashboardHttpIT {
         cleanUp();
         try (RequestCorrelationContext.Scope ignored = RequestCorrelationContext.open(
                 RequestCorrelation.root("work-item-category-http-" + UUID.randomUUID()))) {
-            DirectoryMemberProvisioningResult ownerUser = provisioner.provision("dashboard-owner", "Work Category Owner");
-            DirectoryMemberProvisioningResult memberUser = provisioner.provision("dashboard-member", "Work Category Member");
+            DirectoryMemberProvisioningResult ownerUser =
+                    provisioner.provision("dashboard-owner", "Work Category Owner");
+            DirectoryMemberProvisioningResult memberUser =
+                    provisioner.provision("dashboard-member", "Work Category Member");
             owner = actor(ownerUser.userId());
             member = actor(memberUser.userId());
             createProject(owner.userId(), member.userId());
@@ -95,73 +121,178 @@ class DashboardHttpIT {
     }
 
     @AfterEach
-    void tearDown() { cleanUp(); }
+    void tearDown() {
+        cleanUp();
+    }
 
     @Test
     void teamDashboardRequiresAdministratorAndSplitsTimeByCompanyDay() throws Exception {
         ActorFixture admin;
-        try (var ignored = RequestCorrelationContext.open(RequestCorrelation.root("team-dashboard-" + UUID.randomUUID()))) {
+        try (var ignored =
+                RequestCorrelationContext.open(RequestCorrelation.root("team-dashboard-" + UUID.randomUUID()))) {
             var adminUser = provisioner.provision("team-dashboard-admin", "Team Admin");
-            maintenanceUseCase.execute(new MaintenanceRoleCommand(companyQuery.current().companyId(), adminUser.userId(),
-                    MaintenanceRoleMode.BOOTSTRAP, "UP10 team dashboard fixture"));
+            maintenanceUseCase.execute(new MaintenanceRoleCommand(
+                    companyQuery.current().companyId(),
+                    adminUser.userId(),
+                    MaintenanceRoleMode.BOOTSTRAP,
+                    "UP10 team dashboard fixture"));
             admin = actor(adminUser.userId());
         }
         var body = (tools.jackson.databind.node.ObjectNode) json.readTree(workItemBody(tasksId, "跨日计时"));
         body.set("assigneeUserIds", json.createArrayNode().add(member.userId().toString()));
         body.put("dueDate", "2020-01-01");
-        var assigned = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member, body.toString(), null, UUID.randomUUID()));
-        created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member, workItemBody(tasksId, "未分配"), null, UUID.randomUUID()));
+        var assigned = created(mutate(
+                "POST",
+                "/api/v1/projects/" + PROJECT_ID + "/work-items",
+                member,
+                body.toString(),
+                null,
+                UUID.randomUUID()));
+        created(mutate(
+                "POST",
+                "/api/v1/projects/" + PROJECT_ID + "/work-items",
+                member,
+                workItemBody(tasksId, "未分配"),
+                null,
+                UUID.randomUUID()));
         var zone = companyQuery.current().timezone();
         var midnight = java.time.LocalDate.of(2026, 1, 2).atStartOfDay(zone).toInstant();
-        var time = json.createObjectNode().put("startedAt", midnight.minusSeconds(3600).toString()).put("stoppedAt", midnight.plusSeconds(7200).toString());
-        ok(mutate("POST", "/api/v1/work-items/" + assigned.path("id").asText() + "/time-sessions", member, time.toString(), null, UUID.randomUUID()));
+        var time = json.createObjectNode()
+                .put("startedAt", midnight.minusSeconds(3600).toString())
+                .put("stoppedAt", midnight.plusSeconds(7200).toString());
+        ok(mutate(
+                "POST",
+                "/api/v1/work-items/" + assigned.path("id").asText() + "/time-sessions",
+                member,
+                time.toString(),
+                null,
+                UUID.randomUUID()));
 
-        String base = "/api/v1/company/team-dashboard", sheetBody = "{\"from\":\"2026-01-01\",\"to\":\"2026-01-07\",\"projectIds\":[],\"userIds\":[]}";
-        assertThat(mutate("POST", base + "/timesheet/query", member, sheetBody, null, null).statusCode()).isEqualTo(403);
-        assertThat(mutate("POST", base + "/timesheet/query", member, sheetBody.replace("2026-01-07", "2026-04-05"), null, null).statusCode()).isEqualTo(403);
+        String base = "/api/v1/company/team-dashboard",
+                sheetBody = "{\"from\":\"2026-01-01\",\"to\":\"2026-01-07\",\"projectIds\":[],\"userIds\":[]}";
+        assertThat(mutate("POST", base + "/timesheet/query", member, sheetBody, null, null)
+                        .statusCode())
+                .isEqualTo(403);
+        assertThat(mutate(
+                                "POST",
+                                base + "/timesheet/query",
+                                member,
+                                sheetBody.replace("2026-01-07", "2026-04-05"),
+                                null,
+                                null)
+                        .statusCode())
+                .isEqualTo(403);
         assertThat(get(base + "/options", member).statusCode()).isEqualTo(403);
         var sheet = ok(mutate("POST", base + "/timesheet/query", admin, sheetBody, null, null));
         assertThat(sheet.path("timezone").asText()).isEqualTo(zone.getId());
         assertThat(sheet.path("days").size()).isEqualTo(7);
         assertThat(sheet.path("days").get(2).path("dayType").asText()).isEqualTo("NON_WORKDAY");
         assertThat(sheet.path("days").get(2).path("standardMinutes").asInt()).isZero();
-        assertThat(sheet.path("days").get(4).path("standardMinutes").asInt()).isEqualTo(companyQuery.current().defaultWorkdayMinutes());
-        assertThat(sheet.path("entries").toString()).contains("\"date\":\"2026-01-01\",\"durationMs\":3600000")
+        assertThat(sheet.path("days").get(4).path("standardMinutes").asInt())
+                .isEqualTo(companyQuery.current().defaultWorkdayMinutes());
+        assertThat(sheet.path("entries").toString())
+                .contains("\"date\":\"2026-01-01\",\"durationMs\":3600000")
                 .contains("\"date\":\"2026-01-02\",\"durationMs\":7200000");
         assertThat(sheet.path("workItems").get(0).path("projectName").asText()).isEqualTo("Category Work");
-        assertThat(sheet.path("members").toString()).contains(member.userId().toString()).contains(admin.userId().toString());
-        assertThat(mutate("POST", base + "/timesheet/query", admin, sheetBody.replace("2026-01-07", "2026-04-05"), null, null).statusCode()).isEqualTo(422);
+        assertThat(sheet.path("members").toString())
+                .contains(member.userId().toString())
+                .contains(admin.userId().toString());
+        assertThat(mutate(
+                                "POST",
+                                base + "/timesheet/query",
+                                admin,
+                                sheetBody.replace("2026-01-07", "2026-04-05"),
+                                null,
+                                null)
+                        .statusCode())
+                .isEqualTo(422);
 
-        var workload = ok(mutate("POST", base + "/workload/query", admin, "{\"projectIds\":[],\"userIds\":[]}", null, null));
-        var memberLoad = java.util.stream.StreamSupport.stream(workload.path("members").spliterator(), false)
-                .filter(m -> m.path("userId").asText().equals(member.userId().toString())).findFirst().orElseThrow();
-        assertThat(memberLoad.path("todo").asLong() + memberLoad.path("inProgress").asLong()).isEqualTo(1);
+        var workload =
+                ok(mutate("POST", base + "/workload/query", admin, "{\"projectIds\":[],\"userIds\":[]}", null, null));
+        var memberLoad = java.util.stream.StreamSupport.stream(
+                        workload.path("members").spliterator(), false)
+                .filter(m -> m.path("userId").asText().equals(member.userId().toString()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(memberLoad.path("todo").asLong()
+                        + memberLoad.path("inProgress").asLong())
+                .isEqualTo(1);
         assertThat(memberLoad.path("overdue").asLong()).isEqualTo(1);
-        assertThat(workload.path("unassigned").path("todo").asLong() + workload.path("unassigned").path("inProgress").asLong()).isEqualTo(1);
-        var tasks = ok(mutate("POST", base + "/workload/tasks/query", admin,
-                "{\"userId\":\"" + member.userId() + "\",\"projectIds\":[],\"offset\":0,\"limit\":50}", null, null));
+        assertThat(workload.path("unassigned").path("todo").asLong()
+                        + workload.path("unassigned").path("inProgress").asLong())
+                .isEqualTo(1);
+        var tasks = ok(mutate(
+                "POST",
+                base + "/workload/tasks/query",
+                admin,
+                "{\"userId\":\"" + member.userId() + "\",\"projectIds\":[],\"offset\":0,\"limit\":50}",
+                null,
+                null));
         assertThat(tasks.path("totalElements").asLong()).isEqualTo(1);
         assertThat(tasks.path("items").get(0).path("overdue").asBoolean()).isTrue();
         assertThat(tasks.path("items").get(0).path("projectName").asText()).isEqualTo("Category Work");
-        assertThat(ok(mutate("POST", base + "/workload/tasks/query", admin, "{\"userId\":null,\"projectIds\":[],\"offset\":0,\"limit\":50}", null, null))
-                .path("items").get(0).path("title").asText()).isEqualTo("未分配");
-        assertThat(ok(get(base + "/options", admin)).path("projects").get(0).path("name").asText()).isEqualTo("Category Work");
+        assertThat(ok(mutate(
+                                "POST",
+                                base + "/workload/tasks/query",
+                                admin,
+                                "{\"userId\":null,\"projectIds\":[],\"offset\":0,\"limit\":50}",
+                                null,
+                                null))
+                        .path("items")
+                        .get(0)
+                        .path("title")
+                        .asText())
+                .isEqualTo("未分配");
+        assertThat(ok(get(base + "/options", admin))
+                        .path("projects")
+                        .get(0)
+                        .path("name")
+                        .asText())
+                .isEqualTo("Category Work");
         var currentProject = ok(get("/api/v1/projects/" + PROJECT_ID, admin));
-        ok(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/archive", admin, "", currentProject.path("etag").asText(), UUID.randomUUID()));
+        ok(mutate(
+                "POST",
+                "/api/v1/projects/" + PROJECT_ID + "/archive",
+                admin,
+                "",
+                currentProject.path("etag").asText(),
+                UUID.randomUUID()));
         String requestedProject = "[\"" + PROJECT_ID + "\"]";
         for (String scope : java.util.List.of("[]", requestedProject)) {
-            var archivedSheet = ok(mutate("POST", base + "/timesheet/query", admin,
-                    sheetBody.replace("\"projectIds\":[]", "\"projectIds\":" + scope), null, null));
+            var archivedSheet = ok(mutate(
+                    "POST",
+                    base + "/timesheet/query",
+                    admin,
+                    sheetBody.replace("\"projectIds\":[]", "\"projectIds\":" + scope),
+                    null,
+                    null));
             assertThat(archivedSheet.path("entries").isEmpty()).isTrue();
             assertThat(archivedSheet.path("workItems").isEmpty()).isTrue();
-            var archivedLoad = ok(mutate("POST", base + "/workload/query", admin, "{\"projectIds\":" + scope + ",\"userIds\":[]}", null, null));
+            var archivedLoad = ok(mutate(
+                    "POST",
+                    base + "/workload/query",
+                    admin,
+                    "{\"projectIds\":" + scope + ",\"userIds\":[]}",
+                    null,
+                    null));
             for (var row : archivedLoad.path("members")) {
-                assertThat(row.path("todo").asLong() + row.path("inProgress").asLong()).isZero();
+                assertThat(row.path("todo").asLong() + row.path("inProgress").asLong())
+                        .isZero();
                 assertThat(row.path("overdue").asLong()).isZero();
             }
-            assertThat(archivedLoad.path("unassigned").path("todo").asLong() + archivedLoad.path("unassigned").path("inProgress").asLong()).isZero();
-            assertThat(ok(mutate("POST", base + "/workload/tasks/query", admin,
-                    "{\"userId\":null,\"projectIds\":" + scope + ",\"offset\":0,\"limit\":50}", null, null)).path("totalElements").asLong()).isZero();
+            assertThat(archivedLoad.path("unassigned").path("todo").asLong()
+                            + archivedLoad.path("unassigned").path("inProgress").asLong())
+                    .isZero();
+            assertThat(ok(mutate(
+                                    "POST",
+                                    base + "/workload/tasks/query",
+                                    admin,
+                                    "{\"userId\":null,\"projectIds\":" + scope + ",\"offset\":0,\"limit\":50}",
+                                    null,
+                                    null))
+                            .path("totalElements")
+                            .asLong())
+                    .isZero();
         }
         assertThat(ok(get(base + "/options", admin)).path("projects").isEmpty()).isTrue();
     }
@@ -170,20 +301,53 @@ class DashboardHttpIT {
     void membersReadOnlyTheirOwnTimesheetAndCurrentTasks() throws Exception {
         var body = (tools.jackson.databind.node.ObjectNode) json.readTree(workItemBody(tasksId, "本人任务"));
         body.set("assigneeUserIds", json.createArrayNode().add(member.userId().toString()));
-        var mine = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member, body.toString(), null, UUID.randomUUID()));
-        var others = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", owner, workItemBody(tasksId, "他人任务"), null, UUID.randomUUID()));
-        var midnight = java.time.LocalDate.of(2026, 1, 2).atStartOfDay(companyQuery.current().timezone()).toInstant();
-        var time = json.createObjectNode().put("startedAt", midnight.minusSeconds(3600).toString()).put("stoppedAt", midnight.plusSeconds(7200).toString());
-        ok(mutate("POST", "/api/v1/work-items/" + mine.path("id").asText() + "/time-sessions", member, time.toString(), null, UUID.randomUUID()));
-        ok(mutate("POST", "/api/v1/work-items/" + others.path("id").asText() + "/time-sessions", owner, time.toString(), null, UUID.randomUUID()));
+        var mine = created(mutate(
+                "POST",
+                "/api/v1/projects/" + PROJECT_ID + "/work-items",
+                member,
+                body.toString(),
+                null,
+                UUID.randomUUID()));
+        var others = created(mutate(
+                "POST",
+                "/api/v1/projects/" + PROJECT_ID + "/work-items",
+                owner,
+                workItemBody(tasksId, "他人任务"),
+                null,
+                UUID.randomUUID()));
+        var midnight = java.time.LocalDate.of(2026, 1, 2)
+                .atStartOfDay(companyQuery.current().timezone())
+                .toInstant();
+        var time = json.createObjectNode()
+                .put("startedAt", midnight.minusSeconds(3600).toString())
+                .put("stoppedAt", midnight.plusSeconds(7200).toString());
+        ok(mutate(
+                "POST",
+                "/api/v1/work-items/" + mine.path("id").asText() + "/time-sessions",
+                member,
+                time.toString(),
+                null,
+                UUID.randomUUID()));
+        ok(mutate(
+                "POST",
+                "/api/v1/work-items/" + others.path("id").asText() + "/time-sessions",
+                owner,
+                time.toString(),
+                null,
+                UUID.randomUUID()));
 
         var sheet = ok(get("/api/v1/me/timesheet?from=2026-01-01&to=2026-01-07", member));
         assertThat(sheet.path("members").size()).isEqualTo(1);
-        assertThat(sheet.path("members").get(0).path("userId").asText()).isEqualTo(member.userId().toString());
+        assertThat(sheet.path("members").get(0).path("userId").asText())
+                .isEqualTo(member.userId().toString());
         assertThat(sheet.path("entries").size()).isEqualTo(2);
-        assertThat(sheet.path("entries").toString()).contains("\"date\":\"2026-01-01\",\"durationMs\":3600000")
-                .contains("\"date\":\"2026-01-02\",\"durationMs\":7200000").doesNotContain(owner.userId().toString());
-        assertThat(get("/api/v1/me/timesheet?from=2026-01-01&to=2026-04-05", member).statusCode()).isEqualTo(422);
+        assertThat(sheet.path("entries").toString())
+                .contains("\"date\":\"2026-01-01\",\"durationMs\":3600000")
+                .contains("\"date\":\"2026-01-02\",\"durationMs\":7200000")
+                .doesNotContain(owner.userId().toString());
+        assertThat(get("/api/v1/me/timesheet?from=2026-01-01&to=2026-04-05", member)
+                        .statusCode())
+                .isEqualTo(422);
 
         var tasks = ok(get("/api/v1/me/current-tasks", member));
         assertThat(tasks.path("totalElements").asLong()).isEqualTo(1);
@@ -194,34 +358,69 @@ class DashboardHttpIT {
     @Test
     void nonProjectCategoryTimeJoinsOwnAndUnfilteredTeamTimesheets() throws Exception {
         ActorFixture admin, outsider;
-        try (var ignored = RequestCorrelationContext.open(RequestCorrelation.root("team-categories-" + UUID.randomUUID()))) {
+        try (var ignored =
+                RequestCorrelationContext.open(RequestCorrelation.root("team-categories-" + UUID.randomUUID()))) {
             var adminUser = provisioner.provision("team-category-admin", "Category Admin");
-            maintenanceUseCase.execute(new MaintenanceRoleCommand(companyQuery.current().companyId(), adminUser.userId(),
-                    MaintenanceRoleMode.BOOTSTRAP, "non-project category fixture"));
+            maintenanceUseCase.execute(new MaintenanceRoleCommand(
+                    companyQuery.current().companyId(),
+                    adminUser.userId(),
+                    MaintenanceRoleMode.BOOTSTRAP,
+                    "non-project category fixture"));
             admin = actor(adminUser.userId());
-            outsider = actor(provisioner.provision("team-category-outsider", "No Projects").userId());
+            outsider = actor(provisioner
+                    .provision("team-category-outsider", "No Projects")
+                    .userId());
         }
-        var item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member, workItemBody(tasksId, "并行工作"), null, UUID.randomUUID()));
-        var start = java.time.LocalDate.of(2026, 1, 5).atTime(10, 0).atZone(companyQuery.current().timezone()).toInstant();
+        var item = created(mutate(
+                "POST",
+                "/api/v1/projects/" + PROJECT_ID + "/work-items",
+                member,
+                workItemBody(tasksId, "并行工作"),
+                null,
+                UUID.randomUUID()));
+        var start = java.time.LocalDate.of(2026, 1, 5)
+                .atTime(10, 0)
+                .atZone(companyQuery.current().timezone())
+                .toInstant();
         String range = "\"startedAt\":\"" + start + "\",\"stoppedAt\":\"" + start.plusSeconds(3600) + "\"";
-        ok(mutate("POST", "/api/v1/me/time-sessions/fill", member, "{\"mode\":\"PARALLEL\",\"entries\":[{\"workItemId\":\""
-                + item.path("id").asText() + "\"," + range + "},{\"timeCategory\":\"MEETING\"," + range + "}]}", null, UUID.randomUUID()));
-        ok(mutate("POST", "/api/v1/me/time-sessions/fill", outsider, "{\"mode\":\"GAPS\",\"entries\":[{\"timeCategory\":\"BUSINESS_TRIP\","
-                + range + "}]}", null, UUID.randomUUID()));
+        ok(mutate(
+                "POST",
+                "/api/v1/me/time-sessions/fill",
+                member,
+                "{\"mode\":\"PARALLEL\",\"entries\":[{\"workItemId\":\""
+                        + item.path("id").asText() + "\"," + range + "},{\"timeCategory\":\"MEETING\"," + range + "}]}",
+                null,
+                UUID.randomUUID()));
+        ok(mutate(
+                "POST",
+                "/api/v1/me/time-sessions/fill",
+                outsider,
+                "{\"mode\":\"GAPS\",\"entries\":[{\"timeCategory\":\"BUSINESS_TRIP\"," + range + "}]}",
+                null,
+                UUID.randomUUID()));
 
         var own = ok(get("/api/v1/me/timesheet?from=2026-01-01&to=2026-01-07", member));
         assertThat(own.path("entries").get(0).path("durationMs").asLong()).isEqualTo(1800000);
-        assertThat(own.path("categoryEntries").toString()).contains("\"timeCategory\":\"MEETING\"", "\"date\":\"2026-01-05\",\"durationMs\":1800000")
+        assertThat(own.path("categoryEntries").toString())
+                .contains("\"timeCategory\":\"MEETING\"", "\"date\":\"2026-01-05\",\"durationMs\":1800000")
                 .doesNotContain("BUSINESS_TRIP");
         var outside = ok(get("/api/v1/me/timesheet?from=2026-01-01&to=2026-01-07", outsider));
         assertThat(outside.path("entries").isEmpty()).isTrue();
-        assertThat(outside.path("categoryEntries").get(0).path("durationMs").asLong()).isEqualTo(3600000);
+        assertThat(outside.path("categoryEntries").get(0).path("durationMs").asLong())
+                .isEqualTo(3600000);
 
-        String base = "/api/v1/company/team-dashboard/timesheet/query", sheetBody = "{\"from\":\"2026-01-01\",\"to\":\"2026-01-07\",\"projectIds\":[],\"userIds\":[]}";
+        String base = "/api/v1/company/team-dashboard/timesheet/query",
+                sheetBody = "{\"from\":\"2026-01-01\",\"to\":\"2026-01-07\",\"projectIds\":[],\"userIds\":[]}";
         var sheet = ok(mutate("POST", base, admin, sheetBody, null, null));
         assertThat(sheet.path("categoryEntries").size()).isEqualTo(2);
         assertThat(sheet.path("members").toString()).contains(outsider.userId().toString());
-        var filtered = ok(mutate("POST", base, admin, sheetBody.replace("\"projectIds\":[]", "\"projectIds\":[\"" + PROJECT_ID + "\"]"), null, null));
+        var filtered = ok(mutate(
+                "POST",
+                base,
+                admin,
+                sheetBody.replace("\"projectIds\":[]", "\"projectIds\":[\"" + PROJECT_ID + "\"]"),
+                null,
+                null));
         assertThat(filtered.path("categoryEntries").isEmpty()).isTrue();
         assertThat(filtered.path("entries").size()).isEqualTo(1);
     }
@@ -232,16 +431,24 @@ class DashboardHttpIT {
         UUID key = UUID.randomUUID();
         var first = created(mutate("POST", "/api/v1/me/dashboards", member, body, null, key));
         String path = "/api/v1/me/dashboards/" + first.path("id").asText();
-        assertThat(created(mutate("POST", "/api/v1/me/dashboards", member, body, null, key))).isEqualTo(first);
-        assertThat(ok(get("/api/v1/me/dashboards", member)).path("items").size()).isEqualTo(1);
+        assertThat(created(mutate("POST", "/api/v1/me/dashboards", member, body, null, key)))
+                .isEqualTo(first);
+        assertThat(ok(get("/api/v1/me/dashboards", member)).path("items").size())
+                .isEqualTo(1);
         assertThat(ok(get("/api/v1/me/dashboards", owner)).path("items").size()).isZero();
         assertThat(get(path, owner).statusCode()).isEqualTo(404);
-        assertThat(mutate("PATCH", path, owner, body, "\"0\"", UUID.randomUUID()).statusCode()).isEqualTo(404);
-        assertThat(mutate("PATCH", path, member, body, null, UUID.randomUUID()).statusCode()).isEqualTo(428);
+        assertThat(mutate("PATCH", path, owner, body, "\"0\"", UUID.randomUUID())
+                        .statusCode())
+                .isEqualTo(404);
+        assertThat(mutate("PATCH", path, member, body, null, UUID.randomUUID()).statusCode())
+                .isEqualTo(428);
         var updated = ok(mutate("PATCH", path, member, body.replace("我的仪表板", "第二版"), "\"0\"", UUID.randomUUID()));
         assertThat(updated.path("name").asText()).isEqualTo("第二版");
-        assertThat(mutate("PATCH", path, member, body, "\"0\"", UUID.randomUUID()).statusCode()).isEqualTo(412);
-        assertThat(mutate("POST", path + "/query", owner, "{}", null, null).statusCode()).isEqualTo(404);
+        assertThat(mutate("PATCH", path, member, body, "\"0\"", UUID.randomUUID())
+                        .statusCode())
+                .isEqualTo(412);
+        assertThat(mutate("POST", path + "/query", owner, "{}", null, null).statusCode())
+                .isEqualTo(404);
         UUID deleteKey = UUID.randomUUID();
         ok(mutate("DELETE", path, member, "", "\"1\"", deleteKey));
         ok(mutate("DELETE", path, member, "", "\"1\"", deleteKey));
@@ -250,24 +457,35 @@ class DashboardHttpIT {
 
     @Test
     void dashboardWriteHoldsProjectThroughCommitAndPurgePreventsNestedReferenceResurrection() throws Exception {
-        var initial=created(mutate("POST","/api/v1/me/dashboards",owner,dashboardBody(),null,UUID.randomUUID()));
-        UUID id=UUID.fromString(initial.path("id").asText());
-        String path="/api/v1/me/dashboards/"+id;
+        var initial = created(mutate("POST", "/api/v1/me/dashboards", owner, dashboardBody(), null, UUID.randomUUID()));
+        UUID id = UUID.fromString(initial.path("id").asText());
+        String path = "/api/v1/me/dashboards/" + id;
         jdbc.sql("""
                 UPDATE yumpoo.project SET lifecycle='ARCHIVED',archived_at=CURRENT_TIMESTAMP,
                     updated_at=CURRENT_TIMESTAMP,updated_by_user_id=:owner,
                     deletion_requested_at=CURRENT_TIMESTAMP-interval '2 seconds',deletion_requested_by=:owner,
                     purge_after=CURRENT_TIMESTAMP-interval '1 second' WHERE id=:project
-                """).param("owner",owner.userId()).param("project",PROJECT_ID).update();
-        var input=json.readValue(dashboardReferenceBody(PROJECT_ID,"ALL",true).toString(),DashboardModels.Write.class);
-        var written=new CountDownLatch(1);
-        var commit=new CountDownLatch(1);
-        var executor=Executors.newSingleThreadExecutor();
-        var writer=executor.submit(()->{
-            try (var ignored=RequestCorrelationContext.open(RequestCorrelation.root("dashboard-purge-write-"+UUID.randomUUID()))) {
-                return new TransactionTemplate(transactionManager).execute(status->{
-                    var result=dashboards.command(new CurrentActor(owner.userId(),COMPANY_ID,0,Set.of()),"PATCH",id,input,0,
-                            UUID.randomUUID(),new RequestHash("0".repeat(64)));
+                """)
+                .param("owner", owner.userId())
+                .param("project", PROJECT_ID)
+                .update();
+        var input =
+                json.readValue(dashboardReferenceBody(PROJECT_ID, "ALL", true).toString(), DashboardModels.Write.class);
+        var written = new CountDownLatch(1);
+        var commit = new CountDownLatch(1);
+        var executor = Executors.newSingleThreadExecutor();
+        var writer = executor.submit(() -> {
+            try (var ignored = RequestCorrelationContext.open(
+                    RequestCorrelation.root("dashboard-purge-write-" + UUID.randomUUID()))) {
+                return new TransactionTemplate(transactionManager).execute(status -> {
+                    var result = dashboards.command(
+                            new CurrentActor(owner.userId(), COMPANY_ID, 0, Set.of()),
+                            "PATCH",
+                            id,
+                            input,
+                            0,
+                            UUID.randomUUID(),
+                            new RequestHash("0".repeat(64)));
                     written.countDown();
                     awaitCommit(commit);
                     return result;
@@ -275,112 +493,257 @@ class DashboardHttpIT {
             }
         });
         try {
-            assertThat(written.await(15,TimeUnit.SECONDS)).isTrue();
-            assertThat(purgeQueue.claim(clock.instant(),"dashboard-lock-test",Duration.ofMinutes(3),true)).isEmpty();
+            assertThat(written.await(15, TimeUnit.SECONDS)).isTrue();
+            assertThat(purgeQueue.claim(clock.instant(), "dashboard-lock-test", Duration.ofMinutes(3), true))
+                    .isEmpty();
             assertThat(jdbc.sql("SELECT purge_started_at IS NOT NULL FROM yumpoo.project WHERE id=:id")
-                    .param("id",PROJECT_ID).query(Boolean.class).single()).isFalse();
+                            .param("id", PROJECT_ID)
+                            .query(Boolean.class)
+                            .single())
+                    .isFalse();
             commit.countDown();
-            assertThat(writer.get(15,TimeUnit.SECONDS).result().httpStatus()).isEqualTo(200);
-            assertThat(purgeQueue.claim(clock.instant(),"dashboard-lock-test",Duration.ofMinutes(3),true))
-                    .isPresent().get().satisfies(lease->assertThat(lease.projectId()).isEqualTo(PROJECT_ID));
-            reportingPurger.purgeBatch(COMPANY_ID,PROJECT_ID,500);
-            String cleared=jdbc.sql("SELECT configuration::text FROM yumpoo.personal_dashboard WHERE id=:id")
-                    .param("id",id).query(String.class).single();
+            assertThat(writer.get(15, TimeUnit.SECONDS).result().httpStatus()).isEqualTo(200);
+            assertThat(purgeQueue.claim(clock.instant(), "dashboard-lock-test", Duration.ofMinutes(3), true))
+                    .isPresent()
+                    .get()
+                    .satisfies(lease -> assertThat(lease.projectId()).isEqualTo(PROJECT_ID));
+            reportingPurger.purgeBatch(COMPANY_ID, PROJECT_ID, 500);
+            String cleared = jdbc.sql("SELECT configuration::text FROM yumpoo.personal_dashboard WHERE id=:id")
+                    .param("id", id)
+                    .query(String.class)
+                    .single();
             assertThat(cleared).doesNotContain(PROJECT_ID.toString());
-            var after=ok(get(path,owner));
-            assertThat(mutate("PATCH",path,owner,dashboardReferenceBody(PROJECT_ID,"ALL",false).toString(),
-                    after.path("etag").asText(),UUID.randomUUID()).statusCode()).isEqualTo(404);
+            var after = ok(get(path, owner));
+            var chartFilters = after.at("/configuration/widgets/0/chart/filters");
+            for (String key : List.of("assignees", "statuses", "priorities", "contentIds", "categories")) {
+                assertThat(chartFilters.get(key)).as(key).isEqualTo(json.createArrayNode());
+            }
+            assertThat(chartFilters.get("query"))
+                    .isEqualTo(json.getNodeFactory().stringNode(""));
+            assertThat(mutate(
+                                    "PATCH",
+                                    path,
+                                    owner,
+                                    dashboardReferenceBody(PROJECT_ID, "ALL", false)
+                                            .toString(),
+                                    after.path("etag").asText(),
+                                    UUID.randomUUID())
+                            .statusCode())
+                    .isEqualTo(404);
             assertThat(jdbc.sql("SELECT configuration::text FROM yumpoo.personal_dashboard WHERE id=:id")
-                    .param("id",id).query(String.class).single()).isEqualTo(cleared);
+                            .param("id", id)
+                            .query(String.class)
+                            .single())
+                    .isEqualTo(cleared);
         } finally {
             commit.countDown();
             executor.shutdownNow();
-            assertThat(executor.awaitTermination(15,TimeUnit.SECONDS)).isTrue();
+            assertThat(executor.awaitTermination(15, TimeUnit.SECONDS)).isTrue();
         }
     }
 
     @Test
     void missingNestedProjectsAreRejectedWithoutChangingDashboard() throws Exception {
-        var initial=created(mutate("POST","/api/v1/me/dashboards",member,dashboardBody(),null,UUID.randomUUID()));
-        String path="/api/v1/me/dashboards/"+initial.path("id").asText();
-        UUID missing=UUID.randomUUID();
-        for (String location : List.of("GLOBAL","CHART","CHART_FILTER"))
-            assertThat(mutate("PATCH",path,member,dashboardReferenceBody(missing,location,true).toString(),
-                    initial.path("etag").asText(),UUID.randomUUID()).statusCode()).as(location).isEqualTo(404);
-        var after=ok(get(path,member));
+        var initial =
+                created(mutate("POST", "/api/v1/me/dashboards", member, dashboardBody(), null, UUID.randomUUID()));
+        String path = "/api/v1/me/dashboards/" + initial.path("id").asText();
+        UUID missing = UUID.randomUUID();
+        for (String location : List.of("GLOBAL", "CHART", "CHART_FILTER"))
+            assertThat(mutate(
+                                    "PATCH",
+                                    path,
+                                    member,
+                                    dashboardReferenceBody(missing, location, true)
+                                            .toString(),
+                                    initial.path("etag").asText(),
+                                    UUID.randomUUID())
+                            .statusCode())
+                    .as(location)
+                    .isEqualTo(404);
+        var after = ok(get(path, member));
         assertThat(after.path("version").asLong()).isZero();
         assertThat(after.path("configuration")).isEqualTo(initial.path("configuration"));
     }
 
     @Test
     void statisticsCountParentsAndChildrenOnceAndSumRawTimeWithFilters() throws Exception {
-        var parent = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member, workItemBody(tasksId, "父项"), null, UUID.randomUUID()));
-        var child = created(mutate("POST", "/api/v1/work-items/" + parent.path("id").asText() + "/subitems", member, workItemBody(tasksId, "子项"), null, UUID.randomUUID()));
-        created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member, workItemBody(requirementsId, "无类型限制"), null, UUID.randomUUID()));
-        jdbc.sql("UPDATE yumpoo.work_item SET assignee_user_id=:user WHERE id=:id").param("user", member.userId()).param("id", UUID.fromString(child.path("id").asText())).update();
-        jdbc.sql("INSERT INTO yumpoo.work_item_assignee SELECT company_id,project_id,id,:user,0 FROM yumpoo.work_item WHERE id=:id")
-                .param("user", member.userId()).param("id", UUID.fromString(child.path("id").asText())).update();
+        var parent = created(mutate(
+                "POST",
+                "/api/v1/projects/" + PROJECT_ID + "/work-items",
+                member,
+                workItemBody(tasksId, "父项"),
+                null,
+                UUID.randomUUID()));
+        var child = created(mutate(
+                "POST",
+                "/api/v1/work-items/" + parent.path("id").asText() + "/subitems",
+                member,
+                workItemBody(tasksId, "子项"),
+                null,
+                UUID.randomUUID()));
+        created(mutate(
+                "POST",
+                "/api/v1/projects/" + PROJECT_ID + "/work-items",
+                member,
+                workItemBody(requirementsId, "无类型限制"),
+                null,
+                UUID.randomUUID()));
+        jdbc.sql("UPDATE yumpoo.work_item SET assignee_user_id=:user WHERE id=:id")
+                .param("user", member.userId())
+                .param("id", UUID.fromString(child.path("id").asText()))
+                .update();
+        jdbc.sql(
+                        "INSERT INTO yumpoo.work_item_assignee SELECT company_id,project_id,id,:user,0 FROM yumpoo.work_item WHERE id=:id")
+                .param("user", member.userId())
+                .param("id", UUID.fromString(child.path("id").asText()))
+                .update();
         String times = "/api/v1/work-items/" + parent.path("id").asText() + "/time-sessions";
         String timeBody = "{\"startedAt\":\"2026-01-01T00:00:00Z\",\"stoppedAt\":\"2026-01-01T01:00:00Z\"}";
         ok(mutate("POST", times, member, timeBody, null, UUID.randomUUID()));
-        var second = ok(mutate("POST", times, member, timeBody.replace("2026-01-01", "2026-01-02"), null, UUID.randomUUID()));
-        ok(mutate("POST", "/api/v1/work-items/" + child.path("id").asText() + "/time-sessions", member, timeBody.replace("2026-01-01", "2026-01-03"), null, UUID.randomUUID()));
-        String path = "/api/v1/me/dashboards/" + created(mutate("POST", "/api/v1/me/dashboards", member, dashboardBody(), null, UUID.randomUUID())).path("id").asText();
+        var second = ok(
+                mutate("POST", times, member, timeBody.replace("2026-01-01", "2026-01-02"), null, UUID.randomUUID()));
+        ok(mutate(
+                "POST",
+                "/api/v1/work-items/" + child.path("id").asText() + "/time-sessions",
+                member,
+                timeBody.replace("2026-01-01", "2026-01-03"),
+                null,
+                UUID.randomUUID()));
+        String path = "/api/v1/me/dashboards/"
+                + created(mutate("POST", "/api/v1/me/dashboards", member, dashboardBody(), null, UUID.randomUUID()))
+                        .path("id")
+                        .asText();
         var all = ok(mutate("POST", path + "/query", member, "{}", null, null));
         assertThat(total(all).path("count").asLong()).isEqualTo(3);
         assertThat(total(all).path("durationMs").asLong()).isEqualTo(10800000);
-        var filtered = ok(mutate("POST", path + "/query", member, "{\"filters\":{\"includeArchived\":false,\"hasTime\":false,\"assignees\":[\"" + member.userId() + "\"]}}", null, null));
+        var filtered = ok(mutate(
+                "POST",
+                path + "/query",
+                member,
+                "{\"filters\":{\"includeArchived\":false,\"hasTime\":false,\"assignees\":[\"" + member.userId()
+                        + "\"]}}",
+                null,
+                null));
         assertThat(total(filtered).path("count").asLong()).isEqualTo(1);
         assertThat(total(filtered).path("durationMs").asLong()).isEqualTo(3600000);
-        var unassigned = ok(mutate("POST", path + "/query", member, "{\"filters\":{\"includeArchived\":false,\"hasTime\":false,\"assignees\":[\"UNASSIGNED\"]}}", null, null));
+        var unassigned = ok(mutate(
+                "POST",
+                path + "/query",
+                member,
+                "{\"filters\":{\"includeArchived\":false,\"hasTime\":false,\"assignees\":[\"UNASSIGNED\"]}}",
+                null,
+                null));
         assertThat(total(unassigned).path("count").asLong()).isEqualTo(2);
         var page = ok(mutate("POST", path + "/items/query", member, "{\"offset\":0,\"limit\":1}", null, null));
         assertThat(page.path("items").size()).isEqualTo(1);
         var editable = page.path("items").get(0).path("workItem");
-        assertThat(editable.path("id").asText()).isEqualTo(page.path("items").get(0).path("id").asText());
+        assertThat(editable.path("id").asText())
+                .isEqualTo(page.path("items").get(0).path("id").asText());
         assertThat(editable.path("etag").asText()).isNotBlank();
-        assertThat(editable.path("capabilities").path("canEditFields").asBoolean()).isTrue();
+        assertThat(editable.path("capabilities").path("canEditFields").asBoolean())
+                .isTrue();
         assertThat(editable.path("timeTracking").isObject()).isTrue();
         assertThat(page.path("totalElements").asLong()).isEqualTo(3);
-        assertThat(total(ok(mutate("POST", path + "/query", member, "{\"filters\":{\"includeArchived\":false,\"hasTime\":false,\"query\":\"%\"}}", null, null))).path("count").asLong()).isZero();
-        ok(mutate("DELETE", times + "/" + second.path("id").asText(), member, "{}", second.path("etag").asText(), UUID.randomUUID()));
-        assertThat(total(ok(mutate("POST", path + "/query", member, "{}", null, null))).path("durationMs").asLong()).isEqualTo(7200000);
+        assertThat(total(ok(mutate(
+                                "POST",
+                                path + "/query",
+                                member,
+                                "{\"filters\":{\"includeArchived\":false,\"hasTime\":false,\"query\":\"%\"}}",
+                                null,
+                                null)))
+                        .path("count")
+                        .asLong())
+                .isZero();
+        ok(mutate(
+                "DELETE",
+                times + "/" + second.path("id").asText(),
+                member,
+                "{}",
+                second.path("etag").asText(),
+                UUID.randomUUID()));
+        assertThat(total(ok(mutate("POST", path + "/query", member, "{}", null, null)))
+                        .path("durationMs")
+                        .asLong())
+                .isEqualTo(7200000);
         jdbc.sql("UPDATE yumpoo.work_item SET archived=true WHERE id=:id")
-                .param("id", UUID.fromString(child.path("id").asText())).update();
-        assertThat(total(ok(mutate("POST", path + "/query", member, "{}", null, null))).path("count").asLong()).isEqualTo(2);
-        assertThat(total(ok(mutate("POST", path + "/query", member, "{\"filters\":{\"includeArchived\":true,\"hasTime\":false}}", null, null))).path("count").asLong()).isEqualTo(3);
+                .param("id", UUID.fromString(child.path("id").asText()))
+                .update();
+        assertThat(total(ok(mutate("POST", path + "/query", member, "{}", null, null)))
+                        .path("count")
+                        .asLong())
+                .isEqualTo(2);
+        assertThat(total(ok(mutate(
+                                "POST",
+                                path + "/query",
+                                member,
+                                "{\"filters\":{\"includeArchived\":true,\"hasTime\":false}}",
+                                null,
+                                null)))
+                        .path("count")
+                        .asLong())
+                .isEqualTo(3);
     }
 
     @Test
     void sharedAssigneesCountIndividuallyAndOnlyIncludeTheirOwnTrackedTime() throws Exception {
         ActorFixture other;
-        try (var ignored = RequestCorrelationContext.open(RequestCorrelation.root("dashboard-assignees-" + UUID.randomUUID()))) {
-            other = actor(provisioner.provision("dashboard-other", "Other Member").userId());
+        try (var ignored =
+                RequestCorrelationContext.open(RequestCorrelation.root("dashboard-assignees-" + UUID.randomUUID()))) {
+            other = actor(
+                    provisioner.provision("dashboard-other", "Other Member").userId());
         }
-        jdbc.sql("INSERT INTO yumpoo.project_membership (id,company_id,project_id,user_id,status,joined_at,joined_by_user_id,row_version) "
-                + "VALUES (:id,:company,:project,:user,'ACTIVE',transaction_timestamp(),:owner,0)")
-                .param("id", UUID.randomUUID()).param("company", COMPANY_ID).param("project", PROJECT_ID)
-                .param("user", other.userId()).param("owner", owner.userId()).update();
+        jdbc.sql(
+                        "INSERT INTO yumpoo.project_membership (id,company_id,project_id,user_id,status,joined_at,joined_by_user_id,row_version) "
+                                + "VALUES (:id,:company,:project,:user,'ACTIVE',transaction_timestamp(),:owner,0)")
+                .param("id", UUID.randomUUID())
+                .param("company", COMPANY_ID)
+                .param("project", PROJECT_ID)
+                .param("user", other.userId())
+                .param("owner", owner.userId())
+                .update();
         var body = (tools.jackson.databind.node.ObjectNode) json.readTree(workItemBody(tasksId, "共同处理"));
-        body.set("assigneeUserIds", json.createArrayNode().add(member.userId().toString()).add(owner.userId().toString()));
-        var item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member, body.toString(), null, UUID.randomUUID()));
+        body.set(
+                "assigneeUserIds",
+                json.createArrayNode()
+                        .add(member.userId().toString())
+                        .add(owner.userId().toString()));
+        var item = created(mutate(
+                "POST",
+                "/api/v1/projects/" + PROJECT_ID + "/work-items",
+                member,
+                body.toString(),
+                null,
+                UUID.randomUUID()));
         var actors = java.util.List.of(member, owner, other);
         for (int i = 0; i < actors.size(); i++) {
-            var time = json.createObjectNode().put("startedAt", "2026-01-01T00:00:00Z")
+            var time = json.createObjectNode()
+                    .put("startedAt", "2026-01-01T00:00:00Z")
                     .put("stoppedAt", "2026-01-01T0" + (i + 1) + ":00:00Z");
-            ok(mutate("POST", "/api/v1/work-items/" + item.path("id").asText() + "/time-sessions", actors.get(i), time.toString(), null, UUID.randomUUID()));
+            ok(mutate(
+                    "POST",
+                    "/api/v1/work-items/" + item.path("id").asText() + "/time-sessions",
+                    actors.get(i),
+                    time.toString(),
+                    null,
+                    UUID.randomUUID()));
         }
-        String path = "/api/v1/me/dashboards/" + created(mutate("POST", "/api/v1/me/dashboards", member, dashboardBody(), null, UUID.randomUUID())).path("id").asText();
+        String path = "/api/v1/me/dashboards/"
+                + created(mutate("POST", "/api/v1/me/dashboards", member, dashboardBody(), null, UUID.randomUUID()))
+                        .path("id")
+                        .asText();
         var all = ok(mutate("POST", path + "/query", member, "{}", null, null));
         assertThat(total(all).path("count").asLong()).isEqualTo(1);
         assertThat(total(all).path("durationMs").asLong()).isEqualTo(21600000);
-        var expected = java.util.Map.of(member.userId().toString(), 3600000L, owner.userId().toString(), 7200000L);
+        var expected = java.util.Map.of(
+                member.userId().toString(), 3600000L, owner.userId().toString(), 7200000L);
         int memberBuckets = 0;
-        for (var bucket : all.path("buckets")) if (bucket.path("kind").asText().equals("MEMBER")) {
-            memberBuckets++;
-            assertThat(bucket.path("count").asLong()).isEqualTo(1);
-            assertThat(bucket.path("durationMs").asLong()).isEqualTo(expected.get(bucket.path("key").asText()));
-        }
+        for (var bucket : all.path("buckets"))
+            if (bucket.path("kind").asText().equals("MEMBER")) {
+                memberBuckets++;
+                assertThat(bucket.path("count").asLong()).isEqualTo(1);
+                assertThat(bucket.path("durationMs").asLong())
+                        .isEqualTo(expected.get(bucket.path("key").asText()));
+            }
         assertThat(memberBuckets).isEqualTo(2);
         var widget = chartWidget();
         var chart = (tools.jackson.databind.node.ObjectNode) widget.path("chart");
@@ -390,264 +753,632 @@ class DashboardHttpIT {
         for (var point : counts) assertThat(point.path("value").asLong()).isEqualTo(1);
         chart.set("measure", json.createObjectNode().put("metric", "DURATION").put("calculation", "SUM"));
         for (var point : preview(path, widget, null).path("charts").get(0).path("points"))
-            assertThat(point.path("value").asLong()).isEqualTo(expected.get(point.path("key").asText()));
-        var filters = json.createObjectNode().put("includeArchived", false).put("hasTime", false)
+            assertThat(point.path("value").asLong())
+                    .isEqualTo(expected.get(point.path("key").asText()));
+        var filters = json.createObjectNode()
+                .put("includeArchived", false)
+                .put("hasTime", false)
                 .set("assignees", json.createArrayNode().add(member.userId().toString()));
         var filtered = preview(path, widget, filters);
         var filteredPoints = filtered.path("charts").get(0).path("points");
         assertThat(filteredPoints.size()).isEqualTo(1);
-        assertThat(filteredPoints.get(0).path("key").asText()).isEqualTo(member.userId().toString());
-        for (var bucket : filtered.path("buckets")) if (bucket.path("kind").asText().equals("MEMBER"))
-            assertThat(bucket.path("key").asText()).isEqualTo(member.userId().toString());
+        assertThat(filteredPoints.get(0).path("key").asText())
+                .isEqualTo(member.userId().toString());
+        for (var bucket : filtered.path("buckets"))
+            if (bucket.path("kind").asText().equals("MEMBER"))
+                assertThat(bucket.path("key").asText())
+                        .isEqualTo(member.userId().toString());
     }
 
     @Test
     void editableDetailsRespectVersionAndExcludeArchivedProject() throws Exception {
-        var item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member, workItemBody(tasksId, "可编辑明细"), null, UUID.randomUUID()));
-        String path = "/api/v1/me/dashboards/" + created(mutate("POST", "/api/v1/me/dashboards", member, dashboardBody(), null, UUID.randomUUID())).path("id").asText();
-        String query = "{\"offset\":0,\"limit\":25,\"filters\":{\"includeArchived\":false,\"hasTime\":false,\"assignees\":[\"UNASSIGNED\"]}}";
-        var row = ok(mutate("POST", path + "/items/query", member, query, null, null)).path("items").get(0).path("workItem");
+        var item = created(mutate(
+                "POST",
+                "/api/v1/projects/" + PROJECT_ID + "/work-items",
+                member,
+                workItemBody(tasksId, "可编辑明细"),
+                null,
+                UUID.randomUUID()));
+        String path = "/api/v1/me/dashboards/"
+                + created(mutate("POST", "/api/v1/me/dashboards", member, dashboardBody(), null, UUID.randomUUID()))
+                        .path("id")
+                        .asText();
+        String query =
+                "{\"offset\":0,\"limit\":25,\"filters\":{\"includeArchived\":false,\"hasTime\":false,\"assignees\":[\"UNASSIGNED\"]}}";
+        var row = ok(mutate("POST", path + "/items/query", member, query, null, null))
+                .path("items")
+                .get(0)
+                .path("workItem");
         String editPath = "/api/v1/work-items/" + item.path("id").asText() + "/assignee";
         String body = "{\"assigneeUserId\":\"" + member.userId() + "\"}";
         ok(mutate("PATCH", editPath, member, body, row.path("etag").asText(), UUID.randomUUID()));
-        assertThat(mutate("PATCH", editPath, member, body, row.path("etag").asText(), UUID.randomUUID()).statusCode()).isEqualTo(412);
-        assertThat(ok(mutate("POST", path + "/items/query", member, query, null, null)).path("totalElements").asLong()).isZero();
-        jdbc.sql("UPDATE yumpoo.project SET lifecycle='ARCHIVED',archived_at=transaction_timestamp(),updated_at=transaction_timestamp() WHERE id=:id").param("id", PROJECT_ID).update();
+        assertThat(mutate("PATCH", editPath, member, body, row.path("etag").asText(), UUID.randomUUID())
+                        .statusCode())
+                .isEqualTo(412);
+        assertThat(ok(mutate("POST", path + "/items/query", member, query, null, null))
+                        .path("totalElements")
+                        .asLong())
+                .isZero();
+        jdbc.sql(
+                        "UPDATE yumpoo.project SET lifecycle='ARCHIVED',archived_at=transaction_timestamp(),updated_at=transaction_timestamp() WHERE id=:id")
+                .param("id", PROJECT_ID)
+                .update();
         var excluded = ok(mutate("POST", path + "/items/query", member, "{\"offset\":0,\"limit\":25}", null, null));
         assertThat(excluded.path("items").isEmpty()).isTrue();
         assertThat(excluded.path("totalElements").asLong()).isZero();
-        assertThat(ok(get(path, member)).path("projects").get(0).path("available").asBoolean()).isFalse();
-        var retained=ok(mutate("PATCH",path,member,dashboardBody().replace("我的仪表板","归档后保留连接"),"\"0\"",UUID.randomUUID()));
-        assertThat(retained.path("projects").get(0).path("available").asBoolean()).isFalse();
-        assertThat(retained.path("configuration").path("projectIds").get(0).asText()).isEqualTo(PROJECT_ID.toString());
+        assertThat(ok(get(path, member))
+                        .path("projects")
+                        .get(0)
+                        .path("available")
+                        .asBoolean())
+                .isFalse();
+        var retained = ok(
+                mutate("PATCH", path, member, dashboardBody().replace("我的仪表板", "归档后保留连接"), "\"0\"", UUID.randomUUID()));
+        assertThat(retained.path("projects").get(0).path("available").asBoolean())
+                .isFalse();
+        assertThat(retained.path("configuration").path("projectIds").get(0).asText())
+                .isEqualTo(PROJECT_ID.toString());
     }
 
     @Test
     void archivedConnectionsRemainVisibleToOwnerButNeverEnterCountsTimeChartsOrDetails() throws Exception {
-        var item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member, workItemBody(tasksId, "归档统计"), null, UUID.randomUUID()));
-        ok(mutate("POST", "/api/v1/work-items/" + item.path("id").asText() + "/time-sessions", member,
-                "{\"startedAt\":\"2026-01-01T00:00:00Z\",\"stoppedAt\":\"2026-01-01T01:00:00Z\"}", null, UUID.randomUUID()));
+        var item = created(mutate(
+                "POST",
+                "/api/v1/projects/" + PROJECT_ID + "/work-items",
+                member,
+                workItemBody(tasksId, "归档统计"),
+                null,
+                UUID.randomUUID()));
+        ok(mutate(
+                "POST",
+                "/api/v1/work-items/" + item.path("id").asText() + "/time-sessions",
+                member,
+                "{\"startedAt\":\"2026-01-01T00:00:00Z\",\"stoppedAt\":\"2026-01-01T01:00:00Z\"}",
+                null,
+                UUID.randomUUID()));
         var input = (tools.jackson.databind.node.ObjectNode) json.readTree(dashboardBody());
         var widget = chartWidget();
         ((tools.jackson.databind.node.ObjectNode) widget.path("chart")).put("dimension", "CONTENT");
-        ((tools.jackson.databind.node.ObjectNode) input.path("configuration")).set("widgets", json.createArrayNode().add(widget));
+        ((tools.jackson.databind.node.ObjectNode) input.path("configuration"))
+                .set("widgets", json.createArrayNode().add(widget));
         var dash = created(mutate("POST", "/api/v1/me/dashboards", owner, input.toString(), null, UUID.randomUUID()));
         String path = "/api/v1/me/dashboards/" + dash.path("id").asText();
         var active = ok(mutate("POST", path + "/query", owner, "{}", null, null));
         assertThat(total(active).path("count").asLong()).isEqualTo(1);
         assertThat(total(active).path("durationMs").asLong()).isEqualTo(3600000);
         var project = ok(get("/api/v1/projects/" + PROJECT_ID, owner));
-        ok(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/archive", owner, "", project.path("etag").asText(), UUID.randomUUID()));
+        ok(mutate(
+                "POST",
+                "/api/v1/projects/" + PROJECT_ID + "/archive",
+                owner,
+                "",
+                project.path("etag").asText(),
+                UUID.randomUUID()));
         var connection = ok(get(path, owner)).path("projects").get(0);
         assertThat(connection.path("lifecycle").asText()).isEqualTo("ARCHIVED");
         assertThat(connection.path("available").asBoolean()).isTrue();
-        assertThat(ok(get("/api/v1/me/dashboards", owner)).path("items").get(0).path("projectCount").asLong()).isZero();
-        var query = ok(mutate("POST", path + "/query", owner, "{\"filters\":{\"includeArchived\":true,\"hasTime\":false}}", null, null));
+        assertThat(ok(get("/api/v1/me/dashboards", owner))
+                        .path("items")
+                        .get(0)
+                        .path("projectCount")
+                        .asLong())
+                .isZero();
+        var query = ok(mutate(
+                "POST",
+                path + "/query",
+                owner,
+                "{\"filters\":{\"includeArchived\":true,\"hasTime\":false}}",
+                null,
+                null));
         assertThat(query.path("buckets").isEmpty()).isTrue();
         assertThat(query.path("options").isEmpty()).isTrue();
         assertThat(query.path("charts").get(0).path("points").isEmpty()).isTrue();
-        assertThat(ok(mutate("POST", path + "/items/query", owner, "{\"offset\":0,\"limit\":25}", null, null)).path("totalElements").asLong()).isZero();
-        var tableQuery = json.createObjectNode().put("projectId", PROJECT_ID.toString()).set("widget", widget).set("table", json.createObjectNode());
-        assertThat(mutate("POST", path + "/table/query", owner, tableQuery.toString(), null, null).statusCode()).isEqualTo(404);
-        assertThat(ok(mutate("PATCH",path,owner,input.toString(),"\"0\"",UUID.randomUUID()))
-                .path("projects").get(0).path("available").asBoolean()).isTrue();
+        assertThat(ok(mutate("POST", path + "/items/query", owner, "{\"offset\":0,\"limit\":25}", null, null))
+                        .path("totalElements")
+                        .asLong())
+                .isZero();
+        var tableQuery = json.createObjectNode()
+                .put("projectId", PROJECT_ID.toString())
+                .set("widget", widget)
+                .set("table", json.createObjectNode());
+        assertThat(mutate("POST", path + "/table/query", owner, tableQuery.toString(), null, null)
+                        .statusCode())
+                .isEqualTo(404);
+        assertThat(ok(mutate("PATCH", path, owner, input.toString(), "\"0\"", UUID.randomUUID()))
+                        .path("projects")
+                        .get(0)
+                        .path("available")
+                        .asBoolean())
+                .isTrue();
     }
 
     @Test
     void sharedTableUsesScopedCursorSortingAndFacets() throws Exception {
         for (String title : java.util.List.of("B", "A"))
-            created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member, workItemBody(tasksId, title), null, UUID.randomUUID()));
-        created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member, workItemBody(requirementsId, "outside"), null, UUID.randomUUID()));
-        String path = "/api/v1/me/dashboards/" + created(mutate("POST", "/api/v1/me/dashboards", member, dashboardBody(), null, UUID.randomUUID())).path("id").asText();
+            created(mutate(
+                    "POST",
+                    "/api/v1/projects/" + PROJECT_ID + "/work-items",
+                    member,
+                    workItemBody(tasksId, title),
+                    null,
+                    UUID.randomUUID()));
+        created(mutate(
+                "POST",
+                "/api/v1/projects/" + PROJECT_ID + "/work-items",
+                member,
+                workItemBody(requirementsId, "outside"),
+                null,
+                UUID.randomUUID()));
+        String path = "/api/v1/me/dashboards/"
+                + created(mutate("POST", "/api/v1/me/dashboards", member, dashboardBody(), null, UUID.randomUUID()))
+                        .path("id")
+                        .asText();
         var widget = chartWidget();
         ((tools.jackson.databind.node.ObjectNode) widget.path("chart")).put("dimension", "CONTENT");
-        var criteria = json.createObjectNode().put("limit", 1).set("sort", json.createArrayNode().add("TITLE,ASC"));
-        var query = json.createObjectNode().put("projectId", PROJECT_ID.toString()).set("widget", widget).set("table", criteria)
+        var criteria = json.createObjectNode()
+                .put("limit", 1)
+                .set("sort", json.createArrayNode().add("TITLE,ASC"));
+        var query = json.createObjectNode()
+                .put("projectId", PROJECT_ID.toString())
+                .set("widget", widget)
+                .set("table", criteria)
                 .set("selection", json.createObjectNode().put("key", tasksId.toString()));
         var first = ok(mutate("POST", path + "/table/query", member, query.toString(), null, null));
         assertThat(first.path("items").get(0).path("title").asText()).isEqualTo("A");
         assertThat(first.path("items").get(0).path("etag").asText()).isNotBlank();
-        assertThat(first.path("items").get(0).path("capabilities").path("canEditFields").asBoolean()).isTrue();
+        assertThat(first.path("items")
+                        .get(0)
+                        .path("capabilities")
+                        .path("canEditFields")
+                        .asBoolean())
+                .isTrue();
         assertThat(first.path("nextCursor").isTextual()).isTrue();
         criteria.put("cursor", first.path("nextCursor").asText());
         var second = ok(mutate("POST", path + "/table/query", member, query.toString(), null, null));
         assertThat(second.path("items").get(0).path("title").asText()).isEqualTo("B");
         assertThat(second.path("nextCursor").isNull()).isTrue();
         query.set("selection", json.createObjectNode().put("key", requirementsId.toString()));
-        assertThat(mutate("POST", path + "/table/query", member, query.toString(), null, null).statusCode()).isEqualTo(422);
+        assertThat(mutate("POST", path + "/table/query", member, query.toString(), null, null)
+                        .statusCode())
+                .isEqualTo(422);
         query.set("selection", json.createObjectNode().put("key", tasksId.toString()));
-        criteria.remove("cursor"); criteria.put("field", "CONTENT");
-        var options = ok(mutate("POST", path + "/table/query", member, query.toString(), null, null)).path("options");
+        criteria.remove("cursor");
+        criteria.put("field", "CONTENT");
+        var options = ok(mutate("POST", path + "/table/query", member, query.toString(), null, null))
+                .path("options");
         assertThat(options.size()).isEqualTo(1);
         assertThat(options.get(0).path("value").asText()).isEqualTo(tasksId.toString());
         assertThat(options.get(0).path("count").asLong()).isEqualTo(2);
-        criteria.remove("field"); criteria.set("contentId", json.createArrayNode().add(requirementsId.toString()));
-        assertThat(ok(mutate("POST", path + "/table/query", member, query.toString(), null, null)).path("items").isEmpty()).isTrue();
-        criteria.remove("contentId"); criteria.put("q", "%");
-        assertThat(ok(mutate("POST", path + "/table/query", member, query.toString(), null, null)).path("items").isEmpty()).isTrue();
+        criteria.remove("field");
+        criteria.set("contentId", json.createArrayNode().add(requirementsId.toString()));
+        assertThat(ok(mutate("POST", path + "/table/query", member, query.toString(), null, null))
+                        .path("items")
+                        .isEmpty())
+                .isTrue();
+        criteria.remove("contentId");
+        criteria.put("q", "%");
+        assertThat(ok(mutate("POST", path + "/table/query", member, query.toString(), null, null))
+                        .path("items")
+                        .isEmpty())
+                .isTrue();
         criteria.remove("q");
-        query.set("filters", json.createObjectNode().put("includeArchived", false).put("hasTime", false).set("contentIds", json.createArrayNode().add(requirementsId.toString())));
-        assertThat(ok(mutate("POST", path + "/table/query", member, query.toString(), null, null)).path("items").isEmpty()).isTrue();
+        query.set(
+                "filters",
+                json.createObjectNode()
+                        .put("includeArchived", false)
+                        .put("hasTime", false)
+                        .set("contentIds", json.createArrayNode().add(requirementsId.toString())));
+        assertThat(ok(mutate("POST", path + "/table/query", member, query.toString(), null, null))
+                        .path("items")
+                        .isEmpty())
+                .isTrue();
     }
 
     @Test
     void sharedTablePreservesMatchingChildrenAndRefreshesAfterEdits() throws Exception {
-        var parent = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member, workItemBody(requirementsId, "父项上下文"), null, UUID.randomUUID()));
-        var child = created(mutate("POST", "/api/v1/work-items/" + parent.path("id").asText() + "/subitems", member, workItemBody(tasksId, "匹配子项"), null, UUID.randomUUID()));
-        created(mutate("POST", "/api/v1/work-items/" + parent.path("id").asText() + "/subitems", member, workItemBody(requirementsId, "范围外子项"), null, UUID.randomUUID()));
-        String path = "/api/v1/me/dashboards/" + created(mutate("POST", "/api/v1/me/dashboards", member, dashboardBody(), null, UUID.randomUUID())).path("id").asText();
+        var parent = created(mutate(
+                "POST",
+                "/api/v1/projects/" + PROJECT_ID + "/work-items",
+                member,
+                workItemBody(requirementsId, "父项上下文"),
+                null,
+                UUID.randomUUID()));
+        var child = created(mutate(
+                "POST",
+                "/api/v1/work-items/" + parent.path("id").asText() + "/subitems",
+                member,
+                workItemBody(tasksId, "匹配子项"),
+                null,
+                UUID.randomUUID()));
+        created(mutate(
+                "POST",
+                "/api/v1/work-items/" + parent.path("id").asText() + "/subitems",
+                member,
+                workItemBody(requirementsId, "范围外子项"),
+                null,
+                UUID.randomUUID()));
+        String path = "/api/v1/me/dashboards/"
+                + created(mutate("POST", "/api/v1/me/dashboards", member, dashboardBody(), null, UUID.randomUUID()))
+                        .path("id")
+                        .asText();
         var widget = chartWidget();
         ((tools.jackson.databind.node.ObjectNode) widget.path("chart")).put("dimension", "CONTENT");
         var criteria = json.createObjectNode();
-        var query = json.createObjectNode().put("projectId", PROJECT_ID.toString()).set("widget", widget).set("table", criteria)
+        var query = json.createObjectNode()
+                .put("projectId", PROJECT_ID.toString())
+                .set("widget", widget)
+                .set("table", criteria)
                 .set("selection", json.createObjectNode().put("key", tasksId.toString()));
         var roots = ok(mutate("POST", path + "/table/query", member, query.toString(), null, null));
         assertThat(roots.path("items").size()).isEqualTo(1);
-        assertThat(roots.path("items").get(0).path("id").asText()).isEqualTo(parent.path("id").asText());
+        assertThat(roots.path("items").get(0).path("id").asText())
+                .isEqualTo(parent.path("id").asText());
         assertThat(roots.path("items").get(0).path("subitemCount").asLong()).isEqualTo(2);
-        assertThat(roots.path("subitemCounts").path(parent.path("id").asText()).asLong()).isEqualTo(1);
-        assertThat(roots.path("contextIds").get(0).asText()).isEqualTo(parent.path("id").asText());
+        assertThat(roots.path("subitemCounts").path(parent.path("id").asText()).asLong())
+                .isEqualTo(1);
+        assertThat(roots.path("contextIds").get(0).asText())
+                .isEqualTo(parent.path("id").asText());
         criteria.put("parentWorkItemId", parent.path("id").asText());
-        var children = ok(mutate("POST", path + "/table/query", member, query.toString(), null, null)).path("items");
+        var children = ok(mutate("POST", path + "/table/query", member, query.toString(), null, null))
+                .path("items");
         assertThat(children.size()).isEqualTo(1);
-        assertThat(children.get(0).path("id").asText()).isEqualTo(child.path("id").asText());
-        ok(mutate("PATCH", "/api/v1/work-items/" + child.path("id").asText() + "/content", member,
-                json.createObjectNode().put("contentId", requirementsId.toString()).toString(), children.get(0).path("etag").asText(), UUID.randomUUID()));
+        assertThat(children.get(0).path("id").asText())
+                .isEqualTo(child.path("id").asText());
+        ok(mutate(
+                "PATCH",
+                "/api/v1/work-items/" + child.path("id").asText() + "/content",
+                member,
+                json.createObjectNode()
+                        .put("contentId", requirementsId.toString())
+                        .toString(),
+                children.get(0).path("etag").asText(),
+                UUID.randomUUID()));
         criteria.remove("parentWorkItemId");
-        assertThat(ok(mutate("POST", path + "/table/query", member, query.toString(), null, null)).path("items").isEmpty()).isTrue();
+        assertThat(ok(mutate("POST", path + "/table/query", member, query.toString(), null, null))
+                        .path("items")
+                        .isEmpty())
+                .isTrue();
     }
 
     @Test
     void sharedTableRejectsOtherOwnersUnconnectedProjectsAndRevokedMemberships() throws Exception {
-        String path = "/api/v1/me/dashboards/" + created(mutate("POST", "/api/v1/me/dashboards", member, dashboardBody(), null, UUID.randomUUID())).path("id").asText();
-        var query = json.createObjectNode().put("projectId", PROJECT_ID.toString()).set("widget", chartWidget()).set("table", json.createObjectNode());
-        assertThat(mutate("POST", path + "/table/query", owner, query.toString(), null, null).statusCode()).isEqualTo(404);
+        String path = "/api/v1/me/dashboards/"
+                + created(mutate("POST", "/api/v1/me/dashboards", member, dashboardBody(), null, UUID.randomUUID()))
+                        .path("id")
+                        .asText();
+        var query = json.createObjectNode()
+                .put("projectId", PROJECT_ID.toString())
+                .set("widget", chartWidget())
+                .set("table", json.createObjectNode());
+        assertThat(mutate("POST", path + "/table/query", owner, query.toString(), null, null)
+                        .statusCode())
+                .isEqualTo(404);
         query.put("projectId", UUID.randomUUID().toString());
-        assertThat(mutate("POST", path + "/table/query", member, query.toString(), null, null).statusCode()).isEqualTo(404);
+        assertThat(mutate("POST", path + "/table/query", member, query.toString(), null, null)
+                        .statusCode())
+                .isEqualTo(404);
         query.put("projectId", PROJECT_ID.toString());
-        jdbc.sql("UPDATE yumpoo.project_membership SET status='REMOVED',removed_at=transaction_timestamp(),removed_by_user_id=:owner,remove_reason='dashboard test' WHERE project_id=:project AND user_id=:user")
-                .param("owner", owner.userId()).param("project", PROJECT_ID).param("user", member.userId()).update();
-        assertThat(mutate("POST", path + "/table/query", member, query.toString(), null, null).statusCode()).isEqualTo(404);
+        jdbc.sql(
+                        "UPDATE yumpoo.project_membership SET status='REMOVED',removed_at=transaction_timestamp(),removed_by_user_id=:owner,remove_reason='dashboard test' WHERE project_id=:project AND user_id=:user")
+                .param("owner", owner.userId())
+                .param("project", PROJECT_ID)
+                .param("user", member.userId())
+                .update();
+        assertThat(mutate("POST", path + "/table/query", member, query.toString(), null, null)
+                        .statusCode())
+                .isEqualTo(404);
     }
 
     @Test
     void removedMembershipImmediatelyHidesProjectAndStatistics() throws Exception {
-        String path = "/api/v1/me/dashboards/" + created(mutate("POST", "/api/v1/me/dashboards", member, dashboardBody(), null, UUID.randomUUID())).path("id").asText();
-        assertThat(ok(get("/api/v1/me/dashboard-projects", member)).path("totalElements").asLong()).isEqualTo(1);
-        jdbc.sql("UPDATE yumpoo.project_membership SET status='REMOVED',removed_at=transaction_timestamp(),removed_by_user_id=:owner,remove_reason='dashboard test' WHERE project_id=:project AND user_id=:user")
-                .param("owner", owner.userId()).param("project", PROJECT_ID).param("user", member.userId()).update();
-        assertThat(ok(get("/api/v1/me/dashboard-projects", member)).path("items").size()).isZero();
+        String path = "/api/v1/me/dashboards/"
+                + created(mutate("POST", "/api/v1/me/dashboards", member, dashboardBody(), null, UUID.randomUUID()))
+                        .path("id")
+                        .asText();
+        assertThat(ok(get("/api/v1/me/dashboard-projects", member))
+                        .path("totalElements")
+                        .asLong())
+                .isEqualTo(1);
+        jdbc.sql(
+                        "UPDATE yumpoo.project_membership SET status='REMOVED',removed_at=transaction_timestamp(),removed_by_user_id=:owner,remove_reason='dashboard test' WHERE project_id=:project AND user_id=:user")
+                .param("owner", owner.userId())
+                .param("project", PROJECT_ID)
+                .param("user", member.userId())
+                .update();
+        assertThat(ok(get("/api/v1/me/dashboard-projects", member))
+                        .path("items")
+                        .size())
+                .isZero();
         var view = ok(get(path, member));
         assertThat(view.path("projects").get(0).path("available").asBoolean()).isFalse();
-        assertThat(ok(mutate("POST", path + "/items/query", member, "{\"offset\":0,\"limit\":25}", null, null)).path("items").size()).isZero();
+        assertThat(ok(mutate("POST", path + "/items/query", member, "{\"offset\":0,\"limit\":25}", null, null))
+                        .path("items")
+                        .size())
+                .isZero();
         assertThat(view.path("projects").get(0).path("name").isNull()).isTrue();
-        assertThat(ok(mutate("POST", path + "/query", member, "{}", null, null)).path("buckets").size()).isZero();
+        assertThat(ok(mutate("POST", path + "/query", member, "{}", null, null))
+                        .path("buckets")
+                        .size())
+                .isZero();
         ok(mutate("PATCH", path, member, dashboardBody().replace("我的仪表板", "仍可编辑"), "\"0\"", UUID.randomUUID()));
-        assertThat(mutate("POST", "/api/v1/me/dashboards", member, dashboardBody(), null, UUID.randomUUID()).statusCode()).isEqualTo(404);
+        assertThat(mutate("POST", "/api/v1/me/dashboards", member, dashboardBody(), null, UUID.randomUUID())
+                        .statusCode())
+                .isEqualTo(404);
     }
 
     @Test
     void customChartsPreviewDatesSeriesTimeCalculationsAndIndependentScopes() throws Exception {
-        var a = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member, workItemBody(tasksId, "图表 A"), null, UUID.randomUUID()));
-        var b = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member, workItemBody(tasksId, "图表 B"), null, UUID.randomUUID()));
-        var c = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member, workItemBody(requirementsId, "图表 C"), null, UUID.randomUUID()));
+        var a = created(mutate(
+                "POST",
+                "/api/v1/projects/" + PROJECT_ID + "/work-items",
+                member,
+                workItemBody(tasksId, "图表 A"),
+                null,
+                UUID.randomUUID()));
+        var b = created(mutate(
+                "POST",
+                "/api/v1/projects/" + PROJECT_ID + "/work-items",
+                member,
+                workItemBody(tasksId, "图表 B"),
+                null,
+                UUID.randomUUID()));
+        var c = created(mutate(
+                "POST",
+                "/api/v1/projects/" + PROJECT_ID + "/work-items",
+                member,
+                workItemBody(requirementsId, "图表 C"),
+                null,
+                UUID.randomUUID()));
         jdbc.sql("UPDATE yumpoo.work_item SET due_date=DATE '2026-09-17' WHERE id IN (:ids)")
-                .param("ids", java.util.List.of(UUID.fromString(a.path("id").asText()), UUID.fromString(b.path("id").asText()))).update();
-        jdbc.sql("UPDATE yumpoo.work_item SET due_date=DATE '2026-10-01' WHERE id=:id").param("id", UUID.fromString(c.path("id").asText())).update();
-        for (var item : java.util.List.of(a, b)) ok(mutate("POST", "/api/v1/work-items/" + item.path("id").asText() + "/time-sessions", member,
-                "{\"startedAt\":\"2026-01-" + (item == a ? "01" : "02") + "T00:00:00Z\",\"stoppedAt\":\"2026-01-" + (item == a ? "01" : "02") + "T" + (item == a ? "01" : "03") + ":00:00Z\"}", null, UUID.randomUUID()));
-        String path = "/api/v1/me/dashboards/" + created(mutate("POST", "/api/v1/me/dashboards", member, dashboardBody(), null, UUID.randomUUID())).path("id").asText();
+                .param(
+                        "ids",
+                        java.util.List.of(
+                                UUID.fromString(a.path("id").asText()),
+                                UUID.fromString(b.path("id").asText())))
+                .update();
+        jdbc.sql("UPDATE yumpoo.work_item SET due_date=DATE '2026-10-01' WHERE id=:id")
+                .param("id", UUID.fromString(c.path("id").asText()))
+                .update();
+        for (var item : java.util.List.of(a, b))
+            ok(mutate(
+                    "POST",
+                    "/api/v1/work-items/" + item.path("id").asText() + "/time-sessions",
+                    member,
+                    "{\"startedAt\":\"2026-01-" + (item == a ? "01" : "02") + "T00:00:00Z\",\"stoppedAt\":\"2026-01-"
+                            + (item == a ? "01" : "02") + "T" + (item == a ? "01" : "03") + ":00:00Z\"}",
+                    null,
+                    UUID.randomUUID()));
+        String path = "/api/v1/me/dashboards/"
+                + created(mutate("POST", "/api/v1/me/dashboards", member, dashboardBody(), null, UUID.randomUUID()))
+                        .path("id")
+                        .asText();
         var widget = chartWidget();
         var chart = (tools.jackson.databind.node.ObjectNode) widget.path("chart");
-        chart.put("dimension", "DUE"); chart.put("series", "CONTENT");
+        chart.put("dimension", "DUE");
+        chart.put("series", "CONTENT");
         var points = preview(path, widget, null).path("charts").get(0).path("points");
         assertThat(points.size()).isEqualTo(2);
         assertThat(points.get(0).path("key").asText()).isEqualTo("2026-09-01");
         assertThat(points.get(0).path("value").asDouble()).isEqualTo(2);
         var query = json.createObjectNode().put("offset", 0).put("limit", 25).set("widget", widget);
         query.set("selection", json.createObjectNode().put("key", "2026-09-01").put("seriesKey", tasksId.toString()));
-        assertThat(ok(mutate("POST", path + "/items/query", member, query.toString(), null, null)).path("totalElements").asLong()).isEqualTo(2);
-        query.set("selection", json.createObjectNode().put("key", "2026-09-01").put("seriesKey", requirementsId.toString()));
-        assertThat(ok(mutate("POST", path + "/items/query", member, query.toString(), null, null)).path("totalElements").asLong()).isZero();
+        assertThat(ok(mutate("POST", path + "/items/query", member, query.toString(), null, null))
+                        .path("totalElements")
+                        .asLong())
+                .isEqualTo(2);
+        query.set(
+                "selection",
+                json.createObjectNode().put("key", "2026-09-01").put("seriesKey", requirementsId.toString()));
+        assertThat(ok(mutate("POST", path + "/items/query", member, query.toString(), null, null))
+                        .path("totalElements")
+                        .asLong())
+                .isZero();
         chart.put("dateInterval", "WEEK");
-        assertThat(preview(path, widget, null).path("charts").get(0).path("points").get(0).path("key").asText()).isEqualTo("2026-09-14");
+        assertThat(preview(path, widget, null)
+                        .path("charts")
+                        .get(0)
+                        .path("points")
+                        .get(0)
+                        .path("key")
+                        .asText())
+                .isEqualTo("2026-09-14");
         chart.put("dateInterval", "DAY");
-        assertThat(preview(path, widget, null).path("charts").get(0).path("points").get(0).path("key").asText()).isEqualTo("2026-09-17");
-        jdbc.sql("UPDATE yumpoo.work_item SET created_at=TIMESTAMPTZ '2026-09-16 18:00:00Z' WHERE project_id=:id").param("id", PROJECT_ID).update();
+        assertThat(preview(path, widget, null)
+                        .path("charts")
+                        .get(0)
+                        .path("points")
+                        .get(0)
+                        .path("key")
+                        .asText())
+                .isEqualTo("2026-09-17");
+        jdbc.sql("UPDATE yumpoo.work_item SET created_at=TIMESTAMPTZ '2026-09-16 18:00:00Z' WHERE project_id=:id")
+                .param("id", PROJECT_ID)
+                .update();
         chart.put("dimension", "CREATED");
-        assertThat(preview(path, widget, null).path("charts").get(0).path("points").get(0).path("key").asText()).isEqualTo("2026-09-17");
+        assertThat(preview(path, widget, null)
+                        .path("charts")
+                        .get(0)
+                        .path("points")
+                        .get(0)
+                        .path("key")
+                        .asText())
+                .isEqualTo("2026-09-17");
         chart.put("timezone", "UTC");
-        assertThat(preview(path, widget, null).path("charts").get(0).path("points").get(0).path("key").asText()).isEqualTo("2026-09-16");
-        chart.put("dimension", "PRIORITY"); chart.put("showEmpty", false);
-        assertThat(preview(path, widget, null).path("charts").get(0).path("points").isEmpty()).isTrue();
+        assertThat(preview(path, widget, null)
+                        .path("charts")
+                        .get(0)
+                        .path("points")
+                        .get(0)
+                        .path("key")
+                        .asText())
+                .isEqualTo("2026-09-16");
+        chart.put("dimension", "PRIORITY");
+        chart.put("showEmpty", false);
+        assertThat(preview(path, widget, null)
+                        .path("charts")
+                        .get(0)
+                        .path("points")
+                        .isEmpty())
+                .isTrue();
         chart.put("showEmpty", true);
-        chart.put("dimension", "PROJECT"); chart.put("series", "NONE");
-        var expected = java.util.Map.of("SUM", 14400000d, "AVG", 4800000d, "MEDIAN", 3600000d, "MIN", 0d, "MAX", 10800000d);
+        chart.put("dimension", "PROJECT");
+        chart.put("series", "NONE");
+        var expected =
+                java.util.Map.of("SUM", 14400000d, "AVG", 4800000d, "MEDIAN", 3600000d, "MIN", 0d, "MAX", 10800000d);
         for (var entry : expected.entrySet()) {
-            chart.set("measure", json.createObjectNode().put("metric", "DURATION").put("calculation", entry.getKey()));
-            assertThat(preview(path, widget, null).path("charts").get(0).path("points").get(0).path("value").asDouble()).isEqualTo(entry.getValue());
+            chart.set(
+                    "measure", json.createObjectNode().put("metric", "DURATION").put("calculation", entry.getKey()));
+            assertThat(preview(path, widget, null)
+                            .path("charts")
+                            .get(0)
+                            .path("points")
+                            .get(0)
+                            .path("value")
+                            .asDouble())
+                    .isEqualTo(entry.getValue());
         }
         chart.put("series", "CONTENT");
         chart.set("measure", json.createObjectNode().put("metric", "DURATION").put("calculation", "AVG"));
         for (var point : preview(path, widget, null).path("charts").get(0).path("points"))
             assertThat(point.path("categoryValue").asDouble()).isEqualTo(4800000);
         chart.put("series", "NONE");
-        chart.set("filters", json.createObjectNode().put("includeArchived", true).put("hasTime", false).set("contentIds", json.createArrayNode().add(tasksId.toString())));
-        var global = json.createObjectNode().put("includeArchived", false).put("hasTime", false).set("contentIds", json.createArrayNode().add(requirementsId.toString()));
-        assertThat(preview(path, widget, global).path("charts").get(0).path("points").isEmpty()).isTrue();
+        chart.set(
+                "filters",
+                json.createObjectNode()
+                        .put("includeArchived", true)
+                        .put("hasTime", false)
+                        .set("contentIds", json.createArrayNode().add(tasksId.toString())));
+        var global = json.createObjectNode()
+                .put("includeArchived", false)
+                .put("hasTime", false)
+                .set("contentIds", json.createArrayNode().add(requirementsId.toString()));
+        assertThat(preview(path, widget, global)
+                        .path("charts")
+                        .get(0)
+                        .path("points")
+                        .isEmpty())
+                .isTrue();
         chart.set("projectIds", json.createArrayNode());
-        assertThat(preview(path, widget, null).path("charts").get(0).path("points").isEmpty()).isTrue();
-        chart.putNull("projectIds"); chart.putNull("filters");
+        assertThat(preview(path, widget, null)
+                        .path("charts")
+                        .get(0)
+                        .path("points")
+                        .isEmpty())
+                .isTrue();
+        chart.putNull("projectIds");
+        chart.putNull("filters");
         chart.put("type", "BUBBLE");
         chart.set("xMeasure", json.createObjectNode().put("metric", "TOTAL").put("calculation", "SUM"));
-        chart.set("sizeMeasure", json.createObjectNode().put("metric", "DURATION").put("calculation", "SUM"));
-        var bubble = preview(path, widget, null).path("charts").get(0).path("points").get(0);
+        chart.set(
+                "sizeMeasure", json.createObjectNode().put("metric", "DURATION").put("calculation", "SUM"));
+        var bubble =
+                preview(path, widget, null).path("charts").get(0).path("points").get(0);
         assertThat(bubble.path("xValue").asDouble()).isEqualTo(3);
         assertThat(bubble.path("sizeValue").asDouble()).isEqualTo(14400000);
         var body = (tools.jackson.databind.node.ObjectNode) json.readTree(dashboardBody());
-        ((tools.jackson.databind.node.ObjectNode) body.path("configuration")).set("widgets", json.createArrayNode().add(widget));
+        ((tools.jackson.databind.node.ObjectNode) body.path("configuration"))
+                .set("widgets", json.createArrayNode().add(widget));
         ok(mutate("PATCH", path, member, body.toString(), "\"0\"", UUID.randomUUID()));
-        assertThat(ok(get(path, member)).path("configuration").path("widgets").get(0).path("chart").path("type").asText()).isEqualTo("BUBBLE");
+        assertThat(ok(get(path, member))
+                        .path("configuration")
+                        .path("widgets")
+                        .get(0)
+                        .path("chart")
+                        .path("type")
+                        .asText())
+                .isEqualTo("BUBBLE");
         chart.put("timezone", "invalid/timezone");
-        assertThat(mutate("POST", path + "/query", member, json.createObjectNode().set("widgets", json.createArrayNode().add(widget)).toString(), null, null).statusCode()).isEqualTo(422);
+        assertThat(mutate(
+                                "POST",
+                                path + "/query",
+                                member,
+                                json.createObjectNode()
+                                        .set("widgets", json.createArrayNode().add(widget))
+                                        .toString(),
+                                null,
+                                null)
+                        .statusCode())
+                .isEqualTo(422);
     }
 
     @Test
     void legacyWidgetsAndDraftChartsRespectRevocation() throws Exception {
-        created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member, workItemBody(tasksId, "兼容"), null, UUID.randomUUID()));
-        String path = "/api/v1/me/dashboards/" + created(mutate("POST", "/api/v1/me/dashboards", member, dashboardBody(), null, UUID.randomUUID())).path("id").asText();
-        var widget = chartWidget(); widget.remove("chart"); widget.put("kind", "METRIC");
-        assertThat(preview(path, widget, null).path("charts").get(0).path("points").get(0).path("value").asDouble()).isEqualTo(1);
-        jdbc.sql("UPDATE yumpoo.project_membership SET status='REMOVED',removed_at=transaction_timestamp(),removed_by_user_id=:owner,remove_reason='chart test' WHERE project_id=:project AND user_id=:user")
-                .param("owner", owner.userId()).param("project", PROJECT_ID).param("user", member.userId()).update();
-        assertThat(preview(path, chartWidget(), null).path("charts").get(0).path("points").isEmpty()).isTrue();
+        created(mutate(
+                "POST",
+                "/api/v1/projects/" + PROJECT_ID + "/work-items",
+                member,
+                workItemBody(tasksId, "兼容"),
+                null,
+                UUID.randomUUID()));
+        String path = "/api/v1/me/dashboards/"
+                + created(mutate("POST", "/api/v1/me/dashboards", member, dashboardBody(), null, UUID.randomUUID()))
+                        .path("id")
+                        .asText();
+        var widget = chartWidget();
+        widget.remove("chart");
+        widget.put("kind", "METRIC");
+        assertThat(preview(path, widget, null)
+                        .path("charts")
+                        .get(0)
+                        .path("points")
+                        .get(0)
+                        .path("value")
+                        .asDouble())
+                .isEqualTo(1);
+        jdbc.sql(
+                        "UPDATE yumpoo.project_membership SET status='REMOVED',removed_at=transaction_timestamp(),removed_by_user_id=:owner,remove_reason='chart test' WHERE project_id=:project AND user_id=:user")
+                .param("owner", owner.userId())
+                .param("project", PROJECT_ID)
+                .param("user", member.userId())
+                .update();
+        assertThat(preview(path, chartWidget(), null)
+                        .path("charts")
+                        .get(0)
+                        .path("points")
+                        .isEmpty())
+                .isTrue();
         var body = json.createObjectNode().put("offset", 0).put("limit", 25).set("widget", widget);
-        assertThat(ok(mutate("POST", path + "/items/query", member, body.toString(), null, null)).path("totalElements").asLong()).isZero();
-        assertThat(ok(mutate("PATCH",path,member,dashboardBody(),"\"0\"",UUID.randomUUID()))
-                .path("projects").get(0).path("available").asBoolean()).isFalse();
+        assertThat(ok(mutate("POST", path + "/items/query", member, body.toString(), null, null))
+                        .path("totalElements")
+                        .asLong())
+                .isZero();
+        assertThat(ok(mutate("PATCH", path, member, dashboardBody(), "\"0\"", UUID.randomUUID()))
+                        .path("projects")
+                        .get(0)
+                        .path("available")
+                        .asBoolean())
+                .isFalse();
     }
 
-    private tools.jackson.databind.node.ObjectNode dashboardReferenceBody(UUID reference,String location,boolean includeRoot) throws Exception {
-        var body=(tools.jackson.databind.node.ObjectNode) json.readTree(dashboardBody());
-        var configuration=(tools.jackson.databind.node.ObjectNode) body.path("configuration");
-        if (!includeRoot) configuration.set("projectIds",json.createArrayNode());
+    private tools.jackson.databind.node.ObjectNode dashboardReferenceBody(
+            UUID reference, String location, boolean includeRoot) throws Exception {
+        var body = (tools.jackson.databind.node.ObjectNode) json.readTree(dashboardBody());
+        var configuration = (tools.jackson.databind.node.ObjectNode) body.path("configuration");
+        if (!includeRoot) configuration.set("projectIds", json.createArrayNode());
         if (location.equals("GLOBAL") || location.equals("ALL"))
             ((tools.jackson.databind.node.ObjectNode) configuration.path("filters"))
-                    .set("projectIds",json.createArrayNode().add(reference.toString()));
+                    .set("projectIds", json.createArrayNode().add(reference.toString()));
         if (!location.equals("GLOBAL")) {
-            var widget=chartWidget();
-            var chart=(tools.jackson.databind.node.ObjectNode) widget.path("chart");
-            if (location.equals("CHART") || location.equals("ALL")) chart.set("projectIds",json.createArrayNode().add(reference.toString()));
-            if (location.equals("CHART_FILTER") || location.equals("ALL")) chart.set("filters",json.createObjectNode()
-                    .put("includeArchived",false).put("hasTime",false).set("projectIds",json.createArrayNode().add(reference.toString())));
-            configuration.set("widgets",json.createArrayNode().add(widget));
+            var widget = chartWidget();
+            var chart = (tools.jackson.databind.node.ObjectNode) widget.path("chart");
+            if (location.equals("CHART") || location.equals("ALL"))
+                chart.set("projectIds", json.createArrayNode().add(reference.toString()));
+            if (location.equals("CHART_FILTER") || location.equals("ALL"))
+                chart.set(
+                        "filters",
+                        json.createObjectNode()
+                                .put("includeArchived", false)
+                                .put("hasTime", false)
+                                .set("projectIds", json.createArrayNode().add(reference.toString())));
+            configuration.set("widgets", json.createArrayNode().add(widget));
         }
         return body;
     }
 
     private static void awaitCommit(CountDownLatch commit) {
         try {
-            if (!commit.await(15,TimeUnit.SECONDS)) throw new IllegalStateException("dashboard commit was not released");
+            if (!commit.await(15, TimeUnit.SECONDS))
+                throw new IllegalStateException("dashboard commit was not released");
         } catch (InterruptedException failure) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException(failure);
@@ -671,11 +1402,14 @@ class DashboardHttpIT {
     }
 
     private JsonNode total(JsonNode snapshot) {
-        for (var bucket : snapshot.path("buckets")) if (bucket.path("kind").asText().equals("TOTAL")) return bucket;
+        for (var bucket : snapshot.path("buckets"))
+            if (bucket.path("kind").asText().equals("TOTAL")) return bucket;
         throw new AssertionError(snapshot.toString());
     }
+
     private String dashboardBody() {
-        return "{\"name\":\"我的仪表板\",\"configuration\":{\"projectIds\":[\"" + PROJECT_ID + "\"],\"widgets\":[],\"filters\":{\"includeArchived\":false,\"hasTime\":false}}}";
+        return "{\"name\":\"我的仪表板\",\"configuration\":{\"projectIds\":[\"" + PROJECT_ID
+                + "\"],\"widgets\":[],\"filters\":{\"includeArchived\":false,\"hasTime\":false}}}";
     }
 
     private JsonNode ok(HttpResponse<String> response) throws Exception {
@@ -684,14 +1418,19 @@ class DashboardHttpIT {
     }
 
     private long fieldsEventCount(UUID id) {
-        return jdbc.sql("SELECT count(*) FROM yumpoo.outbox_event WHERE aggregate_id=:id AND event_type='workitem.work_item_fields_changed'")
-                .param("id", id).query(Long.class).single();
+        return jdbc.sql(
+                        "SELECT count(*) FROM yumpoo.outbox_event WHERE aggregate_id=:id AND event_type='workitem.work_item_fields_changed'")
+                .param("id", id)
+                .query(Long.class)
+                .single();
     }
 
     private JsonNode lastFieldsEvent(UUID id) throws Exception {
         return json.readTree(jdbc.sql("SELECT payload_json::text FROM yumpoo.outbox_event WHERE aggregate_id=:id "
                         + "AND event_type='workitem.work_item_fields_changed' ORDER BY aggregate_version DESC LIMIT 1")
-                .param("id", id).query(String.class).single());
+                .param("id", id)
+                .query(String.class)
+                .single());
     }
 
     private JsonNode created(HttpResponse<String> response) throws Exception {
@@ -700,23 +1439,39 @@ class DashboardHttpIT {
     }
 
     private UUID createContent(String name, String color) throws Exception {
-        HttpResponse<String> response = mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/contents", owner,
-                json.writeValueAsString(java.util.Map.of("name", name, "colorToken", color)), null, UUID.randomUUID());
+        HttpResponse<String> response = mutate(
+                "POST",
+                "/api/v1/projects/" + PROJECT_ID + "/contents",
+                owner,
+                json.writeValueAsString(java.util.Map.of("name", name, "colorToken", color)),
+                null,
+                UUID.randomUUID());
         assertThat(response.statusCode()).as(response.body()).isEqualTo(201);
         return UUID.fromString(json.readTree(response.body()).path("id").asText());
     }
 
     private String workItemBody(UUID contentId, String title) throws Exception {
         var body = json.createObjectNode();
-        if (contentId == null) body.putNull("contentId"); else body.put("contentId", contentId.toString());
-        body.put("title", title); body.putNull("priority"); body.putNull("assigneeUserId");
-        body.putNull("description"); body.putNull("notes"); body.putNull("timelineStartDate");
-        body.putNull("timelineEndDate"); body.putNull("dueDate");
+        if (contentId == null) body.putNull("contentId");
+        else body.put("contentId", contentId.toString());
+        body.put("title", title);
+        body.putNull("priority");
+        body.putNull("assigneeUserId");
+        body.putNull("description");
+        body.putNull("notes");
+        body.putNull("timelineStartDate");
+        body.putNull("timelineEndDate");
+        body.putNull("dueDate");
         return json.writeValueAsString(body);
     }
 
-    private String subitemBody(UUID contentId, String title) throws Exception { return workItemBody(contentId, title); }
-    private ActorFixture actor(UUID userId) { return new ActorFixture(userId, sessions.issueWebSession(userId, "work-item-category-http")); }
+    private String subitemBody(UUID contentId, String title) throws Exception {
+        return workItemBody(contentId, title);
+    }
+
+    private ActorFixture actor(UUID userId) {
+        return new ActorFixture(userId, sessions.issueWebSession(userId, "work-item-category-http"));
+    }
 
     private HttpResponse<String> get(String path, ActorFixture actor) throws Exception {
         HttpRequest.Builder request = HttpRequest.newBuilder(uri(path)).GET();
@@ -724,18 +1479,28 @@ class DashboardHttpIT {
         return client.send(request.build(), HttpResponse.BodyHandlers.ofString());
     }
 
-    private HttpResponse<String> mutate(String method, String path, ActorFixture actor, String body,
-            String ifMatch, UUID idempotencyKey) throws Exception {
-        HttpRequest.Builder request = HttpRequest.newBuilder(uri(path)).header("Cookie", cookies(actor))
+    private HttpResponse<String> mutate(
+            String method, String path, ActorFixture actor, String body, String ifMatch, UUID idempotencyKey)
+            throws Exception {
+        HttpRequest.Builder request = HttpRequest.newBuilder(uri(path))
+                .header("Cookie", cookies(actor))
                 .header(CSRF_HEADER, actor.session().csrfCredential().value());
         if (ifMatch != null) request.header("If-Match", ifMatch);
         if (idempotencyKey != null) request.header("Idempotency-Key", idempotencyKey.toString());
         if (!body.isEmpty()) request.header("Content-Type", "application/json");
-        return client.send(request.method(method, body.isEmpty() ? HttpRequest.BodyPublishers.noBody()
-                : HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
+        return client.send(
+                request.method(
+                                method,
+                                body.isEmpty()
+                                        ? HttpRequest.BodyPublishers.noBody()
+                                        : HttpRequest.BodyPublishers.ofString(body))
+                        .build(),
+                HttpResponse.BodyHandlers.ofString());
     }
 
-    private URI uri(String path) { return URI.create("http://127.0.0.1:" + port + path); }
+    private URI uri(String path) {
+        return URI.create("http://127.0.0.1:" + port + path);
+    }
 
     private void createProject(UUID ownerId, UUID memberId) {
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
@@ -746,52 +1511,106 @@ class DashboardHttpIT {
                 VALUES (:id,:companyId,:workspaceId,'CATEGORY_WORK','Category Work',
                     'ACTIVE',:ownerId,0,transaction_timestamp(),:ownerId,
                     transaction_timestamp(),:ownerId)
-                """).param("id", PROJECT_ID).param("companyId", COMPANY_ID)
-                    .param("workspaceId", WORKSPACE_ID).param("ownerId", ownerId).update();
+                """)
+                    .param("id", PROJECT_ID)
+                    .param("companyId", COMPANY_ID)
+                    .param("workspaceId", WORKSPACE_ID)
+                    .param("ownerId", ownerId)
+                    .update();
             jdbc.sql("""
                 INSERT INTO yumpoo.project_membership (id,company_id,project_id,user_id,status,joined_at,joined_by_user_id,row_version)
                 VALUES (:ownerMembership,:companyId,:projectId,:ownerId,'ACTIVE',transaction_timestamp(),:ownerId,0),
                        (:memberMembership,:companyId,:projectId,:memberId,'ACTIVE',transaction_timestamp(),:ownerId,0)
-                """).param("ownerMembership", UUID.randomUUID()).param("memberMembership", UUID.randomUUID())
-                    .param("companyId", COMPANY_ID).param("projectId", PROJECT_ID)
-                    .param("ownerId", ownerId).param("memberId", memberId).update();
-            jdbc.sql("INSERT INTO yumpoo.content_catalog_version (project_id,company_id) VALUES (:projectId,:companyId)")
-                    .param("projectId", PROJECT_ID).param("companyId", COMPANY_ID).update();
+                """)
+                    .param("ownerMembership", UUID.randomUUID())
+                    .param("memberMembership", UUID.randomUUID())
+                    .param("companyId", COMPANY_ID)
+                    .param("projectId", PROJECT_ID)
+                    .param("ownerId", ownerId)
+                    .param("memberId", memberId)
+                    .update();
+            jdbc.sql(
+                            "INSERT INTO yumpoo.content_catalog_version (project_id,company_id) VALUES (:projectId,:companyId)")
+                    .param("projectId", PROJECT_ID)
+                    .param("companyId", COMPANY_ID)
+                    .update();
             labels.initialize(COMPANY_ID, PROJECT_ID, clock.instant());
         });
     }
 
     private static String cookies(ActorFixture actor) {
-        return SESSION_COOKIE + "=" + actor.session().sessionCredential().value()
-                + "; " + CSRF_COOKIE + "=" + actor.session().csrfCredential().value();
+        return SESSION_COOKIE + "=" + actor.session().sessionCredential().value() + "; " + CSRF_COOKIE + "="
+                + actor.session().csrfCredential().value();
     }
 
     private void cleanUp() {
-        jdbc.sql("DELETE FROM yumpoo.project_purge_run WHERE company_id=:id").param("id",COMPANY_ID).update();
-        jdbc.sql("DELETE FROM yumpoo.personal_dashboard WHERE company_id=:id").param("id", COMPANY_ID).update();
-        for (String table : java.util.List.of("work_item_time_session", "work_item_timer_state", "work_item_time_revision"))
-            jdbc.sql("DELETE FROM yumpoo." + table + " WHERE company_id=:id").param("id", COMPANY_ID).update();
-        jdbc.sql("DELETE FROM yumpoo.work_item_update_mention WHERE company_id=:id").param("id", COMPANY_ID).update();
-        jdbc.sql("DELETE FROM yumpoo.work_item_update WHERE company_id=:id").param("id", COMPANY_ID).update();
-        jdbc.sql("DELETE FROM yumpoo.work_item_relation WHERE company_id=:id").param("id", COMPANY_ID).update();
-        jdbc.sql("DELETE FROM yumpoo.work_item WHERE company_id=:id").param("id", COMPANY_ID).update();
-        jdbc.sql("DELETE FROM yumpoo.work_item_project_counter WHERE company_id=:id").param("id", COMPANY_ID).update();
-        jdbc.sql("DELETE FROM yumpoo.content WHERE company_id=:id").param("id", COMPANY_ID).update();
+        jdbc.sql("DELETE FROM yumpoo.project_purge_run WHERE company_id=:id")
+                .param("id", COMPANY_ID)
+                .update();
+        jdbc.sql("DELETE FROM yumpoo.personal_dashboard WHERE company_id=:id")
+                .param("id", COMPANY_ID)
+                .update();
+        for (String table :
+                java.util.List.of("work_item_time_session", "work_item_timer_state", "work_item_time_revision"))
+            jdbc.sql("DELETE FROM yumpoo." + table + " WHERE company_id=:id")
+                    .param("id", COMPANY_ID)
+                    .update();
+        jdbc.sql("DELETE FROM yumpoo.work_item_update_mention WHERE company_id=:id")
+                .param("id", COMPANY_ID)
+                .update();
+        jdbc.sql("DELETE FROM yumpoo.work_item_update WHERE company_id=:id")
+                .param("id", COMPANY_ID)
+                .update();
+        jdbc.sql("DELETE FROM yumpoo.work_item_relation WHERE company_id=:id")
+                .param("id", COMPANY_ID)
+                .update();
+        jdbc.sql("DELETE FROM yumpoo.work_item WHERE company_id=:id")
+                .param("id", COMPANY_ID)
+                .update();
+        jdbc.sql("DELETE FROM yumpoo.work_item_project_counter WHERE company_id=:id")
+                .param("id", COMPANY_ID)
+                .update();
+        jdbc.sql("DELETE FROM yumpoo.content WHERE company_id=:id")
+                .param("id", COMPANY_ID)
+                .update();
         jdbc.sql("DELETE FROM yumpoo.content_catalog_version WHERE company_id=:id")
-                .param("id", COMPANY_ID).update();
+                .param("id", COMPANY_ID)
+                .update();
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
-            jdbc.sql("DELETE FROM yumpoo.project_membership WHERE company_id=:id").param("id", COMPANY_ID).update();
-            jdbc.sql("DELETE FROM yumpoo.project WHERE company_id=:id").param("id", COMPANY_ID).update();
+            jdbc.sql("DELETE FROM yumpoo.project_membership WHERE company_id=:id")
+                    .param("id", COMPANY_ID)
+                    .update();
+            jdbc.sql("DELETE FROM yumpoo.project WHERE company_id=:id")
+                    .param("id", COMPANY_ID)
+                    .update();
         });
-        jdbc.sql("DELETE FROM yumpoo.security_audit_event WHERE company_id=:id").param("id", COMPANY_ID).update();
-        jdbc.sql("DELETE FROM yumpoo.idempotency_record WHERE actor_user_id IN (SELECT id FROM yumpoo.identity_user WHERE company_id=:id)").param("id", COMPANY_ID).update();
-        jdbc.sql("DELETE FROM yumpoo.login_session WHERE company_id=:id").param("id", COMPANY_ID).update();
-        jdbc.sql("DELETE FROM yumpoo.outbox_event WHERE company_id=:id").param("id", COMPANY_ID).update();
-        jdbc.sql("DELETE FROM yumpoo.platform_role_assignment WHERE company_id=:id").param("id", COMPANY_ID).update();
-        jdbc.sql("DELETE FROM yumpoo.external_identity WHERE company_id=:id").param("id", COMPANY_ID).update();
-        jdbc.sql("DELETE FROM yumpoo.identity_user WHERE company_id=:id").param("id", COMPANY_ID).update();
-        jdbc.sql("UPDATE yumpoo.app_manager_governance_state SET lifecycle_status='UNINITIALIZED', initialized_at=NULL, missing_since=NULL, "
-                + "event_version=0, row_version=0, updated_at=transaction_timestamp() WHERE company_id=:id").param("id", COMPANY_ID).update();
+        jdbc.sql("DELETE FROM yumpoo.security_audit_event WHERE company_id=:id")
+                .param("id", COMPANY_ID)
+                .update();
+        jdbc.sql(
+                        "DELETE FROM yumpoo.idempotency_record WHERE actor_user_id IN (SELECT id FROM yumpoo.identity_user WHERE company_id=:id)")
+                .param("id", COMPANY_ID)
+                .update();
+        jdbc.sql("DELETE FROM yumpoo.login_session WHERE company_id=:id")
+                .param("id", COMPANY_ID)
+                .update();
+        jdbc.sql("DELETE FROM yumpoo.outbox_event WHERE company_id=:id")
+                .param("id", COMPANY_ID)
+                .update();
+        jdbc.sql("DELETE FROM yumpoo.platform_role_assignment WHERE company_id=:id")
+                .param("id", COMPANY_ID)
+                .update();
+        jdbc.sql("DELETE FROM yumpoo.external_identity WHERE company_id=:id")
+                .param("id", COMPANY_ID)
+                .update();
+        jdbc.sql("DELETE FROM yumpoo.identity_user WHERE company_id=:id")
+                .param("id", COMPANY_ID)
+                .update();
+        jdbc.sql(
+                        "UPDATE yumpoo.app_manager_governance_state SET lifecycle_status='UNINITIALIZED', initialized_at=NULL, missing_since=NULL, "
+                                + "event_version=0, row_version=0, updated_at=transaction_timestamp() WHERE company_id=:id")
+                .param("id", COMPANY_ID)
+                .update();
     }
 
     private record ActorFixture(UUID userId, IssuedSession session) {}

@@ -1,9 +1,8 @@
 package com.yumpoo.platform.identityaccess.infrastructure.wecom;
 
-import org.springframework.boot.context.properties.ConfigurationProperties;
-
 import java.net.URI;
 import java.time.Duration;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "yumpoo.wecom.oauth")
 public final class WebOAuthProperties {
@@ -160,7 +159,8 @@ public final class WebOAuthProperties {
     }
 
     private static boolean sameOrigin(URI left, URI right) {
-        return left != null && right != null
+        return left != null
+                && right != null
                 && left.getScheme().equalsIgnoreCase(right.getScheme())
                 && left.getHost().equalsIgnoreCase(right.getHost())
                 && left.getPort() == right.getPort();

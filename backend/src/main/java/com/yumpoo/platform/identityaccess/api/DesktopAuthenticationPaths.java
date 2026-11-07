@@ -5,6 +5,5 @@ final class DesktopAuthenticationPaths {
     static final String CALLBACK = "/api/v1/electron/auth/wecom/callback";
     static final String EXCHANGE = "/api/v1/electron/auth/exchange";
 
-    private DesktopAuthenticationPaths() {
-    }
+    private DesktopAuthenticationPaths() {}
 }

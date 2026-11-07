@@ -4,10 +4,7 @@ import java.time.Instant;
 import java.util.Objects;
 
 public record DesktopAuthExchange(
-        DesktopIdentityFingerprint identityFingerprint,
-        Instant handoffIssuedAt,
-        Instant consumedAt
-) {
+        DesktopIdentityFingerprint identityFingerprint, Instant handoffIssuedAt, Instant consumedAt) {
 
     public DesktopAuthExchange {
         Objects.requireNonNull(identityFingerprint, "identityFingerprint must not be null");

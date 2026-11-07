@@ -19,14 +19,14 @@ CI 由统一入口 [tools/ci/run.mjs](../../../../../../tools/ci/run.mjs) 驱动
 | contracts | OpenAPI 合并与基线兼容性、lint 与金样例、生成客户端漂移、事件 Schema 与兼容性、迁移回退安全 |
 | static | lint、工作区边界、preload 契约、Web、桌面与独立监控的类型检查、构建和测试、部署配置、文档与 Agent Note、CI 与发布策略测试 |
 | backend | 后端回归（单元、集成与架构测试）、受限堆运行 |
-| portable | 监控告警规则测试、备份恢复输出、打包后的 HTTP 冒烟、可移植交付包的生成与校验 |
+| portable | 监控告警规则测试、备份恢复输出、打包后的 HTTP 冒烟、浏览器冒烟、可移植交付包的生成与校验 |
 | windows | Windows 工具链、发布恢复、桌面冒烟、打包、安装器与更新签名校验 |
 
-交付步骤按能力命名，本地可以用 `pnpm run ci` 或单独跑某个阶段。历史上的里程碑门禁已经退役。
+交付步骤按能力命名，本地可以用 `pnpm run ci` 或单独跑某个阶段。历史上的里程碑门禁已经退役。在 GitHub Actions 中，static 与 backend 两个阶段并行运行。
 
 ## 本地浏览器冒烟
 
-`pnpm test:e2e` 用系统 Edge 或 Chrome 跑一组串行冒烟用例，在与线上相同的 CSP 下检查主要页面没有控制台错误、页面错误或接口 5xx。它只在本地运行，不属于合并门禁。
+`pnpm test:e2e` 用系统 Edge 或 Chrome 跑一组串行冒烟用例，在与线上相同的 CSP 下检查主要页面没有控制台错误、页面错误或接口 5xx。CI 的 portable 阶段也会运行它，失败会阻止合并。
 
 部署配置检查（[verify-deployment-config.mjs](../../../../../../tools/verification/verify-deployment-config.mjs)）会读取前端路由，拒绝被反向代理的非 SPA 路径遮蔽的路由。
 
