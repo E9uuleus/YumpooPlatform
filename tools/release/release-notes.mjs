@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict'
 import { repository } from './policy.mjs'
 
 // Commit subjects still group the promotion PR comment; Release bodies come from PR release notes instead.
@@ -7,9 +8,6 @@ const sections = [
 ]
 const migrationPrefix = 'backend/src/main/resources/db/migration/'
 const migrationFile = /^backend\/src\/main\/resources\/db\/migration\/.+\.sql$/u
-// GitHub compare 最多返回 250 个提交与 300 个文件；达到上限时在说明中提示截断。
-const compareCommitLimit = 250
-const compareFileLimit = 300
 
 export function commitSection(subject) {
   const type = subject.match(/^([a-z]+)(?:\([^)]*\))?!?:\s/u)?.[1]
@@ -79,6 +77,17 @@ export function exemptPull(pull) {
 }
 
 /**
+ * Every commit of `base...head`, paging the compare API: one unpaged response stops at 250 commits. Its file list
+ * stops at 300 files on any page, so changed files come from the released checkout instead.
+ */
+export async function compareCommits(github, base, head) {
+  const pages = await github.list(`/compare/${base}...${head}?per_page=100`)
+  const commits = pages.flatMap(page => page.commits ?? [])
+  assert.equal(commits.length, pages[0]?.total_commits, `Compare ${base}...${head} returned an incomplete commit list`)
+  return commits
+}
+
+/**
  * Release notes of every PR behind the non-merge commits of a range, in commit order and once per PR. A commit with
  * no PR, or a PR without valid notes, is reported as missing rather than failing the draft: the PR check blocks it
  * at merge time, so only older PRs and direct commits reach here.
@@ -123,7 +132,7 @@ function updateLines(entries, empty) {
   return lines
 }
 
-function infoLines({ sourceCommit, previousTag, firstRelease, run, collected, truncated }) {
+function infoLines({ sourceCommit, previousTag, firstRelease, run, collected }) {
   const { pulls, dependencies, missing } = collected
   return [
     '### 发布信息', '',
@@ -135,7 +144,6 @@ function infoLines({ sourceCommit, previousTag, firstRelease, run, collected, tr
     ...(dependencies.length ? [`- 依赖更新：${dependencies.length} 项（${dependencies.map(number => `#${number}`).join('、')}）`] : []),
     `- 未提供发布说明：${missing.length ? `${missing.length} 项，补写 PR 正文后重跑工作流即可刷新本说明` : '无'}`,
     ...missing.map(item => `  - ${item.label}：${item.reason}`),
-    ...(truncated ? ['- 变更较多，GitHub 对比结果已截断；完整内容见对比链接。'] : []),
     '',
   ]
 }
@@ -158,14 +166,15 @@ const notices = ({ supersededDrafts = [], otherDrafts = [] }) => [
   ...(otherDrafts.length ? [`> 另有草稿 ${otherDrafts.map(name => `\`${name}\``).join('、')} 的源码不早于本草稿：发布前请核对来源 SHA，只发布需要上线的那一个。`, ''] : []),
 ]
 
-/** Server draft body: 更新内容 → 升级影响 → 发布信息. `inventory` classifies migrations from the released checkout. */
-export function releaseNotes({ tag, sourceCommit, run, previousTag, comparison, collected, inventory = [], supersededDrafts = [], otherDrafts = [] }) {
-  const files = comparison?.files ?? []
+/**
+ * Server draft body: 更新内容 → 升级影响 → 发布信息. `files` is the complete change list since the previous release and
+ * `inventory` classifies migrations, both from the released checkout.
+ */
+export function releaseNotes({ tag, sourceCommit, run, previousTag, files = [], collected, inventory = [], supersededDrafts = [], otherDrafts = [] }) {
   const admin = collected.entries.filter(entry => entry.category === '运维')
   const migrations = migrationLines(files, inventory)
   const contracts = files.filter(file => /^contracts\/(?:openapi|events)\//u.test(file.filename)).map(file => `\`${file.filename}\``)
   const engine = files.filter(file => file.filename.startsWith('deployment/windows/cd/')).map(file => `\`${file.filename}\``)
-  const truncated = (comparison?.commits?.length ?? 0) >= compareCommitLimit || files.length >= compareFileLimit
   const lines = [
     `## 服务端 ${tag}`, '',
     summaryLine(collected.entries, [...admin, ...engine]), '',
@@ -180,7 +189,7 @@ export function releaseNotes({ tag, sourceCommit, run, previousTag, comparison, 
     ...admin.map(entry => `  ${entryLine(entry)}`),
     `- 回退：${!previousTag ? '首个版本，没有可回退的版本' : migrations.breaking ? '含破坏性迁移，不能用 Server Rollback 快速回退' : `可用 Server Rollback 回退到 \`${previousTag}\``}`,
     '',
-    ...infoLines({ sourceCommit, previousTag, firstRelease: '无（首个 main 发布版本）', run, collected, truncated }),
+    ...infoLines({ sourceCommit, previousTag, firstRelease: '无（首个 main 发布版本）', run, collected }),
     ...notices({ supersededDrafts, otherDrafts }),
     '> 本草稿由 Prepare Release 工作流根据 main 的 CI 产物生成，条目来自各 PR 的「发布说明」段。点击 Publish 即为上线决定，部署会自动开始；不要修改或替换附件。',
   ]
@@ -202,7 +211,7 @@ export function desktopReleaseBody({ tag, version, sourceCommit, run, previous, 
     ...admin.map(entry => `  ${entryLine(entry)}`),
     '- 回退：桌面不能回退，只能用更高版本前滚。',
     '',
-    ...infoLines({ sourceCommit, previousTag: previous?.tag_name, firstRelease: '无（首个经发布渠道分发的版本）', run, collected, truncated: false }),
+    ...infoLines({ sourceCommit, previousTag: previous?.tag_name, firstRelease: '无（首个经发布渠道分发的版本）', run, collected }),
     '### 发布前试装', '',
     `- 下载本草稿的 \`YumpooDesktop-Setup-${version}-x64.exe\`，在 2–3 台机器上试装并核对版本。`,
     `- 点击 Publish 即为桌面上线决定；发布后 Desktop Release 校验 ${tag} 并写入更新源，客户端在 4 小时内或重启后自动更新。`,

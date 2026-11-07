@@ -81,13 +81,6 @@ function fixture(t, { version = '1.1.0', published = [{ tag: 'desktop-v1.0.0', s
       if (endpoint === '/actions/runs/3001/attempts/1') return run
       const tagRef = endpoint.match(/^\/git\/ref\/tags\/(desktop-v[\d.]+)$/u)
       if (tagRef) return { object: { type: 'commit', sha: tagRef[1] === `desktop-v${version}` ? sha : previousSha } }
-      if (endpoint === `/compare/${previousSha}...${sha}`) {
-        return { commits: [
-          { sha: 'c'.repeat(40), parents: [{}], commit: { message: 'feat(desktop): 新增深链 (DESK-8)' } },
-          { sha: 'd'.repeat(40), parents: [{}, {}], commit: { message: 'Merge dev' } },
-          { sha: 'e'.repeat(40), parents: [{}], commit: { message: 'fix(platform): 修复托盘与表格 (DESK-9)\n\nbody' } },
-        ] }
-      }
       const pulls = endpoint.match(/^\/commits\/([0-9a-f])\1{39}\/pulls$/u)
       if (pulls) {
         const pull = (number, notes) => ({ number, title: `PR ${number}`, merged_at: '2026-10-19T00:00:00Z', user: { login: 'm' }, head: { ref: 'feature/x' }, base: { ref: 'dev' }, body: `## 发布说明\n${notes}` })
@@ -99,6 +92,13 @@ function fixture(t, { version = '1.1.0', published = [{ tag: 'desktop-v1.0.0', s
     },
     list(endpoint) {
       this.calls.push(endpoint)
+      if (endpoint === `/compare/${previousSha}...${sha}?per_page=100`) {
+        return [{ total_commits: 3, commits: [
+          { sha: 'c'.repeat(40), parents: [{}], commit: { message: 'feat(desktop): 新增深链 (DESK-8)' } },
+          { sha: 'd'.repeat(40), parents: [{}, {}], commit: { message: 'Merge dev' } },
+          { sha: 'e'.repeat(40), parents: [{}], commit: { message: 'fix(platform): 修复托盘与表格 (DESK-9)\n\nbody' } },
+        ] }]
+      }
       if (endpoint === '/releases?per_page=100') return this.releases
       if (endpoint.startsWith('/git/matching-refs/tags/')) return this.tags
       if (endpoint.startsWith('/actions/workflows/42/runs?')) return [run]

@@ -99,6 +99,7 @@ test('drafts are prepared only from successful main push CI and never touch depl
   assert.equal(job.environment, undefined)
   assert(!steps(job).some(step => deploySecrets.some(secret => secret in (step.env ?? {}))))
   assert(steps(job).some(step => step.run === 'node tools/release/prepare-release.mjs'))
+  assert.equal(steps(job).find(step => step.uses?.startsWith('actions/checkout@')).with['fetch-depth'], 0, 'changed files since the previous release need full history')
 })
 
 test('desktop drafts come from the same main push CI; only the sign job enters the signing Environment', () => {

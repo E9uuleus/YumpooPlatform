@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { spawnSync } from 'node:child_process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
   repository, releaseAssetNames, expectedArtifactName, nextReleaseTag, validateTag, validateProvenance, validateAssetDigest,
@@ -10,7 +11,7 @@ import { createGithub, fileDigest, readJson, unpackArtifact } from './github.mjs
 import {
   assertOnReleaseBranch, ciWorkflowId, downloadAsset, downloadCiPackage, indexAssets, inspectPackage, resolveTagCommit, selectCiAttempt, verifyCiAttempt,
 } from './promote-release.mjs'
-import { collectReleaseEntries, releaseNotes } from './release-notes.mjs'
+import { collectReleaseEntries, compareCommits, releaseNotes } from './release-notes.mjs'
 import { missingSummary } from './release-notes-policy.mjs'
 import { migrationInventory } from '../ci/migration-policy.mjs'
 import { notifyWeCom } from './notify.mjs'
@@ -18,10 +19,28 @@ import { verifyBuildAttestations } from './attestation.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const serverRelease = release => typeof release.tag_name === 'string' && release.tag_name.startsWith('server-v')
+const fileStatus = { A: 'added', M: 'modified', D: 'removed', T: 'changed' }
+
+/**
+ * Every file changed in `base...head`, read from the released checkout: the compare API lists at most 300 files, so a
+ * large release would otherwise report no migrations or contract changes. A shallow checkout fails here instead.
+ */
+export function changedFiles(root, base, head, run = spawnSync) {
+  assert(/^[0-9a-f]{40}$/u.test(base) && /^[0-9a-f]{40}$/u.test(head), 'Changed files need full commit SHAs')
+  const result = run('git', ['diff', '--name-status', '--no-renames', '-z', `${base}...${head}`], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+  if (result.status !== 0) throw new Error(`git diff ${base}...${head} failed: ${String(result.stderr ?? '').trim()}`)
+  const fields = result.stdout.split('\0').filter(Boolean)
+  assert.equal(fields.length % 2, 0, 'Unexpected git diff output')
+  return Array.from({ length: fields.length / 2 }, (_, index) => {
+    const [status, filename] = fields.slice(index * 2, index * 2 + 2)
+    assert(fileStatus[status], `Unexpected git diff status ${status}`)
+    return { filename, status: fileStatus[status] }
+  })
+}
 
 // Builds the draft that a person publishes: tag, notes and every verified asset are fixed before publishing,
 // because an immutable Release can no longer change its assets afterwards.
-export async function prepareDraft({ github, sourceCommit, env, directory, now = new Date(), unpack = unpackArtifact, attest = verifyBuildAttestations, log = console.log, inventory = () => migrationInventory(root) }) {
+export async function prepareDraft({ github, sourceCommit, env, directory, now = new Date(), unpack = unpackArtifact, attest = verifyBuildAttestations, log = console.log, inventory = () => migrationInventory(root), changes = (base, head) => changedFiles(root, base, head) }) {
   assert(/^[0-9a-f]{40}$/u.test(sourceCommit), 'Invalid source commit')
   assert.equal(env.GITHUB_REPOSITORY, repository, 'Unexpected repository')
   assert(['workflow_run', 'workflow_dispatch'].includes(env.GITHUB_EVENT_NAME), 'Unsupported draft trigger')
@@ -35,9 +54,9 @@ export async function prepareDraft({ github, sourceCommit, env, directory, now =
   }
   const previous = releases.filter(release => !release.draft && release.published_at)
     .sort((left, right) => Date.parse(right.published_at) - Date.parse(left.published_at))[0]
+  const latest = previous ? await resolveTagCommit(github, previous.tag_name) : null
   if (previous) {
     // A draft for a commit older than what is already live could only ever be a downgrade candidate.
-    const latest = await resolveTagCommit(github, previous.tag_name)
     const order = await github.get(`/compare/${sourceCommit}...${latest}?per_page=1`)
     assert(order.status !== 'ahead', `${previous.tag_name} already published a newer commit; refusing a draft for older ${sourceCommit}`)
   }
@@ -67,10 +86,12 @@ export async function prepareDraft({ github, sourceCommit, env, directory, now =
     ? await verifyCiAttempt(github, workflowId, sourceCommit, pinned.ciRunId, pinned.ciRunAttempt)
     : await selectCiAttempt(github, workflowId, sourceCommit)
   // The body is regenerated on every run while the draft is unpublished, so fixing a PR's release notes and rerunning
-  // the workflow refreshes it; the checkout is the released commit, which classifies its own migrations.
-  const comparison = previous ? await github.get(`/compare/${encodeURIComponent(previous.tag_name)}...${sourceCommit}`) : null
-  const collected = await collectReleaseEntries(github, comparison?.commits ?? [])
-  const notes = tag => releaseNotes({ tag, sourceCommit, run, previousTag: previous?.tag_name, comparison, collected, inventory: inventory(), supersededDrafts, otherDrafts })
+  // the workflow refreshes it; the checkout is the released commit, which lists its changed files and classifies its
+  // own migrations.
+  const commits = latest ? await compareCommits(github, latest, sourceCommit) : []
+  const files = latest ? changes(latest, sourceCommit) : []
+  const collected = await collectReleaseEntries(github, commits)
+  const notes = tag => releaseNotes({ tag, sourceCommit, run, previousTag: previous?.tag_name, files, collected, inventory: inventory(), supersededDrafts, otherDrafts })
   if (!draft) {
     const tags = (await github.list('/git/matching-refs/tags/server-v')).map(ref => String(ref.ref).replace(/^refs\/tags\//u, ''))
     const tag = nextReleaseTag([...tags, ...releases.map(release => release.tag_name)], now)
