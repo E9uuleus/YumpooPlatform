@@ -8,7 +8,9 @@ import { timeTrackingApi } from '../api/client'
 import { toApiProblem, type ApiProblem } from '../api/problems'
 import InlineProblem from '../components/InlineProblem.vue'
 import MyWorkItemDialog from '../components/my-work/MyWorkItemDialog.vue'
+import MyWorkViewMenu from '../components/my-work/MyWorkViewMenu.vue'
 import { myWorkTableSource } from '../components/my-work/myWorkTableSource'
+import { DEFAULT_MY_WORK_VIEW, isMyWorkViewField, type MyWorkViewField } from '../components/my-work/myWorkViews'
 import ProjectWorkItems from '../components/projects/ProjectWorkItems.vue'
 import WorkItemGroupToggle from '../components/projects/WorkItemGroupToggle.vue'
 import { assigneeGroupColor } from '../components/projects/workItemGrouping'
@@ -68,6 +70,18 @@ function toggle(projectId: string): void {
   if (!next.delete(projectId)) next.add(projectId)
   collapsed.value = next
   try { localStorage.setItem(collapsedKey.value, JSON.stringify([...next])) } catch { /* 本地存储不可用时只在当前页面保留折叠。 */ }
+}
+
+const viewKey = computed(() => `yumpoo:my-work:view:v1:${scope.value}`)
+const view = ref<MyWorkViewField>(DEFAULT_MY_WORK_VIEW)
+watch(viewKey, key => {
+  let saved: unknown
+  try { saved = localStorage.getItem(key) } catch { /* 本地存储不可用时使用默认视图。 */ }
+  view.value = isMyWorkViewField(saved) ? saved : DEFAULT_MY_WORK_VIEW
+}, { immediate: true })
+function changeView(field: MyWorkViewField): void {
+  view.value = field
+  try { localStorage.setItem(viewKey.value, field) } catch { /* 本地存储不可用时只在当前页面保留视图。 */ }
 }
 
 const onboardingReady = computed(() => !loading.value && !problem.value)
@@ -152,6 +166,10 @@ onBeforeUnmount(() => sectionObserver?.disconnect())
         <span v-if="!loading && projects.length">{{ total }} 项未完成 · {{ projects.length }} 个项目</span>
       </div>
       <div class="dashboard-header-actions">
+        <my-work-view-menu
+          :model-value="view"
+          @update:model-value="changeView"
+        />
         <el-tooltip content="刷新">
           <el-button
             :icon="Refresh"
@@ -229,6 +247,7 @@ onBeforeUnmount(() => sectionObserver?.disconnect())
               :preference-scope="preferenceScope(project.id)"
               :source="tableSource(project.id)"
               :refresh-key="refreshKeys[project.id] ?? 0"
+              :group-field="view"
               my-work
               @open-detail="openDetail"
               @changed="loadProjects"

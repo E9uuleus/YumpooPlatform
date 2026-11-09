@@ -101,6 +101,7 @@ function run(action: ColumnMenuAction): void {
             <work-item-action-icon name="collapse" />折叠
           </el-dropdown-item>
           <el-dropdown-item
+            v-if="!state.groupHidden"
             :disabled="!state.groupField || state.groupDisabled"
             :title="state.groupField ? undefined : '该列暂不支持分组'"
             @pointermove="submenu = undefined"

@@ -78,7 +78,7 @@ Windows 本机不能构造的大小写碰撞与无特权符号链接夹具由必
 | --- | --- | --- |
 | [Release Notes Policy](workflows/release-notes-policy.yml) | 指向 `dev` 或 `main` 的 PR（含修改正文） | PR 正文须有合格的「## 发布说明」段；Dependabot、`backmerge/*` 与 dev 晋升 PR 豁免 |
 | [Main Promotion Policy](workflows/main-promotion-policy.yml) | 指向 `main` 的 PR | 只允许 `dev`/`hotfix/*`；汇总提交、迁移分类与契约变化；`deployment/windows/cd/` 有改动时列出文件并提醒发布前升级主机引擎；破坏性迁移要求 `release:breaking-migration` 标签 |
-| [Prepare Release](workflows/prepare-release.yml) | `main` 推送 CI 成功 | 自动编号并创建草稿 Release，正文按各 PR 的「发布说明」段分层生成（更新内容、升级影响、发布信息），草稿未发布时重跑会刷新正文；草稿阶段上传并核验来源清单、原包与 SBOM，上传前后各核验一次构建证明；不删除任何草稿 |
+| [Prepare Release](workflows/prepare-release.yml) | `main` 推送 CI 成功 | 自动编号并创建草稿 Release，正文按各 PR 的「发布说明」段分层生成（更新内容、升级影响、发布信息），升级影响取自全部历史检出上的完整差异，草稿未发布时重跑会刷新正文；草稿阶段上传并核验来源清单、原包与 SBOM，上传前后各核验一次构建证明；不删除任何草稿 |
 | [Windows Release](workflows/windows-release.yml) | Release 发布 | 只校验不可变 Release（含 SBOM 与构建证明）并部署，不写附件 |
 | [Server Rollback](workflows/server-rollback.yml) | 手动，在上一版本 tag 上 | 提交只换代码、不动数据库的回退请求 |
 | [Back-merge Main](workflows/back-merge.yml) | `main` 或 `dev` 推送 | `main` 含 `dev` 缺少的改动（热修复）时开回合并 PR，或把已有回合并分支快进到最新 `main` |
