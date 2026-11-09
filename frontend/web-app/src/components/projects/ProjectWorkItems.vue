@@ -109,7 +109,7 @@ import { DEFAULT_VALUE_COLUMN_KEYS, isCompletedStatus, heightOption, resolveWork
   type TableSettingsCatalog, evaluateWorkItemColoring, type ColoringColumnKey, type WorkItemColoring } from './workItemTableSettings'
 import { useWorkItemGrouping, isGroupDisplayRow, type WorkItemGroupDisplayRow } from './useWorkItemGrouping'
 import { EMPTY_GROUP, type GroupField, type WorkItemGroup } from './workItemGrouping'
-import { useWorkItemGroupCreate } from './useWorkItemGroupCreate'
+import { groupCreateDefaults, useWorkItemGroupCreate } from './useWorkItemGroupCreate'
 import { useSession } from '../../composables/useSession'
 import { useMinuteClock } from '../../composables/useMinuteClock'
 import { apiDate, companyDate, dueDateKey } from './workItemDueDate'
@@ -156,6 +156,8 @@ const props = defineProps<{
    * 表格随内容增高；打开详情只抛出 openDetail，新建改为弹窗。
    */
   myWork?: boolean
+  /** 分组字段由页面统一决定（我的工作的视图选项）；已保存的字段不生效，列头菜单不提供分组。 */
+  groupField?: GroupField
 }>()
 const emit = defineEmits<{
   changed: []
@@ -217,7 +219,7 @@ const quickCreating = ref(false)
 const creatingTop = ref(false)
 const importOpen = ref(false)
 const archivedOpen = ref(false)
-const createDialog = ref<{ parent?: ProjectWorkItemListItem }>()
+const createDialog = ref<{ parent?: ProjectWorkItemListItem; group?: WorkItemGroup | undefined }>()
 /** Row whose name cell opens for editing as soon as it renders: the item the toolbar button just created. */
 const autoEditId = ref('')
 const quickRow = ref<HTMLElement>()
@@ -384,6 +386,7 @@ function columnMenuState(column: { key: BuiltInColumnKey; label: string }): Colu
     groupField,
     groupedByThis: Boolean(groupField) && groupingField.value === groupField,
     groupDisabled: savingSortOrder.value,
+    groupHidden: Boolean(props.groupField),
   }
 }
 function onColumnMenuAction(key: BuiltInColumnKey, action: ColumnMenuAction, anchor?: HTMLElement): void {
@@ -558,6 +561,7 @@ const grouping = useWorkItemGrouping({
   protectedIds: () => new Set([...expandedIds.value, ...selectedWorkItemIds.value,
     ...[selectedRowId.value, inlineDraft.value?.anchorId].filter((id): id is string => Boolean(id))]),
   filtering: () => explicitFilterActive.value,
+  fixedField: () => props.groupField,
 })
 const { active: grouped, field: groupingField, order: groupingOrder, showEmpty: showEmptyGroups,
   groups: workItemGroups, countsReady: groupCountsReady, error: groupingError, loading: groupsLoading } = grouping
@@ -635,6 +639,10 @@ const groupCreate = useWorkItemGroupCreate({
   projectId: () => projectId.value, field: () => groupingField.value, contentId: () => defaultContentId.value,
   disabledReason: groupCreateDisabledReason, changed: () => { notifyChanged(); return reloadSortedTableInPlace() },
 })
+const createDialogDefaults = computed(() => {
+  const group = createDialog.value?.group
+  return group && groupingField.value ? groupCreateDefaults(createDefaults.value, groupingField.value, group) : createDefaults.value
+})
 type TableDisplayRow = ProjectWorkItemListItem | WorkItemGroupDisplayRow
 function groupKeyForRow(row: TableDisplayRow): string {
   if (isGroupDisplayRow(row)) return row.group.key
@@ -664,7 +672,7 @@ const displayTableItems = computed<TableDisplayRow[]>(() => {
     add('heading'); add('columns')
     result.push(...withSubitems(rows.get(group.key) ?? [], group))
     add('load')
-    if (!props.myWork) add('add')
+    add('add')
   })
   return result
 })
@@ -746,6 +754,7 @@ async function changeGrouping(field: GroupField | ''): Promise<void> {
     await nextTick()
   } finally { groupingSwitching.value = false }
 }
+watch(() => props.groupField, field => { if (field) void changeGrouping(field) })
 const discussionAccess = computed(() => workItemDiscussionAccess(project.value, detail.value))
 const canPublishDiscussion = computed(() => discussionAccess.value.canPublish)
 const discussionReadOnlyReason = computed(() => discussionAccess.value.readOnlyReason)
@@ -922,7 +931,7 @@ async function addSubitem(row: ProjectWorkItemListItem): Promise<void> {
 }
 
 function onCreateBelow(item: ProjectWorkItemListItem): void {
-  if (props.myWork) createDialog.value = {}
+  if (props.myWork) createDialog.value = { group: workItemGroups.value.find(group => group.key === groupKeyForRow(item)) }
   else createBelow(item)
 }
 
@@ -2484,7 +2493,13 @@ onBeforeUnmount(() => {
               >
                 <template #default="scope">
                   <div v-if="isGroupDisplayRow(scope.row) && scope.row.groupRowKind === 'add'" class="work-item-group-create">
-                    <div v-if="groupCreate.draft(scope.row.group).open" class="quick-row monday-quick-row work-item-group-quick" :style="quickGridStyle">
+                    <button v-if="myWork" type="button" class="quick-add monday-quick-add my-work-create-row" :style="quickGridStyle"
+                      :disabled="Boolean(groupCreateDisabledReason(scope.row.group))" :title="groupCreateDisabledReason(scope.row.group) || undefined"
+                      :aria-label="`新建工作项到${scope.row.group.label}`" @click="createDialog = { group: scope.row.group }">
+                      <span class="monday-quick-lead" aria-hidden="true" />
+                      <span class="my-work-create-row__label"><el-icon aria-hidden="true"><plus /></el-icon>新建工作项</span>
+                    </button>
+                    <div v-else-if="groupCreate.draft(scope.row.group).open" class="quick-row monday-quick-row work-item-group-quick" :style="quickGridStyle">
                       <span class="monday-quick-lead" aria-hidden="true" />
                       <span class="monday-quick-checkbox" aria-hidden="true" />
                       <el-input :ref="value => groupCreate.setInput((scope.row as WorkItemGroupDisplayRow).group, value)"
@@ -3103,18 +3118,7 @@ onBeforeUnmount(() => {
                   </div>
                 </div>
                 <button
-                  v-else-if="myWork && !tableInitialLoading"
-                  type="button"
-                  class="quick-add monday-quick-add my-work-create-row"
-                  :style="quickGridStyle"
-                  :disabled="!canCreate"
-                  @click="createDialog = {}"
-                >
-                  <span class="monday-quick-lead" aria-hidden="true" />
-                  <span class="my-work-create-row__label"><el-icon aria-hidden="true"><plus /></el-icon>新建工作项</span>
-                </button>
-                <button
-                  v-else-if="!grouped && !tableInitialLoading"
+                  v-else-if="!myWork && !grouped && !tableInitialLoading"
                   class="quick-add monday-quick-add"
                   data-tour="work-item-quick-add"
                   :style="quickGridStyle"
@@ -3252,8 +3256,8 @@ onBeforeUnmount(() => {
       :label-catalog="labelCatalog"
       :content-catalog="catalog"
       :members="activeMembers"
-      :defaults="createDefaults"
-      :default-content-id="defaultContentId"
+      :defaults="createDialogDefaults"
+      :default-content-id="createDialogDefaults.contentId ?? defaultContentId"
       @close="createDialog = undefined"
       @created="onMyWorkCreated"
       @labels-updated="onLabelsUpdated"
@@ -4671,9 +4675,10 @@ onBeforeUnmount(() => {
 .work-items-my-work .monday-table-surface,
 .work-items-my-work .monday-table-wrapper { height: auto; flex: none; }
 .work-items-my-work .monday-table-surface { min-height: 0; padding-top: 0; }
-.work-items-my-work .monday-table { --work-item-group-accent: inherit; --work-item-quick-add-accent: var(--work-item-group-accent); }
+.work-items-my-work .monday-table { --work-item-group-accent: inherit; }
 
-/* 我的工作底部新增：整行可点，悬停整行高亮。 */
+/* 我的工作每组底部新增：整行可点，悬停整行高亮，色条取所在分组行的颜色。 */
+.my-work-create-row { --work-item-quick-add-accent: var(--work-item-group-accent); }
 .my-work-create-row::before {
   position: absolute; top: 0; right: 0; bottom: 0; left: var(--work-item-quick-start);
   background: var(--yp-bg-hover); content: ''; opacity: 0; pointer-events: none;

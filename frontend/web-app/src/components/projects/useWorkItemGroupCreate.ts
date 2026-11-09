@@ -28,6 +28,17 @@ export function groupCreateFields(field: GroupField, group: WorkItemGroup): Part
   }
 }
 
+/** 所在分组的取值优先于本人的新建默认值，用于预填新建窗口。 */
+export function groupCreateDefaults(defaults: WorkItemCreateDefaults, field: GroupField, group: WorkItemGroup): WorkItemCreateDefaults {
+  const { contentId, ...fields } = groupCreateFields(field, group)
+  return {
+    ...defaults,
+    contentId: contentId ?? defaults.contentId,
+    statusCode: field === 'STATUS' ? group.key : defaults.statusCode,
+    fields: { ...defaults.fields, ...fields },
+  }
+}
+
 export function useWorkItemGroupCreate(options: {
   /** 本人的新建默认值；所在分组的字段值优先。 */
   defaults?: () => WorkItemCreateDefaults

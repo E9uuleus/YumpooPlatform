@@ -14,11 +14,15 @@ Status: implemented
 
 沿用[仪表板下钻复用完整工作项表格](2026-09-18-dashboard-shared-work-item-table.md)的做法，每个项目嵌入一个 `ProjectWorkItems`。`myWorkTableSource` 限定处理人，表格将未完成状态用于列表、分组和子项。仅为显示匹配子项的父项标注上下文并自动展开。新建弹窗默认指派给本人，详情弹窗左侧复用 `WorkItemPropertyList`，右侧使用 `WorkItemDetailPanel`。
 
+子表分组由页头的视图选项统一决定，可选状态、日期、优先级和类别四个视图，默认状态视图，选择按用户保存在本机。表格通过 `groupField` 固定分组字段，已保存的字段不生效，列头菜单不提供分组，也没有不分组状态。新建入口是每组底部的整行按钮，弹窗预填所在分组的取值。
+
 ## Alternatives considered
 
 保留全部个人入口会进一步拉长项目导航。工作台仍保留原名，沿用成员熟悉的入口。
 
 新增跨项目接口和单一表格需重写内联编辑。独立计数接口会重复计时候选查询。首页「我的工作项」只按分类汇总，有 100 项上限且缺少可编辑字段。沿用行内快速新增时，没有处理人的新工作项会从本页消失。
+
+允许各项目单独分组时，同一页的项目结构不一致，新建行也要同时处理分组和不分组两种形态，因此改为页面统一控制。处理人视图没有提供，本页的工作项都分配给本人。
 
 ## Consequences
 
@@ -30,4 +34,4 @@ Status: implemented
 
 ## Verification
 
-`myWorkTableSource.spec.ts` 校验处理人条件和上下文数量，`ProjectWorkItems.loading.spec.ts` 校验工具栏和未完成筛选。外壳和路由测试覆盖成员模块栏顺序、项目导航、仪表板与工时页面的活动分区。
+`myWorkTableSource.spec.ts` 校验处理人条件和上下文数量，`ProjectWorkItems.loading.spec.ts` 校验工具栏和未完成筛选。`MyWorkView.spec.ts` 与 `MyWorkViewMenu.spec.ts` 校验视图选项和本机保存，`ProjectWorkItems.grouping.spec.ts` 校验每组新建行，`useWorkItemGrouping.spec.ts` 校验固定字段。外壳和路由测试覆盖成员模块栏顺序、项目导航、仪表板与工时页面的活动分区。
