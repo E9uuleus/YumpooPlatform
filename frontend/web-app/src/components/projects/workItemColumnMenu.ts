@@ -19,6 +19,8 @@ export interface ColumnMenuState {
   groupField: GroupField | undefined
   groupedByThis: boolean
   groupDisabled: boolean
+  /** 分组由表格外部统一决定时隐藏「分组依据」。 */
+  groupHidden?: boolean
 }
 
 export const COLLAPSED_COLUMN_WIDTH = 40

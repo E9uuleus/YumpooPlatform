@@ -4,7 +4,7 @@ import { defineComponent, ref } from 'vue'
 import { ElMessageBox } from 'element-plus'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { dateGroups, EMPTY_GROUP, itemGroupKey, type GroupField, type WorkItemGroup } from './workItemGrouping'
-import { useWorkItemGroupCreate } from './useWorkItemGroupCreate'
+import { groupCreateDefaults, useWorkItemGroupCreate } from './useWorkItemGroupCreate'
 import type { WorkItemCreateDefaults } from './workItemTableSettings'
 
 const api = vi.hoisted(() => ({ createWorkItem: vi.fn(), transitionWorkItem: vi.fn() }))
@@ -30,6 +30,23 @@ beforeEach(() => {
   vi.resetAllMocks()
   api.createWorkItem.mockResolvedValue(created())
   api.transitionWorkItem.mockResolvedValue({ ...created(), statusCode: 'DONE' })
+})
+
+describe('新建窗口的分组预填', () => {
+  const defaults: WorkItemCreateDefaults = { contentId: 'default', statusCode: 'TODO', fields: { priority: 'LOW', dueDate: new Date('2026-11-20T00:00:00Z') }, count: 3 }
+
+  it('所在分组的取值优先，其余默认值保留', () => {
+    expect(groupCreateDefaults(defaults, 'STATUS', group('DOING'))).toEqual({ ...defaults, statusCode: 'DOING' })
+    expect(groupCreateDefaults(defaults, 'CONTENT', group('bug'))).toEqual({ ...defaults, contentId: 'bug' })
+    expect(groupCreateDefaults(defaults, 'PRIORITY', group('HIGH'))).toEqual({ ...defaults, fields: { ...defaults.fields, priority: 'HIGH' } })
+    expect(groupCreateDefaults(defaults, 'DUE_DATE', { ...group('TODAY'), from: '2026-11-08', to: '2026-11-08' }).fields.dueDate)
+      .toEqual(new Date('2026-11-08T00:00:00Z'))
+  })
+
+  it('空分组清除对应默认值', () => {
+    expect(groupCreateDefaults(defaults, 'PRIORITY', group(EMPTY_GROUP)).fields.priority).toBeNull()
+    expect(groupCreateDefaults(defaults, 'DUE_DATE', group(EMPTY_GROUP)).fields.dueDate).toBeNull()
+  })
 })
 
 describe('分组末尾新增', () => {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 export type WorkItemActionIconName = 'open' | 'link' | 'duplicate' | 'top' | 'bottom' | 'add' | 'subitem' | 'convert' | 'archive' | 'delete' | 'move' | 'more' | 'chevron'
-  | 'settings' | 'filter' | 'sort' | 'collapse' | 'group' | 'expand'
+  | 'settings' | 'filter' | 'sort' | 'collapse' | 'group' | 'expand' | 'status' | 'calendar' | 'priority' | 'category'
 defineProps<{ name: WorkItemActionIconName }>()
 const paths: Record<WorkItemActionIconName, string> = {
   open: 'M5 15 15 5M5 5h10v10',
@@ -22,6 +22,10 @@ const paths: Record<WorkItemActionIconName, string> = {
   collapse: 'M3 6l4 4-4 4M17 6l-4 4 4 4',
   group: 'M3 4h14v12H3zM6 7h3v6H6z',
   expand: 'M3 10h14M6 7l-3 3 3 3M14 7l3 3-3 3',
+  status: 'M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14ZM7 10.2l2.1 2.1 4-4.3',
+  calendar: 'M4.5 4.5h11A1.5 1.5 0 0 1 17 6v9.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 15.5V6a1.5 1.5 0 0 1 1.5-1.5ZM3 8.5h14M7 2.5v4M13 2.5v4',
+  priority: 'M5 17.5V3M5 3.8c3-1.6 5.2 1.4 10 0v7.4c-4.8 1.4-7-1.6-10 0',
+  category: 'M3.5 3.5h5v5h-5zM11.5 3.5h5v5h-5zM3.5 11.5h5v5h-5zM11.5 11.5h5v5h-5z',
 }
 </script>
 

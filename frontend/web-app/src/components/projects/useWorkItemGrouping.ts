@@ -33,6 +33,8 @@ interface Options {
   protectedIds?: () => Set<string>
   /** 搜索或筛选生效时不显示空分组，即使打开了「显示空分组」。 */
   filtering?: () => boolean
+  /** 分组字段由外部决定（我的工作的页头视图），已保存的字段不生效；切换由调用方通过 setField 完成。 */
+  fixedField?: () => GroupField | undefined
 }
 
 /** 与 WorkItemTableSettingsService.MAX_GROUPING_KEYS 一致。 */
@@ -45,13 +47,14 @@ function canonical(value: unknown): string | undefined {
 }
 
 /** 把服务端、本机或损坏的分组值规整为当前支持的字段与顺序。 */
-function normalizeGrouping(value: unknown): WorkItemTableGrouping {
+function normalizeGrouping(value: unknown, fixedField?: GroupField): WorkItemTableGrouping {
   const saved = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
-  const field = groupingFields.find(option => option.value === saved.field)?.value ?? ''
+  const field = fixedField ?? groupingFields.find(option => option.value === saved.field)?.value ?? ''
   const orders = groupOrders(field)
+  const savedOrder = fixedField && saved.field !== fixedField ? undefined : orders.find(option => option.value === saved.order)
   return {
     field: (field || null) as WorkItemGroupingField | null,
-    order: (orders.find(option => option.value === saved.order) ?? orders[0]!).value as WorkItemGroupingOrder,
+    order: (savedOrder ?? orders[0]!).value as WorkItemGroupingOrder,
     showEmpty: saved.showEmpty === true,
     collapsed: Array.isArray(saved.collapsed) ? saved.collapsed.filter((key): key is string => typeof key === 'string') : [],
     colors: saved.colors && typeof saved.colors === 'object' && !Array.isArray(saved.colors)
@@ -266,7 +269,7 @@ export function useWorkItemGrouping(options: Options) {
     else if (options.ready()) await options.restore()
   }
   function readPrefs(value: unknown): void {
-    const saved = normalizeGrouping(value)
+    const saved = normalizeGrouping(value, options.fixedField?.())
     stop()
     restoringPrefs = true
     field.value = (saved.field ?? '') as GroupField | ''
@@ -290,7 +293,7 @@ export function useWorkItemGrouping(options: Options) {
     const stored = options.stored?.()
     const local = localPrefs()
     const saved = options.save ? stored ?? local : local ?? stored
-    const changed = keyChanged || canonical(normalizeGrouping(saved)) !== canonical(snapshot())
+    const changed = keyChanged || canonical(normalizeGrouping(saved, options.fixedField?.())) !== canonical(snapshot())
     const wasActive = active.value
     if (changed) readPrefs(saved)
     if (options.save && stored !== undefined && local !== undefined) {

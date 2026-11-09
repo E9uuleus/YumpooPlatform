@@ -12,6 +12,7 @@ import {
 import { mount } from '@vue/test-utils'
 import { defineComponent, reactive } from 'vue'
 import { vi } from 'vitest'
+import type { GroupField } from './workItemGrouping'
 import type { WorkItemTableSource } from './workItemTableSource'
 import ProjectWorkItems from './ProjectWorkItems.vue'
 import { state } from './projectWorkItemsTestMocks'
@@ -65,7 +66,7 @@ export function page(items = [item()]): ProjectWorkItemCursorPage {
   return { items, nextCursor: null }
 }
 
-export function mountView(discussion?: { hasDraft: boolean, busy: boolean, discardDraft: () => void }, props: { embeddedProjectId?: string; preferenceScope?: string; source?: WorkItemTableSource; myWork?: boolean } = {}) {
+export function mountView(discussion?: { hasDraft: boolean, busy: boolean, discardDraft: () => void }, props: { embeddedProjectId?: string; preferenceScope?: string; source?: WorkItemTableSource; myWork?: boolean; groupField?: GroupField } = {}) {
   return mount(ProjectWorkItems, {
     props,
     global: {

@@ -5,6 +5,9 @@ import { enableAutoUnmount, flushPromises } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { state } from './projectWorkItemsTestMocks'
 import { catalog, item, mountView, page, installWorkItemsTestDefaults, restoreWorkItemsTestGlobals } from './projectWorkItemsTestSupport'
+import WorkItemCreateDialog from './WorkItemCreateDialog.vue'
+import type { ColumnMenuState } from './workItemColumnMenu'
+import type { WorkItemCreateDefaults } from './workItemTableSettings'
 
 vi.mock('../../onboarding/useOnboarding', async () => (await import('./projectWorkItemsTestMocks')).onboardingModule())
 vi.mock('@yumpoo/api-client', async importOriginal => ({
@@ -52,6 +55,33 @@ describe('项目级工作项首页 · 分组', () => {
     expect(wrapper.findAll<HTMLInputElement>('.work-item-group-add input').map(input => input.element.value))
       .toEqual(['待开始草稿', '已完成草稿'])
     expect(state.createWorkItem).not.toHaveBeenCalled()
+  })
+
+  it('我的工作每组末尾一行新建：颜色跟随分组、随分组收起，窗口预填分组取值，视图切换时重新分组', async () => {
+    state.listProjectWorkItems.mockResolvedValue(page([item(), { ...item('done'), statusCode: 'DONE' }]))
+    state.listProjectWorkItemFilterOptions.mockResolvedValue({ items: [
+      { value: 'BACKLOG', label: '待开始', count: 1 }, { value: 'DONE', label: '已完成', count: 1 },
+    ], nextCursor: null })
+    const wrapper = mountView(undefined, { embeddedProjectId: 'project-1', preferenceScope: 'my-work:one', myWork: true, groupField: 'STATUS' })
+    await flushPromises()
+    expect(wrapper.find('.el-table__append-wrapper .quick-add').exists()).toBe(false)
+    const footers = wrapper.findAll('.work-item-group-add')
+    expect(footers).toHaveLength(2)
+    for (const footer of footers) expect(footer.find('.my-work-create-row').exists()).toBe(true)
+    expect(footers[0]!.attributes('style')).toBe(wrapper.get('.work-item-group-columns').attributes('style'))
+    expect(footers[0]!.attributes('style')).not.toBe(footers[1]!.attributes('style'))
+
+    await wrapper.get('[aria-label="收起分组：待开始"]').trigger('click')
+    expect(wrapper.get('.work-item-group-add').classes()).toContain('work-item-group-collapsed')
+    expect(wrapper.findAll('.work-item-group-add')[1]!.classes()).not.toContain('work-item-group-collapsed')
+
+    await wrapper.get('[aria-label="新建工作项到已完成"]').trigger('click')
+    expect((wrapper.getComponent(WorkItemCreateDialog).props('defaults') as WorkItemCreateDefaults).statusCode).toBe('DONE')
+
+    const view = wrapper.vm as unknown as { columnMenuState: (column: { key: string; label: string }) => ColumnMenuState }
+    expect(view.columnMenuState({ key: 'status', label: '状态' }).groupHidden).toBe(true)
+    await wrapper.setProps({ groupField: 'PRIORITY' }); await flushPromises()
+    expect(state.listProjectWorkItemFilterOptions).toHaveBeenLastCalledWith(expect.objectContaining({ field: 'PRIORITY' }), expect.anything())
   })
 
   it('从类别组末尾新增时使用所在类别，停用类别仍显示禁用的末尾入口', async () => {

@@ -9,7 +9,7 @@ const api = vi.hoisted(() => ({ listProjectWorkItems: vi.fn(), listProjectWorkIt
 vi.mock('../../api/client', () => ({ workItemsApi: api }))
 enableAutoUnmount(afterEach)
 const item = (id: string, assigneeUserId: string | null = 'a') => ({ id, assigneeUserId, statusCode: 'TODO', priority: null, dueDate: null } as ProjectWorkItemListItem)
-type ServerOptions = Pick<Parameters<typeof useWorkItemGrouping>[0], 'stored' | 'save'>
+type ServerOptions = Pick<Parameters<typeof useWorkItemGrouping>[0], 'stored' | 'save' | 'fixedField'>
 function harness(initial: ProjectWorkItemListItem[] = [], protectedIds = new Set<string>(), server: ServerOptions = {}) {
   const items = ref(initial)
   const today = ref('2026-09-14')
@@ -30,6 +30,29 @@ beforeEach(() => {
   localStorage.clear(); vi.resetAllMocks()
   api.listProjectWorkItemFilterOptions.mockResolvedValue({ items: [facet('a')], nextCursor: null })
   api.listProjectWorkItems.mockResolvedValue({ items: [item('a1')], nextCursor: null })
+})
+
+describe('外部固定分组字段', () => {
+  const key = 'grouping:user:company:project'
+
+  it('覆盖本机与个人设置中的字段，字段不同时不沿用顺序，其余偏好保留', async () => {
+    localStorage.setItem(key, JSON.stringify({ field: 'CONTENT', order: 'NAME_DESC', showEmpty: true, collapsed: ['STATUS:a'], colors: {} }))
+    const stored = ref<WorkItemTableGrouping | null | undefined>()
+    const { grouping } = harness([], new Set(), { stored: () => stored.value, fixedField: () => 'STATUS' })
+    expect(grouping.field.value).toBe('STATUS')
+    expect(grouping.order.value).toBe('DEFAULT')
+    expect(grouping.showEmpty.value).toBe(true)
+    expect(grouping.isCollapsed('a')).toBe(true)
+    stored.value = { field: WorkItemGroupingField.Assignee, order: WorkItemGroupingOrder.Default, showEmpty: false, collapsed: [], colors: {} }
+    await flushPromises()
+    expect(grouping.field.value).toBe('STATUS')
+  })
+
+  it('字段相同时沿用已保存的顺序', () => {
+    localStorage.setItem(key, JSON.stringify({ field: 'STATUS', order: 'NAME_DESC', showEmpty: false, collapsed: [], colors: {} }))
+    const { grouping } = harness([], new Set(), { fixedField: () => 'STATUS' })
+    expect(grouping.order.value).toBe('NAME_DESC')
+  })
 })
 
 describe('分组分页与本地偏好', () => {
