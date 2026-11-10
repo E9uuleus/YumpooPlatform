@@ -69,10 +69,11 @@ export const TOURS: Record<TourId, TourDefinition> = {
     ],
   },
   'my-work': {
-    version: 2,
+    version: 3,
     steps: [
       { target: at('my-work-projects'), placement: 'bottom-start', title: '按项目查看我的工作', description: '分配给你、尚未完成的工作项按项目分组，是否完成沿用你在各项目表格中的完成设置。点击项目标题折叠；表格里可直接改名、改状态和其他字段，每个分组底部的「新建工作项」打开新建窗口，处理人默认是你，并预填所在分组的取值。' },
       { target: at('my-work-view'), placement: 'bottom-end', title: '视图选项', description: '在状态、日期、优先级和类别视图之间切换，所有项目下的工作项会同时按所选字段分组。', since: 2 },
+      { target: at('my-work-columns'), placement: 'bottom-end', title: '全页列布局', description: '所有项目共用底部横向滚动条。列设置控制全页显隐及主表、子项的冻结范围；调整列宽、顺序和折叠状态也会同步。这里保留单项编辑与行菜单，批量操作请进入项目页。', since: 3 },
       { title: '工作项详情', description: '点击名称旁的详情按钮打开工作项。左侧可以编辑字段，右侧可以查看详情、协作讨论与动态。' },
       { target: at('my-work-refresh'), placement: 'bottom-end', title: '刷新', description: '在其他页面或窗口修改后，点这里重新加载。' },
     ],

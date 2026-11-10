@@ -25,6 +25,20 @@ describe('项目级工作项首页 · 子项', () => {
   beforeEach(installWorkItemsTestDefaults)
   afterEach(restoreWorkItemsTestGlobals)
 
+  it('我的工作取消主子表勾选和新建行占位，仍保留展开与行菜单', async () => {
+    state.listProjectWorkItems.mockResolvedValue(page([{ ...item(), subitemCount: 1 }]))
+    state.listWorkItemSubitems.mockResolvedValue({ items: [item('child')] })
+    const wrapper = mountView(undefined, { embeddedProjectId: 'project-1', myWork: true })
+    await flushPromises()
+    await wrapper.get('.subitem-expand-button').trigger('click'); await flushPromises()
+    expect(wrapper.find('.monday-selection-column, .subitem-selection-column, .subitem-quick-checkbox, .work-item-batch-spacer').exists()).toBe(false)
+    const subtable = wrapper.findComponent({ name: 'ProjectWorkItemSubitemsTable' })
+    expect(subtable.props('selectionEnabled')).toBe(false)
+    expect(subtable.findComponent({ name: 'WorkItemRowActions' }).exists()).toBe(true)
+    expect(subtable.find('.subitem-add').exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'WorkItemBatchBar' }).exists()).toBe(false)
+  })
+
   it('子项移动后刷新同级顺序并保持子项名称选中', async () => {
     const parent = { ...item(), subitemCount: 2 }
     const first = { ...item('child-1'), title: '子项一' }
