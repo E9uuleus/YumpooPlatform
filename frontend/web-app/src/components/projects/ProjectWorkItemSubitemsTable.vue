@@ -38,6 +38,8 @@ import { workItemBatchEditScopeKey, type WorkItemBatchAssigneeMode } from './wor
 import { workItemAssignees } from './workItemAssignees'
 import type { WorkItemPatchField, WorkItemPatchValue } from './useWorkItemEdits'
 import MondayColumnQuickSort from './MondayColumnQuickSort.vue'
+import WorkItemColumnExpandButton from './WorkItemColumnExpandButton.vue'
+import { COLLAPSED_COLUMN_WIDTH } from './workItemColumnMenu'
 import WorkItemLabelPopoverContent from './WorkItemLabelPopoverContent.vue'
 import WorkItemContentPopoverContent from './WorkItemContentPopoverContent.vue'
 import WorkItemDueDateCell from './WorkItemDueDateCell.vue'
@@ -76,7 +78,9 @@ interface PriorityOption {
   sortOrder: number
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
+  selectionEnabled?: boolean
+  collapsedColumnKeys?: ReadonlySet<string> | undefined
   strictVersion?: boolean
   projectId: string
   parent: ProjectWorkItemListItem
@@ -111,7 +115,7 @@ const props = defineProps<{
   today?: string | undefined
   /** 子项表固定的列（不含始终固定的名称列）。 */
   pinnedColumnKeys?: ReadonlySet<string> | undefined
-}>()
+}>(), { selectionEnabled: true })
 
 function contentLabel(item: ProjectWorkItemListItem) {
   return props.contentCatalog?.items.find(content => content.id === item.contentId)
@@ -119,6 +123,7 @@ function contentLabel(item: ProjectWorkItemListItem) {
 }
 
 const emit = defineEmits<{
+  expandColumn: [key: ProjectWorkItemSubitemColumn['key']]
   openConnection: [connection: WorkItemConnection, perspective: 'source' | 'target']
   timerChanged: []
   retry: []
@@ -640,13 +645,14 @@ function columnBodyClass(column: ProjectWorkItemSubitemColumn): string {
   if (column.key === 'status' || column.key === 'priority' || column.key === 'content') {
     classes.push('monday-block-column', 'subitem-block-column')
   }
+  if (props.collapsedColumnKeys?.has(column.key)) classes.push('subitem-column--collapsed')
   return classes.join(' ')
 }
 
 function columnHeaderClass(column: ProjectWorkItemSubitemColumn): string {
   return column.key === 'title'
     ? 'monday-title-column monday-sortable-column-header subitem-title-column-header'
-    : `monday-movable-column-header monday-sortable-column-header monday-column-header--${column.key} subitem-movable-column-header`
+    : `monday-movable-column-header monday-sortable-column-header monday-column-header--${column.key} subitem-movable-column-header${props.collapsedColumnKeys?.has(column.key) ? ' subitem-column--collapsed' : ''}`
 }
 
 function movableColumns(): ProjectWorkItemSubitemColumn[] {
@@ -918,6 +924,7 @@ onBeforeUnmount(() => {
   <section
     class="subitem-table-shell"
     :style="{
+      '--subitem-selection-width': `${selectionEnabled === false ? 0 : 48}px`,
       '--subitem-title-column-width': `${columnWidths.title}px`,
       '--subitem-menu-column-width': `${SUBITEM_MENU_COLUMN_WIDTH}px`,
       '--subitem-body-row-height': `${subitemRowHeight}px`,
@@ -1003,6 +1010,7 @@ onBeforeUnmount(() => {
           </template>
         </el-table-column>
         <el-table-column
+          v-if="selectionEnabled !== false"
           type="selection"
           :selectable="(item: ProjectWorkItemListItem) => !isDraft(item)"
           width="48"
@@ -1017,7 +1025,7 @@ onBeforeUnmount(() => {
           :key="columnIndex"
           :label="column.label"
           :prop="column.key"
-          :width="columnWidths[column.key]"
+          :width="collapsedColumnKeys?.has(column.key) ? COLLAPSED_COLUMN_WIDTH : columnWidths[column.key]"
           :fixed="column.key === 'title' || Boolean(pinnedColumnKeys?.has(column.key))"
           align="center"
           :class-name="columnBodyClass(column)"
@@ -1025,7 +1033,9 @@ onBeforeUnmount(() => {
           resizable
         >
           <template #header>
+            <work-item-column-expand-button v-if="collapsedColumnKeys?.has(column.key)" :label="column.label" @expand="emit('expandColumn', column.key)" />
             <div
+              v-else
               class="subitem-column-header"
               :class="{
                 'subitem-column-header--dragging': columnDraggingKey === column.key,
@@ -1041,14 +1051,16 @@ onBeforeUnmount(() => {
               />
             </div>
             <span
+              v-if="!collapsedColumnKeys?.has(column.key)"
               class="monday-column-resize-handle"
               :class="{ 'monday-title-column-resize-handle': column.key === 'title' }"
               aria-hidden="true"
             />
           </template>
           <template #default="scope">
+            <span v-if="collapsedColumnKeys?.has(column.key)" aria-hidden="true" />
             <div
-              v-if="column.key === 'title'"
+              v-else-if="column.key === 'title'"
               class="subitem-title-cell"
               draggable="false"
               @dragstart.prevent
@@ -1239,7 +1251,7 @@ onBeforeUnmount(() => {
         <template #append>
           <div v-if="quickOpen" ref="quickRow" class="subitem-quick-row">
             <span class="subitem-quick-lead" aria-hidden="true" />
-            <span class="subitem-quick-checkbox" aria-hidden="true" />
+            <span v-if="selectionEnabled !== false" class="subitem-quick-checkbox" aria-hidden="true" />
             <el-input
               ref="quickTitleInput"
               v-model="quickTitle"
@@ -1257,7 +1269,7 @@ onBeforeUnmount(() => {
           </div>
           <button v-else class="subitem-add" :disabled="!canCreate || !defaultContentId" @click="openQuick">
             <span class="subitem-quick-lead" aria-hidden="true" />
-            <span class="subitem-quick-checkbox" aria-hidden="true" />
+            <span v-if="selectionEnabled !== false" class="subitem-quick-checkbox" aria-hidden="true" />
             <span class="subitem-add__field">添加子项</span>
           </button>
         </template>
@@ -1267,6 +1279,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+:deep(.monday-subitem-table .subitem-column--collapsed > .cell) { padding: 0; }
 .subitem-table-shell {
   --subitem-hierarchy-indent: var(--work-item-hierarchy-indent, 40px);
   --subitem-hierarchy-line-width: var(--work-item-hierarchy-line-width, 1px);
@@ -1615,7 +1628,7 @@ onBeforeUnmount(() => {
   width: 100%;
   height: var(--subitem-table-empty-height);
   box-sizing: border-box;
-  padding-left: calc(var(--subitem-menu-column-width) + 48px + 32px);
+  padding-left: calc(var(--subitem-menu-column-width) + var(--subitem-selection-width, 48px) + 32px);
 }
 .subitem-loading-skeleton .work-item-skeleton-block:first-child { width: min(260px, 40%); height: 12px; }
 .subitem-loading-skeleton .work-item-skeleton-block:last-child { width: min(180px, 28%); }
@@ -1668,7 +1681,7 @@ onBeforeUnmount(() => {
   display: grid;
   height: var(--subitem-table-quick-height);
   min-width: max-content;
-  grid-template-columns: var(--subitem-menu-column-width) 48px var(--subitem-title-column-width, 320px) 1fr;
+  grid-template-columns: var(--subitem-menu-column-width) var(--subitem-selection-width, 48px) var(--subitem-title-column-width, 320px) 1fr;
   gap: 0;
   align-items: center;
   box-sizing: border-box;
@@ -1707,8 +1720,8 @@ onBeforeUnmount(() => {
   background: var(--yp-bg-surface);
   pointer-events: none;
 }
-.subitem-add__field { position: sticky; left: calc(var(--subitem-menu-column-width) + 48px); }
-.subitem-quick-controls { position: sticky; left: calc(var(--subitem-menu-column-width) + 48px + var(--subitem-title-column-width, 320px)); justify-self: start; grid-column: 4; display: flex; align-items: center; gap: 8px; padding: 0 8px; }
+.subitem-add__field { grid-column: 3; position: sticky; left: calc(var(--subitem-menu-column-width) + var(--subitem-selection-width, 48px)); }
+.subitem-quick-controls { position: sticky; left: calc(var(--subitem-menu-column-width) + var(--subitem-selection-width, 48px) + var(--subitem-title-column-width, 320px)); justify-self: start; grid-column: 4; display: flex; align-items: center; gap: 8px; padding: 0 8px; }
 .subitem-quick-title.subitem-add__field { width: 100%; min-width: 0; margin: 0; outline: none; border-color: var(--yp-input-border-focus); background: var(--yp-bg-surface); color: var(--yp-text-primary); }
 .subitem-quick-title :deep(.el-input__wrapper) {
   height: 100%;
@@ -1748,7 +1761,7 @@ onBeforeUnmount(() => {
   display: grid;
   width: 100%;
   height: var(--subitem-table-row-height);
-  grid-template-columns: var(--subitem-menu-column-width) 48px var(--subitem-title-column-width, 320px) 1fr;
+  grid-template-columns: var(--subitem-menu-column-width) var(--subitem-selection-width, 48px) var(--subitem-title-column-width, 320px) 1fr;
   align-items: center;
   box-sizing: border-box;
   padding: 0;
