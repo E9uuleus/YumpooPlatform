@@ -8,6 +8,8 @@ import { timeTrackingApi } from '../api/client'
 import { toApiProblem, type ApiProblem } from '../api/problems'
 import InlineProblem from '../components/InlineProblem.vue'
 import MyWorkItemDialog from '../components/my-work/MyWorkItemDialog.vue'
+import MyWorkColumnMenu from '../components/my-work/MyWorkColumnMenu.vue'
+import { useWorkItemPagePresentation } from '../components/projects/workItemPagePresentation'
 import MyWorkViewMenu from '../components/my-work/MyWorkViewMenu.vue'
 import { myWorkTableSource } from '../components/my-work/myWorkTableSource'
 import { DEFAULT_MY_WORK_VIEW, isMyWorkViewField, type MyWorkViewField } from '../components/my-work/myWorkViews'
@@ -30,6 +32,8 @@ const scope = computed(() => {
   const identity = session.authentication.value
   return identity ? `${identity.company.id}:${identity.user.id}` : 'unknown'
 })
+const presentation = useWorkItemPagePresentation(() => scope.value)
+const { scrollbar, extent, overflow } = presentation
 const recents = useProjectRecents(() => scope.value)
 const projects = ref<MyWorkProject[]>([])
 const orderedProjects = computed(() => orderByRecents(projects.value, recents.items.value))
@@ -166,6 +170,7 @@ onBeforeUnmount(() => sectionObserver?.disconnect())
         <span v-if="!loading && projects.length">{{ total }} 项未完成 · {{ projects.length }} 个项目</span>
       </div>
       <div class="dashboard-header-actions">
+        <my-work-column-menu :presentation="presentation" />
         <my-work-view-menu
           :model-value="view"
           @update:model-value="changeView"
@@ -243,6 +248,7 @@ onBeforeUnmount(() => sectionObserver?.disconnect())
               v-if="nearby.has(project.id)"
               :key="manualRefresh"
               ref="tables"
+              :page-presentation="presentation"
               :embedded-project-id="project.id"
               :preference-scope="preferenceScope(project.id)"
               :source="tableSource(project.id)"
@@ -262,6 +268,10 @@ onBeforeUnmount(() => sectionObserver?.disconnect())
         </section>
       </transition-group>
     </div>
+    <div ref="scrollbar" class="my-work-scrollbar" :class="{ 'my-work-scrollbar--visible': overflow }" tabindex="0"
+      aria-label="我的工作横向滚动" @scroll.passive="presentation.onScroll">
+      <div :style="{ width: `${extent}px`, height: '1px' }" />
+    </div>
     <my-work-item-dialog
       ref="dialog"
       v-model:tab="detailTab"
@@ -277,7 +287,9 @@ onBeforeUnmount(() => sectionObserver?.disconnect())
 .my-work-title { display: flex; min-width: 0; align-items: baseline; align-self: center; gap: var(--yp-space-3); }
 .my-work-title h1 { margin: 0; font-size: var(--yp-type-card-title-size); font-weight: 600; white-space: nowrap; }
 .my-work-title span { overflow: hidden; color: var(--yp-text-secondary); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.my-work-body { background: var(--yp-bg-surface); }
+.my-work-scrollbar { flex: none; height: 0; overflow-x: auto; overflow-y: hidden; }
+.my-work-scrollbar--visible { height: 14px; }
+.my-work-body { overflow-x: hidden; background: var(--yp-bg-surface); }
 .my-work-projects { display: grid; min-width: 0; gap: var(--yp-space-8); }
 .my-work-project { min-width: 0; }
 .my-work-project__heading {

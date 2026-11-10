@@ -1,7 +1,9 @@
+import type { WorkItemPagePresentation } from './workItemPagePresentation'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type CSSProperties, type Ref } from 'vue'
 import type { ApiProblem } from '../../api/problems'
 
 interface ScrollLayoutOptions {
+  pagePresentation?: WorkItemPagePresentation | undefined
   tableRef: Ref<{ $el: HTMLElement; doLayout: () => void } | undefined>
   tableSentinel: Ref<HTMLElement | undefined>
   embedded: Readonly<Ref<boolean>>
@@ -18,7 +20,7 @@ interface ScrollLayoutOptions {
 }
 
 export function useProjectTableScrollLayout({
-  tableRef, tableSentinel, embedded, detailOpen, selectedView, grouped, groupingSwitching,
+  tableRef, tableSentinel, embedded, detailOpen, selectedView, grouped, groupingSwitching, pagePresentation,
   tableLoading, tableSorting, error, loadingMoreError, tableNextCursor, loadTable,
 }: ScrollLayoutOptions) {
   const horizontalPageScrollbar = ref<HTMLElement>()
@@ -28,6 +30,7 @@ export function useProjectTableScrollLayout({
   const verticalScrollExtent = ref(1)
   const pageScrollbarLeft = ref(0)
   const pageScrollbarTop = ref(0)
+  let releasePageScroll: (() => void) | undefined
   let tableScrollElement: HTMLElement | undefined
   let pageScrollbarSyncQueued = false
   let responsiveTableLayoutFrame: number | undefined
@@ -75,13 +78,15 @@ export function useProjectTableScrollLayout({
   function bindTableScrollElement(next: HTMLElement | undefined): void {
     if (tableScrollElement === next) return
     tableScrollElement?.removeEventListener('scroll', onTableScroll)
+    releasePageScroll?.()
     tableScrollElement = next
+    releasePageScroll = next ? pagePresentation?.register(next) : undefined
     tableScrollElement?.addEventListener('scroll', onTableScroll, { passive: true })
   }
 
   function syncPageScrollbars(): void {
     bindTableScrollElement(resolveTableScrollElement())
-    if (embedded.value) return
+    if (embedded.value) { pagePresentation?.sync(); return }
 
     const contextNavigation = document.querySelector<HTMLElement>('.app-shell--workspace .context-navigation')
     const appMain = document.querySelector<HTMLElement>('.app-shell--workspace .app-main')

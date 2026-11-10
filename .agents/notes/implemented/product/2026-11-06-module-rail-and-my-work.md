@@ -16,6 +16,10 @@ Status: implemented
 
 子表分组由页头的视图选项统一决定，可选状态、日期、优先级和类别四个视图，默认状态视图，选择按用户保存在本机。表格通过 `groupField` 固定分组字段，已保存的字段不生效，列头菜单不提供分组，也没有不分组状态。新建入口是每组底部的整行按钮，弹窗预填所在分组的取值。
 
+页面共用由 `MyWorkView` 持有的横向位置与列布局，底部只保留一条横向滚动条。各项目延迟挂载、折叠重开和刷新后继承位置；列宽、显隐和折叠全页同步，主表与子项分别维护全页统一的顺序和冻结范围。布局按企业及用户保存在本机，不覆盖既有项目偏好，首次仅冻结名称列。各项目字段目录、完成定义及权限仍由原表格读取。
+
+`myWork` 模式不提供勾选列和批量工作台，分组标题与加载入口放在名称列；子项表通过默认开启的 `selectionEnabled` 保持其他入口的行为。单元格焦点、行菜单、单项复制、新建、排序、计时和详情继续复用原逻辑。
+
 ## Alternatives considered
 
 保留全部个人入口会进一步拉长项目导航。工作台仍保留原名，沿用成员熟悉的入口。
@@ -23,6 +27,8 @@ Status: implemented
 新增跨项目接口和单一表格需重写内联编辑。独立计数接口会重复计时候选查询。首页「我的工作项」只按分类汇总，有 100 项上限且缺少可编辑字段。沿用行内快速新增时，没有处理人的新工作项会从本页消失。
 
 允许各项目单独分组时，同一页的项目结构不一致，新建行也要同时处理分组和不分组两种形态，因此改为页面统一控制。处理人视图没有提供，本页的工作项都分配给本人。
+
+将每个嵌入表格作为独立页面会产生多条横向滚动条与多个批量工作台，割裂跨项目浏览。保留表格组件而共享展示上下文，可以沿用项目权限和数据查询，同时让页面布局一致。
 
 ## Consequences
 
@@ -34,4 +40,4 @@ Status: implemented
 
 ## Verification
 
-`myWorkTableSource.spec.ts` 校验处理人条件和上下文数量，`ProjectWorkItems.loading.spec.ts` 校验工具栏和未完成筛选。`MyWorkView.spec.ts` 与 `MyWorkViewMenu.spec.ts` 校验视图选项和本机保存，`ProjectWorkItems.grouping.spec.ts` 校验每组新建行，`useWorkItemGrouping.spec.ts` 校验固定字段。外壳和路由测试覆盖成员模块栏顺序、项目导航、仪表板与工时页面的活动分区。
+`myWorkTableSource.spec.ts` 校验处理人条件和上下文数量，`ProjectWorkItems.loading.spec.ts` 校验工具栏和未完成筛选。`MyWorkView.spec.ts` 与 `MyWorkViewMenu.spec.ts` 校验视图选项和本机保存，`ProjectWorkItems.grouping.spec.ts` 校验每组新建行，`useWorkItemGrouping.spec.ts` 校验固定字段。`workItemPagePresentation.spec.ts` 校验同步横移、延迟挂载、尺寸变化和企业用户隔离；子项与分组组件回归校验移除勾选后的结构，浏览器回归验证多项目滚动及列设置。外壳和路由测试覆盖成员模块栏顺序、项目导航、仪表板与工时页面的活动分区。

@@ -68,6 +68,8 @@ describe('项目级工作项首页 · 分组', () => {
     const footers = wrapper.findAll('.work-item-group-add')
     expect(footers).toHaveLength(2)
     for (const footer of footers) expect(footer.find('.my-work-create-row').exists()).toBe(true)
+    expect(wrapper.find('.monday-selection-column').exists()).toBe(false)
+    expect(wrapper.get('.work-item-group-heading .monday-title-column').text()).toContain('待开始')
     expect(footers[0]!.attributes('style')).toBe(wrapper.get('.work-item-group-columns').attributes('style'))
     expect(footers[0]!.attributes('style')).not.toBe(footers[1]!.attributes('style'))
 

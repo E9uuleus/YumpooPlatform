@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { pageColumns, type WorkItemPagePresentation } from './workItemPagePresentation'
 import { usePageLoad } from '../../brand/page-progress'
 
 import { projectWritable } from './projectStatus'
@@ -147,6 +148,7 @@ interface LabelPopoverContentHandle {
 }
 
 const props = defineProps<{
+  pagePresentation?: WorkItemPagePresentation
   embeddedProjectId?: string
   preferenceScope?: string
   source?: WorkItemTableSource
@@ -273,7 +275,7 @@ const searchExpanded = ref(Boolean(route.query.q))
 const searchInput = ref(String(route.query.q ?? ''))
 const selectedRowId = ref<string | undefined>(route.query.workItemId ? String(route.query.workItemId) : undefined)
 const selectedCellKey = ref<string | undefined>(route.query.workItemId ? `${route.query.workItemId}:title` : undefined)
-const TABLE_SELECTION_COLUMN_WIDTH = 48
+const TABLE_SELECTION_COLUMN_WIDTH = props.myWork ? 0 : 48
 const TABLE_EXPAND_COLUMN_WIDTH = 1
 const TABLE_MENU_COLUMN_WIDTH = 32
 const TABLE_ADD_COLUMN_MIN_WIDTH = 96
@@ -308,16 +310,9 @@ onBeforeUnmount(stopTimerUpdates)
 onBeforeUnmount(onProjectWorkItemsChanged(() => projectId.value,
   () => void (selectedView.value === 'table' ? reloadSortedTableInPlace() : refreshCurrentView())))
 type ColumnKey = BuiltInColumnKey | ConnectColumnKey
-const columns: Array<{ key: BuiltInColumnKey; label: string; defaultWidth: number; minWidth: number }> = [
-  { key: 'title', label: '工作项名称', defaultWidth: 320, minWidth: 220 },
-  { key: 'assignee', label: '处理人', defaultWidth: 90, minWidth: 72 },
-  { key: 'status', label: '状态', defaultWidth: 96, minWidth: 96 },
-  { key: 'priority', label: '优先级', defaultWidth: 90, minWidth: 90 },
-  { key: 'content', label: '工作项类别', defaultWidth: 110, minWidth: 110 },
-  { key: 'dueDate', label: '截止日期', defaultWidth: 140, minWidth: 112 },
-  { key: 'timeTracking', label: '时长追踪', defaultWidth: 140, minWidth: 120 },
-  { key: 'updatedAt', label: '最后更新时间', defaultWidth: 170, minWidth: 135 },
-]
+const columns = pageColumns.map(column => ({
+  key: column.key, label: column.label, defaultWidth: column.width, minWidth: column.min,
+}))
 const sortFieldByColumn: Record<BuiltInColumnKey, string> = {
   title: 'TITLE',
   assignee: 'ASSIGNEE',
@@ -329,10 +324,10 @@ const sortFieldByColumn: Record<BuiltInColumnKey, string> = {
 }
 const columnByKey = new Map(columns.map(column => [column.key, column]))
 const defaultMovableColumnOrder = columns.filter(column => column.key !== 'title').map(column => column.key as MovableColumnKey)
-const movableColumnOrder = ref<MovableColumnKey[]>([...defaultMovableColumnOrder])
-const subitemMovableColumnOrder = ref<MovableColumnKey[]>([...defaultMovableColumnOrder])
-const columnWidths = reactive<Record<BuiltInColumnKey, number>>(Object.fromEntries(columns.map(item => [item.key, item.defaultWidth])) as Record<BuiltInColumnKey, number>)
-const hiddenColumns = ref(new Set<BuiltInColumnKey>())
+const movableColumnOrder = props.pagePresentation?.order ?? ref<MovableColumnKey[]>([...defaultMovableColumnOrder])
+const subitemMovableColumnOrder = props.pagePresentation?.subitemOrder ?? ref<MovableColumnKey[]>([...defaultMovableColumnOrder])
+const columnWidths = props.pagePresentation?.widths ?? reactive<Record<BuiltInColumnKey, number>>(Object.fromEntries(columns.map(item => [item.key, item.defaultWidth])) as Record<BuiltInColumnKey, number>)
+const hiddenColumns = props.pagePresentation?.hidden ?? ref(new Set<BuiltInColumnKey>())
 let loadRevision = 0
 let searchTimer: number | undefined
 let tableObserver: IntersectionObserver | undefined
@@ -361,7 +356,7 @@ const visibleSubitemColumns = computed(() => orderedSubitemColumns.value.filter(
 const movableVisibleColumns = computed(() => builtInVisibleColumns.value.filter(item => item.key !== 'title'))
 const allHiddenColumns = computed(() => new Set<ColumnKey>([...hiddenColumns.value, ...connect.hidden]))
 const restorableColumns = computed(() => [...columns, ...connect.columns].filter(column => allHiddenColumns.value.has(column.key)))
-const collapsedColumns = ref(new Set<ColumnKey>())
+const collapsedColumns = props.pagePresentation?.collapsed ?? ref(new Set<ColumnKey>())
 const columnSettingsKind = ref<'status' | 'priority' | 'content'>()
 const columnSettingsAnchor = ref<HTMLElement>()
 const groupFieldByColumn: Partial<Record<BuiltInColumnKey, GroupField>> = {
@@ -515,14 +510,14 @@ const defaultValueColumns = computed(() => movableColumnOrder.value
 // 冻结前 N 列：按当前可见列顺序（内置列在前、连接列在后），新建连接列草稿不参与。
 const pinnableColumns = computed(() => visibleColumns.value.filter(column => column.key !== 'title' && column.key !== CONNECT_DRAFT_KEY))
 const pinnedColumnKeys = computed(() => new Set<string>(pinnableColumns.value
-  .slice(0, tableViewSettings.value.pinnedColumnCount).map(column => column.key)))
+  .slice(0, (props.pagePresentation?.pinned.value ?? tableViewSettings.value.pinnedColumnCount)).map(column => column.key)))
 const tablePinColumns = computed(() => [columnByKey.get('title')!, ...pinnableColumns.value]
   .map(column => ({ key: column.key, label: column.label, width: columnWidth(column.key) })))
 // 子项表独立冻结前 N 列：按子项列自己的顺序（内置列在前、连接列在后）。
 const subitemPinnableColumns = computed(() => [...visibleSubitemColumns.value, ...connect.visibleColumns]
   .filter(column => column.key !== 'title' && column.key !== CONNECT_DRAFT_KEY))
 const subitemPinnedColumnKeys = computed(() => new Set<string>(subitemPinnableColumns.value
-  .slice(0, tableViewSettings.value.subitemPinnedColumnCount ?? 0).map(column => column.key)))
+  .slice(0, (props.pagePresentation?.subitemPinned.value ?? tableViewSettings.value.subitemPinnedColumnCount ?? 0)).map(column => column.key)))
 const subitemPinColumns = computed(() => [columnByKey.get('title')!, ...subitemPinnableColumns.value]
   .map(column => ({ key: column.key, label: column.label, width: columnWidth(column.key) })))
 const tableRowHeight = computed(() => heightOption(tableViewSettings.value.rowHeight).row)
@@ -612,6 +607,7 @@ const { horizontalPageScrollbar, verticalPageScrollbar, horizontalOverflow, hori
   resolveTableScrollElement, schedulePageScrollbarSync, scheduleResponsiveTableLayout, flushResponsiveTableLayout,
 } = useProjectTableScrollLayout({
   tableRef, tableSentinel, embedded, detailOpen, selectedView, grouped, groupingSwitching,
+  pagePresentation: props.pagePresentation,
   tableLoading, tableSorting, error, loadingMoreError, tableNextCursor, loadTable,
 })
 const onboardingReady = computed(() => !embedded.value && Boolean(project.value) && !loading.value && !tableLoading.value && !error.value
@@ -706,7 +702,7 @@ function groupSpan({ row, columnIndex }: { row: TableDisplayRow; columnIndex: nu
   if (!isGroupDisplayRow(row) || row.groupRowKind === 'columns') return
   const first = ['spacer', 'subitems', 'add'].includes(row.groupRowKind) ? 0 : 2
   if (columnIndex < first) return
-  return { rowspan: columnIndex === first ? 1 : 0, colspan: columnIndex === first ? visibleColumns.value.length + 4 - first : 0 }
+  return { rowspan: columnIndex === first ? 1 : 0, colspan: columnIndex === first ? visibleColumns.value.length + (props.myWork ? 3 : 4) - first : 0 }
 }
 function groupRowClasses(context: { row: TableDisplayRow; rowIndex: number }): string {
   const { row } = context
@@ -1877,6 +1873,7 @@ async function saveSortedWorkItemOrder(): Promise<void> {
 }
 
 function persistTablePrefs(): void {
+  if (props.pagePresentation) return
   localStorage.setItem(tablePrefsKey.value, JSON.stringify({
     version: TABLE_PREFS_VERSION,
     widths: columnWidths,
@@ -1888,6 +1885,7 @@ function persistTablePrefs(): void {
 }
 
 function loadTablePrefs(): void {
+  if (props.pagePresentation) return
   try {
     const parsed = JSON.parse(localStorage.getItem(tablePrefsKey.value) ?? (embedded.value ? localStorage.getItem(projectTablePrefsKey) : null) ?? '{}') as {
       version?: number
@@ -2501,7 +2499,7 @@ onBeforeUnmount(() => {
                     </button>
                     <div v-else-if="groupCreate.draft(scope.row.group).open" class="quick-row monday-quick-row work-item-group-quick" :style="quickGridStyle">
                       <span class="monday-quick-lead" aria-hidden="true" />
-                      <span class="monday-quick-checkbox" aria-hidden="true" />
+                      <span v-if="!myWork" class="monday-quick-checkbox" aria-hidden="true" />
                       <el-input :ref="value => groupCreate.setInput((scope.row as WorkItemGroupDisplayRow).group, value)"
                         v-model="groupCreate.draft(scope.row.group).title" class="quick-title-field monday-quick-add__field"
                         maxlength="300" :disabled="groupCreate.draft(scope.row.group).saving || Boolean(groupCreate.draft(scope.row.group).request)"
@@ -2521,7 +2519,7 @@ onBeforeUnmount(() => {
                       :disabled="Boolean(groupCreateDisabledReason(scope.row.group))" :title="groupCreateDisabledReason(scope.row.group) || undefined"
                       :aria-label="`添加工作项到${scope.row.group.label}`" @click="groupCreate.open(scope.row.group)">
                       <span class="monday-quick-lead" aria-hidden="true" />
-                      <span class="monday-quick-checkbox" aria-hidden="true" />
+                      <span v-if="!myWork" class="monday-quick-checkbox" aria-hidden="true" />
                       <span class="monday-quick-add__field">添加工作项</span>
                       <span class="work-item-group-add-mask" aria-hidden="true" />
                     </button>
@@ -2532,6 +2530,9 @@ onBeforeUnmount(() => {
                     :style="grouped ? { '--work-item-group-accent': workItemGroups.find(group => group.key === groupKeyForRow(scope.row.parent as ProjectWorkItemListItem))?.color } : undefined"
                     :ref="value => setSubitemTableHandle(scope.row.parent!.id, value)"
                     :project-id="projectId"
+                    :selection-enabled="!myWork"
+                    :collapsed-column-keys="pagePresentation?.collapsed.value"
+                    @expand-column="toggleColumnCollapsed"
                     :selected-cell-key="selectedCellKey"
                     :parent="scope.row.parent as ProjectWorkItemListItem"
                     :items="subitemState((scope.row.parent as ProjectWorkItemListItem).id).items"
@@ -2620,6 +2621,7 @@ onBeforeUnmount(() => {
               </el-table-column>
               <el-table-column :width="TABLE_EXPAND_COLUMN_WIDTH" fixed class-name="monday-expand-column" />
               <el-table-column
+                v-if="!myWork"
                 type="selection"
                 :selectable="(row: TableDisplayRow) => !isGroupDisplayRow(row) && !isDraft(row)"
                 :width="TABLE_SELECTION_COLUMN_WIDTH"
@@ -2693,6 +2695,37 @@ onBeforeUnmount(() => {
                 </template>
                 <template #default="scope">
                   <template v-if="isGroupDisplayRow(scope.row)">
+                    <template v-if="myWork">
+                    <work-item-group-toggle
+                      v-if="scope.row.groupRowKind === 'heading'"
+                      :ref="value => setGroupSentinel((scope.row as WorkItemGroupDisplayRow).group.key, (value as ComponentPublicInstance | null)?.$el, true)"
+                      data-work-item-view-control
+                      :label="scope.row.group.label"
+                      :collapsed="grouping.isCollapsed(scope.row.group.key)"
+                      @toggle="grouping.toggle(scope.row.group.key)"
+                    >
+                      <small v-if="groupCountsReady">{{ scope.row.group.count }} 个工作项</small>
+                      <i
+                        v-else
+                        class="work-item-skeleton work-item-skeleton-block work-item-group-count-skeleton"
+                        aria-hidden="true"
+                      />
+                    </work-item-group-toggle>
+                    <div v-else-if="scope.row.groupRowKind === 'load'" :ref="element => isGroupDisplayRow(scope.row) && setGroupSentinel(scope.row.group.key, element)"
+                      class="work-item-group-load" :class="{ 'work-item-group-load--complete': scope.row.group.count > 0 && grouping.page(scope.row.group.key).loaded && !grouping.page(scope.row.group.key).nextCursor && !grouping.page(scope.row.group.key).error, 'work-item-group-load--loading': isGroupPageLoading(scope.row.group) }">
+                      <template v-if="grouping.page(scope.row.group.key).error">
+                        <span>此分组加载失败</span><el-button text size="small" @click="grouping.load(scope.row.group.key)">重试</el-button>
+                      </template>
+                      <work-item-table-skeleton v-else-if="isGroupPageLoading(scope.row.group)" :columns="skeletonColumns"
+                        :lead-widths="[TABLE_SELECTION_COLUMN_WIDTH]" :sticky-offset="TABLE_MENU_COLUMN_WIDTH + TABLE_EXPAND_COLUMN_WIDTH"
+                        :trailing-width="TABLE_ADD_COLUMN_MIN_WIDTH" :rows="2" :row-height="skeletonRowHeight" :label="`正在加载分组：${scope.row.group.label}`" />
+                      <span v-else-if="scope.row.group.count === 0">暂无工作项</span>
+                      <button v-else-if="!grouping.page(scope.row.group.key).loaded || grouping.page(scope.row.group.key).nextCursor"
+                        class="text-button" @click="grouping.load(scope.row.group.key)">
+                        加载更多工作项
+                      </button>
+                    </div>
+                    </template>
                     <work-item-column-header v-if="scope.row.groupRowKind === 'columns'" :state="columnMenuState(columnByKey.get('title')!)"
                       :saving="tableSorting || savingSortOrder"
                       @sort="applyColumnQuickSort('title')" @action="(action, anchor) => onColumnMenuAction('title', action, anchor)"
@@ -3092,7 +3125,7 @@ onBeforeUnmount(() => {
                   :style="quickGridStyle"
                 >
                   <span class="monday-quick-lead" aria-hidden="true" />
-                  <span class="monday-quick-checkbox" aria-hidden="true" />
+                  <span v-if="!myWork" class="monday-quick-checkbox" aria-hidden="true" />
                   <el-input
                     ref="quickTitleInput"
                     v-model="quickTitle"
@@ -3126,10 +3159,10 @@ onBeforeUnmount(() => {
                   @click="openQuick"
                 >
                   <span class="monday-quick-lead" aria-hidden="true" />
-                  <span class="monday-quick-checkbox" aria-hidden="true" />
+                  <span v-if="!myWork" class="monday-quick-checkbox" aria-hidden="true" />
                   <span class="monday-quick-add__field">添加工作项</span>
                 </button>
-                <div v-if="selectedCount || batchBusy" class="work-item-batch-spacer" aria-hidden="true" />
+                <div v-if="!myWork && (selectedCount || batchBusy)" class="work-item-batch-spacer" aria-hidden="true" />
                 <div ref="tableSentinel" class="cursor-sentinel" aria-hidden="true" />
                 <div v-if="!grouped && loadingMoreError" class="incremental-state incremental-state--error">
                   <span>加载更多失败</span><el-button text @click="loadTable(tableNextCursor, true)">重试</el-button>
@@ -3138,7 +3171,7 @@ onBeforeUnmount(() => {
             </el-table>
           </div>
           <teleport to="body" :disabled="embedded">
-            <work-item-batch-bar v-if="selectedCount || batchBusy" :count="selectedCount" :subitem-count="selectedSubitemCount"
+            <work-item-batch-bar v-if="!myWork && (selectedCount || batchBusy)" :count="selectedCount" :subitem-count="selectedSubitemCount"
               :busy="batchBusy" :stopping="batchStopping" :progress-label="batchProgressLabel"
               :can-create="canCreate" :can-delete="batchCanDelete" :can-convert="Boolean(batchConvertibleItems.length)"
               :move-disabled="batchMoveDisabled" :choosing-parent="batchChoosingParent" :embedded="embedded" :left="pageScrollbarLeft"
@@ -4697,4 +4730,25 @@ onBeforeUnmount(() => {
 :deep(.monday-table td.monday-column--collapsed > .cell),
 :deep(.monday-table th.monday-column-header--collapsed > .cell) { padding: 0; }
 .work-item-collapsed-cell { display: block; width: 100%; height: 100%; }
+</style>
+
+<style scoped>
+.work-items-my-work :deep(.el-scrollbar__bar) { display: none !important; }
+.work-items-my-work :deep(.work-item-group-heading > .monday-title-column),
+.work-items-my-work :deep(.work-item-group-load > .monday-title-column) { position: relative !important; left: auto !important; }
+.work-items-my-work :deep(tr.work-item-table-row > .monday-title-column),
+.work-items-my-work :deep(tr.work-item-group-columns > .monday-title-column) { border-left: 0; }
+.work-items-my-work :deep(tr.work-item-table-row > .monday-title-column)::before,
+.work-items-my-work :deep(tr.work-item-group-columns > .monday-title-column)::before {
+  position: absolute; z-index: 2; top: -1px; bottom: -1px; left: -1px;
+  width: var(--work-item-hierarchy-bar-width); background: var(--work-item-group-accent); content: ''; pointer-events: none;
+}
+.work-items-my-work :deep(tr.work-item-group-columns > .monday-title-column)::before {
+  top: 0; border-top-left-radius: var(--work-item-hierarchy-corner-radius);
+}
+.work-items-my-work :deep(tr.work-item-group-heading.work-item-group-collapsed > .monday-title-column) {
+  border: 1px solid var(--yp-monday-grid-border); border-radius: var(--work-item-hierarchy-corner-radius);
+  background: var(--work-item-table-cell-bg) !important;
+}
+
 </style>
