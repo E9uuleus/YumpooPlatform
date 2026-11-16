@@ -74,6 +74,7 @@ export function plan(stage, baseRef = 'origin/dev') {
     case 'windows': return [
       node('windows-toolchain', 'tools/verification/verify-windows-toolchain.mjs'),
       node('desktop-profile-tests', '--test', 'tools/verification/desktop-profile.test.mjs'),
+      node('windows-archive-tests', '--test', 'tools/verification/windows-archive.test.mjs'),
       node('windows-release-restore', 'tools/release/verify-windows.mjs'),
       node('windows-handoff', 'tools/verification/verify-portable-handoff.mjs'),
       node('desktop-smoke', 'tools/verification/smoke-desktop.mjs', '--handoff', 'out/handoff'),

@@ -20,6 +20,7 @@ const mutating = ref(false)
 const problem = ref('')
 const editing = ref<TimeTrackingSession>()
 const form = ref(false)
+const pickerAppendTo = ref<HTMLElement>()
 const fullCalendar = ref(false)
 watch([form, fullCalendar], ([adding, full]) => emit('resize', adding ? full ? 580 : 460 : 400))
 const start = ref('')
@@ -113,8 +114,7 @@ onMounted(() => load())
 
 <template>
   <section
-    class="time-log"
-    :class="{ 'time-log--adding': form, 'time-log--full-calendar': form && fullCalendar }"
+    class="time-log-shell"
     role="dialog"
     :aria-label="form ? editing ? '编辑时长记录' : '添加时长记录' : '计时日志'"
     :aria-busy="loading || mutating"
@@ -122,149 +122,160 @@ onMounted(() => load())
     @click.stop
     @pointerdown.stop
   >
-    <header>
-      <h3>{{ form ? editing ? '编辑时长记录' : '添加时长记录' : '计时日志' }}</h3>
-      <button
-        v-if="form"
-        class="plain-button"
-        :disabled="loading"
-        @click="form = false"
-      >
-        返回
-      </button><button
-        v-else
-        class="plain-button"
-        :disabled="loading || mutating || !records.length"
-        @click="remove('all')"
-      >
-        清除
-      </button>
-    </header>
     <div
-      v-if="!form"
-      class="add-session"
+      class="time-log"
+      :class="{ 'time-log--adding': form, 'time-log--full-calendar': form && fullCalendar }"
     >
-      <button
-        v-if="page?.canCreate"
-        class="plain-button"
-        :disabled="loading || mutating"
-        @click="edit()"
-      >
-        <span aria-hidden="true">＋</span> 手动添加时长记录
-      </button>
-    </div>
-    <div
-      class="log-body"
-      @scroll="onScroll"
-    >
-      <TimeSessionForm
-        v-if="form"
-        v-model:start="start"
-        v-model:end="end"
-        v-model:mode="mode"
-        :work-item-id="workItemId"
-        :timezone="timezone"
-        :editing="!!editing"
-        :busy="loading"
-        :problem="saveProblem"
-        @expand="fullCalendar = $event"
-        @save="save"
-      />
-      <template v-else>
-        <div
-          v-for="record in records"
-          :key="record.id"
-          class="log-row"
+      <header>
+        <h3>{{ form ? editing ? '编辑时长记录' : '添加时长记录' : '计时日志' }}</h3>
+        <button
+          v-if="form"
+          class="plain-button"
+          :disabled="loading"
+          @click="form = false"
         >
-          <span
-            v-if="record.workItemNo"
-            class="child-source"
-          >来自子项 #{{ record.workItemNo }} {{ record.workItemTitle }}</span>
-          <el-tooltip
-            :content="record.displayName"
-            placement="top"
+          返回
+        </button><button
+          v-else
+          class="plain-button"
+          :disabled="loading || mutating || !records.length"
+          @click="remove('all')"
+        >
+          清除
+        </button>
+      </header>
+      <div
+        v-if="!form"
+        class="add-session"
+      >
+        <button
+          v-if="page?.canCreate"
+          class="plain-button"
+          :disabled="loading || mutating"
+          @click="edit()"
+        >
+          <span aria-hidden="true">＋</span> 手动添加时长记录
+        </button>
+      </div>
+      <div
+        class="log-body"
+        @scroll="onScroll"
+      >
+        <TimeSessionForm
+          v-if="form"
+          v-model:start="start"
+          v-model:end="end"
+          v-model:mode="mode"
+          :work-item-id="workItemId"
+          :timezone="timezone"
+          :editing="!!editing"
+          :busy="loading"
+          :problem="saveProblem"
+          :picker-append-to="pickerAppendTo"
+          @expand="fullCalendar = $event"
+          @save="save"
+        />
+        <template v-else>
+          <div
+            v-for="record in records"
+            :key="record.id"
+            class="log-row"
           >
             <span
-              class="member-badge"
-              :aria-label="record.displayName"
-            >{{ Array.from(record.displayName)[0] }}</span>
-          </el-tooltip>
+              v-if="record.workItemNo"
+              class="child-source"
+            >来自子项 #{{ record.workItemNo }} {{ record.workItemTitle }}</span>
+            <el-tooltip
+              :content="record.displayName"
+              placement="top"
+            >
+              <span
+                class="member-badge"
+                :aria-label="record.displayName"
+              >{{ Array.from(record.displayName)[0] }}</span>
+            </el-tooltip>
+            <button
+              class="plain-button record-date"
+              :class="{ 'is-edited': record.rowVersion > (record.source === 'TIMER' ? 1 : 0) }"
+              :disabled="!record.canEdit || loading || mutating"
+              aria-label="编辑记录日期"
+              @click="edit(record)"
+            >
+              {{ dateLabel(record.startedAt) }}
+            </button>
+            <button
+              class="plain-button time-range"
+              :class="{ 'is-edited': record.rowVersion > (record.source === 'TIMER' ? 1 : 0) }"
+              :disabled="!record.canEdit || loading || mutating"
+              aria-label="编辑开始结束时间"
+              @click="edit(record)"
+            >
+              {{ clockLabel(record.startedAt) }} - {{ record.stoppedAt ? clockLabel(record.stoppedAt) : '计时中' }}
+              <small v-if="record.parallelItemCount > 0">与 {{ record.parallelItemCount }} 项并行 · 计入 {{ formatTrackingDuration(record.allocatedDurationMs) }}</small>
+              <small v-if="record.migrated">迁入工时 · {{ MIGRATED_TIME_NOTE }}</small>
+            </button>
+            <button
+              class="plain-button record-duration"
+              :disabled="!record.canEdit || loading || mutating"
+              @click="edit(record)"
+            >
+              {{ formatDuration(record.durationMs).padStart(8, '0') }}
+            </button>
+            <button
+              v-if="record.canEdit"
+              class="plain-button delete-button"
+              :disabled="loading || mutating"
+              :aria-label="`删除 ${record.displayName} 的计时记录`"
+              @click="remove(record)"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              ><path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7" /></svg>
+            </button>
+            <span v-else />
+          </div>
+          <p
+            v-if="!loading && !problem && !records.length"
+            class="log-status"
+          >
+            暂无计时记录
+          </p>
+          <p
+            v-if="loading"
+            class="log-status"
+            role="status"
+          >
+            正在加载…
+          </p>
+          <p
+            v-if="problem"
+            class="log-status"
+            role="alert"
+          >
+            {{ problem }} <button
+              class="plain-button"
+              @click="load(page?.nextCursor ?? undefined)"
+            >
+              重试
+            </button>
+          </p>
           <button
-            class="plain-button record-date"
-            :class="{ 'is-edited': record.rowVersion > (record.source === 'TIMER' ? 1 : 0) }"
-            :disabled="!record.canEdit || loading || mutating"
-            aria-label="编辑记录日期"
-            @click="edit(record)"
+            v-else-if="page?.nextCursor"
+            class="plain-button load-more"
+            :disabled="loading"
+            @click="loadMore"
           >
-            {{ dateLabel(record.startedAt) }}
+            加载更多记录
           </button>
-          <button
-            class="plain-button time-range"
-            :class="{ 'is-edited': record.rowVersion > (record.source === 'TIMER' ? 1 : 0) }"
-            :disabled="!record.canEdit || loading || mutating"
-            aria-label="编辑开始结束时间"
-            @click="edit(record)"
-          >
-            {{ clockLabel(record.startedAt) }} - {{ record.stoppedAt ? clockLabel(record.stoppedAt) : '计时中' }}
-            <small v-if="record.parallelItemCount > 0">与 {{ record.parallelItemCount }} 项并行 · 计入 {{ formatTrackingDuration(record.allocatedDurationMs) }}</small>
-            <small v-if="record.migrated">迁入工时 · {{ MIGRATED_TIME_NOTE }}</small>
-          </button>
-          <button
-            class="plain-button record-duration"
-            :disabled="!record.canEdit || loading || mutating"
-            @click="edit(record)"
-          >
-            {{ formatDuration(record.durationMs).padStart(8, '0') }}
-          </button>
-          <button
-            v-if="record.canEdit"
-            class="plain-button delete-button"
-            :disabled="loading || mutating"
-            :aria-label="`删除 ${record.displayName} 的计时记录`"
-            @click="remove(record)"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            ><path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7" /></svg>
-          </button>
-          <span v-else />
-        </div>
-        <p
-          v-if="!loading && !problem && !records.length"
-          class="log-status"
-        >
-          暂无计时记录
-        </p>
-        <p
-          v-if="loading"
-          class="log-status"
-          role="status"
-        >
-          正在加载…
-        </p>
-        <p
-          v-if="problem"
-          class="log-status"
-          role="alert"
-        >
-          {{ problem }} <button
-            class="plain-button"
-            @click="load(page?.nextCursor ?? undefined)"
-          >
-            重试
-          </button>
-        </p>
-        <button
-          v-else-if="page?.nextCursor"
-          class="plain-button load-more"
-          :disabled="loading"
-          @click="loadMore"
-        >
-          加载更多记录
-        </button>
-      </template>
+        </template>
+      </div>
     </div>
+    <!-- 保持子浮层在当前弹窗内，同时避开日志和表单的滚动裁切。 -->
+    <div
+      ref="pickerAppendTo"
+      class="time-log-picker-host"
+    />
   </section>
 </template>
 

@@ -12,7 +12,7 @@ const ElOption = ElOptionRaw as unknown as DefineComponent
 const ElSelect = ElSelectRaw as unknown as DefineComponent
 
 const props = withDefaults(defineProps<{ start: string; end: string; timezone: string; editing: boolean; busy: boolean; problem?: string
-  mode?: TimeSessionFillMode; workItemId?: string }>(), { mode: TimeSessionFillMode.Gaps, problem: '', workItemId: '' })
+  mode?: TimeSessionFillMode; workItemId?: string; pickerAppendTo?: HTMLElement | undefined }>(), { mode: TimeSessionFillMode.Gaps, problem: '', workItemId: '', pickerAppendTo: undefined })
 const emit = defineEmits<{ 'update:start': [value: string]; 'update:end': [value: string]; 'update:mode': [value: TimeSessionFillMode]; expand: [value: boolean]; save: [] }>()
 const selectedDay = computed(() => props.start.slice(0, 10))
 const dayMs = 86400000
@@ -93,6 +93,7 @@ function setOffset(value: number) {
         value-format="HH:mm"
         :clearable="false"
         :disabled="busy"
+        :append-to="pickerAppendTo"
         aria-label="开始时间"
         @update:model-value="setTime('start', $event)"
       /></label>
@@ -102,6 +103,7 @@ function setOffset(value: number) {
         value-format="HH:mm"
         :clearable="false"
         :disabled="busy"
+        :append-to="pickerAppendTo"
         aria-label="结束时间"
         @update:model-value="setTime('end', $event)"
       /></label>
@@ -111,6 +113,7 @@ function setOffset(value: number) {
         :model-value="endOffset"
         size="small"
         :disabled="busy"
+        :append-to="pickerAppendTo"
         aria-label="结束日期"
         @update:model-value="setOffset"
       >
