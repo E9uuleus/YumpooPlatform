@@ -8,6 +8,7 @@ import { sboms, validateSbom } from '../release/policy.mjs'
 import { collectRegularFiles, quotePowerShellLiteral, sha256 } from './package-utils.mjs'
 import { verifyPortableHandoff } from './verify-portable-handoff.mjs'
 import { gitHead } from './delivery-utils.mjs'
+import { expandWindowsArchive } from './windows-archive.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const out = path.join(root, 'out', 'm1-15')
@@ -117,9 +118,7 @@ console.log(`Windows 服务器包已复核；source commit ${manifest.sourceComm
 function expand(name, directoryName) {
   const destination = path.join(out, directoryName)
   fs.rmSync(destination, { recursive: true, force: true })
-  const command = `Expand-Archive -LiteralPath ${quotePowerShellLiteral(path.join(out, name))} -DestinationPath ${quotePowerShellLiteral(destination)} -Force`
-  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], { stdio: 'inherit' })
-  assert(result.status === 0, `无法解包 ${name}`)
+  expandWindowsArchive(path.join(out, name), destination)
   return destination
 }
 
