@@ -110,7 +110,7 @@ test('flat static plan runs shared capabilities once and Windows reuses the test
     'backup-restore-output', 'packaged-http', 'packaged-http-report', 'browser-smoke', 'create-handoff', 'verify-handoff',
   ])
   assert.deepEqual(plan('windows').map(step => step.id), [
-    'windows-toolchain', 'desktop-profile-tests', 'windows-release-restore', 'windows-handoff',
+    'windows-toolchain', 'desktop-profile-tests', 'windows-archive-tests', 'windows-release-restore', 'windows-handoff',
     'desktop-smoke', 'desktop-package', 'desktop-package-integrity', 'desktop-installer', 'desktop-update',
     'desktop-release-artifact', 'powershell-behavior', 'server-package', 'server-package-integrity',
   ])
